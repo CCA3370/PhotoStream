@@ -1,0 +1,31 @@
+{
+  "name": "@photostream/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "bootstrap-admin": "tsx src/cli/bootstrap-admin.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.2",
+    "@fastify/helmet": "13.1.1",
+    "@fastify/rate-limit": "11.2.0",
+    "@fastify/swagger": "9.8.1",
+    "@photostream/contracts": "workspace:*",
+    "@photostream/db": "workspace:*",
+    "argon2": "0.45.1",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.12.1",
+    "fastify-type-provider-zod": "7.0.0",
+    "pg": "8.23.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "photostream",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "build": "pnpm -r --workspace-concurrency=1 --if-present build",
+    "dev": "pnpm --parallel --filter @photostream/api --filter @photostream/web dev",
+    "lint": "biome check .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:db": "pnpm --filter @photostream/db test:integration",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@types/node": "26.4.0",
+    "agent-browser": "0.35.0",
+    "tsup": "8.5.0",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

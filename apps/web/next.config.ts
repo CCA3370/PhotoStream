@@ -1,0 +1,39 @@
+import type { NextConfig } from "next";
+
+const apiTarget = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:3001";
+
+const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1"],
+  output: "standalone",
+  poweredByHeader: false,
+  transpilePackages: ["@photostream/contracts"],
+  images: {
+    unoptimized: true,
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+          },
+        ],
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${apiTarget}/api/:path*`,
+      },
+    ];
+  },
+};
+
+export default nextConfig;

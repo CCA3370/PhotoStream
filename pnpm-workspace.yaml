@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - packages/*
+
+saveExact: true
+strictPeerDependencies: true
+autoInstallPeers: false
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+
+allowBuilds:
+  agent-browser: true
+  argon2: true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@types/node@26.4.0'
