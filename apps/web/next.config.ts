@@ -9,6 +9,25 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@photostream/contracts"],
   images: {
     unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cdn.cloverta.top",
+        pathname: "/media/**",
+      },
+      {
+        protocol: "http",
+        hostname: "127.0.0.1",
+        port: "3002",
+        pathname: "/objects/**",
+      },
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "3002",
+        pathname: "/objects/**",
+      },
+    ],
   },
   async headers() {
     return [

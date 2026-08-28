@@ -1,8 +1,15 @@
 "use client";
 
-import { ArrowLeftIcon, ListChecksIcon, PauseIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ListChecksIcon,
+  PauseIcon,
+  PlayIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+} from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { InternalProviders } from "@/components/internal-providers";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -20,20 +27,53 @@ export interface UploadShellProps {
   readonly albumId: string;
   readonly albumTitle: string;
   readonly children: ReactNode;
+  readonly queue: {
+    readonly paused: boolean;
+    readonly processing: number;
+    readonly failed: number;
+    readonly retryableFailed: number;
+    readonly pendingReview: number;
+    readonly completed: number;
+    readonly onTogglePause: () => void;
+    readonly onRetryFailed: () => void;
+    readonly onClearCompleted: () => void;
+  };
 }
 
-function QueueControls() {
+function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>) {
   return (
     <div className="flex flex-col gap-2">
-      <Button className="min-h-11 justify-start" variant="outline">
-        <PauseIcon data-icon="inline-start" />
-        暂停全部
+      <Button
+        className="min-h-11 justify-start"
+        disabled={queue.processing === 0 && !queue.paused}
+        onClick={queue.onTogglePause}
+        type="button"
+        variant="outline"
+      >
+        {queue.paused ? (
+          <PlayIcon data-icon="inline-start" />
+        ) : (
+          <PauseIcon data-icon="inline-start" />
+        )}
+        {queue.paused ? "继续队列" : "暂停全部"}
       </Button>
-      <Button className="min-h-11 justify-start" variant="outline">
+      <Button
+        className="min-h-11 justify-start"
+        disabled={queue.retryableFailed === 0 || queue.processing > 0}
+        onClick={queue.onRetryFailed}
+        type="button"
+        variant="outline"
+      >
         <RotateCcwIcon data-icon="inline-start" />
         重试失败
       </Button>
-      <Button className="min-h-11 justify-start" variant="ghost">
+      <Button
+        className="min-h-11 justify-start"
+        disabled={queue.completed === 0}
+        onClick={queue.onClearCompleted}
+        type="button"
+        variant="ghost"
+      >
         <Trash2Icon data-icon="inline-start" />
         清理已完成
       </Button>
@@ -41,7 +81,18 @@ function QueueControls() {
   );
 }
 
-export function UploadShell({ albumId, albumTitle, children }: UploadShellProps) {
+export function UploadShell({ albumId, albumTitle, children, queue }: UploadShellProps) {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   return (
     <InternalProviders>
       <div className="workbench-theme min-h-screen bg-background text-foreground">
@@ -61,7 +112,9 @@ export function UploadShell({ albumId, albumTitle, children }: UploadShellProps)
               <ArrowLeftIcon data-icon="inline-start" />
             </Link>
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">上传队列 · 网络在线</p>
+              <p className="text-xs text-muted-foreground">
+                上传队列 · {online ? "网络在线" : "网络离线"}
+              </p>
               <h1 className="truncate text-xl font-semibold">{albumTitle}</h1>
             </div>
             <Drawer showSwipeHandle>
@@ -72,10 +125,12 @@ export function UploadShell({ albumId, albumTitle, children }: UploadShellProps)
               <DrawerContent>
                 <DrawerHeader>
                   <DrawerTitle>队列摘要</DrawerTitle>
-                  <DrawerDescription>当前没有进行中的上传任务。</DrawerDescription>
+                  <DrawerDescription>
+                    处理中 {queue.processing} · 失败 {queue.failed} · 待复核 {queue.pendingReview}
+                  </DrawerDescription>
                 </DrawerHeader>
                 <div className="p-4">
-                  <QueueControls />
+                  <QueueControls queue={queue} />
                 </div>
               </DrawerContent>
             </Drawer>
@@ -89,18 +144,32 @@ export function UploadShell({ albumId, albumTitle, children }: UploadShellProps)
             <div className="sticky top-20 flex flex-col gap-5">
               <div className="flex flex-col gap-1">
                 <h2 className="font-semibold">任务摘要</h2>
-                <p className="text-sm text-muted-foreground">处理中 0 · 失败 0 · 待复核 0</p>
+                <p className="text-sm text-muted-foreground">
+                  处理中 {queue.processing} · 失败 {queue.failed} · 待复核 {queue.pendingReview}
+                </p>
               </div>
-              <QueueControls />
+              <QueueControls queue={queue} />
             </div>
           </aside>
         </div>
         <div className="fixed inset-x-0 bottom-0 border-t bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
           <div className="mx-auto flex max-w-lg gap-2">
-            <Button className="min-h-11 flex-1" variant="outline">
-              暂停全部
+            <Button
+              className="min-h-11 flex-1"
+              disabled={queue.processing === 0 && !queue.paused}
+              onClick={queue.onTogglePause}
+              type="button"
+              variant="outline"
+            >
+              {queue.paused ? "继续队列" : "暂停全部"}
             </Button>
-            <Button className="min-h-11 flex-1" variant="outline">
+            <Button
+              className="min-h-11 flex-1"
+              disabled={queue.retryableFailed === 0 || queue.processing > 0}
+              onClick={queue.onRetryFailed}
+              type="button"
+              variant="outline"
+            >
               重试失败
             </Button>
           </div>

@@ -28,7 +28,21 @@ export const PublicGallery: Story = {
 
 export const UploadQueue: Story = {
   render: () => (
-    <UploadShell albumId="demo" albumTitle="春季运动会">
+    <UploadShell
+      albumId="demo"
+      albumTitle="春季运动会"
+      queue={{
+        paused: false,
+        processing: 0,
+        failed: 0,
+        retryableFailed: 0,
+        pendingReview: 0,
+        completed: 0,
+        onTogglePause: () => undefined,
+        onRetryFailed: () => undefined,
+        onClearCompleted: () => undefined,
+      }}
+    >
       <h2 className="text-xl font-semibold">上传队列为空</h2>
     </UploadShell>
   ),

@@ -13,6 +13,10 @@ const configSchema = z.object({
   SESSION_SECRET_PREVIOUS: secretSchema.optional(),
   CSRF_SECRET: secretSchema,
   CURSOR_SIGNING_SECRET: secretSchema,
+  VISITOR_SESSION_SECRET: secretSchema,
+  ALBUM_PASSWORD_GENERATION_SECRET: secretSchema,
+  LOCAL_OBJECT_SECRET: secretSchema,
+  LOCAL_OBJECT_BASE_URL: z.string().url().default("http://127.0.0.1:3002"),
   BOOTSTRAP_ADMIN_TOKEN: secretSchema.optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });

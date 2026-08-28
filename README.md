@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1 的本地工程基础实现，包括 pnpm monorepo、Next.js/Fastify、共享 Zod 契约、Drizzle/PostgreSQL 迁移、Argon2id 登录与首登改密、会话/CSRF/RBAC 基础、Base UI 试验组件、三个界面壳和自动验证。
+阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1 工程基础和阶段 2 照片纵向闭环的本地实现，包括浏览器照片派生、直传对象数据面、固定分片、审核/自动发布、口令公共相册、签名游标、SSE/轮询、恢复队列和容量门禁。
 
-尚未开始阶段 2 的照片纵向闭环，也未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA 与目标 2C2G 主机检查仍为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)。
+阶段 3 的审核与运营尚未开始，也未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、授权样片与目标 2C2G 主机检查仍为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)和[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)。
 
 ## 本地开发
 
@@ -15,11 +15,12 @@
 - `pnpm install --frozen-lockfile`：按锁文件安装并执行供应链策略；
 - `docker compose -f compose.dev.yml up -d postgres`：启动本地 PostgreSQL 18.6；
 - `pnpm --filter @photostream/db db:migrate`：执行显式 SQL 迁移；
-- `pnpm dev`：并行启动 Next.js 与 Fastify；
+- `pnpm dev`：并行启动 Next.js、Fastify 与本地对象存储；
 - `pnpm check`：运行 Biome、类型检查、单元/契约测试和构建；
 - `pnpm --filter @photostream/web storybook`：查看组件与三类界面壳状态；
 - `TEST_DATABASE_URL=postgresql://photostream:local-development-only@127.0.0.1:5432/photostream_test pnpm test:db`：运行隔离数据库集成测试；
 - `pnpm --filter @photostream/web test:e2e`：运行浏览器/axe 验证。
+- `TEST_DATABASE_URL=postgresql://photostream:local-development-only@127.0.0.1:5432/photostream_test pnpm --filter @photostream/api test:capacity`：运行 5,000 项与 500 SSE 独立容量门禁。
 
 运行 API 前从 `.env.example` 提供本地值；示例中的本地数据库口令不用于任何部署，秘密变量必须自行生成且不得提交。
 
@@ -54,9 +55,9 @@
 
 ## 下一道门禁
 
-进入照片纵向闭环前：
+进入审核与运营阶段前：
 
-- 阶段 1 自动化与代码复查保持通过；
+- 阶段 1–2 自动化与代码复查保持通过；
 - 真实微信/Safari 的 Tailwind/Base UI 风险继续按 **Unverified** 跟踪，不能用 Chromium 结果替代；
 - 媒体二进制不得进入 Fastify/Next.js/香港数据库的架构不变量保持不变；
 - 云端、DNS、部署和真实学生影像仍需各自单独批准。

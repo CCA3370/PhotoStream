@@ -5,28 +5,16 @@ import {
   loginRequestSchema,
   okResponseSchema,
 } from "@photostream/contracts";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import type { AuthenticatedSession, AuthService, IssuedSession } from "../auth/service.js";
+import {
+  clearInternalSessionCookie,
+  requireInternalCsrf,
+  requireInternalSession,
+  setInternalSessionCookie,
+} from "../auth/http.js";
+import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
-
-function cookieName(config: AppConfig): string {
-  return config.NODE_ENV === "production" ? "__Host-photostream_session" : "photostream_session";
-}
-
-function sessionToken(request: FastifyRequest, config: AppConfig): string | undefined {
-  return request.cookies[cookieName(config)];
-}
-
-function setSessionCookie(reply: FastifyReply, issued: IssuedSession, config: AppConfig): void {
-  reply.setCookie(cookieName(config), issued.rawToken, {
-    httpOnly: true,
-    secure: config.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: issued.absoluteExpiresAt,
-  });
-}
 
 function noStore(reply: FastifyReply): void {
   void reply.header("cache-control", "no-store");
@@ -45,20 +33,6 @@ export async function registerAuthRoutes(
     500: apiErrorSchema,
   };
 
-  async function requireSession(request: FastifyRequest): Promise<AuthenticatedSession> {
-    return options.authService.authenticate(sessionToken(request, options.config));
-  }
-
-  async function requireCsrf(request: FastifyRequest): Promise<AuthenticatedSession> {
-    const session = await requireSession(request);
-    const csrfHeader = request.headers["x-csrf-token"];
-    options.authService.verifyCsrf(
-      session.rawToken,
-      typeof csrfHeader === "string" ? csrfHeader : undefined,
-    );
-    return session;
-  }
-
   typed.post(
     "/api/v1/auth/login",
     {
@@ -73,7 +47,7 @@ export async function registerAuthRoutes(
     async (request, reply) => {
       noStore(reply);
       const issued = await options.authService.login(request.body);
-      setSessionCookie(reply, issued, options.config);
+      setInternalSessionCookie(reply, issued, options.config);
       return issued.view;
     },
   );
@@ -89,7 +63,7 @@ export async function registerAuthRoutes(
     },
     async (request, reply) => {
       noStore(reply);
-      return (await requireSession(request)).view;
+      return (await requireInternalSession(request, options.authService, options.config)).view;
     },
   );
 
@@ -105,14 +79,14 @@ export async function registerAuthRoutes(
     },
     async (request, reply) => {
       noStore(reply);
-      const session = await requireCsrf(request);
+      const session = await requireInternalCsrf(request, options.authService, options.config);
       const issued = await options.authService.changePassword({
         session,
         currentPassword: request.body.currentPassword,
         newPassword: request.body.newPassword,
         requestId: request.id,
       });
-      setSessionCookie(reply, issued, options.config);
+      setInternalSessionCookie(reply, issued, options.config);
       return issued.view;
     },
   );
@@ -128,9 +102,9 @@ export async function registerAuthRoutes(
     },
     async (request, reply) => {
       noStore(reply);
-      const session = await requireCsrf(request);
+      const session = await requireInternalCsrf(request, options.authService, options.config);
       await options.authService.logout(session);
-      reply.clearCookie(cookieName(options.config), { path: "/" });
+      clearInternalSessionCookie(reply, options.config);
       return { ok: true as const };
     },
   );

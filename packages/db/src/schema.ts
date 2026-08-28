@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   bigserial,
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -14,11 +16,49 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "reviewer", "uploader"]);
+export const albumStateEnum = pgEnum("album_state", ["draft", "live", "ended", "archived"]);
+export const albumAccessEnum = pgEnum("album_access", ["password", "public"]);
+export const publishModeEnum = pgEnum("publish_mode", ["review", "auto"]);
+export const mediaKindEnum = pgEnum("media_kind", ["photo", "video"]);
+export const ingestStatusEnum = pgEnum("ingest_status", [
+  "created",
+  "local_processing",
+  "uploading_preview",
+  "preview_ready",
+  "uploading_source",
+  "ready",
+  "failed",
+  "cancelled",
+]);
+export const publicationStatusEnum = pgEnum("publication_status", [
+  "draft",
+  "pending_review",
+  "published",
+  "hidden",
+  "deleted",
+]);
+export const variantKindEnum = pgEnum("variant_kind", [
+  "photo_480",
+  "photo_960",
+  "photo_1920",
+  "photo_original",
+  "video_poster_480",
+  "video_poster_960",
+  "video_source",
+]);
+export const uploadIntentStatusEnum = pgEnum("upload_intent_status", [
+  "active",
+  "completed",
+  "cancelled",
+  "expired",
+]);
 
-const timestampColumns = {
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-};
+function timestampColumns() {
+  return {
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  };
+}
 
 export const users = pgTable(
   "users",
@@ -32,7 +72,7 @@ export const users = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     mustChangePassword: boolean("must_change_password").notNull().default(true),
     passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
-    ...timestampColumns,
+    ...timestampColumns(),
   },
   (table) => [uniqueIndex("users_normalized_username_unique").on(table.normalizedUsername)],
 );
@@ -76,6 +116,217 @@ export const auditLogs = pgTable(
   (table) => [index("audit_logs_actor_created_idx").on(table.actorUserId, table.createdAt)],
 );
 
+export const albums = pgTable(
+  "albums",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    slug: varchar("slug", { length: 32 }).notNull(),
+    title: varchar("title", { length: 120 }).notNull(),
+    description: varchar("description", { length: 1_000 }).notNull().default(""),
+    state: albumStateEnum("state").notNull().default("draft"),
+    access: albumAccessEnum("access").notNull().default("password"),
+    publishMode: publishModeEnum("publish_mode").notNull().default("review"),
+    passwordHash: text("password_hash"),
+    accessVersion: integer("access_version").notNull().default(1),
+    previewDownloadEnabled: boolean("preview_download_enabled").notNull().default(false),
+    originalDownloadEnabled: boolean("original_download_enabled").notNull().default(false),
+    videoDownloadEnabled: boolean("video_download_enabled").notNull().default(false),
+    bibRecognitionEnabled: boolean("bib_recognition_enabled").notNull().default(false),
+    bibSearchEnabled: boolean("bib_search_enabled").notNull().default(false),
+    publishSequence: bigint("publish_sequence", { mode: "number" }).notNull().default(0),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("albums_slug_unique").on(table.slug),
+    uniqueIndex("albums_creator_idempotency_unique").on(table.createdBy, table.idempotencyKey),
+    index("albums_state_updated_idx").on(table.state, table.updatedAt),
+  ],
+);
+
+export const categories = pgTable(
+  "categories",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 60 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    enabled: boolean("enabled").notNull().default(true),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("categories_album_name_unique").on(table.albumId, table.name),
+    uniqueIndex("categories_creator_idempotency_unique").on(
+      table.albumId,
+      table.createdBy,
+      table.idempotencyKey,
+    ),
+    index("categories_album_sort_idx").on(table.albumId, table.enabled, table.sortOrder),
+  ],
+);
+
+export const media = pgTable(
+  "media",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
+    kind: mediaKindEnum("kind").notNull(),
+    uploaderId: uuid("uploader_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ingestStatus: ingestStatusEnum("ingest_status").notNull().default("created"),
+    publicationStatus: publicationStatusEnum("publication_status").notNull().default("draft"),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    durationMs: integer("duration_ms"),
+    mediaType: varchar("media_type", { length: 80 }).notNull(),
+    totalBytes: bigint("total_bytes", { mode: "number" }).notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    publishSequence: bigint("publish_sequence", { mode: "number" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    failureCode: varchar("failure_code", { length: 80 }),
+    retryable: boolean("retryable").notNull().default(false),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("media_album_publish_sequence_unique")
+      .on(table.albumId, table.publishSequence)
+      .where(sql`${table.publishSequence} is not null`),
+    index("media_album_public_cursor_idx").on(
+      table.albumId,
+      table.publicationStatus,
+      table.publishSequence,
+      table.id,
+    ),
+    index("media_album_ingest_idx").on(table.albumId, table.ingestStatus, table.createdAt),
+  ],
+);
+
+export const mediaVariants = pgTable(
+  "media_variants",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    kind: variantKindEnum("kind").notNull(),
+    objectKey: varchar("object_key", { length: 512 }).notNull(),
+    format: varchar("format", { length: 16 }).notNull(),
+    contentType: varchar("content_type", { length: 80 }).notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    expectedBytes: bigint("expected_bytes", { mode: "number" }).notNull(),
+    bytes: bigint("bytes", { mode: "number" }),
+    etag: varchar("etag", { length: 128 }),
+    verified: boolean("verified").notNull().default(false),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("media_variants_media_kind_unique").on(table.mediaId, table.kind),
+    uniqueIndex("media_variants_object_key_unique").on(table.objectKey),
+    index("media_variants_media_verified_idx").on(table.mediaId, table.verified),
+  ],
+);
+
+export const uploadIntents = pgTable(
+  "upload_intents",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    uploaderId: uuid("uploader_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    status: uploadIntentStatusEnum("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("upload_intents_uploader_idempotency_unique").on(
+      table.uploaderId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("upload_intents_media_unique").on(table.mediaId),
+    index("upload_intents_expiry_idx").on(table.status, table.expiresAt),
+  ],
+);
+
+export const uploadParts = pgTable(
+  "upload_parts",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => mediaVariants.id, { onDelete: "cascade" }),
+    partNumber: integer("part_number").notNull(),
+    expectedBytes: bigint("expected_bytes", { mode: "number" }).notNull(),
+    etag: varchar("etag", { length: 128 }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("upload_parts_variant_number_unique").on(table.variantId, table.partNumber),
+    index("upload_parts_variant_completed_idx").on(table.variantId, table.completedAt),
+  ],
+);
+
+export const liveEvents = pgTable(
+  "live_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 80 }).notNull(),
+    mediaId: uuid("media_id").references(() => media.id, { onDelete: "cascade" }),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("live_events_album_id_idx").on(table.albumId, table.id)],
+);
+
+export const visitorSessions = pgTable(
+  "visitor_sessions",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    accessVersion: integer("access_version").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("visitor_sessions_token_hash_unique").on(table.tokenHash),
+    index("visitor_sessions_album_expiry_idx").on(table.albumId, table.expiresAt),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
+export type AlbumRow = typeof albums.$inferSelect;
+export type CategoryRow = typeof categories.$inferSelect;
+export type MediaRow = typeof media.$inferSelect;
+export type MediaVariantRow = typeof mediaVariants.$inferSelect;
+export type UploadIntentRow = typeof uploadIntents.$inferSelect;
+export type UploadPartRow = typeof uploadParts.$inferSelect;

@@ -17,12 +17,17 @@ import type { AuthStore, PasswordHasher } from "./auth/types.js";
 import type { AppConfig } from "./config.js";
 import { AppError } from "./errors.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
+import type { LiveEventBroker } from "./media/live-event-broker.js";
+import type { PhotoService } from "./media/service.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerPhotoRoutes } from "./routes/photos.js";
 
 export interface BuildAppOptions {
   readonly config: AppConfig;
   readonly authStore: AuthStore;
   readonly passwordHasher?: PasswordHasher;
+  readonly photoService?: PhotoService;
+  readonly broker?: LiveEventBroker;
   readonly logger?: NonNullable<FastifyServerOptions["logger"]>;
 }
 
@@ -115,6 +120,17 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         statusCode: 429,
         retryable: true,
       });
+    } else if (
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      (error.statusCode === 400 || error.statusCode === 415)
+    ) {
+      appError = new AppError({
+        code: "BAD_REQUEST",
+        message: "请求参数无效",
+        statusCode: 400,
+      });
     } else {
       request.log.error(
         {
@@ -192,6 +208,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     options.config,
   );
   await registerAuthRoutes(app, { authService, config: options.config });
+  if (options.photoService !== undefined && options.broker !== undefined) {
+    await registerPhotoRoutes(app, {
+      authService,
+      photoService: options.photoService,
+      broker: options.broker,
+      config: options.config,
+    });
+  }
 
   return app;
 }

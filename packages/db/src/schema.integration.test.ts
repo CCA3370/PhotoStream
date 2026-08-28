@@ -4,7 +4,9 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createDatabase, createPool, migrateDatabase } from "./index.js";
-import { sessions, users } from "./schema.js";
+import * as schema from "./schema.js";
+
+const { sessions, users } = schema;
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (databaseUrl !== undefined && new URL(databaseUrl).pathname !== "/photostream_test") {
@@ -22,6 +24,15 @@ maybeDescribe("PostgreSQL identity schema", () => {
   });
 
   beforeEach(async () => {
+    await database.delete(schema.liveEvents);
+    await database.delete(schema.uploadParts);
+    await database.delete(schema.mediaVariants);
+    await database.delete(schema.uploadIntents);
+    await database.delete(schema.media);
+    await database.delete(schema.visitorSessions);
+    await database.delete(schema.categories);
+    await database.delete(schema.albums);
+    await database.delete(schema.auditLogs);
     await database.delete(sessions);
     await database.delete(users);
   });

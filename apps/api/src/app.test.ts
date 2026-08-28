@@ -121,6 +121,10 @@ const config = loadConfig({
   SESSION_SECRET_PREVIOUS: "p".repeat(32),
   CSRF_SECRET: "c".repeat(32),
   CURSOR_SIGNING_SECRET: "u".repeat(32),
+  VISITOR_SESSION_SECRET: "v".repeat(32),
+  ALBUM_PASSWORD_GENERATION_SECRET: "a".repeat(32),
+  LOCAL_OBJECT_SECRET: "o".repeat(32),
+  LOCAL_OBJECT_BASE_URL: "http://127.0.0.1:3002",
 });
 
 function requestHeaders(extra: Record<string, string> = {}): Record<string, string> {

@@ -9,7 +9,9 @@
     "start": "node dist/server.js",
     "bootstrap-admin": "tsx src/cli/bootstrap-admin.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:capacity": "vitest run --config vitest.capacity.config.ts"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
@@ -18,6 +20,7 @@
     "@fastify/swagger": "9.8.1",
     "@photostream/contracts": "workspace:*",
     "@photostream/db": "workspace:*",
+    "@photostream/local-object-protocol": "workspace:*",
     "argon2": "0.45.1",
     "drizzle-orm": "0.45.2",
     "fastify": "5.12.1",

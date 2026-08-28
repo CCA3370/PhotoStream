@@ -1,0 +1,17 @@
+{
+  "name": "@photostream/object-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@photostream/local-object-protocol": "workspace:*",
+    "zod": "4.4.3"
+  }
+}
