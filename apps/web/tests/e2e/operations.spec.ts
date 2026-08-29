@@ -208,7 +208,9 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     }
 
     await page.goto(appUrl(`/studio/albums/${album.album.id}/settings`));
-    await page.getByRole("tab", { name: "下载" }).click();
+    const downloadsTab = page.getByRole("tab", { name: "下载" });
+    await expectReactHydrated(downloadsTab);
+    await downloadsTab.click();
     for (const [name, confirmation] of [
       ["普通图下载", "普通图下载已更新"],
       ["照片原图下载", "照片原图下载已更新"],
@@ -281,6 +283,7 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     const selectPublished = publishedCard.getByRole("checkbox", {
       name: `选择照片 ${mediaId.slice(-8)}`,
     });
+    await expectReactHydrated(selectPublished);
     await selectPublished.click();
     await page.getByRole("button", { name: "隐藏", exact: true }).click();
     await expect(publishedCard.getByText("已隐藏", { exact: true })).toBeVisible();
@@ -336,7 +339,9 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     );
 
     await page.goto(appUrl(`/studio/albums/${album.album.id}/settings`));
-    await page.getByRole("tab", { name: "访问与发布" }).click();
+    const accessTab = page.getByRole("tab", { name: "访问与发布" });
+    await expectReactHydrated(accessTab);
+    await accessTab.click();
     await page.getByRole("button", { name: "更换随机口令并退出旧访客" }).click();
     const passwordAlert = page.getByRole("alert").filter({ hasText: "请立即安全保存新口令" });
     await expect(passwordAlert).toBeVisible();
@@ -348,7 +353,9 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await viewerPage.reload();
     await expect(viewerPage.getByLabel("相册口令")).toBeVisible();
     await viewerPage.getByLabel("相册口令").fill(album.generatedPassword);
-    await viewerPage.getByRole("button", { name: "进入相册" }).click();
+    const rotatedUnlock = viewerPage.getByRole("button", { name: "进入相册" });
+    await expectReactHydrated(rotatedUnlock);
+    await rotatedUnlock.click();
     await expect(viewerPage.getByText("相册不可用或口令错误")).toBeVisible();
     await viewerPage.getByLabel("相册口令").fill(newPassword);
     await viewerPage.getByRole("button", { name: "进入相册" }).click();
@@ -450,7 +457,9 @@ test("member routes enforce roles and administration remains accessible", async 
   const uploaderUsername = `uploader-${unique}`;
   await page.getByLabel("用户名").fill(uploaderUsername);
   await page.getByLabel("显示名").fill("自动化上传者");
-  await page.getByRole("button", { name: "创建成员" }).click();
+  const createMember = page.getByRole("button", { name: "创建成员" });
+  await expectReactHydrated(createMember);
+  await createMember.click();
   await expect(page.getByText("请把一次性临时密码安全交给本人")).toBeVisible();
   await expect(page.getByText(uploaderUsername)).toBeVisible();
   await expectNoAxeViolations(page);

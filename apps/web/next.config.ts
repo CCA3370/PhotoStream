@@ -32,6 +32,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/assets/models/bib-ocr/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

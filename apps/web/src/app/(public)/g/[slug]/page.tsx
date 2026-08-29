@@ -2,6 +2,7 @@ import type { PublicMediaView } from "@photostream/contracts";
 import Link from "next/link";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
+import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
@@ -18,6 +19,19 @@ interface PublicAlbum {
   readonly accessRequired: boolean;
   readonly privacyNotice: string;
   readonly complaintContact: string;
+  readonly bibSearchEnabled: boolean;
+  readonly bibNumberLengths: readonly number[];
+  readonly bibAttributeFilterEnabled: boolean;
+  readonly bibAttributeOptions: readonly {
+    readonly id: string;
+    readonly dimension: "grade" | "class";
+    readonly displayName: string;
+    readonly sortOrder: number;
+  }[];
+  readonly bibAttributePairs: readonly {
+    readonly gradeOptionId: string;
+    readonly classOptionId: string | null;
+  }[];
   readonly categories: readonly { readonly id: string; readonly name: string }[];
 }
 
@@ -96,12 +110,30 @@ export default async function GalleryPage({
         <h2 className="sr-only" id="gallery-heading">
           活动影像
         </h2>
-        <PaginatedMediaGrid
-          {...(category === undefined ? {} : { categoryId: category.id })}
-          initialPage={media}
-          key={category?.id ?? "all"}
-          slug={slug}
-        />
+        {album.bibSearchEnabled ? (
+          <BibSearchPanel
+            attributeFilterEnabled={album.bibAttributeFilterEnabled}
+            attributeOptions={album.bibAttributeOptions}
+            attributePairs={album.bibAttributePairs}
+            numberLengths={album.bibNumberLengths}
+            {...(category === undefined ? {} : { categoryId: category.id })}
+            slug={slug}
+          >
+            <PaginatedMediaGrid
+              {...(category === undefined ? {} : { categoryId: category.id })}
+              initialPage={media}
+              key={category?.id ?? "all"}
+              slug={slug}
+            />
+          </BibSearchPanel>
+        ) : (
+          <PaginatedMediaGrid
+            {...(category === undefined ? {} : { categoryId: category.id })}
+            initialPage={media}
+            key={category?.id ?? "all"}
+            slug={slug}
+          />
+        )}
       </section>
       {album.state === "live" ? (
         <LiveUpdates

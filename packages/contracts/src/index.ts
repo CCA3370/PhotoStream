@@ -1,4 +1,7 @@
+import { bibMediaStateSchema } from "@photostream/contracts/bib";
 import { z } from "zod";
+
+export * from "@photostream/contracts/bib";
 
 export const userRoleSchema = z.enum(["admin", "reviewer", "uploader"]);
 export type UserRole = z.infer<typeof userRoleSchema>;
@@ -110,6 +113,14 @@ export const apiErrorCodeSchema = z.enum([
   "DELETION_TASK_FAILED",
   "IDEMPOTENCY_CONFLICT",
   "RECENT_AUTH_REQUIRED",
+  "BIB_CONFIG_INVALID",
+  "BIB_KEYS_UNAVAILABLE",
+  "BIB_TAG_NOT_FOUND",
+  "BIB_NUMBER_INVALID",
+  "BIB_MODEL_VERSION_MISMATCH",
+  "BIB_RULE_VERSION_MISMATCH",
+  "BIB_SEARCH_DISABLED",
+  "BIB_RECALCULATION_FAILED",
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
 
@@ -451,6 +462,7 @@ export const internalMediaViewSchema = z
       })
       .strict()
       .nullable(),
+    bib: bibMediaStateSchema.optional(),
     createdAt: z.string().datetime(),
   })
   .strict();
@@ -469,6 +481,27 @@ export const publicAlbumViewSchema = z
     videoDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
     complaintContact: z.string().max(300),
+    bibSearchEnabled: z.boolean(),
+    bibNumberLengths: z.array(z.number().int().min(1).max(12)),
+    bibAttributeFilterEnabled: z.boolean(),
+    bibAttributeOptions: z.array(
+      z
+        .object({
+          id: z.string().uuid(),
+          dimension: z.enum(["grade", "class"]),
+          displayName: z.string().min(1).max(60),
+          sortOrder: z.number().int().min(0),
+        })
+        .strict(),
+    ),
+    bibAttributePairs: z.array(
+      z
+        .object({
+          gradeOptionId: z.string().uuid(),
+          classOptionId: z.string().uuid().nullable(),
+        })
+        .strict(),
+    ),
     categories: z.array(categoryViewSchema),
   })
   .strict();

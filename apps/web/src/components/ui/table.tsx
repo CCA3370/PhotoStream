@@ -6,13 +6,19 @@ import { cn } from "@/lib/utils";
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <section
+      aria-label="可横向滚动的数据表"
+      className="relative w-full overflow-x-auto"
+      data-slot="table-container"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: axe requires keyboard access for the horizontal scroll region in Safari.
+      tabIndex={0}
+    >
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
-    </div>
+    </section>
   );
 }
 

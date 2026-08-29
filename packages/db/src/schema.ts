@@ -1,3 +1,4 @@
+import type { BibCandidateInput } from "@photostream/contracts";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -68,6 +69,34 @@ export const analyticsEventTypeEnum = pgEnum("analytics_event_type", [
   "open",
   "session",
   "download",
+]);
+export const bibTagStatusEnum = pgEnum("bib_tag_status", [
+  "suggested",
+  "confirmed",
+  "rejected",
+  "needs_review",
+]);
+export const bibTagSourceEnum = pgEnum("bib_tag_source", ["ocr", "manual"]);
+export const bibReviewDecisionEnum = pgEnum("bib_review_decision", [
+  "pending",
+  "numbers_confirmed",
+  "no_number_confirmed",
+  "needs_review",
+]);
+export const bibOcrStatusEnum = pgEnum("bib_ocr_status", [
+  "not_started",
+  "processing",
+  "completed",
+  "failed",
+  "unsupported",
+]);
+export const bibAttributeDimensionEnum = pgEnum("bib_attribute_dimension", ["grade", "class"]);
+export const bibRecalculationKindEnum = pgEnum("bib_recalculation_kind", ["rule", "mapping"]);
+export const bibRecalculationStatusEnum = pgEnum("bib_recalculation_status", [
+  "pending",
+  "processing",
+  "failed",
+  "completed",
 ]);
 
 function timestampColumns() {
@@ -159,6 +188,13 @@ export const albums = pgTable(
     videoDownloadEnabled: boolean("video_download_enabled").notNull().default(false),
     bibRecognitionEnabled: boolean("bib_recognition_enabled").notNull().default(false),
     bibSearchEnabled: boolean("bib_search_enabled").notNull().default(false),
+    bibRuleVersion: integer("bib_rule_version").notNull().default(0),
+    bibMappingVersion: integer("bib_mapping_version").notNull().default(0),
+    bibModelVersion: varchar("bib_model_version", { length: 80 })
+      .notNull()
+      .default("ppocrv6-tiny-0.4.2-ff6ab415-1e13b227"),
+    bibRuleUsable: boolean("bib_rule_usable").notNull().default(false),
+    bibMappingUsable: boolean("bib_mapping_usable").notNull().default(true),
     privacyNotice: varchar("privacy_notice", { length: 2_000 }).notNull().default(""),
     complaintContact: varchar("complaint_contact", { length: 300 }).notNull().default(""),
     publishSequence: bigint("publish_sequence", { mode: "number" }).notNull().default(0),
@@ -467,6 +503,224 @@ export const analyticsDaily = pgTable(
   (table) => [uniqueIndex("analytics_daily_album_day_unique").on(table.albumId, table.day)],
 );
 
+export const bibPatterns = pgTable(
+  "bib_patterns",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    totalLength: integer("total_length").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    enabled: boolean("enabled").notNull().default(true),
+    ...timestampColumns(),
+  },
+  (table) => [index("bib_patterns_album_sort_idx").on(table.albumId, table.sortOrder, table.id)],
+);
+
+export const bibConstraints = pgTable(
+  "bib_constraints",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    patternId: uuid("pattern_id")
+      .notNull()
+      .references(() => bibPatterns.id, { onDelete: "cascade" }),
+    startPosition: integer("start_position").notNull(),
+    width: integer("width").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bib_constraints_pattern_sort_idx").on(table.patternId, table.sortOrder, table.id),
+  ],
+);
+
+export const bibAllowedRanges = pgTable(
+  "bib_allowed_ranges",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    constraintId: uuid("constraint_id")
+      .notNull()
+      .references(() => bibConstraints.id, { onDelete: "cascade" }),
+    startValue: varchar("start_value", { length: 12 }).notNull(),
+    endValue: varchar("end_value", { length: 12 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("bib_allowed_ranges_constraint_values_unique").on(
+      table.constraintId,
+      table.startValue,
+      table.endValue,
+    ),
+  ],
+);
+
+export const bibAttributeOptions = pgTable(
+  "bib_attribute_options",
+  {
+    id: uuid("id").primaryKey(),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    dimension: bibAttributeDimensionEnum("dimension").notNull(),
+    displayName: varchar("display_name", { length: 60 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    enabled: boolean("enabled").notNull().default(true),
+    ...timestampColumns(),
+  },
+  (table) => [
+    index("bib_attribute_options_album_dimension_sort_idx").on(
+      table.albumId,
+      table.dimension,
+      table.sortOrder,
+      table.id,
+    ),
+  ],
+);
+
+export const bibAttributeMappings = pgTable(
+  "bib_attribute_mappings",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    dimension: bibAttributeDimensionEnum("dimension").notNull(),
+    startPosition: integer("start_position").notNull(),
+    width: integer("width").notNull(),
+    outputOptionId: uuid("output_option_id")
+      .notNull()
+      .references(() => bibAttributeOptions.id, { onDelete: "restrict" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bib_attribute_mappings_album_dimension_sort_idx").on(
+      table.albumId,
+      table.dimension,
+      table.sortOrder,
+      table.id,
+    ),
+  ],
+);
+
+export const bibAttributeMappingRanges = pgTable(
+  "bib_attribute_mapping_ranges",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    mappingId: uuid("mapping_id")
+      .notNull()
+      .references(() => bibAttributeMappings.id, { onDelete: "cascade" }),
+    startValue: varchar("start_value", { length: 12 }).notNull(),
+    endValue: varchar("end_value", { length: 12 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("bib_attribute_mapping_ranges_values_unique").on(
+      table.mappingId,
+      table.startValue,
+      table.endValue,
+    ),
+  ],
+);
+
+export const mediaBibTags = pgTable(
+  "media_bib_tags",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    numberCiphertext: text("number_ciphertext").notNull(),
+    numberIv: varchar("number_iv", { length: 32 }).notNull(),
+    numberAuthTag: varchar("number_auth_tag", { length: 32 }).notNull(),
+    blindIndex: varchar("blind_index", { length: 64 }).notNull(),
+    keyVersion: varchar("key_version", { length: 40 }).notNull(),
+    status: bibTagStatusEnum("status").notNull(),
+    source: bibTagSourceEnum("source").notNull(),
+    confidenceBasisPoints: integer("confidence_basis_points"),
+    quadrilateral: jsonb("quadrilateral").$type<BibCandidateInput["quadrilateral"]>(),
+    ruleVersion: integer("rule_version").notNull(),
+    modelVersion: varchar("model_version", { length: 80 }),
+    gradeOptionId: uuid("grade_option_id").references(() => bibAttributeOptions.id, {
+      onDelete: "set null",
+    }),
+    classOptionId: uuid("class_option_id").references(() => bibAttributeOptions.id, {
+      onDelete: "set null",
+    }),
+    mappingVersion: integer("mapping_version").notNull().default(0),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "set null" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("media_bib_tags_confirmed_number_unique")
+      .on(table.mediaId, table.blindIndex)
+      .where(sql`${table.status} = 'confirmed'`),
+    index("media_bib_tags_media_status_idx").on(table.mediaId, table.status, table.createdAt),
+    index("media_bib_tags_public_search_idx").on(
+      table.albumId,
+      table.blindIndex,
+      table.status,
+      table.ruleVersion,
+    ),
+    index("media_bib_tags_attribute_filter_idx").on(
+      table.albumId,
+      table.status,
+      table.mappingVersion,
+      table.gradeOptionId,
+      table.classOptionId,
+    ),
+  ],
+);
+
+export const mediaBibReviews = pgTable("media_bib_reviews", {
+  mediaId: uuid("media_id")
+    .primaryKey()
+    .references(() => media.id, { onDelete: "cascade" }),
+  decision: bibReviewDecisionEnum("decision").notNull().default("pending"),
+  ocrStatus: bibOcrStatusEnum("ocr_status").notNull().default("not_started"),
+  ocrModelVersion: varchar("ocr_model_version", { length: 80 }),
+  ocrErrorCode: varchar("ocr_error_code", { length: 80 }),
+  decidedBy: uuid("decided_by").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  reason: varchar("reason", { length: 100 }).notNull().default("created"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const bibRecalculationTasks = pgTable(
+  "bib_recalculation_tasks",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    kind: bibRecalculationKindEnum("kind").notNull(),
+    targetVersion: integer("target_version").notNull(),
+    status: bibRecalculationStatusEnum("status").notNull().default("pending"),
+    cursorTagId: uuid("cursor_tag_id"),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("bib_recalculation_album_kind_version_unique").on(
+      table.albumId,
+      table.kind,
+      table.targetVersion,
+    ),
+    index("bib_recalculation_poll_idx").on(table.status, table.nextAttemptAt),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
@@ -477,3 +731,6 @@ export type MediaVariantRow = typeof mediaVariants.$inferSelect;
 export type UploadIntentRow = typeof uploadIntents.$inferSelect;
 export type UploadPartRow = typeof uploadParts.$inferSelect;
 export type DeletionTaskRow = typeof deletionTasks.$inferSelect;
+export type BibPatternRow = typeof bibPatterns.$inferSelect;
+export type MediaBibTagRow = typeof mediaBibTags.$inferSelect;
+export type MediaBibReviewRow = typeof mediaBibReviews.$inferSelect;

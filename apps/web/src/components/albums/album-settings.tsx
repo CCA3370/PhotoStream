@@ -1,9 +1,14 @@
 "use client";
 
-import type { AlbumStatistics, AlbumView, UpdateAlbumRequest } from "@photostream/contracts";
+import type {
+  AlbumStatistics,
+  AlbumView,
+  BibConfigView,
+  UpdateAlbumRequest,
+} from "@photostream/contracts";
 import { KeyRoundIcon } from "lucide-react";
 import { useState } from "react";
-
+import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,8 +39,13 @@ function formatBytes(bytes: number): string {
 
 export function AlbumSettings({
   initialAlbum,
+  bibConfig,
   statistics,
-}: Readonly<{ initialAlbum: AlbumView; statistics: AlbumStatistics }>) {
+}: Readonly<{
+  initialAlbum: AlbumView;
+  bibConfig: BibConfigView;
+  statistics: AlbumStatistics;
+}>) {
   const [album, setAlbum] = useState(initialAlbum);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +127,7 @@ export function AlbumSettings({
           <TabsTrigger value="access">访问与发布</TabsTrigger>
           <TabsTrigger value="downloads">下载</TabsTrigger>
           <TabsTrigger value="privacy">隐私与投诉</TabsTrigger>
+          <TabsTrigger value="bib">号码规则</TabsTrigger>
           <TabsTrigger value="statistics">统计</TabsTrigger>
         </TabsList>
 
@@ -361,6 +372,9 @@ export function AlbumSettings({
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="bib">
+          <BibConfigEditor initial={bibConfig} />
         </TabsContent>
       </Tabs>
     </div>

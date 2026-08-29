@@ -2,17 +2,21 @@ import type {
   AlbumStatistics,
   AlbumView,
   AuditLogList,
+  BibConfigView,
+  BibMediaState,
   InternalMediaView,
 } from "@photostream/contracts";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import { AlbumSettings } from "@/components/albums/album-settings";
 import { AuditLogTable } from "@/components/audit/audit-log-table";
+import { BibConfigEditor } from "@/components/bib/bib-config-editor";
+import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
 import { UserManagement } from "@/components/users/user-management";
 
 const meta = {
-  title: "Operations/Stage 3 workflows",
+  title: "Operations/Stage 4 workflows",
   parameters: { layout: "padded" },
 } satisfies Meta;
 
@@ -22,12 +26,15 @@ type Story = StoryObj<typeof meta>;
 const albumId = "019d0000-0000-7000-8000-000000000101";
 const uploaderId = "019d0000-0000-7000-8000-000000000102";
 const categoryId = "019d0000-0000-7000-8000-000000000103";
+const gradeOptionId = "019d0000-0000-7000-8000-000000000104";
+const classOptionId = "019d0000-0000-7000-8000-000000000105";
 const createdAt = "2026-08-29T00:00:00.000Z";
 
 function mediaFixture(
   id: string,
   publicationStatus: InternalMediaView["publicationStatus"],
   deletionTask: InternalMediaView["deletionTask"] = null,
+  bib?: BibMediaState,
 ): InternalMediaView {
   return {
     id,
@@ -54,6 +61,7 @@ function mediaFixture(
       },
     ],
     deletionTask,
+    ...(bib === undefined ? {} : { bib }),
     createdAt,
   };
 }
@@ -63,16 +71,62 @@ export const ReviewAndRecover: Story = {
     <ReviewWorkspace
       albumId={albumId}
       albumTitle="春季运动会"
+      bibConfig={bibConfig}
       categories={[{ id: categoryId, name: "田径" }]}
       initialPage={{
         items: [
-          mediaFixture("019d0000-0000-7000-8000-000000000111", "pending_review"),
-          mediaFixture("019d0000-0000-7000-8000-000000000112", "hidden", {
-            id: "019d0000-0000-7000-8000-000000000113",
-            status: "failed",
-            attempts: 2,
-            lastErrorCode: "CDN_INVALIDATION_FAILED",
+          mediaFixture("019d0000-0000-7000-8000-000000000111", "pending_review", null, {
+            tags: [
+              {
+                id: "019d0000-0000-7000-8000-000000000114",
+                mediaId: "019d0000-0000-7000-8000-000000000111",
+                number: "101999",
+                status: "suggested",
+                source: "ocr",
+                confidence: 0.91,
+                quadrilateral: [
+                  { x: 0.2, y: 0.3 },
+                  { x: 0.5, y: 0.3 },
+                  { x: 0.5, y: 0.45 },
+                  { x: 0.2, y: 0.45 },
+                ],
+                ruleVersion: 1,
+                modelVersion: "ppocrv6-tiny-0.4.2-ff6ab415-1e13b227",
+                gradeOptionId: null,
+                classOptionId: null,
+                mappingVersion: 1,
+                createdAt,
+                confirmedAt: null,
+              },
+            ],
+            review: {
+              mediaId: "019d0000-0000-7000-8000-000000000111",
+              decision: "pending",
+              ocrStatus: "completed",
+              ocrModelVersion: "ppocrv6-tiny-0.4.2-ff6ab415-1e13b227",
+              decidedAt: null,
+            },
           }),
+          mediaFixture(
+            "019d0000-0000-7000-8000-000000000112",
+            "hidden",
+            {
+              id: "019d0000-0000-7000-8000-000000000113",
+              status: "failed",
+              attempts: 2,
+              lastErrorCode: "CDN_INVALIDATION_FAILED",
+            },
+            {
+              tags: [],
+              review: {
+                mediaId: "019d0000-0000-7000-8000-000000000112",
+                decision: "no_number_confirmed",
+                ocrStatus: "failed",
+                ocrModelVersion: "ppocrv6-tiny-0.4.2-ff6ab415-1e13b227",
+                decidedAt: createdAt,
+              },
+            },
+          ),
         ],
         nextCursor: null,
       }}
@@ -117,8 +171,87 @@ const statistics: AlbumStatistics = {
   ],
 };
 
+const bibConfig: BibConfigView = {
+  albumId,
+  automationStatus: "experimental",
+  recognitionEnabled: true,
+  searchEnabled: true,
+  modelVersion: "ppocrv6-tiny-0.4.2-ff6ab415-1e13b227",
+  patterns: [
+    {
+      id: "019d0000-0000-7000-8000-000000000131",
+      totalLength: 6,
+      sortOrder: 0,
+      enabled: true,
+      constraints: [
+        {
+          id: "019d0000-0000-7000-8000-000000000132",
+          startPosition: 1,
+          width: 3,
+          sortOrder: 0,
+          ranges: [{ start: "101", end: "112" }],
+        },
+      ],
+    },
+  ],
+  attributeOptions: [
+    { id: gradeOptionId, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
+    { id: classOptionId, dimension: "class", displayName: "一班", sortOrder: 0, enabled: true },
+  ],
+  mappings: [
+    {
+      id: "019d0000-0000-7000-8000-000000000133",
+      dimension: "grade",
+      startPosition: 1,
+      width: 1,
+      ranges: [{ start: "1", end: "1" }],
+      outputOptionId: gradeOptionId,
+      sortOrder: 0,
+    },
+    {
+      id: "019d0000-0000-7000-8000-000000000134",
+      dimension: "class",
+      startPosition: 2,
+      width: 2,
+      ranges: [{ start: "01", end: "01" }],
+      outputOptionId: classOptionId,
+      sortOrder: 0,
+    },
+  ],
+  ruleVersion: 1,
+  mappingVersion: 1,
+  ruleUsable: true,
+  mappingUsable: true,
+  recalculationStatus: "idle",
+  issues: [],
+  updatedAt: createdAt,
+};
+
 export const SettingsAndStatistics: Story = {
-  render: () => <AlbumSettings initialAlbum={album} statistics={statistics} />,
+  render: () => (
+    <AlbumSettings bibConfig={bibConfig} initialAlbum={album} statistics={statistics} />
+  ),
+};
+
+export const BibRuleAndMappingEditor: Story = {
+  render: () => <BibConfigEditor initial={bibConfig} />,
+};
+
+export const PublicBibSearch: Story = {
+  render: () => (
+    <BibSearchPanel
+      attributeFilterEnabled
+      attributeOptions={bibConfig.attributeOptions}
+      attributePairs={[
+        { gradeOptionId, classOptionId: null },
+        { gradeOptionId, classOptionId },
+      ]}
+      numberLengths={[6]}
+      slug="storybook-bib-album"
+    >
+      <div className="min-h-48 rounded-xl border bg-muted p-6">普通相册流占位</div>
+    </BibSearchPanel>
+  ),
 };
 
 export const Members: Story = {

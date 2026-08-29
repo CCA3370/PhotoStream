@@ -12,7 +12,21 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  not,
+  or,
+  sql,
+} from "drizzle-orm";
 import { createSessionToken, safeEqual } from "../auth/crypto.js";
 import type { PasswordHasher } from "../auth/types.js";
 import type { AppConfig } from "../config.js";
@@ -1000,6 +1014,12 @@ export class PhotoService {
       readonly ingestGroup?: "incomplete" | "failed" | undefined;
       readonly categoryId?: string | undefined;
       readonly uploaderId?: string | undefined;
+      readonly bibReviewDecision?:
+        | (typeof schema.bibReviewDecisionEnum.enumValues)[number]
+        | undefined;
+      readonly bibOcrStatus?: (typeof schema.bibOcrStatusEnum.enumValues)[number] | undefined;
+      readonly gradeOptionId?: string | undefined;
+      readonly classOptionId?: string | undefined;
       readonly cursor?: string | undefined;
       readonly limit: number;
     },
@@ -1028,6 +1048,62 @@ export class PhotoService {
     }
     if (options.uploaderId !== undefined) {
       conditions.push(eq(schema.media.uploaderId, options.uploaderId));
+    }
+    if (options.bibReviewDecision !== undefined) {
+      const matchingReview = this.#database
+        .select({ value: sql`1` })
+        .from(schema.mediaBibReviews)
+        .where(
+          and(
+            eq(schema.mediaBibReviews.mediaId, schema.media.id),
+            eq(schema.mediaBibReviews.decision, options.bibReviewDecision),
+          ),
+        );
+      if (options.bibReviewDecision === "pending") {
+        const anyReview = this.#database
+          .select({ value: sql`1` })
+          .from(schema.mediaBibReviews)
+          .where(eq(schema.mediaBibReviews.mediaId, schema.media.id));
+        const pending = or(exists(matchingReview), not(exists(anyReview)));
+        if (pending !== undefined) conditions.push(pending);
+      } else {
+        conditions.push(exists(matchingReview));
+      }
+    }
+    if (options.bibOcrStatus !== undefined) {
+      conditions.push(
+        exists(
+          this.#database
+            .select({ value: sql`1` })
+            .from(schema.mediaBibReviews)
+            .where(
+              and(
+                eq(schema.mediaBibReviews.mediaId, schema.media.id),
+                eq(schema.mediaBibReviews.ocrStatus, options.bibOcrStatus),
+              ),
+            ),
+        ),
+      );
+    }
+    if (options.gradeOptionId !== undefined) {
+      conditions.push(
+        exists(
+          this.#database
+            .select({ value: sql`1` })
+            .from(schema.mediaBibTags)
+            .where(
+              and(
+                eq(schema.mediaBibTags.mediaId, schema.media.id),
+                eq(schema.mediaBibTags.status, "confirmed"),
+                eq(schema.mediaBibTags.mappingVersion, album.bibMappingVersion),
+                eq(schema.mediaBibTags.gradeOptionId, options.gradeOptionId),
+                ...(options.classOptionId === undefined
+                  ? []
+                  : [eq(schema.mediaBibTags.classOptionId, options.classOptionId)]),
+              ),
+            ),
+        ),
+      );
     }
     if (actor.role === "uploader") {
       conditions.push(eq(schema.media.uploaderId, actor.id));
@@ -1154,6 +1230,67 @@ export class PhotoService {
       .from(schema.categories)
       .where(and(eq(schema.categories.albumId, album.id), eq(schema.categories.enabled, true)))
       .orderBy(asc(schema.categories.sortOrder), asc(schema.categories.id));
+    const bibSearchEnabled =
+      unlocked && album.access === "password" && album.bibSearchEnabled && album.bibRuleUsable;
+    const bibNumberLengths = bibSearchEnabled
+      ? (
+          await this.#database
+            .selectDistinct({ totalLength: schema.bibPatterns.totalLength })
+            .from(schema.bibPatterns)
+            .where(
+              and(eq(schema.bibPatterns.albumId, album.id), eq(schema.bibPatterns.enabled, true)),
+            )
+            .orderBy(asc(schema.bibPatterns.totalLength))
+        ).map((pattern) => pattern.totalLength)
+      : [];
+    const bibAttributeOptions = bibSearchEnabled
+      ? await this.#database
+          .select({
+            id: schema.bibAttributeOptions.id,
+            dimension: schema.bibAttributeOptions.dimension,
+            displayName: schema.bibAttributeOptions.displayName,
+            sortOrder: schema.bibAttributeOptions.sortOrder,
+          })
+          .from(schema.bibAttributeOptions)
+          .where(
+            and(
+              eq(schema.bibAttributeOptions.albumId, album.id),
+              eq(schema.bibAttributeOptions.enabled, true),
+            ),
+          )
+          .orderBy(
+            asc(schema.bibAttributeOptions.dimension),
+            asc(schema.bibAttributeOptions.sortOrder),
+            asc(schema.bibAttributeOptions.id),
+          )
+      : [];
+    const [mappingTask] = bibSearchEnabled
+      ? await this.#database
+          .select({ id: schema.bibRecalculationTasks.id })
+          .from(schema.bibRecalculationTasks)
+          .where(
+            and(
+              eq(schema.bibRecalculationTasks.albumId, album.id),
+              eq(schema.bibRecalculationTasks.kind, "mapping"),
+              inArray(schema.bibRecalculationTasks.status, ["pending", "processing", "failed"]),
+            ),
+          )
+          .limit(1)
+      : [];
+    const bibAttributeFilterEnabled =
+      bibSearchEnabled && album.bibMappingUsable && mappingTask === undefined;
+    const gradeOptionIds = bibAttributeOptions
+      .filter((option) => option.dimension === "grade")
+      .map((option) => option.id);
+    const classOptionIds = bibAttributeOptions
+      .filter((option) => option.dimension === "class")
+      .map((option) => option.id);
+    const bibAttributePairs = bibAttributeFilterEnabled
+      ? gradeOptionIds.flatMap((gradeOptionId) => [
+          { gradeOptionId, classOptionId: null },
+          ...classOptionIds.map((classOptionId) => ({ gradeOptionId, classOptionId })),
+        ])
+      : [];
     return {
       album,
       view: {
@@ -1168,6 +1305,11 @@ export class PhotoService {
         videoDownloadEnabled: album.videoDownloadEnabled,
         privacyNotice: album.privacyNotice,
         complaintContact: album.complaintContact,
+        bibSearchEnabled,
+        bibNumberLengths,
+        bibAttributeFilterEnabled,
+        bibAttributeOptions,
+        bibAttributePairs,
         categories: categories.map(categoryView),
       },
       unlocked,
@@ -1207,6 +1349,7 @@ export class PhotoService {
     readonly cursor: string | undefined;
     readonly categoryId: string | undefined;
     readonly limit: number;
+    readonly mediaIds?: readonly string[] | undefined;
   }) {
     const album = await this.#publicAlbumBySlug(options.slug);
     if (!(await this.#isVisitorAuthorized(album, options.visitorToken))) {
@@ -1230,6 +1373,13 @@ export class PhotoService {
     ];
     if (options.categoryId !== undefined) {
       conditions.push(eq(schema.media.categoryId, options.categoryId));
+    }
+    if (options.mediaIds !== undefined) {
+      conditions.push(
+        options.mediaIds.length === 0
+          ? sql`false`
+          : inArray(schema.media.id, [...options.mediaIds]),
+      );
     }
     if (cursor !== null) conditions.push(lt(schema.media.publishSequence, cursor.publishSequence));
     const rows = await this.#database
@@ -1312,6 +1462,23 @@ export class PhotoService {
           ? this.#encodeCursor(album.id, last.publishSequence, last.id)
           : null,
     };
+  }
+
+  async getAuthorizedPublicAlbum(
+    slug: string,
+    visitorToken: string | undefined,
+    options: { readonly requirePassword?: boolean } = {},
+  ) {
+    const album = await this.#publicAlbumBySlug(slug);
+    const authorized = await this.#isVisitorAuthorized(album, visitorToken);
+    if (!authorized || (options.requirePassword === true && album.access !== "password")) {
+      throw new AppError({
+        code: "ALBUM_PASSWORD_INVALID",
+        message: "相册不可用或口令错误",
+        statusCode: 404,
+      });
+    }
+    return album;
   }
 
   async listLiveEvents(options: {

@@ -3,6 +3,8 @@ import {
   albumUploaderViewSchema,
   albumViewSchema,
   apiErrorSchema,
+  bibOcrStatusSchema,
+  bibReviewDecisionSchema,
   categoryViewSchema,
   completeUploadPartRequestSchema,
   createAlbumRequestSchema,
@@ -28,6 +30,7 @@ import { z } from "zod";
 
 import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
+import type { BibService } from "../bib/service.js";
 import type { AppConfig } from "../config.js";
 import type { LiveEventBroker } from "../media/live-event-broker.js";
 import type { OperationsService } from "../media/operations-service.js";
@@ -66,10 +69,18 @@ const internalMediaQuerySchema = z
     ingestGroup: z.enum(["incomplete", "failed"]).optional(),
     categoryId: z.string().uuid().optional(),
     uploaderId: z.string().uuid().optional(),
+    bibReviewDecision: bibReviewDecisionSchema.optional(),
+    bibOcrStatus: bibOcrStatusSchema.optional(),
+    gradeOptionId: z.string().uuid().optional(),
+    classOptionId: z.string().uuid().optional(),
     cursor: z.string().max(1_000).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(60),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.classOptionId === undefined || value.gradeOptionId !== undefined, {
+    message: "班级筛选必须同时提供年级",
+    path: ["classOptionId"],
+  });
 const changesQuerySchema = z.object({ after: z.coerce.number().int().min(0).default(0) }).strict();
 const eventStreamQuerySchema = z
   .object({ after: z.coerce.number().int().min(0).optional() })
@@ -93,6 +104,7 @@ export async function registerPhotoRoutes(
     readonly broker: LiveEventBroker;
     readonly config: AppConfig;
     readonly operationsService?: OperationsService;
+    readonly bibService?: BibService;
   },
 ): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -377,12 +389,17 @@ export async function registerPhotoRoutes(
         response: { 200: internalMediaListSchema, ...commonErrors },
       },
     },
-    async (request) => {
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
       const session = await requireInternalSession(request, options.authService, options.config);
-      return options.photoService.listInternalMedia(actorFrom(session), {
+      const actor = actorFrom(session);
+      const media = await options.photoService.listInternalMedia(actor, {
         albumId: request.params.id,
         ...request.query,
       });
+      return options.bibService === undefined
+        ? media
+        : options.bibService.attachMediaStates(actor, media);
     },
   );
 

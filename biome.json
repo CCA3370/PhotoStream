@@ -6,7 +6,8 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": true
+    "ignoreUnknown": true,
+    "includes": ["**", "!apps/web/public/assets/models/bib-ocr"]
   },
   "formatter": {
     "enabled": true,

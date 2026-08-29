@@ -42,7 +42,7 @@ export async function clientMutation<T>(
   options: {
     readonly body?: unknown;
     readonly idempotencyKey?: string;
-    readonly method?: "POST" | "PATCH" | "DELETE";
+    readonly method?: "POST" | "PUT" | "PATCH" | "DELETE";
     readonly signal?: AbortSignal;
   } = {},
 ): Promise<T> {

@@ -41,4 +41,23 @@ describe("configuration", () => {
       new Set(["localhost:3000", "localhost:3001", "127.0.0.1:3001"]),
     );
   });
+
+  it("requires bib encryption and search keys as one independent pair", () => {
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        BIB_DATA_KEY: Buffer.alloc(32, 1).toString("base64url"),
+      }),
+    ).toThrowError(expect.objectContaining({ fields: ["BIB_SEARCH_KEY"] }));
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        BIB_DATA_KEY: Buffer.alloc(32, 1).toString("base64url"),
+        BIB_SEARCH_KEY: "b".repeat(32),
+      }),
+    ).toMatchObject({ BIB_KEY_VERSION: "v1", BIB_OCR_AUTOMATION_STATUS: "experimental" });
+    expect(() =>
+      loadConfig({ ...validEnvironment, BIB_OCR_AUTOMATION_STATUS: "unverified" }),
+    ).toThrowError(expect.objectContaining({ fields: ["BIB_OCR_AUTOMATION_STATUS"] }));
+  });
 });

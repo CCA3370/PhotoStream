@@ -12,6 +12,7 @@ allowBuilds:
   agent-browser: true
   argon2: true
   esbuild: true
+  protobufjs: false
   sharp: true
   unrs-resolver: true
 
@@ -20,3 +21,4 @@ minimumReleaseAgeExclude:
 
 overrides:
   '@esbuild-kit/core-utils>esbuild': 0.25.12
+  '@paddleocr/paddleocr-js>onnxruntime-web': 1.24.3

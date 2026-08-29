@@ -40,6 +40,9 @@ export function LiveUpdates({
       if (event.id <= lastEventId.current) return;
       lastEventId.current = event.id;
       if (event.type === "media.published") {
+        window.dispatchEvent(
+          new CustomEvent("photostream:media-published", { detail: { mediaId: event.mediaId } }),
+        );
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
           setCount((current) => current + 1);
@@ -48,6 +51,12 @@ export function LiveUpdates({
       }
       if (event.type === "media.updated") {
         startTransition(() => router.refresh());
+        return;
+      }
+      if (event.type === "media.bib.updated") {
+        window.dispatchEvent(
+          new CustomEvent("photostream:bib-updated", { detail: { mediaId: event.mediaId } }),
+        );
         return;
       }
       if (
@@ -103,11 +112,13 @@ export function LiveUpdates({
     const hidden = (event: Event) => receiveSse("media.hidden", event);
     const deleted = (event: Event) => receiveSse("media.deleted", event);
     const restored = (event: Event) => receiveSse("media.restored", event);
+    const bibUpdated = (event: Event) => receiveSse("media.bib.updated", event);
     events.addEventListener("media.published", published);
     events.addEventListener("media.updated", updated);
     events.addEventListener("media.hidden", hidden);
     events.addEventListener("media.deleted", deleted);
     events.addEventListener("media.restored", restored);
+    events.addEventListener("media.bib.updated", bibUpdated);
     events.addEventListener("open", stopPolling);
     events.addEventListener("error", startPolling);
     return () => {

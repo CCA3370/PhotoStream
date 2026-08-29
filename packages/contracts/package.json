@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./bib": {
+      "types": "./src/bib.ts",
+      "import": "./src/bib.ts"
     }
   },
   "files": [

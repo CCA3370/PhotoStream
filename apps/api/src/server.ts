@@ -4,6 +4,7 @@ import { buildApp } from "./app.js";
 import { argon2PasswordHasher } from "./auth/password.js";
 import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { UserAdminService } from "./auth/user-admin-service.js";
+import { BibService } from "./bib/service.js";
 import { loadConfig } from "./config.js";
 import { LiveEventBroker } from "./media/live-event-broker.js";
 import { LocalObjectStorage } from "./media/object-storage.js";
@@ -32,6 +33,7 @@ const userAdminService = new UserAdminService({
   config,
 });
 const operationsService = new OperationsService({ database, storage, config });
+const bibService = new BibService({ database, config, photoService });
 const app = await buildApp({
   config,
   authStore,
@@ -39,6 +41,7 @@ const app = await buildApp({
   broker,
   userAdminService,
   operationsService,
+  bibService,
 });
 const deletionPoll = setInterval(() => {
   void operationsService.processPendingDeletionTasks().catch((error: unknown) => {
@@ -61,10 +64,36 @@ const analyticsCleanup = setInterval(
   24 * 60 * 60 * 1_000,
 );
 analyticsCleanup.unref();
+const bibMaintenance = setInterval(() => {
+  void Promise.all([
+    bibService.processPendingRecalculations(),
+    bibService.expireStaleOcrActivities(),
+  ]).catch((error: unknown) => {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : "unknown" },
+      "bib maintenance poll failed",
+    );
+  });
+}, 30_000);
+bibMaintenance.unref();
+const bibCleanup = setInterval(
+  () => {
+    void bibService.cleanupStaleCandidates().catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : "unknown" },
+        "bib candidate cleanup failed",
+      );
+    });
+  },
+  24 * 60 * 60 * 1_000,
+);
+bibCleanup.unref();
 
 async function shutdown(signal: string): Promise<void> {
   clearInterval(deletionPoll);
   clearInterval(analyticsCleanup);
+  clearInterval(bibMaintenance);
+  clearInterval(bibCleanup);
   app.log.info({ signal }, "shutdown requested");
   await app.close();
   await broker.close();

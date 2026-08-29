@@ -1,0 +1,135 @@
+{
+  "assetVersion": "ppocrv6-tiny-0.4.2-ff6ab415-1e13b227",
+  "sdk": {
+    "name": "@paddleocr/paddleocr-js",
+    "version": "0.4.2",
+    "license": "Apache-2.0"
+  },
+  "runtime": {
+    "name": "onnxruntime-web",
+    "version": "1.24.3"
+  },
+  "files": [
+    {
+      "path": "det.tar",
+      "bytes": 1792000,
+      "sha256": "ff6ab415b0a6e0c488550f2fb5d5046f1719848df220b2dc21b56402a65bc05d",
+      "source": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_det_onnx_infer.tar"
+    },
+    {
+      "path": "rec.tar",
+      "bytes": 4526080,
+      "sha256": "1e13b22717b1edd89d4cde4fda272b6c17d5b505c97c2baea99da1a3a2d54b29",
+      "source": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_rec_onnx_infer.tar"
+    },
+    {
+      "path": "ort/ort-wasm-simd-threaded.mjs",
+      "bytes": 24274,
+      "sha256": "5687566b1bc1c8cf628d76c2ddb16b2a3b81a7997273d4666564880495088e57"
+    },
+    {
+      "path": "ort/ort-wasm-simd-threaded.wasm",
+      "bytes": 12361745,
+      "sha256": "be0e129949062ad50290ef94683fac8be5bb6156f709e030b7a5f1661a2f6c17"
+    },
+    {
+      "path": "ort/ort-wasm-simd-threaded.jsep.mjs",
+      "bytes": 46595,
+      "sha256": "9a99acd12acc495184c9ea4d458ac9424f8180aacfbc7b8371ed64f9351e4a81"
+    },
+    {
+      "path": "ort/ort-wasm-simd-threaded.jsep.wasm",
+      "bytes": 25014754,
+      "sha256": "2e0a3d0e3f6b7c13ecfaba38c13691fd19c9ed470e72f9d7d8416ca59ab6dbcd"
+    },
+    {
+      "path": "sdk/runtime.mjs",
+      "bytes": 81637,
+      "sha256": "3864d78b939325027089b60a434076bbf69d78f580a44e692921844f90891b2d"
+    },
+    {
+      "path": "sdk/assets/worker-entry-C9UNuyOJ.js",
+      "bytes": 11341300,
+      "sha256": "17022b0f453e34a9549cd9ed55ff917ad38e5a4dbf2ed6d9947acf4c6f97b6e7"
+    },
+    {
+      "path": "sdk/assets/ort.bundle.min.mjs",
+      "bytes": 403282,
+      "sha256": "647b039fd94e4fd5fc686ec30f637fdf99e164a512a98a84905e12bb54511d86"
+    },
+    {
+      "path": "sdk/vendor/js-yaml.mjs",
+      "bytes": 103891,
+      "sha256": "33e98d04719e7a7fc8e0433803ad4b26a6f72d4545d279a5b053d45bd7871c7a"
+    },
+    {
+      "path": "sdk/vendor/clipper-stub.mjs",
+      "bytes": 111,
+      "sha256": "6be7074d305a90efa84318bd5729596d97895ad10ad72cd7cbdbd062151a78cc"
+    },
+    {
+      "path": "sdk/vendor/opencv-stub.mjs",
+      "bytes": 110,
+      "sha256": "4a290396510f3daf1211ce96b673f964a546a9b54fabd113c4cbac86be9bf059"
+    },
+    {
+      "path": "sdk/vendor/ort-stub.mjs",
+      "bytes": 82,
+      "sha256": "282ac7b67a83246f2e99a0d447ba03d8cccc7eb15370c4c0b2b1b060fd1e6e5b"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "bytes": 1382,
+      "sha256": "a0f78056bb7acb592aa310e26b96022710da0b6f2cb0a9a2927ade5a9e0e215b"
+    },
+    {
+      "path": "licenses/Apache-2.0.txt",
+      "bytes": 9240,
+      "sha256": "0162b0da39f69d9c98226e7eaf705e518c4ee9d4e7e3e3c55ee960a6d128caab"
+    },
+    {
+      "path": "licenses/BSL-1.0.txt",
+      "bytes": 1338,
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+    },
+    {
+      "path": "licenses/JSBN.txt",
+      "bytes": 1247,
+      "sha256": "b92f47a35475f20eef1887231b951941b6bf2b781bd15bb2e7d146546801f690"
+    },
+    {
+      "path": "licenses/MIT.txt",
+      "bytes": 1112,
+      "sha256": "9c1eb572b7249bc34c1a2a83c343f11d963445d0605faa19394fc1f2476ae4d7"
+    }
+  ],
+  "transferSets": {
+    "wasmFallback": [
+      "det.tar",
+      "rec.tar",
+      "ort/ort-wasm-simd-threaded.mjs",
+      "ort/ort-wasm-simd-threaded.wasm",
+      "sdk/runtime.mjs",
+      "sdk/assets/worker-entry-C9UNuyOJ.js",
+      "sdk/assets/ort.bundle.min.mjs",
+      "sdk/vendor/js-yaml.mjs",
+      "sdk/vendor/clipper-stub.mjs",
+      "sdk/vendor/opencv-stub.mjs",
+      "sdk/vendor/ort-stub.mjs"
+    ],
+    "webGpu": [
+      "det.tar",
+      "rec.tar",
+      "ort/ort-wasm-simd-threaded.jsep.mjs",
+      "ort/ort-wasm-simd-threaded.jsep.wasm",
+      "sdk/runtime.mjs",
+      "sdk/assets/worker-entry-C9UNuyOJ.js",
+      "sdk/assets/ort.bundle.min.mjs",
+      "sdk/vendor/js-yaml.mjs",
+      "sdk/vendor/clipper-stub.mjs",
+      "sdk/vendor/opencv-stub.mjs",
+      "sdk/vendor/ort-stub.mjs"
+    ]
+  },
+  "maximumPerDeviceGzipBytes": 36700160
+}
