@@ -103,6 +103,13 @@ export const apiErrorCodeSchema = z.enum([
   "OBJECT_VERIFICATION_FAILED",
   "STATE_CONFLICT",
   "MEDIA_LIMIT_EXCEEDED",
+  "USER_NOT_FOUND",
+  "MEDIA_NOT_FOUND",
+  "DOWNLOAD_DISABLED",
+  "DOWNLOAD_NOT_READY",
+  "DELETION_TASK_FAILED",
+  "IDEMPOTENCY_CONFLICT",
+  "RECENT_AUTH_REQUIRED",
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
 
@@ -174,6 +181,8 @@ export const albumViewSchema = z
     previewDownloadEnabled: z.boolean(),
     originalDownloadEnabled: z.boolean(),
     videoDownloadEnabled: z.boolean(),
+    privacyNotice: z.string().max(2_000),
+    complaintContact: z.string().max(300),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -404,6 +413,15 @@ export const publicMediaViewSchema = z
     publishSequence: z.number().int().positive(),
     publishedAt: z.string().datetime(),
     variants: z.array(mediaVariantViewSchema),
+    downloads: z
+      .object({
+        preview: z.boolean(),
+        original: z.boolean(),
+        video: z.boolean(),
+        originalBytes: z.number().int().positive().nullable(),
+        videoBytes: z.number().int().positive().nullable(),
+      })
+      .strict(),
   })
   .strict();
 export type PublicMediaView = z.infer<typeof publicMediaViewSchema>;
@@ -413,11 +431,26 @@ export const internalMediaViewSchema = z
     id: z.string().uuid(),
     albumId: z.string().uuid(),
     uploaderId: z.string().uuid(),
+    categoryId: z.string().uuid().nullable(),
     kind: z.literal("photo"),
     ingestStatus: ingestStatusSchema,
     publicationStatus: publicationStatusSchema,
     width: z.number().int().positive(),
     height: z.number().int().positive(),
+    totalBytes: z.number().int().positive(),
+    capturedAt: z.string().datetime().nullable(),
+    publishSequence: z.number().int().positive().nullable(),
+    publishedAt: z.string().datetime().nullable(),
+    variants: z.array(mediaVariantViewSchema),
+    deletionTask: z
+      .object({
+        id: z.string().uuid(),
+        status: z.enum(["pending", "processing", "failed", "completed"]),
+        attempts: z.number().int().min(0),
+        lastErrorCode: z.string().nullable(),
+      })
+      .strict()
+      .nullable(),
     createdAt: z.string().datetime(),
   })
   .strict();
@@ -431,6 +464,11 @@ export const publicAlbumViewSchema = z
     state: albumStateSchema,
     access: albumAccessSchema,
     accessRequired: z.boolean(),
+    previewDownloadEnabled: z.boolean(),
+    originalDownloadEnabled: z.boolean(),
+    videoDownloadEnabled: z.boolean(),
+    privacyNotice: z.string().max(2_000),
+    complaintContact: z.string().max(300),
     categories: z.array(categoryViewSchema),
   })
   .strict();
@@ -455,3 +493,209 @@ export const liveEventViewSchema = z
     createdAt: z.string().datetime(),
   })
   .strict();
+
+export const adminUserViewSchema = userViewSchema
+  .extend({
+    isActive: z.boolean(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+export type AdminUserView = z.infer<typeof adminUserViewSchema>;
+
+export const createUserRequestSchema = z
+  .object({
+    username: usernameSchema,
+    displayName: z.string().trim().min(1).max(80),
+    role: userRoleSchema,
+  })
+  .strict();
+
+export const createUserResponseSchema = z
+  .object({
+    user: adminUserViewSchema,
+    generatedTemporaryPassword: passwordSchema,
+  })
+  .strict();
+
+export const updateUserRequestSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(80).optional(),
+    role: userRoleSchema.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, { message: "至少提供一个修改字段" });
+
+export const resetUserPasswordResponseSchema = z
+  .object({ generatedTemporaryPassword: passwordSchema })
+  .strict();
+
+export const updateAlbumRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(1_000).optional(),
+    access: albumAccessSchema.optional(),
+    publishMode: publishModeSchema.optional(),
+    previewDownloadEnabled: z.boolean().optional(),
+    originalDownloadEnabled: z.boolean().optional(),
+    videoDownloadEnabled: z.boolean().optional(),
+    privacyNotice: z.string().trim().max(2_000).optional(),
+    complaintContact: z.string().trim().max(300).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, { message: "至少提供一个修改字段" });
+export type UpdateAlbumRequest = z.infer<typeof updateAlbumRequestSchema>;
+
+export const rotateAlbumPasswordResponseSchema = z
+  .object({ generatedPassword: z.string().min(8), album: albumViewSchema })
+  .strict();
+
+export const albumSummaryViewSchema = albumViewSchema
+  .extend({
+    mediaCount: z.number().int().min(0),
+    pendingReviewCount: z.number().int().min(0),
+    incompleteCount: z.number().int().min(0),
+    logicalBytes: z.number().int().min(0),
+  })
+  .strict();
+export type AlbumSummaryView = z.infer<typeof albumSummaryViewSchema>;
+
+export const updateCategoryRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    sortOrder: z.number().int().min(0).max(10_000).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, { message: "至少提供一个修改字段" });
+
+export const internalMediaListSchema = z
+  .object({ items: z.array(internalMediaViewSchema), nextCursor: z.string().nullable() })
+  .strict();
+export type InternalMediaList = z.infer<typeof internalMediaListSchema>;
+
+export const albumUploaderViewSchema = z
+  .object({
+    id: z.string().uuid(),
+    username: usernameSchema,
+    displayName: z.string().min(1).max(80),
+  })
+  .strict();
+export type AlbumUploaderView = z.infer<typeof albumUploaderViewSchema>;
+
+export const mediaBatchActionSchema = z.enum(["publish", "hide", "restore", "change_category"]);
+export const mediaBatchRequestSchema = z
+  .object({
+    action: mediaBatchActionSchema,
+    mediaIds: z.array(z.string().uuid()).min(1).max(200),
+    categoryId: z.string().uuid().nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.mediaIds).size !== value.mediaIds.length) {
+      context.addIssue({ code: "custom", message: "媒体 ID 不能重复", path: ["mediaIds"] });
+    }
+    if (value.action === "change_category" && value.categoryId === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "改分类必须提供 categoryId",
+        path: ["categoryId"],
+      });
+    }
+    if (value.action !== "change_category" && value.categoryId !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "当前操作不能提供 categoryId",
+        path: ["categoryId"],
+      });
+    }
+  });
+export type MediaBatchRequest = z.infer<typeof mediaBatchRequestSchema>;
+
+export const mediaBatchResultSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          mediaId: z.string().uuid(),
+          ok: z.boolean(),
+          code: z.string().nullable(),
+          message: z.string().nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type MediaBatchResult = z.infer<typeof mediaBatchResultSchema>;
+
+export const deletionTaskViewSchema = z
+  .object({
+    id: z.string().uuid(),
+    mediaId: z.string().uuid(),
+    status: z.enum(["pending", "processing", "failed", "completed"]),
+    attempts: z.number().int().min(0),
+    lastErrorCode: z.string().nullable(),
+    nextAttemptAt: z.string().datetime(),
+    completedAt: z.string().datetime().nullable(),
+  })
+  .strict();
+export type DeletionTaskView = z.infer<typeof deletionTaskViewSchema>;
+
+export const deleteMediaRequestSchema = z
+  .object({ confirmation: z.string().min(1).max(120) })
+  .strict();
+
+export const downloadKindSchema = z.enum(["preview", "original", "video"]);
+export type DownloadKind = z.infer<typeof downloadKindSchema>;
+export const signedDownloadSchema = z
+  .object({
+    url: z.string().url(),
+    filename: z.string().min(1).max(180),
+    bytes: z.number().int().positive(),
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+export type SignedDownload = z.infer<typeof signedDownloadSchema>;
+
+export const auditLogViewSchema = z
+  .object({
+    id: z.number().int().positive(),
+    actorUserId: z.string().uuid().nullable(),
+    action: z.string(),
+    targetType: z.string(),
+    targetId: z.string().uuid().nullable(),
+    result: z.string(),
+    changedFields: z.array(z.string()),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type AuditLogView = z.infer<typeof auditLogViewSchema>;
+
+export const auditLogListSchema = z
+  .object({ items: z.array(auditLogViewSchema), nextCursor: z.string().nullable() })
+  .strict();
+export type AuditLogList = z.infer<typeof auditLogListSchema>;
+
+export const albumStatisticsSchema = z
+  .object({
+    mediaCount: z.number().int().min(0),
+    logicalBytes: z.number().int().min(0),
+    opens: z.number().int().min(0),
+    sessions: z.number().int().min(0),
+    downloads: z.number().int().min(0),
+    uniqueVisitors: z.number().int().min(0),
+    daily: z.array(
+      z
+        .object({
+          day: z.iso.date(),
+          opens: z.number().int().min(0),
+          sessions: z.number().int().min(0),
+          downloads: z.number().int().min(0),
+          uniqueVisitors: z.number().int().min(0),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type AlbumStatistics = z.infer<typeof albumStatisticsSchema>;

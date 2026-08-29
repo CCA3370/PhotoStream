@@ -9,7 +9,7 @@ import type {
 import { ImagePlusIcon, RotateCcwIcon, WifiIcon, XIcon } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-
+import { AlbumContextNav } from "@/components/albums/album-context-nav";
 import { UploadShell } from "@/components/shells/upload-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -172,10 +172,12 @@ export function UploadQueue({
   albumId,
   albumTitle,
   categories,
+  role,
 }: Readonly<{
   albumId: string;
   albumTitle: string;
   categories: readonly CategoryOption[];
+  role: "admin" | "uploader";
 }>) {
   const inputRef = useRef<HTMLInputElement>(null);
   const controllers = useRef(new Map<string, AbortController>());
@@ -704,168 +706,171 @@ export function UploadQueue({
         onClearCompleted: clearCompleted,
       }}
     >
-      <section className="flex flex-col gap-4" aria-labelledby="upload-title">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-semibold" id="upload-title">
-            上传队列
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            请选择系统 Chrome、Edge 或 Safari 上传媒体。
-          </p>
-        </div>
-        <div className="flex flex-col gap-5">
-          {recoveryError === null ? null : (
-            <Alert variant="destructive">
-              <AlertTitle>恢复存储不可用</AlertTitle>
-              <AlertDescription>{recoveryError}</AlertDescription>
-            </Alert>
-          )}
-          {recoveries.length === 0 ? null : (
-            <Alert>
-              <RotateCcwIcon aria-hidden="true" />
-              <AlertTitle>发现 {recoveries.length} 个可恢复任务</AlertTitle>
-              <AlertDescription>
-                重新选择同一文件后会校验本地内容指纹，并只续传服务端确认缺失的对象。
-              </AlertDescription>
-            </Alert>
-          )}
-          <Card>
-            <CardHeader>
-              <CardTitle>选择照片</CardTitle>
-              <CardDescription>
-                照片在浏览器 Worker 中处理，媒体正文直接上传本地 OSS 模拟器。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 md:flex-row md:items-end">
-              <Field className="max-w-xs">
-                <FieldLabel htmlFor="upload-category">一级分类</FieldLabel>
-                <Select
-                  items={categoryItems}
-                  value={categoryId}
-                  onValueChange={(value) => setCategoryId(value ?? "uncategorized")}
+      <div className="flex flex-col gap-4">
+        <AlbumContextNav albumId={albumId} current="upload" role={role} />
+        <section className="flex flex-col gap-4" aria-labelledby="upload-title">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-semibold" id="upload-title">
+              上传队列
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              请选择系统 Chrome、Edge 或 Safari 上传媒体。
+            </p>
+          </div>
+          <div className="flex flex-col gap-5">
+            {recoveryError === null ? null : (
+              <Alert variant="destructive">
+                <AlertTitle>恢复存储不可用</AlertTitle>
+                <AlertDescription>{recoveryError}</AlertDescription>
+              </Alert>
+            )}
+            {recoveries.length === 0 ? null : (
+              <Alert>
+                <RotateCcwIcon aria-hidden="true" />
+                <AlertTitle>发现 {recoveries.length} 个可恢复任务</AlertTitle>
+                <AlertDescription>
+                  重新选择同一文件后会校验本地内容指纹，并只续传服务端确认缺失的对象。
+                </AlertDescription>
+              </Alert>
+            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>选择照片</CardTitle>
+                <CardDescription>
+                  照片在浏览器 Worker 中处理，媒体正文直接上传本地 OSS 模拟器。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 md:flex-row md:items-end">
+                <Field className="max-w-xs">
+                  <FieldLabel htmlFor="upload-category">一级分类</FieldLabel>
+                  <Select
+                    items={categoryItems}
+                    value={categoryId}
+                    onValueChange={(value) => setCategoryId(value ?? "uncategorized")}
+                  >
+                    <SelectTrigger className="min-h-11 w-full" id="upload-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {categoryItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>选择后应用于本次新任务。</FieldDescription>
+                </Field>
+                <input
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-label="照片文件"
+                  className="sr-only"
+                  disabled={busy}
+                  id="photo-files"
+                  multiple
+                  onChange={(event) => void selected(event.currentTarget.files)}
+                  ref={inputRef}
+                  type="file"
+                />
+                <Button
+                  className="min-h-11"
+                  disabled={busy}
+                  onClick={() => inputRef.current?.click()}
+                  type="button"
                 >
-                  <SelectTrigger className="min-h-11 w-full" id="upload-category">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {categoryItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FieldDescription>选择后应用于本次新任务。</FieldDescription>
-              </Field>
-              <input
-                accept="image/jpeg,image/png,image/webp"
-                aria-label="照片文件"
-                className="sr-only"
-                disabled={busy}
-                id="photo-files"
-                multiple
-                onChange={(event) => void selected(event.currentTarget.files)}
-                ref={inputRef}
-                type="file"
-              />
-              <Button
-                className="min-h-11"
-                disabled={busy}
-                onClick={() => inputRef.current?.click()}
-                type="button"
-              >
-                <ImagePlusIcon data-icon="inline-start" />
-                {busy ? "正在处理队列…" : "选择照片"}
-              </Button>
-            </CardContent>
-          </Card>
+                  <ImagePlusIcon data-icon="inline-start" />
+                  {busy ? "正在处理队列…" : "选择照片"}
+                </Button>
+              </CardContent>
+            </Card>
 
-          {tasks.length === 0 ? (
-            <Empty className="min-h-64 border">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <WifiIcon aria-hidden="true" />
-                </EmptyMedia>
-                <EmptyTitle>上传队列为空</EmptyTitle>
-                <EmptyDescription>选择一张或多张静态照片开始处理。</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className="flex flex-col gap-3" aria-live="polite">
-              {tasks.map((task) => (
-                <Card key={task.id} size="sm">
-                  <CardHeader>
-                    <CardTitle>{task.label}</CardTitle>
-                    <CardDescription>{task.stage}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 sm:grid-cols-[72px_minmax(0,1fr)]">
-                    {task.previewUrl === null ? (
-                      <div aria-hidden="true" className="size-[72px] rounded-lg bg-muted" />
-                    ) : (
-                      <Image
-                        alt={`${task.label} 本地缩略图`}
-                        className="size-[72px] rounded-lg object-cover"
-                        height={72}
-                        src={task.previewUrl}
-                        unoptimized
-                        width={72}
-                      />
-                    )}
-                    <div className="flex min-w-0 flex-col gap-3">
-                      <Progress value={task.progress}>
-                        <ProgressLabel>总进度</ProgressLabel>
-                        <ProgressValue>
-                          {(_formattedValue, value) => `${value ?? 0}%`}
-                        </ProgressValue>
-                      </Progress>
-                      <p className="text-sm text-muted-foreground">
-                        {task.contentType || "未开始"} · {formatBytes(task.uploadedBytes)} /{" "}
-                        {formatBytes(task.totalBytes)}
-                        {task.rateBytesPerSecond > 0
-                          ? ` · ${formatBytes(task.rateBytesPerSecond)}/s · ${formatRemaining(task.remainingSeconds)}`
-                          : ""}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={task.error === null ? "secondary" : "destructive"}>
-                          {task.error ?? task.stage}
-                        </Badge>
-                        {task.publicationStatus === undefined ? null : (
-                          <Badge>{taskLabel(task.publicationStatus)}</Badge>
-                        )}
-                        {task.state === "active" ? (
-                          <Button
-                            onClick={() => cancelTask(task.id)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <XIcon data-icon="inline-start" />
-                            取消
-                          </Button>
-                        ) : null}
-                        {task.state === "failed" && task.retryable ? (
-                          <Button
-                            disabled={busy}
-                            onClick={() => void retryFailed(new Set([task.id]))}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <RotateCcwIcon data-icon="inline-start" />
-                            重试
-                          </Button>
-                        ) : null}
+            {tasks.length === 0 ? (
+              <Empty className="min-h-64 border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <WifiIcon aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyTitle>上传队列为空</EmptyTitle>
+                  <EmptyDescription>选择一张或多张静态照片开始处理。</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <div className="flex flex-col gap-3" aria-live="polite">
+                {tasks.map((task) => (
+                  <Card key={task.id} size="sm">
+                    <CardHeader>
+                      <CardTitle>{task.label}</CardTitle>
+                      <CardDescription>{task.stage}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 sm:grid-cols-[72px_minmax(0,1fr)]">
+                      {task.previewUrl === null ? (
+                        <div aria-hidden="true" className="size-[72px] rounded-lg bg-muted" />
+                      ) : (
+                        <Image
+                          alt={`${task.label} 本地缩略图`}
+                          className="size-[72px] rounded-lg object-cover"
+                          height={72}
+                          src={task.previewUrl}
+                          unoptimized
+                          width={72}
+                        />
+                      )}
+                      <div className="flex min-w-0 flex-col gap-3">
+                        <Progress value={task.progress}>
+                          <ProgressLabel>总进度</ProgressLabel>
+                          <ProgressValue>
+                            {(_formattedValue, value) => `${value ?? 0}%`}
+                          </ProgressValue>
+                        </Progress>
+                        <p className="text-sm text-muted-foreground">
+                          {task.contentType || "未开始"} · {formatBytes(task.uploadedBytes)} /{" "}
+                          {formatBytes(task.totalBytes)}
+                          {task.rateBytesPerSecond > 0
+                            ? ` · ${formatBytes(task.rateBytesPerSecond)}/s · ${formatRemaining(task.remainingSeconds)}`
+                            : ""}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={task.error === null ? "secondary" : "destructive"}>
+                            {task.error ?? task.stage}
+                          </Badge>
+                          {task.publicationStatus === undefined ? null : (
+                            <Badge>{taskLabel(task.publicationStatus)}</Badge>
+                          )}
+                          {task.state === "active" ? (
+                            <Button
+                              onClick={() => cancelTask(task.id)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <XIcon data-icon="inline-start" />
+                              取消
+                            </Button>
+                          ) : null}
+                          {task.state === "failed" && task.retryable ? (
+                            <Button
+                              disabled={busy}
+                              onClick={() => void retryFailed(new Set([task.id]))}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <RotateCcwIcon data-icon="inline-start" />
+                              重试
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
     </UploadShell>
   );
 }

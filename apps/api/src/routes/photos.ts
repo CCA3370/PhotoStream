@@ -1,4 +1,6 @@
 import {
+  albumSummaryViewSchema,
+  albumUploaderViewSchema,
   albumViewSchema,
   apiErrorSchema,
   categoryViewSchema,
@@ -7,11 +9,13 @@ import {
   createAlbumResponseSchema,
   createCategoryRequestSchema,
   createPhotoUploadRequestSchema,
-  internalMediaViewSchema,
+  ingestStatusSchema,
+  internalMediaListSchema,
   liveEventViewSchema,
   okResponseSchema,
   photoVariantKindSchema,
   publicAlbumViewSchema,
+  publicationStatusSchema,
   publicMediaListSchema,
   signedUploadSchema,
   unlockAlbumRequestSchema,
@@ -26,7 +30,13 @@ import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import type { LiveEventBroker } from "../media/live-event-broker.js";
+import type { OperationsService } from "../media/operations-service.js";
 import type { PhotoService } from "../media/service.js";
+import {
+  anonymousVisitorId,
+  visitorSessionCookieName,
+  visitorSessionToken,
+} from "../media/visitor-http.js";
 
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const albumIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
@@ -49,6 +59,17 @@ const publicMediaQuerySchema = z
     limit: z.coerce.number().int().min(1).max(60).default(60),
   })
   .strict();
+const internalMediaQuerySchema = z
+  .object({
+    publicationStatus: publicationStatusSchema.optional(),
+    ingestStatus: ingestStatusSchema.optional(),
+    ingestGroup: z.enum(["incomplete", "failed"]).optional(),
+    categoryId: z.string().uuid().optional(),
+    uploaderId: z.string().uuid().optional(),
+    cursor: z.string().max(1_000).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(60),
+  })
+  .strict();
 const changesQuerySchema = z.object({ after: z.coerce.number().int().min(0).default(0) }).strict();
 const eventStreamQuerySchema = z
   .object({ after: z.coerce.number().int().min(0).optional() })
@@ -58,19 +79,6 @@ const eventListSchema = z.object({ events: z.array(liveEventViewSchema) }).stric
 function idempotencyKey(request: FastifyRequest): string | undefined {
   const value = request.headers["idempotency-key"];
   return typeof value === "string" ? value : undefined;
-}
-
-function visitorCookieName(config: AppConfig, slug: string): string {
-  const prefix = config.NODE_ENV === "production" ? "__Host-" : "";
-  return `${prefix}photostream_album_${slug}`;
-}
-
-function visitorToken(
-  request: FastifyRequest,
-  config: AppConfig,
-  slug: string,
-): string | undefined {
-  return request.cookies[visitorCookieName(config, slug)];
 }
 
 function actorFrom(session: Awaited<ReturnType<typeof requireInternalSession>>) {
@@ -84,6 +92,7 @@ export async function registerPhotoRoutes(
     readonly photoService: PhotoService;
     readonly broker: LiveEventBroker;
     readonly config: AppConfig;
+    readonly operationsService?: OperationsService;
   },
 ): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -103,12 +112,12 @@ export async function registerPhotoRoutes(
       schema: {
         operationId: "listAlbums",
         tags: ["albums"],
-        response: { 200: z.array(albumViewSchema), ...commonErrors },
+        response: { 200: z.array(albumSummaryViewSchema), ...commonErrors },
       },
     },
     async (request) => {
       const session = await requireInternalSession(request, options.authService, options.config);
-      return options.photoService.listAlbums(actorFrom(session));
+      return options.photoService.listAlbumSummaries(actorFrom(session));
     },
   );
 
@@ -351,6 +360,7 @@ export async function registerPhotoRoutes(
         actor: actorFrom(session),
         mediaId: request.params.id,
         requestId: request.id,
+        idempotencyKey: idempotencyKey(request),
       });
       return { ok: true as const };
     },
@@ -363,12 +373,32 @@ export async function registerPhotoRoutes(
         operationId: "listInternalMedia",
         tags: ["media"],
         params: albumIdParamsSchema,
-        response: { 200: z.array(internalMediaViewSchema), ...commonErrors },
+        querystring: internalMediaQuerySchema,
+        response: { 200: internalMediaListSchema, ...commonErrors },
       },
     },
     async (request) => {
       const session = await requireInternalSession(request, options.authService, options.config);
-      return options.photoService.listInternalMedia(actorFrom(session), request.params.id);
+      return options.photoService.listInternalMedia(actorFrom(session), {
+        albumId: request.params.id,
+        ...request.query,
+      });
+    },
+  );
+
+  typed.get(
+    "/api/v1/albums/:id/uploaders",
+    {
+      schema: {
+        operationId: "listAlbumUploaders",
+        tags: ["media"],
+        params: albumIdParamsSchema,
+        response: { 200: z.array(albumUploaderViewSchema), ...commonErrors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return options.photoService.listAlbumUploaders(actorFrom(session), request.params.id);
     },
   );
 
@@ -386,7 +416,7 @@ export async function registerPhotoRoutes(
       void reply.header("cache-control", "no-store");
       const result = await options.photoService.getPublicAlbum(
         request.params.slug,
-        visitorToken(request, options.config, request.params.slug),
+        visitorSessionToken(request, options.config, request.params.slug),
       );
       return result.view;
     },
@@ -409,13 +439,23 @@ export async function registerPhotoRoutes(
         request.params.slug,
         request.body.password,
       );
-      reply.setCookie(visitorCookieName(options.config, request.params.slug), unlocked.rawToken, {
-        httpOnly: true,
-        secure: options.config.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        expires: unlocked.expiresAt,
-      });
+      reply.setCookie(
+        visitorSessionCookieName(options.config, request.params.slug),
+        unlocked.rawToken,
+        {
+          httpOnly: true,
+          secure: options.config.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          expires: unlocked.expiresAt,
+        },
+      );
+      if (options.operationsService !== undefined) {
+        await options.operationsService.recordSession(
+          request.params.slug,
+          anonymousVisitorId(request, reply, options.config),
+        );
+      }
       void reply.header("cache-control", "no-store");
       return { unlocked: true as const };
     },
@@ -436,7 +476,7 @@ export async function registerPhotoRoutes(
       void reply.header("cache-control", "no-store");
       return options.photoService.listPublicMedia({
         slug: request.params.slug,
-        visitorToken: visitorToken(request, options.config, request.params.slug),
+        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         cursor: request.query.cursor,
         categoryId: request.query.categoryId,
         limit: request.query.limit,
@@ -459,7 +499,7 @@ export async function registerPhotoRoutes(
       void reply.header("cache-control", "no-store");
       const result = await options.photoService.listLiveEvents({
         slug: request.params.slug,
-        visitorToken: visitorToken(request, options.config, request.params.slug),
+        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         afterId: request.query.after,
       });
       return { events: result.events };
@@ -486,7 +526,7 @@ export async function registerPhotoRoutes(
       let lastEventId = Math.max(headerEventId, request.query.after ?? 0);
       const initial = await options.photoService.listLiveEvents({
         slug: request.params.slug,
-        visitorToken: visitorToken(request, options.config, request.params.slug),
+        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         afterId: lastEventId,
       });
 
@@ -516,7 +556,7 @@ export async function registerPhotoRoutes(
         try {
           const next = await options.photoService.listLiveEvents({
             slug: request.params.slug,
-            visitorToken: visitorToken(request, options.config, request.params.slug),
+            visitorToken: visitorSessionToken(request, options.config, request.params.slug),
             afterId: lastEventId,
           });
           send(next.events);

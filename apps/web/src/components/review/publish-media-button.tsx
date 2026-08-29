@@ -18,7 +18,9 @@ export function PublishMediaButton({ mediaId }: Readonly<{ mediaId: string }>) {
     setSubmitting(true);
     setError(null);
     try {
-      await clientMutation(`/api/v1/media/${mediaId}/publish`);
+      await clientMutation(`/api/v1/media/${mediaId}/publish`, {
+        idempotencyKey: crypto.randomUUID(),
+      });
       startTransition(() => router.refresh());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "发布失败");

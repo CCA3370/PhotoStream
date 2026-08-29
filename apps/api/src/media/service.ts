@@ -6,16 +6,24 @@ import {
   hasPermission,
   type PhotoVariantKind,
   type PublicMediaView,
+  type UpdateAlbumRequest,
   type UploadIntentView,
   type UserRole,
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { createSessionToken, safeEqual } from "../auth/crypto.js";
 import type { PasswordHasher } from "../auth/types.js";
 import type { AppConfig } from "../config.js";
 import { AppError } from "../errors.js";
+import {
+  findOperationRequest,
+  lockOperationRequest,
+  operationRequestHash,
+  saveOperationRequest,
+} from "../idempotency.js";
+import { type CdnInvalidator, LocalCdnInvalidator } from "./cdn-invalidator.js";
 import { liveEventChannel } from "./live-event-broker.js";
 import type { ObjectStorage } from "./object-storage.js";
 
@@ -32,6 +40,13 @@ const previewVariantKinds = new Set<PhotoVariantKind>(["photo_480", "photo_960"]
 const publicVariantKinds = new Set<PhotoVariantKind>(["photo_480", "photo_960", "photo_1920"]);
 const multipartThreshold = 16 * 1024 * 1024;
 const multipartPartBytes = 8 * 1024 * 1024;
+const incompleteIngestStatuses = [
+  "created",
+  "local_processing",
+  "uploading_preview",
+  "preview_ready",
+  "uploading_source",
+] as const;
 
 function iso(value: Date): string {
   return value.toISOString();
@@ -49,6 +64,8 @@ function albumView(row: typeof schema.albums.$inferSelect): AlbumView {
     previewDownloadEnabled: row.previewDownloadEnabled,
     originalDownloadEnabled: row.originalDownloadEnabled,
     videoDownloadEnabled: row.videoDownloadEnabled,
+    privacyNotice: row.privacyNotice,
+    complaintContact: row.complaintContact,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -109,17 +126,20 @@ export class PhotoService {
   readonly #storage: ObjectStorage;
   readonly #hasher: PasswordHasher;
   readonly #config: AppConfig;
+  readonly #cdnInvalidator: CdnInvalidator;
 
   constructor(options: {
     readonly database: Database;
     readonly storage: ObjectStorage;
     readonly passwordHasher: PasswordHasher;
     readonly config: AppConfig;
+    readonly cdnInvalidator?: CdnInvalidator;
   }) {
     this.#database = options.database;
     this.#storage = options.storage;
     this.#hasher = options.passwordHasher;
     this.#config = options.config;
+    this.#cdnInvalidator = options.cdnInvalidator ?? new LocalCdnInvalidator();
   }
 
   async listAlbums(actor: InternalActor): Promise<AlbumView[]> {
@@ -129,6 +149,41 @@ export class PhotoService {
       .from(schema.albums)
       .orderBy(desc(schema.albums.updatedAt));
     return rows.map(albumView);
+  }
+
+  async listAlbumSummaries(actor: InternalActor) {
+    const albums = await this.listAlbums(actor);
+    return Promise.all(
+      albums.map(async (album) => {
+        const [counts] = await this.#database
+          .select({
+            mediaCount: sql<number>`count(*)::int`,
+            pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.publicationStatus} = 'pending_review')::int`,
+            incompleteCount: sql<number>`count(*) filter (where ${schema.media.ingestStatus} not in ('ready', 'failed', 'cancelled'))::int`,
+          })
+          .from(schema.media)
+          .where(
+            and(
+              eq(schema.media.albumId, album.id),
+              sql`${schema.media.publicationStatus} <> 'deleted'`,
+            ),
+          );
+        const [storage] = await this.#database
+          .select({
+            logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint`,
+          })
+          .from(schema.mediaVariants)
+          .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
+          .where(and(eq(schema.media.albumId, album.id), eq(schema.mediaVariants.verified, true)));
+        return {
+          ...album,
+          mediaCount: counts?.mediaCount ?? 0,
+          pendingReviewCount: counts?.pendingReviewCount ?? 0,
+          incompleteCount: counts?.incompleteCount ?? 0,
+          logicalBytes: Number(storage?.logicalBytes ?? 0),
+        };
+      }),
+    );
   }
 
   async getAlbum(actor: InternalActor, albumId: string): Promise<AlbumView> {
@@ -231,6 +286,151 @@ export class PhotoService {
     });
   }
 
+  async endAlbum(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly requestId: string;
+  }): Promise<AlbumView> {
+    requirePermission(options.actor.role, "album:configure");
+    return this.#transitionAlbum({
+      ...options,
+      from: ["live"],
+      to: "ended",
+      action: "album.ended",
+    });
+  }
+
+  async archiveAlbum(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly requestId: string;
+  }): Promise<AlbumView> {
+    requirePermission(options.actor.role, "album:configure");
+    return this.#transitionAlbum({
+      ...options,
+      from: ["ended"],
+      to: "archived",
+      action: "album.archived",
+    });
+  }
+
+  async restoreAlbum(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly requestId: string;
+  }): Promise<AlbumView> {
+    requirePermission(options.actor.role, "album:configure");
+    return this.#transitionAlbum({
+      ...options,
+      from: ["archived"],
+      to: "ended",
+      action: "album.restored",
+    });
+  }
+
+  async updateAlbum(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly input: UpdateAlbumRequest;
+    readonly requestId: string;
+  }): Promise<AlbumView> {
+    requirePermission(options.actor.role, "album:configure");
+    return this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `album-settings:${options.albumId}`);
+      const album = await this.#albumById(transaction, options.albumId);
+      if (album === null) throw this.#albumNotFound();
+      const accessChanged =
+        options.input.access !== undefined && options.input.access !== album.access;
+      const now = new Date();
+      const [updated] = await transaction
+        .update(schema.albums)
+        .set({
+          ...options.input,
+          ...(options.input.access === "public" ? { bibSearchEnabled: false } : {}),
+          ...(accessChanged ? { accessVersion: album.accessVersion + 1 } : {}),
+          updatedAt: now,
+        })
+        .where(eq(schema.albums.id, album.id))
+        .returning();
+      if (updated === undefined) throw this.#albumNotFound();
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "album.settings.updated",
+        targetType: "album",
+        targetId: album.id,
+        result: "success",
+        changedFields: [
+          ...Object.keys(options.input).sort(),
+          ...(accessChanged ? ["accessVersion"] : []),
+        ],
+        requestId: options.requestId,
+      });
+      return albumView(updated);
+    });
+  }
+
+  async rotateAlbumPassword(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly idempotencyKey: string | undefined;
+    readonly requestId: string;
+  }): Promise<{ readonly album: AlbumView; readonly generatedPassword: string }> {
+    requirePermission(options.actor.role, "album:configure");
+    const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
+    const generatedPassword = this.#deriveAlbumPassword(
+      options.actor.id,
+      `rotate:${options.albumId}:${idempotencyKey}`,
+    );
+    const passwordHash = await this.#hasher.hash(generatedPassword);
+    return this.#database.transaction(async (transaction) => {
+      const actorScope = `user:${options.actor.id}`;
+      const operation = `album.password.rotate:${options.albumId}`;
+      const requestHash = operationRequestHash({ albumId: options.albumId });
+      await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
+      const retried = await findOperationRequest(transaction, {
+        actorScope,
+        operation,
+        idempotencyKey,
+        requestHash,
+      });
+      if (retried !== null) {
+        return { album: retried.album as AlbumView, generatedPassword };
+      }
+      const album = await this.#albumById(transaction, options.albumId);
+      if (album === null) throw this.#albumNotFound();
+      const now = new Date();
+      const [updated] = await transaction
+        .update(schema.albums)
+        .set({
+          passwordHash,
+          access: "password",
+          accessVersion: album.accessVersion + 1,
+          updatedAt: now,
+        })
+        .where(eq(schema.albums.id, album.id))
+        .returning();
+      if (updated === undefined) throw this.#albumNotFound();
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "album.password.rotated",
+        targetType: "album",
+        targetId: album.id,
+        result: "success",
+        changedFields: ["passwordHash", "access", "accessVersion"],
+        requestId: options.requestId,
+      });
+      const view = albumView(updated);
+      await saveOperationRequest(transaction, {
+        actorScope,
+        operation,
+        idempotencyKey,
+        requestHash,
+        result: { album: view },
+      });
+      return { album: view, generatedPassword };
+    });
+  }
+
   async createCategory(options: {
     readonly actor: InternalActor;
     readonly albumId: string;
@@ -238,9 +438,7 @@ export class PhotoService {
     readonly sortOrder: number;
     readonly idempotencyKey: string | undefined;
   }) {
-    if (options.actor.role === "uploader") {
-      throw new AppError({ code: "FORBIDDEN", message: "当前角色无权管理分类", statusCode: 403 });
-    }
+    requirePermission(options.actor.role, "album:configure");
     const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
     return this.#database.transaction(async (transaction) => {
       await this.#advisoryLock(
@@ -286,6 +484,33 @@ export class PhotoService {
       .where(eq(schema.categories.albumId, albumId))
       .orderBy(asc(schema.categories.sortOrder), asc(schema.categories.id));
     return rows.map(categoryView);
+  }
+
+  async updateCategory(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly categoryId: string;
+    readonly input: {
+      readonly name?: string | undefined;
+      readonly sortOrder?: number | undefined;
+      readonly enabled?: boolean | undefined;
+    };
+  }) {
+    requirePermission(options.actor.role, "album:configure");
+    const [updated] = await this.#database
+      .update(schema.categories)
+      .set({ ...options.input, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.categories.id, options.categoryId),
+          eq(schema.categories.albumId, options.albumId),
+        ),
+      )
+      .returning();
+    if (updated === undefined) {
+      throw new AppError({ code: "NOT_FOUND", message: "分类不存在", statusCode: 404 });
+    }
+    return categoryView(updated);
   }
 
   async createPhotoUpload(options: {
@@ -709,9 +934,25 @@ export class PhotoService {
     readonly actor: InternalActor;
     readonly mediaId: string;
     readonly requestId: string;
+    readonly idempotencyKey: string | undefined;
   }): Promise<void> {
     requirePermission(options.actor.role, "media:review");
+    const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
     await this.#database.transaction(async (transaction) => {
+      const actorScope = `user:${options.actor.id}`;
+      const operation = `media.publish:${options.mediaId}`;
+      const requestHash = operationRequestHash({ mediaId: options.mediaId });
+      await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
+      if (
+        (await findOperationRequest(transaction, {
+          actorScope,
+          operation,
+          idempotencyKey,
+          requestHash,
+        })) !== null
+      ) {
+        return;
+      }
       await this.#advisoryLock(transaction, `media:${options.mediaId}`);
       const [media] = await transaction
         .select()
@@ -719,48 +960,190 @@ export class PhotoService {
         .where(eq(schema.media.id, options.mediaId))
         .limit(1);
       if (media === undefined) throw this.#uploadNotFound();
-      if (media.publicationStatus === "published") return;
-      if (media.publicationStatus !== "pending_review") {
+      if (media.publicationStatus !== "published" && media.publicationStatus !== "pending_review") {
         throw new AppError({
           code: "STATE_CONFLICT",
           message: "媒体尚未达到可发布状态",
           statusCode: 409,
         });
       }
-      await this.#allocatePublication(transaction, media.albumId, media.id, new Date());
-      await transaction.insert(schema.auditLogs).values({
-        actorUserId: options.actor.id,
-        action: "media.published",
-        targetType: "media",
-        targetId: media.id,
-        result: "success",
-        changedFields: ["publicationStatus", "publishSequence"],
-        requestId: options.requestId,
+      if (media.publicationStatus === "pending_review") {
+        await this.#allocatePublication(transaction, media.albumId, media.id, new Date());
+        await transaction.insert(schema.auditLogs).values({
+          actorUserId: options.actor.id,
+          action: "media.published",
+          targetType: "media",
+          targetId: media.id,
+          result: "success",
+          changedFields: ["publicationStatus", "publishSequence"],
+          requestId: options.requestId,
+        });
+      }
+      await saveOperationRequest(transaction, {
+        actorScope,
+        operation,
+        idempotencyKey,
+        requestHash,
+        result: { mediaId: options.mediaId },
       });
     });
   }
 
-  async listInternalMedia(actor: InternalActor, albumId: string) {
+  async listInternalMedia(
+    actor: InternalActor,
+    options: {
+      readonly albumId: string;
+      readonly publicationStatus?:
+        | (typeof schema.publicationStatusEnum.enumValues)[number]
+        | undefined;
+      readonly ingestStatus?: (typeof schema.ingestStatusEnum.enumValues)[number] | undefined;
+      readonly ingestGroup?: "incomplete" | "failed" | undefined;
+      readonly categoryId?: string | undefined;
+      readonly uploaderId?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit: number;
+    },
+  ) {
+    requirePermission(actor.role, "album:read");
+    const album = await this.#albumById(this.#database, options.albumId);
+    if (album === null) throw this.#albumNotFound();
+    const cursor =
+      options.cursor === undefined
+        ? null
+        : this.#decodeInternalCursor(options.cursor, options.albumId);
+    const conditions = [eq(schema.media.albumId, options.albumId)];
+    if (options.publicationStatus !== undefined) {
+      conditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
+    }
+    if (options.ingestStatus !== undefined) {
+      conditions.push(eq(schema.media.ingestStatus, options.ingestStatus));
+    }
+    if (options.ingestGroup === "incomplete") {
+      conditions.push(inArray(schema.media.ingestStatus, incompleteIngestStatuses));
+    } else if (options.ingestGroup === "failed") {
+      conditions.push(eq(schema.media.ingestStatus, "failed"));
+    }
+    if (options.categoryId !== undefined) {
+      conditions.push(eq(schema.media.categoryId, options.categoryId));
+    }
+    if (options.uploaderId !== undefined) {
+      conditions.push(eq(schema.media.uploaderId, options.uploaderId));
+    }
+    if (actor.role === "uploader") {
+      conditions.push(eq(schema.media.uploaderId, actor.id));
+    }
+    if (cursor !== null) {
+      const cursorCondition = or(
+        lt(schema.media.createdAt, cursor.createdAt),
+        and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),
+      );
+      if (cursorCondition !== undefined) conditions.push(cursorCondition);
+    }
+    const rows = await this.#database
+      .select()
+      .from(schema.media)
+      .where(and(...conditions))
+      .orderBy(desc(schema.media.createdAt), desc(schema.media.id))
+      .limit(options.limit + 1);
+    const hasMore = rows.length > options.limit;
+    const page = rows.slice(0, options.limit);
+    const mediaIds = page.map((media) => media.id);
+    const variants =
+      mediaIds.length === 0
+        ? []
+        : await this.#database
+            .select()
+            .from(schema.mediaVariants)
+            .where(
+              and(
+                inArray(schema.mediaVariants.mediaId, mediaIds),
+                eq(schema.mediaVariants.verified, true),
+                isNotNull(schema.mediaVariants.bytes),
+              ),
+            );
+    const deletionTasks =
+      mediaIds.length === 0
+        ? []
+        : await this.#database
+            .select()
+            .from(schema.deletionTasks)
+            .where(inArray(schema.deletionTasks.mediaId, mediaIds));
+    const byMedia = new Map<string, typeof variants>();
+    for (const variant of variants) {
+      const current = byMedia.get(variant.mediaId) ?? [];
+      current.push(variant);
+      byMedia.set(variant.mediaId, current);
+    }
+    const deletionByMedia = new Map(deletionTasks.map((task) => [task.mediaId, task]));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
+    const items = page.map((media) => {
+      const deletion = deletionByMedia.get(media.id) ?? null;
+      return {
+        id: media.id,
+        albumId: media.albumId,
+        uploaderId: media.uploaderId,
+        categoryId: media.categoryId,
+        kind: "photo" as const,
+        ingestStatus: media.ingestStatus,
+        publicationStatus: media.publicationStatus,
+        width: media.width,
+        height: media.height,
+        totalBytes: media.totalBytes,
+        capturedAt: media.capturedAt === null ? null : iso(media.capturedAt),
+        publishSequence: media.publishSequence,
+        publishedAt: media.publishedAt === null ? null : iso(media.publishedAt),
+        variants: (byMedia.get(media.id) ?? [])
+          .filter((variant) => photoVariantKinds.includes(variant.kind as PhotoVariantKind))
+          .map((variant) => ({
+            kind: variant.kind as PhotoVariantKind,
+            url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+            width: variant.width,
+            height: variant.height,
+            bytes: variant.bytes as number,
+            contentType: variant.contentType,
+          })),
+        deletionTask:
+          deletion === null
+            ? null
+            : {
+                id: deletion.id,
+                status: deletion.status,
+                attempts: deletion.attempts,
+                lastErrorCode: deletion.lastErrorCode,
+              },
+        createdAt: iso(media.createdAt),
+      };
+    });
+    const last = page.at(-1);
+    return {
+      items,
+      nextCursor:
+        hasMore && last !== undefined
+          ? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id)
+          : null,
+    };
+  }
+
+  async listAlbumUploaders(actor: InternalActor, albumId: string) {
     requirePermission(actor.role, "album:read");
     const album = await this.#albumById(this.#database, albumId);
     if (album === null) throw this.#albumNotFound();
     const rows = await this.#database
-      .select()
+      .selectDistinct({
+        id: schema.users.id,
+        username: schema.users.username,
+        displayName: schema.users.displayName,
+      })
       .from(schema.media)
-      .where(eq(schema.media.albumId, albumId))
-      .orderBy(desc(schema.media.createdAt), desc(schema.media.id))
-      .limit(200);
-    return rows.map((media) => ({
-      id: media.id,
-      albumId: media.albumId,
-      uploaderId: media.uploaderId,
-      kind: "photo" as const,
-      ingestStatus: media.ingestStatus,
-      publicationStatus: media.publicationStatus,
-      width: media.width,
-      height: media.height,
-      createdAt: iso(media.createdAt),
-    }));
+      .innerJoin(schema.users, eq(schema.media.uploaderId, schema.users.id))
+      .where(
+        and(
+          eq(schema.media.albumId, albumId),
+          ...(actor.role === "uploader" ? [eq(schema.users.id, actor.id)] : []),
+        ),
+      )
+      .orderBy(asc(schema.users.displayName), asc(schema.users.id));
+    return rows;
   }
 
   async getPublicAlbum(slug: string, visitorToken?: string) {
@@ -780,6 +1163,11 @@ export class PhotoService {
         state: album.state,
         access: album.access,
         accessRequired: album.access === "password" && !unlocked,
+        previewDownloadEnabled: album.previewDownloadEnabled,
+        originalDownloadEnabled: album.originalDownloadEnabled,
+        videoDownloadEnabled: album.videoDownloadEnabled,
+        privacyNotice: album.privacyNotice,
+        complaintContact: album.complaintContact,
         categories: categories.map(categoryView),
       },
       unlocked,
@@ -895,6 +1283,24 @@ export class PhotoService {
               contentType: variant.contentType,
             };
           }),
+        downloads: {
+          preview:
+            album.previewDownloadEnabled &&
+            (byMedia.get(media.id) ?? []).some(
+              (variant) => variant.kind === "photo_1920" && variant.verified,
+            ),
+          original:
+            album.originalDownloadEnabled &&
+            (byMedia.get(media.id) ?? []).some(
+              (variant) => variant.kind === "photo_original" && variant.verified,
+            ),
+          video: false,
+          originalBytes:
+            (byMedia.get(media.id) ?? []).find(
+              (variant) => variant.kind === "photo_original" && variant.verified,
+            )?.bytes ?? null,
+          videoBytes: null,
+        },
       };
     });
     const last = page.at(-1);
@@ -947,6 +1353,46 @@ export class PhotoService {
       .update(`${userId}\n${idempotencyKey}`, "utf8")
       .digest("base64url")
       .slice(0, 14);
+  }
+
+  async #transitionAlbum(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly requestId: string;
+    readonly from: readonly AlbumView["state"][];
+    readonly to: AlbumView["state"];
+    readonly action: string;
+  }): Promise<AlbumView> {
+    return this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `album-state:${options.albumId}`);
+      const album = await this.#albumById(transaction, options.albumId);
+      if (album === null) throw this.#albumNotFound();
+      if (album.state === options.to) return albumView(album);
+      if (!options.from.includes(album.state)) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "当前相册状态不能执行该操作",
+          statusCode: 409,
+        });
+      }
+      const now = new Date();
+      const [updated] = await transaction
+        .update(schema.albums)
+        .set({ state: options.to, updatedAt: now })
+        .where(eq(schema.albums.id, album.id))
+        .returning();
+      if (updated === undefined) throw this.#albumNotFound();
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: options.action,
+        targetType: "album",
+        targetId: album.id,
+        result: "success",
+        changedFields: ["state"],
+        requestId: options.requestId,
+      });
+      return albumView(updated);
+    });
   }
 
   async #advisoryLock(executor: DbExecutor, value: string): Promise<void> {
@@ -1136,6 +1582,43 @@ export class PhotoService {
       return parsed;
     } catch {
       throw new AppError({ code: "BAD_REQUEST", message: "分页游标无效", statusCode: 400 });
+    }
+  }
+
+  #encodeInternalCursor(albumId: string, createdAt: Date, mediaId: string): string {
+    const encoded = Buffer.from(
+      JSON.stringify({ albumId, createdAt: createdAt.toISOString(), mediaId }),
+      "utf8",
+    ).toString("base64url");
+    return `${encoded}.${cursorSignature(this.#config.CURSOR_SIGNING_SECRET, encoded)}`;
+  }
+
+  #decodeInternalCursor(value: string, albumId: string) {
+    const [encoded, suppliedSignature] = value.split(".", 2);
+    if (
+      encoded === undefined ||
+      suppliedSignature === undefined ||
+      !safeEqual(cursorSignature(this.#config.CURSOR_SIGNING_SECRET, encoded), suppliedSignature)
+    ) {
+      throw new AppError({ code: "BAD_REQUEST", message: "媒体游标无效", statusCode: 400 });
+    }
+    try {
+      const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as {
+        albumId: string;
+        createdAt: string;
+        mediaId: string;
+      };
+      const createdAt = new Date(parsed.createdAt);
+      if (
+        parsed.albumId !== albumId ||
+        Number.isNaN(createdAt.getTime()) ||
+        typeof parsed.mediaId !== "string"
+      ) {
+        throw new Error("invalid cursor");
+      }
+      return { createdAt, mediaId: parsed.mediaId };
+    } catch {
+      throw new AppError({ code: "BAD_REQUEST", message: "媒体游标无效", statusCode: 400 });
     }
   }
 

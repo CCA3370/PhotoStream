@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title description">
+  <title id="title">非人物活动影像占位图</title>
+  <desc id="description">由绿色跑道和白色看台组成的几何图形</desc>
+  <rect width="640" height="480" fill="#f8fafc"/>
+  <path d="M0 72h640v112H0zM0 296h640v112H0z" fill="#166534"/>
+  <path d="M64 216h512v48H64z" fill="#dbeafe"/>
+</svg>

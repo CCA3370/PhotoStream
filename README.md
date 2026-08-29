@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1 工程基础和阶段 2 照片纵向闭环的本地实现，包括浏览器照片派生、直传对象数据面、固定分片、审核/自动发布、口令公共相册、签名游标、SSE/轮询、恢复队列和容量门禁。
+阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1 工程基础、阶段 2 照片纵向闭环和阶段 3 审核运营的本地实现，包括浏览器照片派生与直传、口令公共相册、SSE/轮询、恢复队列、批量审核与筛选、三类下载策略、成员与审计、匿名日统计、口令轮换和持久删除任务。
 
-阶段 3 的审核与运营尚未开始，也未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、授权样片与目标 2C2G 主机检查仍为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)和[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)。
+阶段 4 的号码牌闭环尚未开始，也未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、授权样片、学校隐私流程与目标 2C2G 主机检查仍为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)、[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)和[阶段 3 验证记录](docs/verification/phase-3-review-and-operations.md)。
 
 ## 本地开发
 
@@ -55,9 +55,10 @@
 
 ## 下一道门禁
 
-进入审核与运营阶段前：
+进入号码牌闭环阶段前：
 
-- 阶段 1–2 自动化与代码复查保持通过；
+- 阶段 1–3 自动化与代码复查保持通过；
 - 真实微信/Safari 的 Tailwind/Base UI 风险继续按 **Unverified** 跟踪，不能用 Chromium 结果替代；
 - 媒体二进制不得进入 Fastify/Next.js/香港数据库的架构不变量保持不变；
+- OCR 只生成候选，任何号码或“无号码”结果都必须经人工确认后才进入公共搜索；
 - 云端、DNS、部署和真实学生影像仍需各自单独批准。

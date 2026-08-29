@@ -15,6 +15,8 @@ const configSchema = z.object({
   CURSOR_SIGNING_SECRET: secretSchema,
   VISITOR_SESSION_SECRET: secretSchema,
   ALBUM_PASSWORD_GENERATION_SECRET: secretSchema,
+  USER_PASSWORD_GENERATION_SECRET: secretSchema,
+  ANALYTICS_HMAC_SECRET: secretSchema,
   LOCAL_OBJECT_SECRET: secretSchema,
   LOCAL_OBJECT_BASE_URL: z.string().url().default("http://127.0.0.1:3002"),
   BOOTSTRAP_ADMIN_TOKEN: secretSchema.optional(),

@@ -12,6 +12,13 @@ const items: readonly PublicMediaView[] = Array.from({ length: 5_000 }, (_, inde
     publishSequence: sequence,
     publishedAt: "2026-08-28T00:00:00.000Z",
     variants: [],
+    downloads: {
+      preview: false,
+      original: false,
+      video: false,
+      originalBytes: null,
+      videoBytes: null,
+    },
   };
 });
 

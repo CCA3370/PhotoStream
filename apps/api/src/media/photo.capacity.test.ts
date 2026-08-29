@@ -32,6 +32,8 @@ const config = loadConfig({
   CURSOR_SIGNING_SECRET: "u".repeat(32),
   VISITOR_SESSION_SECRET: "v".repeat(32),
   ALBUM_PASSWORD_GENERATION_SECRET: "a".repeat(32),
+  USER_PASSWORD_GENERATION_SECRET: "w".repeat(32),
+  ANALYTICS_HMAC_SECRET: "n".repeat(32),
   LOCAL_OBJECT_SECRET: "o".repeat(32),
   LOCAL_OBJECT_BASE_URL: "http://127.0.0.1:3002",
 });
@@ -83,6 +85,10 @@ class CapacityObjectStorage implements ObjectStorage {
 
   async head(): Promise<ObjectMetadata | null> {
     return null;
+  }
+
+  async delete(): Promise<void> {
+    throw new Error("Capacity test never deletes media objects");
   }
 }
 
@@ -160,6 +166,12 @@ maybeDescribe("phase 2 local capacity", () => {
       fileURLToPath(new URL("../../../../packages/db/drizzle", import.meta.url)),
     );
     await database.delete(schema.liveEvents);
+    await database.delete(schema.analyticsEvents);
+    await database.delete(schema.analyticsDaily);
+    await database.delete(schema.deletionTaskObjects);
+    await database.delete(schema.deletionTasks);
+    await database.delete(schema.mediaBatchRequests);
+    await database.delete(schema.operationRequests);
     await database.delete(schema.uploadParts);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);

@@ -5,6 +5,8 @@ import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
+import { DownloadButton } from "@/components/gallery/download-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 
@@ -140,8 +142,17 @@ function VirtualMediaGrid({
   );
 }
 
-export function MediaGrid({ items }: Readonly<{ items: readonly PublicMediaView[] }>) {
+export function MediaGrid({
+  items,
+  slug,
+}: Readonly<{ items: readonly PublicMediaView[]; slug?: string }>) {
   const [selected, setSelected] = useState<PublicMediaView | null>(null);
+
+  useEffect(() => {
+    setSelected((current) =>
+      current === null ? null : (items.find((item) => item.id === current.id) ?? null),
+    );
+  }, [items]);
 
   if (items.length === 0) {
     return (
@@ -172,15 +183,47 @@ export function MediaGrid({ items }: Readonly<{ items: readonly PublicMediaView[
           <DialogTitle className="sr-only">活动照片预览</DialogTitle>
           <DialogDescription className="sr-only">完整比例查看当前活动照片</DialogDescription>
           {large === null || selected === null ? null : (
-            <div className="relative h-[min(80dvh,900px)] w-full">
-              <Image
-                alt="活动照片"
-                fill
-                sizes="100vw"
-                src={large.url}
-                style={{ objectFit: "contain" }}
-                unoptimized
-              />
+            <div className="flex flex-col gap-4">
+              <div className="relative h-[min(70dvh,800px)] w-full">
+                <Image
+                  alt="活动照片"
+                  fill
+                  sizes="100vw"
+                  src={large.url}
+                  style={{ objectFit: "contain" }}
+                  unoptimized
+                />
+              </div>
+              {slug === undefined ? null : (
+                <div className="flex flex-wrap gap-2">
+                  {selected.downloads.preview && variant(selected, "photo_1920") !== null ? (
+                    <DownloadButton
+                      bytes={(variant(selected, "photo_1920") as NonNullable<typeof large>).bytes}
+                      kind="preview"
+                      label="下载普通图"
+                      mediaId={selected.id}
+                      slug={slug}
+                    />
+                  ) : null}
+                  {selected.downloads.original && selected.downloads.originalBytes !== null ? (
+                    <DownloadButton
+                      bytes={selected.downloads.originalBytes}
+                      kind="original"
+                      label="下载原图"
+                      mediaId={selected.id}
+                      slug={slug}
+                    />
+                  ) : null}
+                </div>
+              )}
+              {selected.downloads.original && selected.downloads.originalBytes !== null ? (
+                <Alert>
+                  <AlertTitle>原图可能包含相机元数据</AlertTitle>
+                  <AlertDescription>
+                    原始文件可能仍含拍摄时间、相机信息或 GPS；请勿再次公开传播。
+                  </AlertDescription>
+                </Alert>
+              ) : null}
             </div>
           )}
         </DialogContent>

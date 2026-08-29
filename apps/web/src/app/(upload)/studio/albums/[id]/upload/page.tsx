@@ -14,7 +14,7 @@ interface CategoryDetails {
 }
 
 export default async function UploadPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireInternalSession();
+  const session = await requireInternalSession(["admin", "uploader"]);
   const { id } = await params;
   const [album, categories] = await Promise.all([
     serverApi<AlbumDetails>(`/api/v1/albums/${id}`),
@@ -25,6 +25,7 @@ export default async function UploadPage({ params }: { params: Promise<{ id: str
       albumId={album.id}
       albumTitle={album.title}
       categories={categories.filter((category) => category.enabled)}
+      role={session.user.role}
     />
   );
 }

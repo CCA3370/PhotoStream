@@ -48,6 +48,20 @@ export function LiveUpdates({
       }
       if (event.type === "media.updated") {
         startTransition(() => router.refresh());
+        return;
+      }
+      if (
+        (event.type === "media.hidden" || event.type === "media.deleted") &&
+        event.mediaId !== null
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("photostream:media-removed", { detail: { mediaId: event.mediaId } }),
+        );
+        knownIds.current.delete(event.mediaId);
+        return;
+      }
+      if (event.type === "media.restored") {
+        startTransition(() => router.refresh());
       }
     };
 
@@ -86,8 +100,14 @@ export function LiveUpdates({
     };
     const published = (event: Event) => receiveSse("media.published", event);
     const updated = (event: Event) => receiveSse("media.updated", event);
+    const hidden = (event: Event) => receiveSse("media.hidden", event);
+    const deleted = (event: Event) => receiveSse("media.deleted", event);
+    const restored = (event: Event) => receiveSse("media.restored", event);
     events.addEventListener("media.published", published);
     events.addEventListener("media.updated", updated);
+    events.addEventListener("media.hidden", hidden);
+    events.addEventListener("media.deleted", deleted);
+    events.addEventListener("media.restored", restored);
     events.addEventListener("open", stopPolling);
     events.addEventListener("error", startPolling);
     return () => {

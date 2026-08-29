@@ -5,9 +5,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../app.js";
 import { PostgresAuthStore } from "../auth/postgres-store.js";
 import type { PasswordHasher } from "../auth/types.js";
+import { UserAdminService } from "../auth/user-admin-service.js";
 import { loadConfig } from "../config.js";
 import { LiveEventBroker } from "./live-event-broker.js";
 import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
+import { OperationsService } from "./operations-service.js";
 import { PhotoService } from "./service.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -28,6 +30,8 @@ const config = loadConfig({
   CURSOR_SIGNING_SECRET: "u".repeat(32),
   VISITOR_SESSION_SECRET: "v".repeat(32),
   ALBUM_PASSWORD_GENERATION_SECRET: "a".repeat(32),
+  USER_PASSWORD_GENERATION_SECRET: "w".repeat(32),
+  ANALYTICS_HMAC_SECRET: "n".repeat(32),
   LOCAL_OBJECT_SECRET: "o".repeat(32),
   LOCAL_OBJECT_BASE_URL: "http://127.0.0.1:3002",
 });
@@ -105,6 +109,10 @@ class FakeObjectStorage implements ObjectStorage {
   async head(key: string): Promise<ObjectMetadata | null> {
     return this.objects.get(key) ?? null;
   }
+
+  async delete(key: string): Promise<void> {
+    this.objects.delete(key);
+  }
 }
 
 const photoRequest = (albumId: string): CreatePhotoUploadRequest => ({
@@ -167,6 +175,8 @@ maybeDescribe("photo vertical slice transactions", () => {
   const database = createDatabase(pool);
   const storage = new FakeObjectStorage();
   const service = new PhotoService({ database, storage, passwordHasher: fakeHasher, config });
+  const operationsService = new OperationsService({ database, storage, config });
+  const userAdminService = new UserAdminService({ database, passwordHasher: fakeHasher, config });
   let adminId = "";
   let reviewerId = "";
   let uploaderId = "";
@@ -182,6 +192,12 @@ maybeDescribe("photo vertical slice transactions", () => {
     storage.objects.clear();
     storage.multipartParts.clear();
     await database.delete(schema.liveEvents);
+    await database.delete(schema.analyticsEvents);
+    await database.delete(schema.analyticsDaily);
+    await database.delete(schema.deletionTaskObjects);
+    await database.delete(schema.deletionTasks);
+    await database.delete(schema.mediaBatchRequests);
+    await database.delete(schema.operationRequests);
     await database.delete(schema.uploadParts);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);
@@ -288,6 +304,7 @@ maybeDescribe("photo vertical slice transactions", () => {
       actor: { id: reviewerId, role: "reviewer" },
       mediaId: intent.mediaId,
       requestId: "request-publish",
+      idempotencyKey: "publish-media-idempotency",
     });
     await service.signUpload({
       actor: { id: uploaderId, role: "uploader" },
@@ -437,6 +454,108 @@ maybeDescribe("photo vertical slice transactions", () => {
     );
   });
 
+  it("filters incomplete and failed media and lists only participating uploaders", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "筛选相册", description: "", publishMode: "review" },
+      idempotencyKey: "album-filter-idempotency",
+      requestId: "request-album-filter",
+    });
+    await database.insert(schema.media).values([
+      {
+        albumId: album.album.id,
+        kind: "photo",
+        uploaderId,
+        ingestStatus: "uploading_source",
+        publicationStatus: "pending_review",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      },
+      {
+        albumId: album.album.id,
+        kind: "photo",
+        uploaderId,
+        ingestStatus: "failed",
+        publicationStatus: "draft",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      },
+      {
+        albumId: album.album.id,
+        kind: "photo",
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "published",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+        publishSequence: 1,
+        publishedAt: new Date(),
+      },
+    ]);
+
+    const incomplete = await service.listInternalMedia(
+      { id: reviewerId, role: "reviewer" },
+      { albumId: album.album.id, ingestGroup: "incomplete", limit: 60 },
+    );
+    const failed = await service.listInternalMedia(
+      { id: reviewerId, role: "reviewer" },
+      { albumId: album.album.id, ingestGroup: "failed", limit: 60 },
+    );
+    expect(incomplete.items.map((item) => item.ingestStatus)).toEqual(["uploading_source"]);
+    expect(failed.items.map((item) => item.ingestStatus)).toEqual(["failed"]);
+    expect(
+      await service.listAlbumUploaders({ id: reviewerId, role: "reviewer" }, album.album.id),
+    ).toEqual([
+      expect.objectContaining({ id: uploaderId, username: "uploader", displayName: "上传者" }),
+    ]);
+  });
+
+  it("restores an archived album to the documented ended state", async () => {
+    const created = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "状态机相册", description: "", publishMode: "review" },
+      idempotencyKey: "album-state-machine-idempotency",
+      requestId: "album-state-create",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      requestId: "album-state-start",
+    });
+    await service.endAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      requestId: "album-state-end",
+    });
+    await service.archiveAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      requestId: "album-state-archive",
+    });
+    expect(
+      await service.restoreAlbum({
+        actor: { id: adminId, role: "admin" },
+        albumId: created.album.id,
+        requestId: "album-state-restore",
+      }),
+    ).toMatchObject({ state: "ended" });
+    await expect(
+      service.createCategory({
+        actor: { id: reviewerId, role: "reviewer" },
+        albumId: created.album.id,
+        name: "审核员不应创建",
+        sortOrder: 0,
+        idempotencyKey: "reviewer-category-idempotency",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("exposes the runtime REST contract without accepting media bodies", async () => {
     const app = await buildApp({
       config,
@@ -444,6 +563,8 @@ maybeDescribe("photo vertical slice transactions", () => {
       passwordHasher: fakeHasher,
       photoService: service,
       broker: new LiveEventBroker(),
+      operationsService,
+      userAdminService,
       logger: false,
     });
     const headers = { host: "localhost:3000", origin: "http://localhost:3000" };
@@ -495,9 +616,14 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(Object.keys(document.paths)).toEqual(
       expect.arrayContaining([
         "/api/v1/albums",
+        "/api/v1/albums/{id}/uploaders",
         "/api/v1/uploads",
         "/api/v1/public/albums/{slug}/media",
         "/api/v1/public/albums/{slug}/events",
+        "/api/v1/media/batch",
+        "/api/v1/public/albums/{slug}/downloads/{mediaId}/{kind}",
+        "/api/v1/users",
+        "/api/v1/audit",
       ]),
     );
     await app.close();

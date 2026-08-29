@@ -4,8 +4,10 @@ import {
   createPhotoUploadRequestSchema,
   hasPermission,
   loginRequestSchema,
+  mediaBatchRequestSchema,
   normalizeUsername,
   permissionsFor,
+  updateAlbumRequestSchema,
 } from "./index.js";
 
 describe("permission matrix", () => {
@@ -131,5 +133,39 @@ describe("photo upload contract", () => {
         ),
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("operations contracts", () => {
+  const first = "019d0000-0000-7000-8000-000000000101";
+  const second = "019d0000-0000-7000-8000-000000000102";
+
+  it("requires a non-empty album settings patch", () => {
+    expect(updateAlbumRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      updateAlbumRequestSchema.safeParse({
+        previewDownloadEnabled: true,
+        privacyNotice: "仅用于校内活动记录",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("keeps batch IDs unique and category fields action-specific", () => {
+    expect(
+      mediaBatchRequestSchema.safeParse({ action: "publish", mediaIds: [first, second] }).success,
+    ).toBe(true);
+    expect(
+      mediaBatchRequestSchema.safeParse({ action: "publish", mediaIds: [first, first] }).success,
+    ).toBe(false);
+    expect(
+      mediaBatchRequestSchema.safeParse({ action: "change_category", mediaIds: [first] }).success,
+    ).toBe(false);
+    expect(
+      mediaBatchRequestSchema.safeParse({
+        action: "change_category",
+        mediaIds: [first],
+        categoryId: null,
+      }).success,
+    ).toBe(true);
   });
 });

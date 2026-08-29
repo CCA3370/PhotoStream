@@ -123,6 +123,8 @@ const config = loadConfig({
   CURSOR_SIGNING_SECRET: "u".repeat(32),
   VISITOR_SESSION_SECRET: "v".repeat(32),
   ALBUM_PASSWORD_GENERATION_SECRET: "a".repeat(32),
+  USER_PASSWORD_GENERATION_SECRET: "w".repeat(32),
+  ANALYTICS_HMAC_SECRET: "n".repeat(32),
   LOCAL_OBJECT_SECRET: "o".repeat(32),
   LOCAL_OBJECT_BASE_URL: "http://127.0.0.1:3002",
 });

@@ -1,6 +1,7 @@
 import type { PublicMediaView } from "@photostream/contracts";
 import Link from "next/link";
 
+import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
@@ -15,6 +16,8 @@ interface PublicAlbum {
   readonly description: string;
   readonly state: "live" | "ended" | "archived";
   readonly accessRequired: boolean;
+  readonly privacyNotice: string;
+  readonly complaintContact: string;
   readonly categories: readonly { readonly id: string; readonly name: string }[];
 }
 
@@ -38,6 +41,8 @@ export default async function GalleryPage({
     return (
       <PublicGalleryShell
         albumTitle={album.title}
+        complaintContact={album.complaintContact}
+        privacyNotice={album.privacyNotice}
         status={album.state === "live" ? "直播中" : "已结束"}
       >
         <UnlockAlbumForm slug={slug} />
@@ -54,8 +59,11 @@ export default async function GalleryPage({
   return (
     <PublicGalleryShell
       albumTitle={album.title}
+      complaintContact={album.complaintContact}
+      privacyNotice={album.privacyNotice}
       status={album.state === "live" ? "直播中" : "已结束"}
     >
+      <AlbumOpenTracker slug={slug} />
       <nav
         aria-label="相册分类"
         className="sticky top-0 flex gap-2 overflow-x-auto border-b bg-background py-3"

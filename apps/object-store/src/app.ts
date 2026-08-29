@@ -334,6 +334,16 @@ async function handleRead(options: {
   }
 }
 
+async function handleDelete(response: ServerResponse, path: string): Promise<void> {
+  try {
+    await Promise.all([removeIfPresent(path), removeIfPresent(metadataPath(path))]);
+    response.writeHead(204, { "cache-control": "no-store" });
+    response.end();
+  } catch {
+    sendJson(response, 500, { code: "OBJECT_DELETE_FAILED" });
+  }
+}
+
 export function createObjectStoreServer(config: LocalObjectStoreConfig) {
   return createServer(async (request, response) => {
     try {
@@ -341,7 +351,7 @@ export function createObjectStoreServer(config: LocalObjectStoreConfig) {
       if (request.method === "OPTIONS") {
         response.writeHead(204, {
           "access-control-allow-origin": config.appOrigin,
-          "access-control-allow-methods": "PUT, GET, HEAD, POST, OPTIONS",
+          "access-control-allow-methods": "PUT, GET, HEAD, POST, DELETE, OPTIONS",
           "access-control-allow-headers": "content-type",
           "access-control-max-age": "600",
         });
@@ -415,6 +425,10 @@ export function createObjectStoreServer(config: LocalObjectStoreConfig) {
           expectedBytes: verified.contentLength,
           contentType: verified.contentType,
         });
+        return;
+      }
+      if (request.method === "DELETE") {
+        await handleDelete(response, path);
         return;
       }
       await handleRead({ request, response, path, headOnly: request.method === "HEAD" });

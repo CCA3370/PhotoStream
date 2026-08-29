@@ -53,7 +53,7 @@ export const StudioAdmin: Story = {
     nextjs: { navigation: { pathname: "/studio" } },
   },
   render: () => (
-    <StudioShell pageTitle="活动" userRole="admin">
+    <StudioShell pageTitle="活动" userDisplayName="系统管理员" userRole="admin">
       <h2 className="text-xl font-semibold">活动总览</h2>
     </StudioShell>
   ),
@@ -64,7 +64,7 @@ export const StudioUploader: Story = {
     nextjs: { navigation: { pathname: "/studio" } },
   },
   render: () => (
-    <StudioShell pageTitle="活动" userRole="uploader">
+    <StudioShell pageTitle="活动" userDisplayName="摄影老师" userRole="uploader">
       <p>上传者不显示成员和审计入口。</p>
     </StudioShell>
   ),

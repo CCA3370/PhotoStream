@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -52,6 +53,22 @@ export const uploadIntentStatusEnum = pgEnum("upload_intent_status", [
   "cancelled",
   "expired",
 ]);
+export const deletionTaskStatusEnum = pgEnum("deletion_task_status", [
+  "pending",
+  "processing",
+  "failed",
+  "completed",
+]);
+export const deletionObjectStatusEnum = pgEnum("deletion_object_status", [
+  "pending",
+  "deleted",
+  "failed",
+]);
+export const analyticsEventTypeEnum = pgEnum("analytics_event_type", [
+  "open",
+  "session",
+  "download",
+]);
 
 function timestampColumns() {
   return {
@@ -71,10 +88,19 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     isActive: boolean("is_active").notNull().default(true),
     mustChangePassword: boolean("must_change_password").notNull().default(true),
+    creationActorId: uuid("creation_actor_id"),
+    creationIdempotencyKey: varchar("creation_idempotency_key", { length: 128 }),
     passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
     ...timestampColumns(),
   },
-  (table) => [uniqueIndex("users_normalized_username_unique").on(table.normalizedUsername)],
+  (table) => [
+    uniqueIndex("users_normalized_username_unique").on(table.normalizedUsername),
+    uniqueIndex("users_creation_actor_idempotency_unique")
+      .on(table.creationActorId, table.creationIdempotencyKey)
+      .where(
+        sql`${table.creationActorId} is not null and ${table.creationIdempotencyKey} is not null`,
+      ),
+  ],
 );
 
 export const sessions = pgTable(
@@ -133,6 +159,8 @@ export const albums = pgTable(
     videoDownloadEnabled: boolean("video_download_enabled").notNull().default(false),
     bibRecognitionEnabled: boolean("bib_recognition_enabled").notNull().default(false),
     bibSearchEnabled: boolean("bib_search_enabled").notNull().default(false),
+    privacyNotice: varchar("privacy_notice", { length: 2_000 }).notNull().default(""),
+    complaintContact: varchar("complaint_contact", { length: 300 }).notNull().default(""),
     publishSequence: bigint("publish_sequence", { mode: "number" }).notNull().default(0),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     createdBy: uuid("created_by")
@@ -321,6 +349,124 @@ export const visitorSessions = pgTable(
   ],
 );
 
+export const mediaBatchRequests = pgTable(
+  "media_batch_requests",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    requestHash: varchar("request_hash", { length: 64 }).notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("media_batch_actor_idempotency_unique").on(table.actorUserId, table.idempotencyKey),
+  ],
+);
+
+export const operationRequests = pgTable(
+  "operation_requests",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    actorScope: varchar("actor_scope", { length: 128 }).notNull(),
+    operation: varchar("operation", { length: 120 }).notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    requestHash: varchar("request_hash", { length: 64 }).notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("operation_requests_scope_operation_key_unique").on(
+      table.actorScope,
+      table.operation,
+      table.idempotencyKey,
+    ),
+  ],
+);
+
+export const deletionTasks = pgTable(
+  "deletion_tasks",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: deletionTaskStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    requestId: varchar("request_id", { length: 128 }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("deletion_tasks_media_unique").on(table.mediaId),
+    index("deletion_tasks_poll_idx").on(table.status, table.nextAttemptAt),
+  ],
+);
+
+export const deletionTaskObjects = pgTable(
+  "deletion_task_objects",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => deletionTasks.id, { onDelete: "cascade" }),
+    variantKind: variantKindEnum("variant_kind").notNull(),
+    objectKey: varchar("object_key", { length: 512 }),
+    status: deletionObjectStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("deletion_task_objects_task_variant_unique").on(table.taskId, table.variantKind),
+    index("deletion_task_objects_status_idx").on(table.taskId, table.status),
+  ],
+);
+
+export const analyticsEvents = pgTable(
+  "analytics_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    eventType: analyticsEventTypeEnum("event_type").notNull(),
+    visitorDigest: varchar("visitor_digest", { length: 64 }).notNull(),
+    mediaId: uuid("media_id").references(() => media.id, { onDelete: "set null" }),
+    variantKind: variantKindEnum("variant_kind"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("analytics_events_album_day_idx").on(table.albumId, table.day),
+    index("analytics_events_retention_idx").on(table.createdAt),
+  ],
+);
+
+export const analyticsDaily = pgTable(
+  "analytics_daily",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    opens: integer("opens").notNull().default(0),
+    sessions: integer("sessions").notNull().default(0),
+    downloads: integer("downloads").notNull().default(0),
+    uniqueVisitors: integer("unique_visitors").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("analytics_daily_album_day_unique").on(table.albumId, table.day)],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
@@ -330,3 +476,4 @@ export type MediaRow = typeof media.$inferSelect;
 export type MediaVariantRow = typeof mediaVariants.$inferSelect;
 export type UploadIntentRow = typeof uploadIntents.$inferSelect;
 export type UploadPartRow = typeof uploadParts.$inferSelect;
+export type DeletionTaskRow = typeof deletionTasks.$inferSelect;

@@ -1,4 +1,4 @@
-import type { AlbumView } from "@photostream/contracts";
+import type { AlbumSummaryView } from "@photostream/contracts";
 import Link from "next/link";
 
 import { CreateAlbumForm } from "@/components/albums/create-album-form";
@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { serverApi } from "@/lib/api";
+import { requireInternalSession } from "@/lib/server-auth";
 
-const stateLabels: Record<AlbumView["state"], string> = {
+const stateLabels: Record<AlbumSummaryView["state"], string> = {
   draft: "草稿",
   live: "直播中",
   ended: "已结束",
@@ -24,7 +25,10 @@ const stateLabels: Record<AlbumView["state"], string> = {
 };
 
 export default async function StudioPage() {
-  const albums = await serverApi<AlbumView[]>("/api/v1/albums");
+  const [session, albums] = await Promise.all([
+    requireInternalSession(),
+    serverApi<AlbumSummaryView[]>("/api/v1/albums"),
+  ]);
   return (
     <section aria-labelledby="activity-heading" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -34,7 +38,7 @@ export default async function StudioPage() {
           </h2>
           <p className="text-sm text-muted-foreground">创建相册、开始直播并进入照片上传闭环。</p>
         </div>
-        <CreateAlbumForm />
+        {session.user.role === "admin" ? <CreateAlbumForm /> : null}
       </div>
       {albums.length === 0 ? (
         <Empty className="min-h-64 border">
@@ -59,13 +63,21 @@ export default async function StudioPage() {
               <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
                 <p>{album.access === "password" ? "口令访问" : "公开链接"}</p>
                 <p>{album.publishMode === "review" ? "先审核后发布" : "预览就绪后自动发布"}</p>
+                <p>
+                  媒体 {album.mediaCount} · 待审核 {album.pendingReviewCount} · 不完整{" "}
+                  {album.incompleteCount}
+                </p>
               </CardContent>
               <CardFooter>
                 <Link
                   className={buttonVariants({ variant: "outline" })}
-                  href={`/studio/albums/${album.id}`}
+                  href={
+                    session.user.role === "uploader"
+                      ? `/studio/albums/${album.id}/upload`
+                      : `/studio/albums/${album.id}`
+                  }
                 >
-                  管理相册
+                  {session.user.role === "uploader" ? "进入上传" : "管理相册"}
                 </Link>
               </CardFooter>
             </Card>

@@ -25,6 +25,12 @@ maybeDescribe("PostgreSQL identity schema", () => {
 
   beforeEach(async () => {
     await database.delete(schema.liveEvents);
+    await database.delete(schema.analyticsEvents);
+    await database.delete(schema.analyticsDaily);
+    await database.delete(schema.deletionTaskObjects);
+    await database.delete(schema.deletionTasks);
+    await database.delete(schema.mediaBatchRequests);
+    await database.delete(schema.operationRequests);
     await database.delete(schema.uploadParts);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);

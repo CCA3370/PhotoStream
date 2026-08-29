@@ -4,12 +4,16 @@ export interface PublicGalleryShellProps {
   readonly albumTitle: string;
   readonly children: ReactNode;
   readonly status?: "直播中" | "已结束";
+  readonly privacyNotice?: string;
+  readonly complaintContact?: string;
 }
 
 export function PublicGalleryShell({
   albumTitle,
   children,
   status = "直播中",
+  privacyNotice = "影像仅用于校内活动记录。",
+  complaintContact = "删除或投诉联系方式将在试运行前由学校确认。",
 }: PublicGalleryShellProps) {
   return (
     <div className="public-theme min-h-screen bg-background text-foreground">
@@ -33,7 +37,8 @@ export function PublicGalleryShell({
         {children}
       </main>
       <footer className="mx-auto max-w-[1440px] px-3 py-8 text-sm text-muted-foreground sm:px-4 md:px-6">
-        <p>影像仅用于校内活动记录。删除或投诉入口将在试运行前由学校确认。</p>
+        <p>{privacyNotice || "影像仅用于校内活动记录。"}</p>
+        <p>{complaintContact || "删除或投诉联系方式将在试运行前由学校确认。"}</p>
       </footer>
     </div>
   );

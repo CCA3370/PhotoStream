@@ -43,9 +43,15 @@ export interface StudioShellProps {
   readonly children: ReactNode;
   readonly pageTitle: string;
   readonly userRole?: UserRole;
+  readonly userDisplayName?: string;
 }
 
-export function StudioShell({ children, pageTitle, userRole = "admin" }: StudioShellProps) {
+export function StudioShell({
+  children,
+  pageTitle,
+  userDisplayName = "内部成员",
+  userRole = "admin",
+}: StudioShellProps) {
   const pathname = usePathname();
   const visibleNavigation = navigation.filter((item) =>
     item.roles.some((allowedRole) => allowedRole === userRole),
@@ -115,7 +121,7 @@ export function StudioShell({ children, pageTitle, userRole = "admin" }: StudioS
                 <p className="text-xs text-muted-foreground">活动工作台</p>
                 <h1 className="truncate text-xl font-semibold">{pageTitle}</h1>
               </div>
-              <p className="hidden text-sm text-muted-foreground sm:block">系统管理员</p>
+              <p className="hidden text-sm text-muted-foreground sm:block">{userDisplayName}</p>
             </header>
             <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 p-4 md:p-6">
               {children}

@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN "creation_idempotency_key" varchar(128);--> statement-breakpoint
+CREATE UNIQUE INDEX "users_creation_idempotency_unique" ON "users" USING btree ("creation_idempotency_key") WHERE "users"."creation_idempotency_key" is not null;

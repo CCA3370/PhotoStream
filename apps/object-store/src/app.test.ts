@@ -140,6 +140,35 @@ describe("local object store", () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([2, 3, 4]));
   });
 
+  it("deletes an exact signed object idempotently", async () => {
+    const { storageRoot, baseUrl } = await fixture();
+    const key = "media/albums/a/photos/delete/original.jpg";
+    const expiresAt = new Date(Date.now() + 60_000);
+    const body = new Uint8Array([1, 2, 3]);
+    await fetch(
+      signLocalObjectUrl({
+        baseUrl,
+        key,
+        method: "PUT",
+        secret,
+        expiresAt,
+        contentType: "image/jpeg",
+        contentLength: body.byteLength,
+      }),
+      { method: "PUT", headers: { "content-type": "image/jpeg" }, body },
+    );
+    const deleteUrl = signLocalObjectUrl({
+      baseUrl,
+      key,
+      method: "DELETE",
+      secret,
+      expiresAt,
+    });
+    expect((await fetch(deleteUrl, { method: "DELETE" })).status).toBe(204);
+    expect((await fetch(deleteUrl, { method: "DELETE" })).status).toBe(204);
+    await expect(readFile(join(storageRoot, key))).rejects.toThrow();
+  });
+
   it("composes immutable multipart parts without proxying bytes through the API", async () => {
     const { storageRoot, baseUrl } = await fixture();
     const uploadId = "019d43f4-7d20-7000-8000-000000000002";

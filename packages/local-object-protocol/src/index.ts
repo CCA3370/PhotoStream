@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type LocalObjectMethod = "GET" | "HEAD" | "PUT";
+export type LocalObjectMethod = "DELETE" | "GET" | "HEAD" | "PUT";
 
 export interface SignLocalObjectOptions {
   readonly baseUrl: string;
@@ -117,7 +117,7 @@ export function verifyLocalObjectRequest(options: {
   readonly secret: string;
   readonly now?: Date;
 }): VerifiedLocalObjectRequest {
-  if (!(["GET", "HEAD", "PUT"] as const).includes(options.method as LocalObjectMethod)) {
+  if (!(["DELETE", "GET", "HEAD", "PUT"] as const).includes(options.method as LocalObjectMethod)) {
     throw new Error("Unsupported method");
   }
   const expires = options.url.searchParams.get("expires") ?? "";

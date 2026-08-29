@@ -65,3 +65,21 @@ export async function clientMutation<T>(
   if (!response.ok) throw await errorFrom(response);
   return (await response.json()) as T;
 }
+
+export async function publicMutation<T>(
+  path: string,
+  options: { readonly body?: unknown; readonly idempotencyKey?: string } = {},
+): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) headers["content-type"] = "application/json";
+  if (options.idempotencyKey !== undefined) {
+    headers["idempotency-key"] = options.idempotencyKey;
+  }
+  const response = await fetch(path, {
+    method: "POST",
+    headers,
+    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+  });
+  if (!response.ok) throw await errorFrom(response);
+  return (await response.json()) as T;
+}

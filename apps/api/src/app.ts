@@ -14,13 +14,17 @@ import {
 import { argon2PasswordHasher } from "./auth/password.js";
 import { AuthService } from "./auth/service.js";
 import type { AuthStore, PasswordHasher } from "./auth/types.js";
+import type { UserAdminService } from "./auth/user-admin-service.js";
 import type { AppConfig } from "./config.js";
 import { AppError } from "./errors.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
+import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
+import { registerUserRoutes } from "./routes/users.js";
 
 export interface BuildAppOptions {
   readonly config: AppConfig;
@@ -28,6 +32,8 @@ export interface BuildAppOptions {
   readonly passwordHasher?: PasswordHasher;
   readonly photoService?: PhotoService;
   readonly broker?: LiveEventBroker;
+  readonly userAdminService?: UserAdminService;
+  readonly operationsService?: OperationsService;
   readonly logger?: NonNullable<FastifyServerOptions["logger"]>;
 }
 
@@ -208,11 +214,29 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     options.config,
   );
   await registerAuthRoutes(app, { authService, config: options.config });
+  if (options.userAdminService !== undefined) {
+    await registerUserRoutes(app, {
+      authService,
+      userAdminService: options.userAdminService,
+      config: options.config,
+    });
+  }
   if (options.photoService !== undefined && options.broker !== undefined) {
     await registerPhotoRoutes(app, {
       authService,
       photoService: options.photoService,
       broker: options.broker,
+      config: options.config,
+      ...(options.operationsService === undefined
+        ? {}
+        : { operationsService: options.operationsService }),
+    });
+  }
+  if (options.photoService !== undefined && options.operationsService !== undefined) {
+    await registerOperationsRoutes(app, {
+      authService,
+      photoService: options.photoService,
+      operationsService: options.operationsService,
       config: options.config,
     });
   }

@@ -38,6 +38,16 @@ export function PaginatedMediaGrid({
     });
   }, [initialPage.items]);
 
+  useEffect(() => {
+    const remove = (event: Event) => {
+      const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
+      if (typeof detail?.mediaId !== "string") return;
+      setItems((current) => current.filter((item) => item.id !== detail.mediaId));
+    };
+    window.addEventListener("photostream:media-removed", remove);
+    return () => window.removeEventListener("photostream:media-removed", remove);
+  }, []);
+
   async function loadMore(): Promise<void> {
     if (cursor === null || requestInFlight.current) return;
     requestInFlight.current = true;
@@ -80,7 +90,7 @@ export function PaginatedMediaGrid({
 
   return (
     <div className="flex flex-col gap-5">
-      <MediaGrid items={items} />
+      <MediaGrid items={items} slug={slug} />
       {error === null ? null : (
         <Alert variant="destructive">
           <AlertTitle>无法继续加载</AlertTitle>
