@@ -249,7 +249,6 @@ export function AlbumSettings({
                 [
                   ["previewDownloadEnabled", "普通图下载", "下载 1920 派生图"],
                   ["originalDownloadEnabled", "照片原图下载", "下载原始文件，可能含相机元数据"],
-                  ["videoDownloadEnabled", "视频下载", "阶段 5 视频完成后生效"],
                 ] as const
               ).map(([field, label, description]) => (
                 <Field key={field} orientation="horizontal">

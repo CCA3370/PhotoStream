@@ -77,7 +77,7 @@ export function CreateAlbumForm() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>创建活动相册</DialogTitle>
-          <DialogDescription>默认使用随机口令，三类下载和号码搜索全部关闭。</DialogDescription>
+          <DialogDescription>默认使用随机口令，两类下载和号码搜索全部关闭。</DialogDescription>
         </DialogHeader>
         {result === null ? (
           <form action={submit} className="flex flex-col gap-5">

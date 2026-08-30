@@ -77,7 +77,6 @@ function albumView(row: typeof schema.albums.$inferSelect): AlbumView {
     publishMode: row.publishMode,
     previewDownloadEnabled: row.previewDownloadEnabled,
     originalDownloadEnabled: row.originalDownloadEnabled,
-    videoDownloadEnabled: row.videoDownloadEnabled,
     privacyNotice: row.privacyNotice,
     complaintContact: row.complaintContact,
     createdAt: iso(row.createdAt),
@@ -577,7 +576,7 @@ export class PhotoService {
       const countRows = await transaction
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.media)
-        .where(and(eq(schema.media.albumId, album.id), eq(schema.media.kind, "photo")));
+        .where(eq(schema.media.albumId, album.id));
       if ((countRows[0]?.count ?? 0) >= 5_000) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
@@ -593,7 +592,6 @@ export class PhotoService {
         .values({
           albumId: album.id,
           categoryId: options.input.categoryId,
-          kind: "photo",
           uploaderId: options.actor.id,
           ingestStatus: "uploading_preview",
           publicationStatus: "draft",
@@ -1159,7 +1157,6 @@ export class PhotoService {
         albumId: media.albumId,
         uploaderId: media.uploaderId,
         categoryId: media.categoryId,
-        kind: "photo" as const,
         ingestStatus: media.ingestStatus,
         publicationStatus: media.publicationStatus,
         width: media.width,
@@ -1302,7 +1299,6 @@ export class PhotoService {
         accessRequired: album.access === "password" && !unlocked,
         previewDownloadEnabled: album.previewDownloadEnabled,
         originalDownloadEnabled: album.originalDownloadEnabled,
-        videoDownloadEnabled: album.videoDownloadEnabled,
         privacyNotice: album.privacyNotice,
         complaintContact: album.complaintContact,
         bibSearchEnabled,
@@ -1415,7 +1411,6 @@ export class PhotoService {
       }
       return {
         id: media.id,
-        kind: "photo",
         width: media.width,
         height: media.height,
         publishSequence: media.publishSequence,
@@ -1444,12 +1439,10 @@ export class PhotoService {
             (byMedia.get(media.id) ?? []).some(
               (variant) => variant.kind === "photo_original" && variant.verified,
             ),
-          video: false,
           originalBytes:
             (byMedia.get(media.id) ?? []).find(
               (variant) => variant.kind === "photo_original" && variant.verified,
             )?.bytes ?? null,
-          videoBytes: null,
         },
       };
     });

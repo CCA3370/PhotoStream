@@ -84,6 +84,50 @@ maybeDescribe("PostgreSQL identity schema", () => {
     expect(remaining).toHaveLength(0);
   });
 
+  it("keeps the persisted media boundary photo-only", async () => {
+    const mediaColumns = await pool.query<{ column_name: string }>(
+      `select column_name
+       from information_schema.columns
+       where table_schema = 'public' and table_name = 'media'
+       order by ordinal_position`,
+    );
+    expect(mediaColumns.rows.map((row) => row.column_name)).toEqual([
+      "id",
+      "album_id",
+      "category_id",
+      "uploader_id",
+      "ingest_status",
+      "publication_status",
+      "width",
+      "height",
+      "media_type",
+      "total_bytes",
+      "captured_at",
+      "received_at",
+      "publish_sequence",
+      "published_at",
+      "hidden_at",
+      "failure_code",
+      "retryable",
+      "created_at",
+      "updated_at",
+    ]);
+
+    const variantKinds = await pool.query<{ enumlabel: string }>(
+      `select enumlabel
+       from pg_enum
+       join pg_type on pg_type.oid = pg_enum.enumtypid
+       where pg_type.typname = 'variant_kind'
+       order by pg_enum.enumsortorder`,
+    );
+    expect(variantKinds.rows.map((row) => row.enumlabel)).toEqual([
+      "photo_480",
+      "photo_960",
+      "photo_1920",
+      "photo_original",
+    ]);
+  });
+
   async function insertAdmin() {
     const [created] = await database
       .insert(users)

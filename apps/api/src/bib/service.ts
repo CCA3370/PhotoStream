@@ -1619,13 +1619,6 @@ export class BibService {
     if (actor.role === "uploader" && media.uploaderId !== actor.id) {
       throw new AppError({ code: "FORBIDDEN", message: "只能处理自己上传的照片", statusCode: 403 });
     }
-    if (media.kind !== "photo") {
-      throw new AppError({
-        code: "BIB_CONFIG_INVALID",
-        message: "号码功能只支持照片",
-        statusCode: 409,
-      });
-    }
     return media;
   }
 

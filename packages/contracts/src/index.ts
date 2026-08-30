@@ -191,7 +191,6 @@ export const albumViewSchema = z
     publishMode: publishModeSchema,
     previewDownloadEnabled: z.boolean(),
     originalDownloadEnabled: z.boolean(),
-    videoDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
     complaintContact: z.string().max(300),
     createdAt: z.string().datetime(),
@@ -418,7 +417,6 @@ export const mediaVariantViewSchema = z
 export const publicMediaViewSchema = z
   .object({
     id: z.string().uuid(),
-    kind: z.literal("photo"),
     width: z.number().int().positive(),
     height: z.number().int().positive(),
     publishSequence: z.number().int().positive(),
@@ -428,9 +426,7 @@ export const publicMediaViewSchema = z
       .object({
         preview: z.boolean(),
         original: z.boolean(),
-        video: z.boolean(),
         originalBytes: z.number().int().positive().nullable(),
-        videoBytes: z.number().int().positive().nullable(),
       })
       .strict(),
   })
@@ -443,7 +439,6 @@ export const internalMediaViewSchema = z
     albumId: z.string().uuid(),
     uploaderId: z.string().uuid(),
     categoryId: z.string().uuid().nullable(),
-    kind: z.literal("photo"),
     ingestStatus: ingestStatusSchema,
     publicationStatus: publicationStatusSchema,
     width: z.number().int().positive(),
@@ -478,7 +473,6 @@ export const publicAlbumViewSchema = z
     accessRequired: z.boolean(),
     previewDownloadEnabled: z.boolean(),
     originalDownloadEnabled: z.boolean(),
-    videoDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
     complaintContact: z.string().max(300),
     bibSearchEnabled: z.boolean(),
@@ -572,7 +566,6 @@ export const updateAlbumRequestSchema = z
     publishMode: publishModeSchema.optional(),
     previewDownloadEnabled: z.boolean().optional(),
     originalDownloadEnabled: z.boolean().optional(),
-    videoDownloadEnabled: z.boolean().optional(),
     privacyNotice: z.string().trim().max(2_000).optional(),
     complaintContact: z.string().trim().max(300).optional(),
   })
@@ -679,7 +672,7 @@ export const deleteMediaRequestSchema = z
   .object({ confirmation: z.string().min(1).max(120) })
   .strict();
 
-export const downloadKindSchema = z.enum(["preview", "original", "video"]);
+export const downloadKindSchema = z.enum(["preview", "original"]);
 export type DownloadKind = z.infer<typeof downloadKindSchema>;
 export const signedDownloadSchema = z
   .object({

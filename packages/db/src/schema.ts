@@ -21,7 +21,6 @@ export const userRoleEnum = pgEnum("user_role", ["admin", "reviewer", "uploader"
 export const albumStateEnum = pgEnum("album_state", ["draft", "live", "ended", "archived"]);
 export const albumAccessEnum = pgEnum("album_access", ["password", "public"]);
 export const publishModeEnum = pgEnum("publish_mode", ["review", "auto"]);
-export const mediaKindEnum = pgEnum("media_kind", ["photo", "video"]);
 export const ingestStatusEnum = pgEnum("ingest_status", [
   "created",
   "local_processing",
@@ -44,9 +43,6 @@ export const variantKindEnum = pgEnum("variant_kind", [
   "photo_960",
   "photo_1920",
   "photo_original",
-  "video_poster_480",
-  "video_poster_960",
-  "video_source",
 ]);
 export const uploadIntentStatusEnum = pgEnum("upload_intent_status", [
   "active",
@@ -185,7 +181,6 @@ export const albums = pgTable(
     accessVersion: integer("access_version").notNull().default(1),
     previewDownloadEnabled: boolean("preview_download_enabled").notNull().default(false),
     originalDownloadEnabled: boolean("original_download_enabled").notNull().default(false),
-    videoDownloadEnabled: boolean("video_download_enabled").notNull().default(false),
     bibRecognitionEnabled: boolean("bib_recognition_enabled").notNull().default(false),
     bibSearchEnabled: boolean("bib_search_enabled").notNull().default(false),
     bibRuleVersion: integer("bib_rule_version").notNull().default(0),
@@ -246,7 +241,6 @@ export const media = pgTable(
       .notNull()
       .references(() => albums.id, { onDelete: "cascade" }),
     categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
-    kind: mediaKindEnum("kind").notNull(),
     uploaderId: uuid("uploader_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -254,7 +248,6 @@ export const media = pgTable(
     publicationStatus: publicationStatusEnum("publication_status").notNull().default("draft"),
     width: integer("width").notNull(),
     height: integer("height").notNull(),
-    durationMs: integer("duration_ms"),
     mediaType: varchar("media_type", { length: 80 }).notNull(),
     totalBytes: bigint("total_bytes", { mode: "number" }).notNull(),
     capturedAt: timestamp("captured_at", { withTimezone: true }),
@@ -301,7 +294,7 @@ export const mediaVariants = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("media_variants_media_kind_unique").on(table.mediaId, table.kind),
+    uniqueIndex("media_variants_media_variant_unique").on(table.mediaId, table.kind),
     uniqueIndex("media_variants_object_key_unique").on(table.objectKey),
     index("media_variants_media_verified_idx").on(table.mediaId, table.verified),
   ],

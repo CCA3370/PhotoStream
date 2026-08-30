@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createPhotoUploadRequestSchema,
+  downloadKindSchema,
   hasPermission,
   loginRequestSchema,
   mediaBatchRequestSchema,
@@ -148,6 +149,10 @@ describe("operations contracts", () => {
         privacyNotice: "仅用于校内活动记录",
       }).success,
     ).toBe(true);
+  });
+
+  it("keeps the download contract photo-only", () => {
+    expect(downloadKindSchema.options).toEqual(["preview", "original"]);
   });
 
   it("keeps batch IDs unique and category fields action-specific", () => {

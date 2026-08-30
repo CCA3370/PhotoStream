@@ -39,7 +39,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
           {album.title}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {album.description || "默认口令、三类下载关闭。"}
+          {album.description || "默认口令、两类下载关闭。"}
         </p>
       </div>
       <Card>

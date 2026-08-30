@@ -577,18 +577,14 @@ export class OperationsService {
       )
       .limit(1);
     if (media === undefined || media.publishSequence === null) throw this.#publicNotFound();
-    let variantKind: (typeof schema.variantKindEnum.enumValues)[number];
-    let enabled: boolean;
-    if (options.kind === "preview") {
-      variantKind = "photo_1920";
-      enabled = album.previewDownloadEnabled;
-    } else if (options.kind === "original") {
-      variantKind = "photo_original";
-      enabled = album.originalDownloadEnabled;
-    } else {
-      variantKind = "video_source";
-      enabled = album.videoDownloadEnabled;
-    }
+    const downloadSelection = {
+      preview: { variantKind: "photo_1920", enabled: album.previewDownloadEnabled },
+      original: { variantKind: "photo_original", enabled: album.originalDownloadEnabled },
+    } satisfies Record<
+      DownloadKind,
+      { variantKind: (typeof schema.variantKindEnum.enumValues)[number]; enabled: boolean }
+    >;
+    const { variantKind, enabled } = downloadSelection[options.kind];
     if (!enabled) {
       throw new AppError({ code: "DOWNLOAD_DISABLED", message: "该下载未开启", statusCode: 403 });
     }

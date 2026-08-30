@@ -225,7 +225,6 @@ maybeDescribe("phase 2 local capacity", () => {
             const publishSequence = start + index;
             return {
               albumId: album.id,
-              kind: "photo" as const,
               uploaderId: user.id,
               ingestStatus: "ready" as const,
               publicationStatus: "published" as const,

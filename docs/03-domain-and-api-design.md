@@ -1,7 +1,7 @@
 # 领域模型与 API 设计
 
 状态：已批准的实施基线
-更新日期：2026-08-26
+更新日期：2026-08-30
 
 ## 1. 设计原则
 
@@ -20,10 +20,9 @@
 | `AlbumState` | `draft`、`live`、`ended`、`archived` | 相册生命周期 |
 | `AlbumAccess` | `password`、`public` | 观众访问方式 |
 | `PublishMode` | `review`、`auto` | 媒体准备完成后的处理方式 |
-| `MediaKind` | `photo`、`video` | 混合媒体类型 |
 | `IngestStatus` | `created`、`local_processing`、`uploading_preview`、`preview_ready`、`uploading_source`、`ready`、`failed`、`cancelled` | 采集/上传完整度 |
 | `PublicationStatus` | `draft`、`pending_review`、`published`、`hidden`、`deleted` | 观众可见性 |
-| `VariantKind` | `photo_480`、`photo_960`、`photo_1920`、`photo_original`、`video_poster_480`、`video_poster_960`、`video_source` | OSS 对象角色 |
+| `VariantKind` | `photo_480`、`photo_960`、`photo_1920`、`photo_original` | OSS 对象角色 |
 | `BibTagStatus` | `suggested`、`confirmed`、`rejected`、`needs_review` | 号码候选/索引状态 |
 | `BibTagSource` | `ocr`、`manual` | 号码来源 |
 | `BibReviewDecision` | `pending`、`numbers_confirmed`、`no_number_confirmed`、`needs_review` | 照片级号码复核结论 |
@@ -49,7 +48,7 @@
 - 标题、说明、封面媒体 ID、活动起止时间；
 - `AlbumState`、`AlbumAccess`、`PublishMode`；
 - 口令摘要与 `accessVersion`；
-- 普通图、原图、视频三个独立下载开关；
+- 普通图、原图两个独立下载开关；
 - 号码识别/观众搜索开关、当前规则/映射版本和 OCR 模型版本；
 - 品牌展示名称、Logo 对象 key、强调色；
 - 创建者、创建/更新时间和发布序列计数器。
@@ -62,11 +61,11 @@
 
 ### 3.4 Media
 
-`Media` 是照片和视频共享基表，保存：
+`Media` 是照片记录，保存：
 
-- ID、相册 ID、分类 ID、`MediaKind`；
+- ID、相册 ID、分类 ID；
 - 上传者 ID、`IngestStatus`、`PublicationStatus`；
-- 宽、高、时长、媒体类型、总字节数；
+- 宽、高、MIME 类型、总字节数；
 - 客户端提取的拍摄时间和服务端接收时间；
 - 单调 `publishSequence`、发布时间、隐藏时间；
 - 失败代码、可重试标记、创建/更新时间。
@@ -195,7 +194,7 @@ stateDiagram-v2
 
 | 方法与路径 | 行为 |
 | --- | --- |
-| `POST /api/v1/uploads` | 创建照片或视频上传意图，返回媒体 ID、对象 key 和允许的步骤 |
+| `POST /api/v1/uploads` | 创建照片上传意图，返回媒体 ID、对象 key 和允许的步骤 |
 | `POST /api/v1/uploads/{id}/objects/{variant}/sign` | 为单个精确 object key 生成短期 V4 PUT URL |
 | `POST /api/v1/uploads/{id}/multipart/{variant}/start` | 初始化分片任务并返回 upload ID、part 大小 |
 | `POST /api/v1/uploads/{id}/multipart/{variant}/parts/sign` | 批量签发指定 part number 的 URL |

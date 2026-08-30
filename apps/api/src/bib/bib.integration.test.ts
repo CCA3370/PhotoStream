@@ -251,7 +251,6 @@ maybeDescribe("bib configuration, privacy and search", () => {
       .insert(schema.media)
       .values({
         albumId,
-        kind: "photo",
         uploaderId,
         ingestStatus: "ready",
         publicationStatus: "published",
@@ -732,7 +731,6 @@ maybeDescribe("bib configuration, privacy and search", () => {
       .insert(schema.media)
       .values({
         albumId,
-        kind: "photo",
         uploaderId: reviewerId,
         ingestStatus: "ready",
         publicationStatus: "published",

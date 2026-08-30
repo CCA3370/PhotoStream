@@ -116,7 +116,7 @@ describe("local object store", () => {
 
   it("supports bounded byte ranges for signed reads", async () => {
     const { baseUrl } = await fixture();
-    const key = "media/albums/a/videos/v/source.mp4";
+    const key = "media/albums/a/photos/v/original.jpg";
     const expiresAt = new Date(Date.now() + 60_000);
     const body = new Uint8Array([0, 1, 2, 3, 4, 5]);
     await fetch(
@@ -126,10 +126,10 @@ describe("local object store", () => {
         method: "PUT",
         secret,
         expiresAt,
-        contentType: "video/mp4",
+        contentType: "image/jpeg",
         contentLength: body.byteLength,
       }),
-      { method: "PUT", headers: { "content-type": "video/mp4" }, body },
+      { method: "PUT", headers: { "content-type": "image/jpeg" }, body },
     );
     const response = await fetch(
       signLocalObjectUrl({ baseUrl, key, method: "GET", secret, expiresAt }),

@@ -464,7 +464,6 @@ maybeDescribe("photo vertical slice transactions", () => {
     await database.insert(schema.media).values([
       {
         albumId: album.album.id,
-        kind: "photo",
         uploaderId,
         ingestStatus: "uploading_source",
         publicationStatus: "pending_review",
@@ -475,7 +474,6 @@ maybeDescribe("photo vertical slice transactions", () => {
       },
       {
         albumId: album.album.id,
-        kind: "photo",
         uploaderId,
         ingestStatus: "failed",
         publicationStatus: "draft",
@@ -486,7 +484,6 @@ maybeDescribe("photo vertical slice transactions", () => {
       },
       {
         albumId: album.album.id,
-        kind: "photo",
         uploaderId,
         ingestStatus: "ready",
         publicationStatus: "published",

@@ -6,7 +6,7 @@
 
 - [喔图云摄影官网](https://www.alltuu.com/)：用于理解照片直播、多端协作、AI、下载和营销等竞品边界；本项目只实现学校核心闭环，不复制其完整平台。
 - [喔图图片直播教程](https://faq.alltuu.com/)：用于了解摄影师上传、相册管理和现场协作场景。
-- [喔图 AI 找我/号码识别](https://faq.alltuu.com/04/a00d/9c62)：用于确认竞品号码识别的照片、字符和不支持手写/球服/视频等边界；本项目不复制其人脸或模糊搜索能力。
+- [喔图 AI 找我/号码识别](https://faq.alltuu.com/04/a00d/9c62)：用于确认竞品号码识别的照片与字符边界；本项目不复制其人脸或模糊搜索能力。
 
 ## 2. OSS 上传、存储与权限
 
@@ -15,7 +15,6 @@
 - [Node.js SDK 生成预签名上传 URL](https://help.aliyun.com/zh/oss/developer-reference/upload-objects-using-a-signed-url-generated-with-oss-sdk-for-node-js)：服务器本地签名实现依据。
 - [OSS Multipart Upload](https://help.aliyun.com/zh/oss/user-guide/multipart-upload/)：分片数量、大小、恢复和请求计费边界。
 - [PutObject](https://help.aliyun.com/zh/oss/developer-reference/putobject)：单次上传、禁止覆盖和标准响应头。
-- [GetObject 与 Range](https://help.aliyun.com/zh/oss/developer-reference/getobject)：视频分段读取与 206 行为。
 - [OSS 私有 Bucket CDN 回源](https://help.aliyun.com/zh/cdn/user-guide/grant-alibaba-cloud-cdn-access-permissions-on-private-oss-buckets)：CDN 只读私有源站授权。
 - [OSS 计费概述](https://help.aliyun.com/zh/oss/billing-overview/)：存储、请求、流量与增值项边界。
 - [OSS 请求费用](https://help.aliyun.com/zh/oss/api-operation-calling-fees)：PUT、UploadPart、HEAD 等请求的计数方式。
@@ -23,12 +22,11 @@
 
 ## 3. CDN 配置与费用
 
-- [通过 CDN 加速 OSS](https://help.aliyun.com/zh/oss/user-guide/cdn-acceleration)：私有回源、缓存、URL 鉴权、Range 和流量风险。
+- [通过 CDN 加速 OSS](https://help.aliyun.com/zh/oss/user-guide/cdn-acceleration)：私有回源、缓存、URL 鉴权和流量风险。
 - [配置 URL 鉴权](https://help.aliyun.com/zh/cdn/user-guide/configure-url-signing)：临时媒体 URL、规则条件和鉴权失败费用边界。
 - [鉴权方式 C](https://help.aliyun.com/zh/cdn/user-guide/type-c-signing)：查询参数型签名与鉴权后统一 Cache Key。
 - [自定义 Cache Key](https://help.aliyun.com/zh/cdn/user-guide/create-custom-cache-keys/)：避免无关参数造成重复缓存与回源。
-- [配置 Range 回源](https://help.aliyun.com/zh/cdn/user-guide/object-chunking/)：MP4 边下边播、分片大小和 OSS 注意事项。
-- [CDN 加速应用场景](https://help.aliyun.com/zh/cdn/product-overview/scenarios)：图片小文件、视音频和业务类型影响。
+- [CDN 加速应用场景](https://help.aliyun.com/zh/cdn/product-overview/scenarios)：图片小文件和业务类型影响。
 - [CDN 计费概述](https://help.aliyun.com/zh/cdn/product-overview/billing-overview)：基础下行与可选增值项目。
 - [CDN 增值服务计费](https://help.aliyun.com/zh/cdn/billing-of-value-added-services-1)：HTTPS 请求、QUIC、实时日志等计费提醒。
 - [CDN 请求数计费 FAQ](https://help.aliyun.com/zh/cdn/product-overview/faq-about-the-billing-of-requests)：304、恶意请求和 HTTPS 免费额度边界。
@@ -41,15 +39,11 @@
 - [函数计算计费](https://help.aliyun.com/en/functioncompute/billing-overview-of-fc)：CU 与公网流量属于独立费用，故本项目不创建 FC。
 - [OSS 图片处理](https://help.aliyun.com/zh/oss/user-guide/overview-17/)：支持格式、QPS/吞吐和数据处理费用；本项目改为客户端派生。
 
-## 5. 图片、OCR 与浏览器媒体
+## 5. 图片与浏览器 OCR
 
 - [选择图片格式](https://web.dev/articles/choose-the-right-image-format)：WebP/AVIF 与传统格式的兼容和用途。
 - [AVIF 的压缩与部署](https://web.dev/articles/avif-updates-2023)：AVIF 可能比 WebP 更小，但编码成本和链路需评估。
 - [MDN 图片格式指南](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types)：WebP、AVIF、JPEG/PNG 回退和浏览器支持。
-- [Chrome WebCodecs 视频处理](https://developer.chrome.com/docs/web-platform/best-practices/webcodecs)：解码、编码、Worker 和 H.264 工作流。
-- [Safari WebCodecs](https://webkit.org/blog/14787/webkit-features-in-safari-17-2/)：Safari 视频 WebCodecs 与 H.264 支持背景。
-- [Mediabunny](https://mediabunny.dev/)：浏览器流式读取、写入和转换媒体。
-- [Mediabunny 支持格式与编码](https://mediabunny.dev/guide/supported-formats-and-codecs)：MP4、H.264、AAC 与运行时 codec 能力检测。
 - [PaddleOCR.js 官方浏览器 SDK](https://github.com/PaddlePaddle/PaddleOCR/blob/main/paddleocr-js/packages/core/README.md)：PP-OCRv5/v6、tiny/mobile 模型、自定义模型 URL、Worker 和 ONNX Runtime 配置。
 - [PaddleOCR.js 架构](https://github.com/PaddlePaddle/PaddleOCR/blob/main/paddleocr-js/docs/architecture.md)：Worker、OpenCV.js、ONNX Runtime WASM 和自托管资源路径责任。
 - [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)：浏览器本地推理、WebGPU/WASM 后端及隐私/成本特性。
@@ -70,7 +64,7 @@
 ## 7. UI 基础、性能与无障碍
 
 - [Next.js Server 与 Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components)：保持服务端主体并缩小客户端边界，避免公共相册加载工作台或媒体处理代码。
-- [Next.js 懒加载](https://nextjs.org/docs/app/guides/lazy-loading)：灯箱、视频、OCR 和转码等客户端模块按路由/操作加载。
+- [Next.js 懒加载](https://nextjs.org/docs/app/guides/lazy-loading)：灯箱与 OCR 等客户端模块按路由/操作加载。
 - [Tailwind CSS 主题变量](https://tailwindcss.com/docs/theme)：使用语义 CSS 变量承载颜色、字体、间距和其他设计 Token。
 - [Tailwind CSS 浏览器兼容](https://tailwindcss.com/docs/compatibility)：v4 依赖 Chrome 111、Safari 16.4、Firefox 128 及以上；目标环境不满足时官方建议保留 v3.4。
 - [shadcn/ui Next.js](https://ui.shadcn.com/docs/installation/next)：Next.js、Tailwind、RSC 和按需生成组件的官方集成路径。

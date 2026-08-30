@@ -196,7 +196,7 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await expect.poll(() => publicObjectRequests.length).toBeGreaterThan(0);
     expect(publicObjectRequests.some((path) => /\/original\./u.test(path))).toBe(false);
 
-    for (const kind of ["preview", "original", "video"] as const) {
+    for (const kind of ["preview", "original"] as const) {
       const disabledDownload = await viewer.request.post(
         appUrl(`/api/v1/public/albums/${album.album.slug}/downloads/${mediaId}/${kind}`),
         { headers: publicWriteHeaders(crypto.randomUUID()) },
@@ -214,7 +214,6 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     for (const [name, confirmation] of [
       ["普通图下载", "普通图下载已更新"],
       ["照片原图下载", "照片原图下载已更新"],
-      ["视频下载", "视频下载已更新"],
     ] as const) {
       const toggle = page.getByRole("switch", { name });
       await expectReactHydrated(toggle);
@@ -267,14 +266,6 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     expect(originalResponse.status()).toBe(200);
     expect((await originalResponse.json()) as { filename: string }).toMatchObject({
       filename: expect.stringContaining("original"),
-    });
-    const videoResponse = await viewer.request.post(
-      appUrl(`/api/v1/public/albums/${album.album.slug}/downloads/${mediaId}/video`),
-      { headers: publicWriteHeaders(crypto.randomUUID()) },
-    );
-    expect(videoResponse.status()).toBe(409);
-    expect((await videoResponse.json()) as { code: string }).toMatchObject({
-      code: "DOWNLOAD_NOT_READY",
     });
     await viewerPage.keyboard.press("Escape");
 

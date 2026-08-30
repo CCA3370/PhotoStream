@@ -6,7 +6,6 @@ const items: readonly PublicMediaView[] = Array.from({ length: 5_000 }, (_, inde
   const sequence = 5_000 - index;
   return {
     id: `00000000-0000-7000-8000-${sequence.toString().padStart(12, "0")}`,
-    kind: "photo",
     width: 1_920,
     height: 1_280,
     publishSequence: sequence,
@@ -15,9 +14,7 @@ const items: readonly PublicMediaView[] = Array.from({ length: 5_000 }, (_, inde
     downloads: {
       preview: false,
       original: false,
-      video: false,
       originalBytes: null,
-      videoBytes: null,
     },
   };
 });

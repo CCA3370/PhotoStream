@@ -19,8 +19,8 @@
 - 公共相册复用 Token、按钮、表单和对话框原语，但媒体网格、实时提示、灯箱内容与下载体验保持产品定制，不直接套用 Dashboard block。
 - 表单使用 React Hook Form，客户端和服务端复用 Zod schema；客户端错误用于即时反馈，服务端继续执行最终校验和权限判断。
 - 长媒体列表在约 200 个挂载卡片后使用 TanStack Virtual。TanStack Table 只用于成员、审计等语义表格，不用于照片审核网格。
-- 灯箱使用 Radix Dialog 管理模态语义、焦点约束和关闭恢复，使用 Embla Carousel 管理相邻媒体和触摸切换；视频、下载授权和预取策略由项目实现。
-- 公共页面保留 Server Component 主体，仅将分类、搜索、SSE 增量、灯箱和其他需要浏览器状态的区域划为小型 Client Island。灯箱、虚拟化、视频、OCR 和转码模块按路由或操作懒加载。
+- 灯箱使用项目选定的 Dialog 原语管理模态语义、焦点约束和关闭恢复，使用 Embla Carousel 管理相邻照片和触摸切换；下载授权和预取策略由项目实现。
+- 公共页面保留 Server Component 主体，仅将分类、搜索、SSE 增量、灯箱和其他需要浏览器状态的区域划为小型 Client Island。灯箱、虚拟化和 OCR 模块按路由或操作懒加载。
 - 上传队列继续使用本项目的多状态轴和 IndexedDB 恢复模型，不采用 Uppy Dashboard 或其状态模型。若后续评估 Uppy 的传输插件，只能复用不改变精确 OSS V4 签名、对象命名、完成校验和恢复契约的部分。
 - 工程阶段使用 Storybook 固化共享组件状态，使用 Playwright + axe 执行自动无障碍检查；自动结果不能替代键盘、屏幕阅读器和真实设备人工验收。
 

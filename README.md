@@ -1,12 +1,12 @@
 # 中学部影像直播
 
-“中学部影像直播”是面向北航实验学校中学部的校内图片与短视频直播平台。摄影、审核和管理人员通过浏览器完成素材上传与发布，师生和家长通过口令相册在微信或现代浏览器中查看活动影像。
+“中学部影像直播”是面向北航实验学校中学部的校内照片直播平台。摄影、审核和管理人员通过浏览器完成照片上传与发布，师生和家长通过口令相册在微信或现代浏览器中查看活动影像。
 
 ## 当前状态
 
-阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1 工程基础、阶段 2 照片纵向闭环、阶段 3 审核运营和阶段 4 号码牌闭环的本地实现，包括浏览器照片派生与直传、口令公共相册、SSE/轮询、恢复队列、批量审核与筛选、三类下载策略、成员与审计、匿名日统计、口令轮换、持久删除任务、结构化号码规则、浏览器本地 OCR、人工确认以及精确号码/年级班级筛选。
+阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1 工程基础、阶段 2 照片纵向闭环、阶段 3 审核运营和阶段 4 号码牌闭环的本地实现，包括浏览器照片派生与直传、口令公共相册、SSE/轮询、恢复队列、批量审核与筛选、两类下载策略、成员与审计、匿名日统计、口令轮换、持久删除任务、结构化号码规则、浏览器本地 OCR、人工确认以及精确号码/年级班级筛选。产品边界现已收缩为仅照片，其他媒体类型不进入契约、数据库或路线图。
 
-自动号码候选当前明确保持 **experimental**：尚未取得 200 张 Git 外授权样片，也没有 Safari/移动设备召回率与性能门禁证据；手工标签和精确搜索闭环不依赖自动候选资格。项目仍未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、学校隐私流程与目标 2C2G 主机检查均为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)、[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)、[阶段 3 验证记录](docs/verification/phase-3-review-and-operations.md)和[阶段 4 验证记录](docs/verification/phase-4-bib-recognition.md)。
+自动号码候选当前明确保持 **experimental**：尚未取得 200 张 Git 外授权样片，也没有 Safari/移动设备召回率与性能门禁证据；手工标签和精确搜索闭环不依赖自动候选资格。项目仍未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、学校隐私流程与目标 2C2G 主机检查均为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)、[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)、[阶段 3 验证记录](docs/verification/phase-3-review-and-operations.md)、[阶段 4 验证记录](docs/verification/phase-4-bib-recognition.md)和[纯照片边界退役验证](docs/verification/photo-only-retirement.md)。
 
 ## 本地开发
 
@@ -29,12 +29,12 @@
 
 - 单学校、单团队、非商业使用，不开放公众注册。
 - 香港 2C2G Linux 主机承载主站、API 和 PostgreSQL；杭州 OSS 与中国内地 CDN 承载全部媒体内容。
-- 图片和视频二进制不得经过香港应用服务器；香港侧只保存必要元数据与业务状态。
-- 阿里云只使用 OSS 与 CDN 的基础能力，不使用函数计算、图片处理、视频点播、DCDN/ESA、实时日志或其他可选增值服务。
-- 图片在上传者浏览器本地生成 WebP 派生图；视频在浏览器能力允许时使用 WebCodecs 本地压缩。
+- 照片二进制不得经过香港应用服务器；香港侧只保存必要元数据与业务状态。
+- 阿里云只使用 OSS 与 CDN 的基础能力，不使用函数计算、云端媒体处理、DCDN/ESA、实时日志或其他可选增值服务。
+- 照片在上传者浏览器本地生成 WebP 派生图。
 - 可按相册启用本地数字号码牌 OCR；自动结果只作候选，人工确认后自动派生年级/班级并供口令相册筛选；无候选照片必须人工确认“无号码”。
 - 新相册默认需要口令且禁止下载；管理员可对单场活动逐项放开。
-- 第一版重点服务小型活动，设计目标为每场 5,000 张照片、50 条短视频、5 名并发上传者和 500 名并发观众。
+- 第一版重点服务小型活动，设计目标为每场 5,000 张照片、5 名并发上传者和 500 名并发观众。
 
 ## 文档索引
 
@@ -42,24 +42,23 @@
 2. [系统架构](docs/02-system-architecture.md)
 3. [领域模型与 API 设计](docs/03-domain-and-api-design.md)
 4. [照片处理与上传链路](docs/04-photo-pipeline.md)
-5. [视频处理与播放链路](docs/05-video-pipeline.md)
-6. [前端与交互设计](docs/06-frontend-ux.md)
-7. [安全、隐私与合规](docs/07-security-privacy.md)
-8. [阿里云 OSS/CDN 配置](docs/08-aliyun-cdn-oss.md)
-9. [费用控制](docs/09-cost-controls.md)
-10. [测试与验收](docs/10-test-and-acceptance.md)
-11. [开发路线图](docs/11-development-roadmap.md)
-12. [号码牌识别与筛选](docs/12-bib-recognition.md)
-13. [部署前待提供信息](docs/deployment-inputs.md)
-14. [参考资料](docs/references.md)
-15. [架构决策记录](docs/adr/README.md)
+5. [前端与交互设计](docs/06-frontend-ux.md)
+6. [安全、隐私与合规](docs/07-security-privacy.md)
+7. [阿里云 OSS/CDN 配置](docs/08-aliyun-cdn-oss.md)
+8. [费用控制](docs/09-cost-controls.md)
+9. [测试与验收](docs/10-test-and-acceptance.md)
+10. [开发路线图](docs/11-development-roadmap.md)
+11. [号码牌识别与筛选](docs/12-bib-recognition.md)
+12. [部署前待提供信息](docs/deployment-inputs.md)
+13. [参考资料](docs/references.md)
+14. [架构决策记录](docs/adr/README.md)
 
 ## 下一道门禁
 
-进入视频闭环阶段前：
+进入安全与性能加固阶段前：
 
 - 阶段 1–4 自动化与代码复查保持通过，自动号码候选在授权样本与设备门禁完成前继续标为 `experimental`；
 - 真实微信/Safari 的 Tailwind/Base UI 风险继续按 **Unverified** 跟踪，不能用 Chromium 结果替代；
 - 媒体二进制不得进入 Fastify/Next.js/香港数据库的架构不变量保持不变；
-- 阶段 5 只能使用浏览器 Mediabunny/WebCodecs 完成视频重封装/转码，不引入 ffmpeg.wasm 或云端转码；
+- 继续保持仅照片的产品、契约、数据库和测试边界，不增加其他媒体类型占位；
 - 云端、DNS、部署和真实学生影像仍需各自单独批准。

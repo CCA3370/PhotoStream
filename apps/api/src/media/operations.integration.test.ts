@@ -229,7 +229,6 @@ maybeDescribe("stage 3 operations", () => {
       .values([
         {
           albumId,
-          kind: "photo",
           uploaderId,
           ingestStatus: "preview_ready",
           publicationStatus: "pending_review",
@@ -240,7 +239,6 @@ maybeDescribe("stage 3 operations", () => {
         },
         {
           albumId,
-          kind: "photo",
           uploaderId,
           ingestStatus: "uploading_preview",
           publicationStatus: "draft",
@@ -326,7 +324,6 @@ maybeDescribe("stage 3 operations", () => {
       .insert(schema.media)
       .values({
         albumId,
-        kind: "photo",
         uploaderId,
         ingestStatus: "preview_ready",
         publicationStatus: "pending_review",
@@ -382,7 +379,6 @@ maybeDescribe("stage 3 operations", () => {
       .insert(schema.media)
       .values({
         albumId,
-        kind: "photo",
         uploaderId,
         ingestStatus: "ready",
         publicationStatus: "published",
@@ -479,7 +475,6 @@ maybeDescribe("stage 3 operations", () => {
       .insert(schema.media)
       .values({
         albumId,
-        kind: "photo",
         uploaderId,
         ingestStatus: "ready",
         publicationStatus: "published",
