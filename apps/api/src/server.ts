@@ -34,6 +34,7 @@ const userAdminService = new UserAdminService({
 });
 const operationsService = new OperationsService({ database, storage, config });
 const bibService = new BibService({ database, config, photoService });
+await bibService.assertKeyCoverage();
 const app = await buildApp({
   config,
   authStore,
@@ -44,7 +45,10 @@ const app = await buildApp({
   bibService,
 });
 const deletionPoll = setInterval(() => {
-  void operationsService.processPendingDeletionTasks().catch((error: unknown) => {
+  void Promise.all([
+    operationsService.processPendingDeletionTasks(),
+    photoService.processExpiredUploadCleanups(),
+  ]).catch((error: unknown) => {
     app.log.error(
       { errorName: error instanceof Error ? error.name : "unknown" },
       "deletion poll failed",
@@ -54,7 +58,10 @@ const deletionPoll = setInterval(() => {
 deletionPoll.unref();
 const analyticsCleanup = setInterval(
   () => {
-    void operationsService.cleanupAnalytics().catch((error: unknown) => {
+    void Promise.all([
+      operationsService.cleanupAnalytics(),
+      operationsService.cleanupOperationalRecords(),
+    ]).catch((error: unknown) => {
       app.log.error(
         { errorName: error instanceof Error ? error.name : "unknown" },
         "analytics cleanup failed",
@@ -68,6 +75,7 @@ const bibMaintenance = setInterval(() => {
   void Promise.all([
     bibService.processPendingRecalculations(),
     bibService.expireStaleOcrActivities(),
+    bibService.processKeyRotation(),
   ]).catch((error: unknown) => {
     app.log.error(
       { errorName: error instanceof Error ? error.name : "unknown" },

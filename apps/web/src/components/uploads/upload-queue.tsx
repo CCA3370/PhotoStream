@@ -423,12 +423,20 @@ export function UploadQueue({
       let recovery = recoveryRecords.current.find((record) => record.fingerprint === fingerprint);
       let recoveredIntent: UploadIntentView | undefined;
       if (recovery !== undefined) {
+        const recoveryIntentId = recovery.intentId;
         activeRecovery = recovery;
         try {
           recoveredIntent = await clientGet<UploadIntentView>(
-            `/api/v1/uploads/${recovery.intentId}`,
+            `/api/v1/uploads/${recoveryIntentId}`,
             controller.signal,
           );
+          if (recoveredIntent.status !== "active") {
+            await deleteUploadRecovery(recoveryIntentId);
+            removeRecovery(recoveryIntentId);
+            activeRecovery = null;
+            recovery = undefined;
+            recoveredIntent = undefined;
+          }
         } catch (error) {
           if (
             !(error instanceof ClientApiError) ||
@@ -436,8 +444,8 @@ export function UploadQueue({
           ) {
             throw error;
           }
-          await deleteUploadRecovery(recovery.intentId);
-          removeRecovery(recovery.intentId);
+          await deleteUploadRecovery(recoveryIntentId);
+          removeRecovery(recoveryIntentId);
           activeRecovery = null;
           recovery = undefined;
         }
@@ -747,8 +755,25 @@ export function UploadQueue({
           ? error.message
           : "上传失败";
       if (activeRecovery !== null && cancelled) {
-        await deleteUploadRecovery(activeRecovery.intentId).catch(() => undefined);
-        removeRecovery(activeRecovery.intentId);
+        try {
+          await clientMutation<UploadIntentView>(
+            `/api/v1/uploads/${activeRecovery.intentId}/cancel`,
+          );
+          await deleteUploadRecovery(activeRecovery.intentId);
+          removeRecovery(activeRecovery.intentId);
+        } catch (cleanupError) {
+          const failedRecovery: UploadRecoveryRecord = {
+            ...activeRecovery,
+            retryCount: activeRecovery.retryCount + 1,
+            lastError:
+              cleanupError instanceof Error
+                ? `本地任务已停止，服务端清理待重试：${cleanupError.message}`
+                : "本地任务已停止，服务端清理待重试",
+            updatedAt: new Date().toISOString(),
+          };
+          await saveUploadRecovery(failedRecovery).catch(() => undefined);
+          setRecovery(failedRecovery);
+        }
       } else if (activeRecovery !== null) {
         try {
           const current = await clientGet<UploadIntentView>(
@@ -892,7 +917,7 @@ export function UploadQueue({
               上传队列
             </h2>
             <p className="text-sm text-muted-foreground">
-              请选择系统 Chrome、Edge 或 Safari 上传媒体。
+              请选择系统 Chrome、Edge 或 Safari 上传照片。
             </p>
           </div>
           <div className="flex flex-col gap-5">

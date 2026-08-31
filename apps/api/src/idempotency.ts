@@ -31,7 +31,7 @@ export async function findOperationRequest(
     readonly actorScope: string;
     readonly operation: string;
     readonly idempotencyKey: string;
-    readonly requestHash: string;
+    readonly requestHash: string | readonly string[];
   },
 ): Promise<Record<string, unknown> | null> {
   const [record] = await transaction
@@ -46,7 +46,9 @@ export async function findOperationRequest(
     )
     .limit(1);
   if (record === undefined) return null;
-  if (record.requestHash !== options.requestHash) {
+  const acceptedHashes =
+    typeof options.requestHash === "string" ? [options.requestHash] : options.requestHash;
+  if (!acceptedHashes.includes(record.requestHash)) {
     throw new AppError({
       code: "IDEMPOTENCY_CONFLICT",
       message: "同一幂等键不能用于不同请求",

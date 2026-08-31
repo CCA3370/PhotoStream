@@ -29,6 +29,7 @@ import type { InternalActor } from "./service.js";
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const recentAuthenticationMs = 15 * 60 * 1_000;
 const analyticsRetentionMs = 30 * 24 * 60 * 60 * 1_000;
+const operationRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 
 function requirePermission(role: UserRole, permission: Parameters<typeof hasPermission>[1]): void {
   if (!hasPermission(role, permission)) {
@@ -498,6 +499,12 @@ export class OperationsService {
           sql`${schema.operationRequests.operation} like ${`download:%:${claimed.mediaId}:%`}`,
         );
       await transaction
+        .delete(schema.mediaBibTags)
+        .where(eq(schema.mediaBibTags.mediaId, claimed.mediaId));
+      await transaction
+        .delete(schema.mediaBibReviews)
+        .where(eq(schema.mediaBibReviews.mediaId, claimed.mediaId));
+      await transaction
         .update(schema.deletionTaskObjects)
         .set({ objectKey: null })
         .where(eq(schema.deletionTaskObjects.taskId, taskId));
@@ -527,7 +534,7 @@ export class OperationsService {
         actorId: claimed.requestedBy,
         action: "media.deletion.completed",
         targetId: claimed.mediaId,
-        changedFields: ["objects", "cdn", "publicationStatus"],
+        changedFields: ["objects", "cdn", "bibData", "publicationStatus"],
         requestId: claimed.requestId,
       });
     });
@@ -728,6 +735,48 @@ export class OperationsService {
       .where(lt(schema.analyticsEvents.createdAt, new Date(now.getTime() - analyticsRetentionMs)))
       .returning({ id: schema.analyticsEvents.id });
     return deleted.length;
+  }
+
+  async cleanupOperationalRecords(now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - operationRetentionMs);
+    return this.#database.transaction(async (transaction) => {
+      const operationRequests = await transaction
+        .delete(schema.operationRequests)
+        .where(lt(schema.operationRequests.createdAt, cutoff))
+        .returning({ id: schema.operationRequests.id });
+      const batchRequests = await transaction
+        .delete(schema.mediaBatchRequests)
+        .where(lt(schema.mediaBatchRequests.createdAt, cutoff))
+        .returning({ id: schema.mediaBatchRequests.id });
+      const sessions = await transaction
+        .delete(schema.sessions)
+        .where(lt(schema.sessions.absoluteExpiresAt, now))
+        .returning({ id: schema.sessions.id });
+      const visitorSessions = await transaction
+        .delete(schema.visitorSessions)
+        .where(lt(schema.visitorSessions.expiresAt, now))
+        .returning({ id: schema.visitorSessions.id });
+      const liveEvents = await transaction
+        .delete(schema.liveEvents)
+        .where(
+          and(
+            lt(schema.liveEvents.createdAt, cutoff),
+            sql`exists (
+              select 1 from ${schema.albums}
+              where ${schema.albums.id} = ${schema.liveEvents.albumId}
+                and ${schema.albums.state} in ('ended', 'archived')
+            )`,
+          ),
+        )
+        .returning({ id: schema.liveEvents.id });
+      return (
+        operationRequests.length +
+        batchRequests.length +
+        sessions.length +
+        visitorSessions.length +
+        liveEvents.length
+      );
+    });
   }
 
   async albumStatistics(actor: InternalActor, albumId: string) {

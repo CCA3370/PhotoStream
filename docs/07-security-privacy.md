@@ -155,14 +155,14 @@
 - CDN URL 鉴权主/备密钥；
 - 数据库备份加密密钥；
 - 首次管理员引导令牌。
-- 号码值加密当前/上一版本密钥；
+- 号码值加密当前/上一版本密钥及对应版本标识；
 - 号码 blind-index 搜索当前/上一版本密钥。
 
-文档和示例只列变量名，不提供真实值。密钥轮换需要支持 CDN 主/备 key 重叠窗口、会话密钥版本和 RAM key 撤销。
+文档和示例只列变量名，不提供真实值。密钥轮换需要支持 CDN 主/备 key 重叠窗口、会话密钥版本、号码 current/previous 双读与后台重加密，以及 RAM key 撤销。具体顺序见[运维、备份与事件响应手册](13-operations-runbook.md)。
 
 ## 12. 响应头基线
 
-主站至少配置：严格 CSP、HSTS、`X-Content-Type-Options: nosniff`、合理 Referrer Policy、Permissions Policy 和 frame 限制。CSP 仅允许同源 API/脚本以及 `cdn.cloverta.top` 的图片和静态资源；不得默认允许任意第三方源或内联脚本。
+主站至少配置：逐请求 nonce 严格 CSP、HSTS、`X-Content-Type-Options: nosniff`、合理 Referrer Policy、Permissions Policy 和 frame 限制。脚本只允许同源 nonce/`strict-dynamic`，OCR WebAssembly 使用 `wasm-unsafe-eval`，Worker 只允许同源/Blob；图片只允许同源、Blob/Data 与 `MEDIA_BASE_URL`，上传连接只额外允许精确 `PHOTO_UPLOAD_BASE_URL`。`media-src`、object、frame、脚本属性和任意第三方源全部拒绝；生产脚本不得依赖 `unsafe-inline`/`unsafe-eval`。
 
 ## 13. 删除与事件响应
 

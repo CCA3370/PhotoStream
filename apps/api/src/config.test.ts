@@ -60,4 +60,35 @@ describe("configuration", () => {
       loadConfig({ ...validEnvironment, BIB_OCR_AUTOMATION_STATUS: "unverified" }),
     ).toThrowError(expect.objectContaining({ fields: ["BIB_OCR_AUTOMATION_STATUS"] }));
   });
+
+  it("requires a complete, distinct previous bib key set during rotation", () => {
+    const current = {
+      ...validEnvironment,
+      BIB_DATA_KEY: Buffer.alloc(32, 1).toString("base64url"),
+      BIB_SEARCH_KEY: "b".repeat(32),
+      BIB_KEY_VERSION: "v2",
+    };
+    expect(() =>
+      loadConfig({
+        ...current,
+        BIB_DATA_KEY_PREVIOUS: Buffer.alloc(32, 2).toString("base64url"),
+      }),
+    ).toThrowError(expect.objectContaining({ fields: ["BIB_SEARCH_KEY_PREVIOUS"] }));
+    expect(() =>
+      loadConfig({
+        ...current,
+        BIB_DATA_KEY_PREVIOUS: Buffer.alloc(32, 2).toString("base64url"),
+        BIB_SEARCH_KEY_PREVIOUS: "p".repeat(32),
+        BIB_KEY_VERSION_PREVIOUS: "v2",
+      }),
+    ).toThrowError(expect.objectContaining({ fields: ["BIB_KEY_VERSION_PREVIOUS"] }));
+    expect(
+      loadConfig({
+        ...current,
+        BIB_DATA_KEY_PREVIOUS: Buffer.alloc(32, 2).toString("base64url"),
+        BIB_SEARCH_KEY_PREVIOUS: "p".repeat(32),
+        BIB_KEY_VERSION_PREVIOUS: "v1",
+      }),
+    ).toMatchObject({ BIB_KEY_VERSION: "v2", BIB_KEY_VERSION_PREVIOUS: "v1" });
+  });
 });

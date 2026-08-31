@@ -83,6 +83,8 @@ class CapacityObjectStorage implements ObjectStorage {
     throw new Error("Capacity test never uploads media bodies");
   }
 
+  async abortMultipart(): Promise<void> {}
+
   async head(): Promise<ObjectMetadata | null> {
     return null;
   }

@@ -1,5 +1,6 @@
 import type { BibConfigView } from "@photostream/contracts";
 
+import { ServiceWorkerRegistration } from "@/components/uploads/service-worker-registration";
 import { UploadQueue } from "@/components/uploads/upload-queue";
 import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
@@ -24,12 +25,15 @@ export default async function UploadPage({ params }: { params: Promise<{ id: str
     serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
   ]);
   return (
-    <UploadQueue
-      albumId={album.id}
-      albumTitle={album.title}
-      bibConfig={bibConfig}
-      categories={categories.filter((category) => category.enabled)}
-      role={session.user.role}
-    />
+    <>
+      <ServiceWorkerRegistration />
+      <UploadQueue
+        albumId={album.id}
+        albumTitle={album.title}
+        bibConfig={bibConfig}
+        categories={categories.filter((category) => category.enabled)}
+        role={session.user.role}
+      />
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { CreatePhotoUploadRequest, PhotoVariantKind } from "@photostream/contracts";
 import { createDatabase, createPool, migrateDatabase, schema } from "@photostream/db";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../app.js";
 import { PostgresAuthStore } from "../auth/postgres-store.js";
@@ -48,6 +49,8 @@ const fakeHasher: PasswordHasher = {
 class FakeObjectStorage implements ObjectStorage {
   readonly objects = new Map<string, ObjectMetadata>();
   readonly multipartParts = new Map<string, ObjectMetadata>();
+  readonly abortedMultipart = new Set<string>();
+  readonly failDeleteOnce = new Set<string>();
 
   signPut(options: {
     readonly key: string;
@@ -106,11 +109,19 @@ class FakeObjectStorage implements ObjectStorage {
     });
   }
 
+  async abortMultipart(uploadId: string): Promise<void> {
+    this.abortedMultipart.add(uploadId);
+    for (const key of this.multipartParts.keys()) {
+      if (key.startsWith(`${uploadId}:`)) this.multipartParts.delete(key);
+    }
+  }
+
   async head(key: string): Promise<ObjectMetadata | null> {
     return this.objects.get(key) ?? null;
   }
 
   async delete(key: string): Promise<void> {
+    if (this.failDeleteOnce.delete(key)) throw new Error("synthetic cleanup failure");
     this.objects.delete(key);
   }
 }
@@ -191,6 +202,8 @@ maybeDescribe("photo vertical slice transactions", () => {
   beforeEach(async () => {
     storage.objects.clear();
     storage.multipartParts.clear();
+    storage.abortedMultipart.clear();
+    storage.failDeleteOnce.clear();
     await database.delete(schema.liveEvents);
     await database.delete(schema.analyticsEvents);
     await database.delete(schema.analyticsDaily);
@@ -388,6 +401,78 @@ maybeDescribe("photo vertical slice transactions", () => {
     ).rejects.toMatchObject({ code: "OBJECT_VERIFICATION_FAILED" });
   });
 
+  it("rolls publication state back when the durable event insert fails", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "事务回滚", description: "", publishMode: "auto" },
+      idempotencyKey: "album-idempotency-outbox",
+      requestId: "request-album-outbox",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      requestId: "request-start-outbox",
+    });
+    const intent = await service.createPhotoUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: photoRequest(album.album.id),
+      idempotencyKey: "photo-idempotency-outbox",
+    });
+    const complete = async (kind: "photo_480" | "photo_960") => {
+      const object = intent.objects.find((candidate) => candidate.kind === kind);
+      if (object === undefined) throw new Error(`Missing ${kind}`);
+      storage.objects.set(object.objectKey, {
+        bytes: object.expectedBytes,
+        contentType: object.contentType,
+        etag: `etag-${kind}`,
+      });
+      return service.completeUploadObject({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: intent.id,
+        kind,
+      });
+    };
+    await complete("photo_480");
+    await pool.query(`
+      create function photostream_test_fail_live_event() returns trigger language plpgsql as $$
+      begin
+        raise exception 'synthetic live event failure';
+      end
+      $$;
+      create trigger photostream_test_fail_live_event
+      before insert on live_events
+      for each row execute function photostream_test_fail_live_event();
+    `);
+    try {
+      await expect(complete("photo_960")).rejects.toThrow(
+        'Failed query: insert into "live_events"',
+      );
+      const [storedMedia] = await database
+        .select()
+        .from(schema.media)
+        .where(eq(schema.media.id, intent.mediaId));
+      const [storedAlbum] = await database
+        .select()
+        .from(schema.albums)
+        .where(eq(schema.albums.id, album.album.id));
+      expect(storedMedia).toMatchObject({ publicationStatus: "draft", publishSequence: null });
+      expect(storedAlbum?.publishSequence).toBe(0);
+      expect(await database.select().from(schema.liveEvents)).toHaveLength(0);
+      expect(
+        (await database.select().from(schema.mediaVariants)).find(
+          (variant) => variant.kind === "photo_960",
+        )?.verified,
+      ).toBe(false);
+    } finally {
+      await pool.query(`
+        drop trigger if exists photostream_test_fail_live_event on live_events;
+        drop function if exists photostream_test_fail_live_event();
+      `);
+    }
+    expect((await complete("photo_960")).publicationStatus).toBe("published");
+    expect(await database.select().from(schema.liveEvents)).toHaveLength(1);
+  });
+
   it("persists and completes an immutable multipart original", async () => {
     const album = await service.createAlbum({
       actor: { id: adminId, role: "admin" },
@@ -452,6 +537,214 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(completed.objects.find((object) => object.kind === "photo_original")?.completed).toBe(
       true,
     );
+  });
+
+  it("cancels unpublished uploads and durably removes objects and multipart state", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "取消上传", description: "", publishMode: "auto" },
+      idempotencyKey: "album-idempotency-cancel",
+      requestId: "request-album-cancel",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      requestId: "request-start-cancel",
+    });
+    const intent = await service.createPhotoUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: multipartPhotoRequest(album.album.id),
+      idempotencyKey: "photo-idempotency-cancel",
+    });
+    for (const object of intent.objects) {
+      storage.objects.set(object.objectKey, {
+        bytes: object.expectedBytes,
+        contentType: object.contentType,
+        etag: `etag-${object.kind}`,
+      });
+      if (object.multipartUploadId !== null) {
+        storage.multipartParts.set(`${object.multipartUploadId}:1`, {
+          bytes: object.parts[0]?.expectedBytes ?? 1,
+          contentType: object.contentType,
+          etag: "a".repeat(64),
+        });
+      }
+    }
+
+    const cancelled = await service.cancelUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      intentId: intent.id,
+    });
+    expect(cancelled).toMatchObject({
+      status: "cancelled",
+      cleanupStatus: "pending",
+      cleanupLastErrorCode: null,
+      objects: expect.arrayContaining([expect.objectContaining({ kind: "photo_480" })]),
+    });
+    await expect(
+      service.completeUploadObject({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: intent.id,
+        kind: "photo_480",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    const firstSweep = new Date(Date.now() + 31 * 60 * 1_000);
+    await service.processUploadCleanup(intent.id, firstSweep);
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({ status: "cancelled", cleanupStatus: "pending", objects: [] });
+    expect(storage.objects).toHaveLength(0);
+    expect(storage.multipartParts).toHaveLength(0);
+    expect(storage.abortedMultipart).toContain(
+      intent.objects.find((object) => object.kind === "photo_original")?.multipartUploadId,
+    );
+    expect(await database.select().from(schema.uploadParts)).toHaveLength(0);
+    expect(await database.select().from(schema.mediaVariants)).toHaveLength(0);
+    await service.processUploadCleanup(
+      intent.id,
+      new Date(firstSweep.getTime() + 24 * 60 * 60 * 1_000 + 1),
+    );
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({ status: "cancelled", cleanupStatus: "completed" });
+  });
+
+  it("preserves published previews while cleaning cancelled source work", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "保留直播预览", description: "", publishMode: "auto" },
+      idempotencyKey: "album-idempotency-cancel-preview",
+      requestId: "request-album-cancel-preview",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      requestId: "request-start-cancel-preview",
+    });
+    const intent = await service.createPhotoUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: photoRequest(album.album.id),
+      idempotencyKey: "photo-idempotency-cancel-preview",
+    });
+    for (const kind of ["photo_480", "photo_960"] as const) {
+      const object = intent.objects.find((candidate) => candidate.kind === kind);
+      if (object === undefined) throw new Error(`Missing ${kind}`);
+      storage.objects.set(object.objectKey, {
+        bytes: object.expectedBytes,
+        contentType: object.contentType,
+        etag: `etag-${kind}`,
+      });
+      await service.completeUploadObject({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: intent.id,
+        kind,
+      });
+    }
+    const source = intent.objects.find((object) => object.kind === "photo_1920");
+    if (source === undefined) throw new Error("Missing source fixture");
+    storage.objects.set(source.objectKey, {
+      bytes: source.expectedBytes,
+      contentType: source.contentType,
+      etag: "unverified-source",
+    });
+
+    const cancelled = await service.cancelUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      intentId: intent.id,
+    });
+    expect(cancelled).toMatchObject({
+      status: "cancelled",
+      cleanupStatus: "pending",
+      publicationStatus: "published",
+    });
+    const firstSweep = new Date(Date.now() + 31 * 60 * 1_000);
+    await service.processUploadCleanup(intent.id, firstSweep);
+    const swept = await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id);
+    expect(swept).toMatchObject({ cleanupStatus: "pending", ingestStatus: "preview_ready" });
+    expect(swept.objects.map((object) => object.kind).sort()).toEqual(["photo_480", "photo_960"]);
+    expect(storage.objects.has(source.objectKey)).toBe(false);
+    const visitor = await service.unlockAlbum(album.album.slug, album.generatedPassword);
+    expect(
+      await service.listPublicMedia({
+        slug: album.album.slug,
+        visitorToken: visitor.rawToken,
+        cursor: undefined,
+        categoryId: undefined,
+        limit: 60,
+      }),
+    ).toMatchObject({ items: [{ id: intent.mediaId }] });
+    await service.processUploadCleanup(
+      intent.id,
+      new Date(firstSweep.getTime() + 24 * 60 * 60 * 1_000 + 1),
+    );
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({ cleanupStatus: "completed", ingestStatus: "preview_ready" });
+  });
+
+  it("expires orphaned uploads and retries cleanup failures from persisted state", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "过期清理", description: "", publishMode: "auto" },
+      idempotencyKey: "album-idempotency-expiry",
+      requestId: "request-album-expiry",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      requestId: "request-start-expiry",
+    });
+    const intent = await service.createPhotoUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: photoRequest(album.album.id),
+      idempotencyKey: "photo-idempotency-expiry",
+    });
+    const orphan = intent.objects[0];
+    if (orphan === undefined) throw new Error("Missing orphan fixture");
+    storage.objects.set(orphan.objectKey, {
+      bytes: orphan.expectedBytes,
+      contentType: orphan.contentType,
+      etag: "orphan",
+    });
+    storage.failDeleteOnce.add(orphan.objectKey);
+    const now = new Date("2026-08-30T12:00:00.000Z");
+    await database
+      .update(schema.uploadIntents)
+      .set({ expiresAt: new Date(now.getTime() - 1) })
+      .where(eq(schema.uploadIntents.id, intent.id));
+
+    expect(await service.processExpiredUploadCleanups(10, now)).toBe(0);
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({
+      status: "expired",
+      cleanupStatus: "pending",
+      cleanupLastErrorCode: null,
+    });
+    const firstSweep = new Date(now.getTime() + 31 * 60 * 1_000);
+    expect(await service.processExpiredUploadCleanups(10, firstSweep)).toBe(1);
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({
+      status: "expired",
+      cleanupStatus: "failed",
+      cleanupLastErrorCode: "UPLOAD_CLEANUP_FAILED",
+    });
+    const retrySweep = new Date(firstSweep.getTime() + 61_000);
+    expect(await service.processExpiredUploadCleanups(10, retrySweep)).toBe(1);
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({ status: "expired", cleanupStatus: "pending", objects: [] });
+    expect(storage.objects.has(orphan.objectKey)).toBe(false);
+    expect(
+      await service.processExpiredUploadCleanups(
+        10,
+        new Date(retrySweep.getTime() + 24 * 60 * 60 * 1_000 + 1),
+      ),
+    ).toBe(1);
+    expect(
+      await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id),
+    ).toMatchObject({ status: "expired", cleanupStatus: "completed", objects: [] });
   });
 
   it("filters incomplete and failed media and lists only participating uploaders", async () => {

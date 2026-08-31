@@ -1,0 +1,1 @@
+CREATE INDEX "media_bib_tags_key_version_idx" ON "media_bib_tags" USING btree ("key_version","id");

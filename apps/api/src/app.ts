@@ -66,7 +66,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       disableRequestLogging: true,
       requestIdLogLabel: "requestId",
     }),
-    trustProxy: false,
+    trustProxy: ["127.0.0.1", "::1"],
   };
   const app: FastifyInstance = Fastify(serverOptions);
 

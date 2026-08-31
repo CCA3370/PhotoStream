@@ -28,7 +28,7 @@
 | 安全事件联系人 | 部署前 | 待提供，不一定公开展示 | 学校/运维 |
 | 首场试运行活动 | 首场活动前 | 待确定日期、预计人数和照片数量 | 用户 |
 | 号码找照片隐私说明 | 首场活动前 | 待学校确认号码用途、访问范围和删除流程 | 学校 |
-| 号码牌评测照片 | 号码识别阶段前 | 用户确认可提供至少 200 张授权代表照片；必须保存在 Git 外 | 用户/学校 |
+| 号码牌评测照片 | 号码识别阶段前 | 已有 `test_photos/` 813 张 Git 忽略本地 JPG；仍待学校确认评测授权并提供逐号码/四边形真值标注 | 用户/学校 |
 | 评测标注责任人 | 号码识别阶段前 | 待指定；需标注人眼可读号码、四边形，并对无号码照片明确标注 | 用户/学校 |
 | 号码规则样例 | 号码识别阶段前 | 已确定支持任意位置/区间规则；需提供首场活动实际配置用于评测 | 用户 |
 | 年级/班级选项与映射 | 号码识别阶段前 | 待提供正式名称、排序和位置映射，例如第 1 位到年级、第 2–3 位到班级 | 用户/学校 |
@@ -109,6 +109,7 @@
 
 - `APP_ORIGIN`
 - `MEDIA_BASE_URL`
+- `PHOTO_UPLOAD_BASE_URL`（精确 OSS 上传 origin，不含对象路径或签名）
 - `DATABASE_URL`
 - `SESSION_SECRET_CURRENT`
 - `SESSION_SECRET_PREVIOUS`
@@ -121,12 +122,15 @@
 - `ALIYUN_ACCESS_KEY_SECRET`
 - `ALIYUN_CDN_AUTH_KEY_CURRENT`
 - `ALIYUN_CDN_AUTH_KEY_PREVIOUS`
-- `BACKUP_ENCRYPTION_RECIPIENT`
+- `BACKUP_ENCRYPTION_PUBLIC_KEY_FILE`
+- `BACKUP_DECRYPTION_PRIVATE_KEY_FILE`（仅隔离恢复时临时提供）
 - `BOOTSTRAP_ADMIN_TOKEN`
-- `BIB_VALUE_ENCRYPTION_KEY_CURRENT`
-- `BIB_VALUE_ENCRYPTION_KEY_PREVIOUS`
-- `BIB_SEARCH_KEY_CURRENT`
+- `BIB_DATA_KEY`
+- `BIB_DATA_KEY_PREVIOUS`
+- `BIB_SEARCH_KEY`
 - `BIB_SEARCH_KEY_PREVIOUS`
+- `BIB_KEY_VERSION`
+- `BIB_KEY_VERSION_PREVIOUS`
 
 具体命名可在编码阶段保持语义不变地调整，但必须有启动时 schema 校验、禁止打印和轮换说明。
 

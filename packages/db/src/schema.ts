@@ -50,6 +50,13 @@ export const uploadIntentStatusEnum = pgEnum("upload_intent_status", [
   "cancelled",
   "expired",
 ]);
+export const uploadCleanupStatusEnum = pgEnum("upload_cleanup_status", [
+  "not_needed",
+  "pending",
+  "processing",
+  "failed",
+  "completed",
+]);
 export const deletionTaskStatusEnum = pgEnum("deletion_task_status", [
   "pending",
   "processing",
@@ -313,6 +320,12 @@ export const uploadIntents = pgTable(
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     status: uploadIntentStatusEnum("status").notNull().default("active"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    cleanupStatus: uploadCleanupStatusEnum("cleanup_status").notNull().default("not_needed"),
+    cleanupAttempts: integer("cleanup_attempts").notNull().default(0),
+    cleanupSuccessfulSweeps: integer("cleanup_successful_sweeps").notNull().default(0),
+    cleanupLastErrorCode: varchar("cleanup_last_error_code", { length: 100 }),
+    cleanupNextAttemptAt: timestamp("cleanup_next_attempt_at", { withTimezone: true }),
+    cleanupCompletedAt: timestamp("cleanup_completed_at", { withTimezone: true }),
     ...timestampColumns(),
   },
   (table) => [
@@ -322,6 +335,7 @@ export const uploadIntents = pgTable(
     ),
     uniqueIndex("upload_intents_media_unique").on(table.mediaId),
     index("upload_intents_expiry_idx").on(table.status, table.expiresAt),
+    index("upload_intents_cleanup_idx").on(table.cleanupStatus, table.cleanupNextAttemptAt),
   ],
 );
 
@@ -657,6 +671,7 @@ export const mediaBibTags = pgTable(
       .on(table.mediaId, table.blindIndex)
       .where(sql`${table.status} = 'confirmed'`),
     index("media_bib_tags_media_status_idx").on(table.mediaId, table.status, table.createdAt),
+    index("media_bib_tags_key_version_idx").on(table.keyVersion, table.id),
     index("media_bib_tags_public_search_idx").on(
       table.albumId,
       table.blindIndex,

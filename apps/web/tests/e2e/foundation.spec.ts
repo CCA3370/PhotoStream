@@ -114,6 +114,40 @@ test("Tailwind compatibility surface renders semantic tokens without accessibili
   await expectNoAxeViolations(page);
 });
 
+test("document responses use unique CSP nonces and security headers", async () => {
+  const first = await context.request.get(appUrl("/compatibility"));
+  const second = await context.request.get(appUrl("/compatibility"));
+  const firstPolicy = first.headers()["content-security-policy"] ?? "";
+  const secondPolicy = second.headers()["content-security-policy"] ?? "";
+  const firstNonce = /'nonce-([^']+)'/u.exec(firstPolicy)?.[1];
+  const secondNonce = /'nonce-([^']+)'/u.exec(secondPolicy)?.[1];
+
+  expect(firstNonce).toMatch(/^[A-Za-z0-9+/=]{16,256}$/u);
+  expect(secondNonce).toMatch(/^[A-Za-z0-9+/=]{16,256}$/u);
+  expect(secondNonce).not.toBe(firstNonce);
+  expect(firstPolicy.match(/script-src [^;]+/u)?.[0]).not.toContain("'unsafe-inline'");
+  expect(firstPolicy).toContain("media-src 'none'");
+  expect(firstPolicy).toContain("object-src 'none'");
+  expect(firstPolicy).toContain("frame-ancestors 'none'");
+  expect(first.headers()["strict-transport-security"]).toBe("max-age=31536000");
+  expect(first.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(first.headers()["x-frame-options"]).toBe("DENY");
+
+  const response = await page.goto(appUrl("/compatibility"));
+  const documentPolicy = response?.headers()["content-security-policy"] ?? "";
+  const documentNonce = /'nonce-([^']+)'/u.exec(documentPolicy)?.[1];
+  expect(documentNonce).toBeDefined();
+  expect(
+    await page.evaluate(
+      (nonce) =>
+        [...document.scripts]
+          .filter((script) => script.text.length > 0)
+          .every((script) => script.nonce === nonce),
+      documentNonce,
+    ),
+  ).toBe(true);
+});
+
 test("Base UI dialog restores keyboard focus", async () => {
   await page.goto(appUrl("/ui-foundation"));
   const trigger = page.getByRole("button", { name: "打开对话框" });

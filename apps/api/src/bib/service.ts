@@ -556,7 +556,7 @@ export class BibService {
     readonly requestId: string;
   }): Promise<BibMediaState> {
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({
+    const requestHashes = this.cryptoOrThrow().requestHashes({
       mediaId: options.mediaId,
       activityStatus: options.activityStatus,
       modelVersion: options.modelVersion,
@@ -572,7 +572,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -634,14 +634,14 @@ export class BibService {
       const tagIds: string[] = [];
       if (review?.decision !== "no_number_confirmed") {
         for (const candidate of candidates) {
-          const blindIndex = bibCrypto.blindIndex(media.albumId, candidate.number);
+          const blindIndexes = bibCrypto.blindIndexes(media.albumId, candidate.number);
           const [existing] = await transaction
             .select({ id: schema.mediaBibTags.id })
             .from(schema.mediaBibTags)
             .where(
               and(
                 eq(schema.mediaBibTags.mediaId, media.id),
-                eq(schema.mediaBibTags.blindIndex, blindIndex),
+                inArray(schema.mediaBibTags.blindIndex, [...blindIndexes]),
                 inArray(schema.mediaBibTags.status, ["suggested", "confirmed", "needs_review"]),
               ),
             )
@@ -695,7 +695,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: { tagIds, acceptedCount: tagIds.length },
       });
     });
@@ -747,7 +747,7 @@ export class BibService {
     const number = normalizeBibNumber(options.number);
     if (number === null) throw this.#invalidNumber();
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({ mediaId: options.mediaId, number });
+    const requestHashes = this.cryptoOrThrow().requestHashes({ mediaId: options.mediaId, number });
     await this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
       const operation = `bib.tag.add:${options.mediaId}`;
@@ -757,7 +757,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -781,7 +781,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: { tagId },
       });
     });
@@ -802,7 +802,7 @@ export class BibService {
         ? undefined
         : normalizeBibNumber(options.correctedNumber);
     if (options.correctedNumber !== undefined && corrected === null) throw this.#invalidNumber();
-    const requestHash = this.cryptoOrThrow().requestHash({
+    const requestHashes = this.cryptoOrThrow().requestHashes({
       mediaId: options.mediaId,
       tagId: options.tagId,
       corrected,
@@ -816,7 +816,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -896,7 +896,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: {
           tagId: resultingTagId,
           ...(number === original ? {} : { correctedFromTagId: tag.id }),
@@ -914,7 +914,7 @@ export class BibService {
     readonly requestId: string;
   }): Promise<BibMediaState> {
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({
+    const requestHashes = this.cryptoOrThrow().requestHashes({
       mediaId: options.mediaId,
       tagId: options.tagId,
     });
@@ -927,7 +927,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -966,7 +966,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: { mediaId: media.id, tagId: tag.id },
       });
     });
@@ -981,7 +981,7 @@ export class BibService {
     readonly requestId: string;
   }): Promise<BibMediaState> {
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({
+    const requestHashes = this.cryptoOrThrow().requestHashes({
       mediaId: options.mediaId,
       tagId: options.tagId,
     });
@@ -994,7 +994,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -1027,7 +1027,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: { mediaId: media.id, tagId: options.tagId },
       });
     });
@@ -1041,7 +1041,7 @@ export class BibService {
     readonly requestId: string;
   }): Promise<BibMediaState> {
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({ mediaId: options.mediaId });
+    const requestHashes = this.cryptoOrThrow().requestHashes({ mediaId: options.mediaId });
     await this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
       const operation = `bib.review.no-number:${options.mediaId}`;
@@ -1051,7 +1051,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -1070,7 +1070,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: { mediaId: media.id },
       });
     });
@@ -1084,7 +1084,7 @@ export class BibService {
     readonly requestId: string;
   }): Promise<BibMediaState> {
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({ mediaId: options.mediaId });
+    const requestHashes = this.cryptoOrThrow().requestHashes({ mediaId: options.mediaId });
     await this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
       const operation = `bib.review.reset:${options.mediaId}`;
@@ -1094,7 +1094,7 @@ export class BibService {
           actorScope,
           operation,
           idempotencyKey,
-          requestHash,
+          requestHash: requestHashes,
         })) !== null
       ) {
         return;
@@ -1133,7 +1133,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result: { mediaId: media.id },
       });
     });
@@ -1151,7 +1151,10 @@ export class BibService {
     const number = normalizeBibNumber(options.number);
     if (number === null) throw this.#invalidNumber();
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({ mediaIds: options.mediaIds, number });
+    const requestHashes = this.cryptoOrThrow().requestHashes({
+      mediaIds: options.mediaIds,
+      number,
+    });
     return this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
       const operation = "bib.batch.add";
@@ -1160,7 +1163,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes,
       });
       if (retried !== null) return retried as BibBatchResult;
       await this.#lockMediaIds(transaction, options.mediaIds);
@@ -1208,7 +1211,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result,
       });
       return result;
@@ -1223,7 +1226,7 @@ export class BibService {
   }): Promise<BibBatchResult> {
     requirePermission(options.actor.role, "bib:any");
     const idempotencyKey = requireIdempotencyKey(options.idempotencyKey);
-    const requestHash = this.cryptoOrThrow().requestHash({ mediaIds: options.mediaIds });
+    const requestHashes = this.cryptoOrThrow().requestHashes({ mediaIds: options.mediaIds });
     return this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
       const operation = "bib.batch.no-number";
@@ -1232,7 +1235,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes,
       });
       if (retried !== null) return retried as BibBatchResult;
       await this.#lockMediaIds(transaction, options.mediaIds);
@@ -1275,7 +1278,7 @@ export class BibService {
         actorScope,
         operation,
         idempotencyKey,
-        requestHash,
+        requestHash: requestHashes[0],
         result,
       });
       return result;
@@ -1475,6 +1478,67 @@ export class BibService {
     return deleted.length;
   }
 
+  async assertKeyCoverage(): Promise<void> {
+    const versions = await this.#database
+      .selectDistinct({ keyVersion: schema.mediaBibTags.keyVersion })
+      .from(schema.mediaBibTags);
+    if (versions.length === 0) return;
+    if (this.#crypto === null) {
+      throw new Error("Bib key material is required for persisted tags");
+    }
+    const unsupported = versions
+      .map((row) => row.keyVersion)
+      .filter((version) => !this.#crypto?.supportsKeyVersion(version));
+    if (unsupported.length > 0) {
+      throw new Error(`Bib key versions unavailable: ${unsupported.sort().join(", ")}`);
+    }
+  }
+
+  async processKeyRotation(limit = 200): Promise<number> {
+    if (this.#crypto === null || !this.#crypto.hasPreviousKey) return 0;
+    const bibCrypto = this.#crypto;
+    const previousKeyVersion = bibCrypto.previousKeyVersion;
+    if (previousKeyVersion === null) return 0;
+    return this.#database.transaction(async (transaction) => {
+      await transaction.execute(sql`select pg_advisory_xact_lock(130071011)`);
+      const tags = await transaction
+        .select()
+        .from(schema.mediaBibTags)
+        .where(eq(schema.mediaBibTags.keyVersion, previousKeyVersion))
+        .orderBy(asc(schema.mediaBibTags.id))
+        .limit(limit);
+      for (const tag of tags) {
+        const number = bibCrypto.decrypt({
+          albumId: tag.albumId,
+          mediaId: tag.mediaId,
+          tagId: tag.id,
+          ciphertext: tag.numberCiphertext,
+          iv: tag.numberIv,
+          authTag: tag.numberAuthTag,
+          keyVersion: tag.keyVersion,
+        });
+        const encrypted = bibCrypto.encrypt({
+          albumId: tag.albumId,
+          mediaId: tag.mediaId,
+          tagId: tag.id,
+          number,
+        });
+        await transaction
+          .update(schema.mediaBibTags)
+          .set({
+            numberCiphertext: encrypted.ciphertext,
+            numberIv: encrypted.iv,
+            numberAuthTag: encrypted.authTag,
+            blindIndex: encrypted.blindIndex,
+            keyVersion: encrypted.keyVersion,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.mediaBibTags.id, tag.id));
+      }
+      return tags.length;
+    });
+  }
+
   async searchPublic(options: {
     readonly slug: string;
     readonly visitorToken: string | undefined;
@@ -1490,7 +1554,7 @@ export class BibService {
     if (!album.bibSearchEnabled || !album.bibRuleUsable) throw this.#publicSearchUnavailable();
     const document = await this.#loadDocument(this.#database, album.id);
     if (!evaluateBibNumber(number, document.patterns).valid) throw this.#publicSearchUnavailable();
-    const blindIndex = this.cryptoOrThrow().blindIndex(album.id, number);
+    const blindIndexes = this.cryptoOrThrow().blindIndexes(album.id, number);
     const matches = await this.#database
       .selectDistinct({ mediaId: schema.mediaBibTags.mediaId })
       .from(schema.mediaBibTags)
@@ -1498,7 +1562,7 @@ export class BibService {
       .where(
         and(
           eq(schema.mediaBibTags.albumId, album.id),
-          eq(schema.mediaBibTags.blindIndex, blindIndex),
+          inArray(schema.mediaBibTags.blindIndex, [...blindIndexes]),
           eq(schema.mediaBibTags.status, "confirmed"),
           eq(schema.mediaBibTags.ruleVersion, album.bibRuleVersion),
           eq(schema.media.publicationStatus, "published"),
@@ -1659,14 +1723,14 @@ export class BibService {
       throw this.#invalidNumber();
     }
     const bibCrypto = this.cryptoOrThrow();
-    const blindIndex = bibCrypto.blindIndex(options.media.albumId, options.number);
+    const blindIndexes = bibCrypto.blindIndexes(options.media.albumId, options.number);
     const [existing] = await transaction
       .select()
       .from(schema.mediaBibTags)
       .where(
         and(
           eq(schema.mediaBibTags.mediaId, options.media.id),
-          eq(schema.mediaBibTags.blindIndex, blindIndex),
+          inArray(schema.mediaBibTags.blindIndex, [...blindIndexes]),
           inArray(schema.mediaBibTags.status, ["suggested", "confirmed", "needs_review"]),
         ),
       )

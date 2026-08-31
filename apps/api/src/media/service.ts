@@ -23,6 +23,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   not,
   or,
   sql,
@@ -53,6 +54,8 @@ const photoVariantKinds: readonly PhotoVariantKind[] = [
 const previewVariantKinds = new Set<PhotoVariantKind>(["photo_480", "photo_960"]);
 const publicVariantKinds = new Set<PhotoVariantKind>(["photo_480", "photo_960", "photo_1920"]);
 const multipartThreshold = 16 * 1024 * 1024;
+const uploadCleanupInitialGraceMs = 30 * 60 * 1_000;
+const uploadCleanupVerificationDelayMs = 24 * 60 * 60 * 1_000;
 const multipartPartBytes = 8 * 1024 * 1024;
 const incompleteIngestStatuses = [
   "created",
@@ -684,6 +687,9 @@ export class PhotoService {
     return {
       id: row.intent.id,
       mediaId: row.media.id,
+      status: row.intent.status,
+      cleanupStatus: row.intent.cleanupStatus,
+      cleanupLastErrorCode: row.intent.cleanupLastErrorCode,
       ingestStatus: row.media.ingestStatus,
       publicationStatus: row.media.publicationStatus,
       expiresAt: iso(row.intent.expiresAt),
@@ -708,6 +714,193 @@ export class PhotoService {
           };
         }),
     };
+  }
+
+  async cancelUpload(options: {
+    readonly actor: InternalActor;
+    readonly intentId: string;
+  }): Promise<UploadIntentView> {
+    const now = new Date();
+    await this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `upload-cleanup:${options.intentId}`);
+      const [row] = await transaction
+        .select({ intent: schema.uploadIntents, media: schema.media })
+        .from(schema.uploadIntents)
+        .innerJoin(schema.media, eq(schema.uploadIntents.mediaId, schema.media.id))
+        .where(eq(schema.uploadIntents.id, options.intentId))
+        .limit(1);
+      if (row === undefined) throw this.#uploadNotFound();
+      this.#assertUploadAccess(options.actor, row.media.uploaderId);
+      if (row.intent.status === "completed" || row.intent.cleanupStatus === "completed") return;
+      await transaction
+        .update(schema.uploadIntents)
+        .set({
+          status: "cancelled",
+          cleanupStatus: "pending",
+          cleanupLastErrorCode: null,
+          cleanupNextAttemptAt: new Date(now.getTime() + uploadCleanupInitialGraceMs),
+          updatedAt: now,
+        })
+        .where(eq(schema.uploadIntents.id, row.intent.id));
+    });
+    return this.getUploadIntent(options.actor, options.intentId);
+  }
+
+  async processExpiredUploadCleanups(limit = 10, now = new Date()): Promise<number> {
+    await this.#database
+      .update(schema.uploadIntents)
+      .set({
+        status: "expired",
+        cleanupStatus: "pending",
+        cleanupLastErrorCode: null,
+        cleanupNextAttemptAt: new Date(now.getTime() + uploadCleanupInitialGraceMs),
+        updatedAt: now,
+      })
+      .where(
+        and(eq(schema.uploadIntents.status, "active"), lte(schema.uploadIntents.expiresAt, now)),
+      );
+    const intents = await this.#database
+      .select({ id: schema.uploadIntents.id })
+      .from(schema.uploadIntents)
+      .where(
+        and(
+          inArray(schema.uploadIntents.status, ["cancelled", "expired"]),
+          inArray(schema.uploadIntents.cleanupStatus, ["pending", "processing", "failed"]),
+          or(
+            isNull(schema.uploadIntents.cleanupNextAttemptAt),
+            lte(schema.uploadIntents.cleanupNextAttemptAt, now),
+          ),
+        ),
+      )
+      .orderBy(asc(schema.uploadIntents.cleanupNextAttemptAt), asc(schema.uploadIntents.id))
+      .limit(limit);
+    for (const intent of intents) await this.processUploadCleanup(intent.id, now);
+    return intents.length;
+  }
+
+  async processUploadCleanup(intentId: string, now = new Date()): Promise<void> {
+    const claimed = await this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `upload-cleanup:${intentId}`);
+      const [row] = await transaction
+        .select({ intent: schema.uploadIntents, media: schema.media })
+        .from(schema.uploadIntents)
+        .innerJoin(schema.media, eq(schema.uploadIntents.mediaId, schema.media.id))
+        .where(eq(schema.uploadIntents.id, intentId))
+        .limit(1);
+      if (
+        row === undefined ||
+        (row.intent.status !== "cancelled" && row.intent.status !== "expired") ||
+        row.intent.cleanupStatus === "completed" ||
+        row.intent.cleanupStatus === "not_needed" ||
+        (row.intent.cleanupNextAttemptAt !== null && row.intent.cleanupNextAttemptAt > now)
+      ) {
+        return null;
+      }
+      const [intent] = await transaction
+        .update(schema.uploadIntents)
+        .set({
+          cleanupStatus: "processing",
+          cleanupAttempts: row.intent.cleanupAttempts + 1,
+          cleanupLastErrorCode: null,
+          cleanupNextAttemptAt: new Date(now.getTime() + 5 * 60 * 1_000),
+          updatedAt: now,
+        })
+        .where(eq(schema.uploadIntents.id, intentId))
+        .returning();
+      return intent === undefined ? null : { intent, media: row.media };
+    });
+    if (claimed === null) return;
+
+    const variants = await this.#database
+      .select()
+      .from(schema.mediaVariants)
+      .where(eq(schema.mediaVariants.mediaId, claimed.media.id));
+    const parts =
+      variants.length === 0
+        ? []
+        : await this.#database
+            .select({ variantId: schema.uploadParts.variantId })
+            .from(schema.uploadParts)
+            .where(
+              inArray(
+                schema.uploadParts.variantId,
+                variants.map((variant) => variant.id),
+              ),
+            );
+    const multipartVariantIds = new Set(parts.map((part) => part.variantId));
+    const preserveVerified =
+      claimed.media.publicationStatus === "published" ||
+      claimed.media.publicationStatus === "pending_review";
+    const cleanedVariants = variants.filter((variant) => !(preserveVerified && variant.verified));
+    try {
+      for (const variant of variants) {
+        if (multipartVariantIds.has(variant.id)) await this.#storage.abortMultipart(variant.id);
+      }
+      for (const variant of cleanedVariants) await this.#storage.delete(variant.objectKey);
+    } catch {
+      const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** claimed.intent.cleanupAttempts);
+      await this.#database
+        .update(schema.uploadIntents)
+        .set({
+          cleanupStatus: "failed",
+          cleanupLastErrorCode: "UPLOAD_CLEANUP_FAILED",
+          cleanupNextAttemptAt: new Date(now.getTime() + retryDelay),
+          updatedAt: now,
+        })
+        .where(eq(schema.uploadIntents.id, intentId));
+      return;
+    }
+
+    const preservedKinds = new Set(
+      variants
+        .filter((variant) => preserveVerified && variant.verified)
+        .map((variant) => variant.kind),
+    );
+    const ingestStatus = preserveVerified
+      ? photoVariantKinds.every((kind) => preservedKinds.has(kind))
+        ? "ready"
+        : [...previewVariantKinds].every((kind) => preservedKinds.has(kind))
+          ? "preview_ready"
+          : "failed"
+      : "cancelled";
+    await this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `upload-cleanup:${intentId}`);
+      if (variants.length > 0) {
+        await transaction.delete(schema.uploadParts).where(
+          inArray(
+            schema.uploadParts.variantId,
+            variants.map((variant) => variant.id),
+          ),
+        );
+      }
+      if (cleanedVariants.length > 0) {
+        await transaction.delete(schema.mediaVariants).where(
+          inArray(
+            schema.mediaVariants.id,
+            cleanedVariants.map((variant) => variant.id),
+          ),
+        );
+      }
+      await transaction
+        .update(schema.media)
+        .set({ ingestStatus, retryable: false, updatedAt: now })
+        .where(eq(schema.media.id, claimed.media.id));
+      const successfulSweeps = claimed.intent.cleanupSuccessfulSweeps + 1;
+      const completed = successfulSweeps >= 2;
+      await transaction
+        .update(schema.uploadIntents)
+        .set({
+          cleanupStatus: completed ? "completed" : "pending",
+          cleanupSuccessfulSweeps: successfulSweeps,
+          cleanupLastErrorCode: null,
+          cleanupNextAttemptAt: completed
+            ? now
+            : new Date(now.getTime() + uploadCleanupVerificationDelayMs),
+          cleanupCompletedAt: completed ? now : null,
+          updatedAt: now,
+        })
+        .where(eq(schema.uploadIntents.id, intentId));
+    });
   }
 
   async signUpload(options: {
@@ -790,16 +983,45 @@ export class PhotoService {
     const row = await this.#uploadPart(options.intentId, options.kind, options.partNumber);
     this.#assertUploadAccess(options.actor, row.media.uploaderId);
     const etag = options.etag.replace(/^"|"$/gu, "");
-    if (row.part.completedAt !== null) {
-      if (row.part.etag !== etag) {
-        throw new AppError({ code: "STATE_CONFLICT", message: "分片 ETag 冲突", statusCode: 409 });
-      }
-      return this.getUploadIntent(options.actor, options.intentId);
+    const now = new Date();
+    if (row.intent.status !== "active" || row.intent.expiresAt <= now) {
+      throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
     }
-    await this.#database
-      .update(schema.uploadParts)
-      .set({ etag, completedAt: new Date() })
-      .where(eq(schema.uploadParts.id, row.part.id));
+    await this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `upload-cleanup:${options.intentId}`);
+      const [intent] = await transaction
+        .select()
+        .from(schema.uploadIntents)
+        .where(eq(schema.uploadIntents.id, options.intentId))
+        .limit(1);
+      const [part] = await transaction
+        .select()
+        .from(schema.uploadParts)
+        .where(eq(schema.uploadParts.id, row.part.id))
+        .limit(1);
+      if (
+        intent === undefined ||
+        part === undefined ||
+        intent.status !== "active" ||
+        intent.expiresAt <= now
+      ) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
+      }
+      if (part.completedAt !== null) {
+        if (part.etag !== etag) {
+          throw new AppError({
+            code: "STATE_CONFLICT",
+            message: "分片 ETag 冲突",
+            statusCode: 409,
+          });
+        }
+        return;
+      }
+      await transaction
+        .update(schema.uploadParts)
+        .set({ etag, completedAt: now })
+        .where(eq(schema.uploadParts.id, part.id));
+    });
     return this.getUploadIntent(options.actor, options.intentId);
   }
 
@@ -810,6 +1032,9 @@ export class PhotoService {
   }): Promise<UploadIntentView> {
     const snapshot = await this.#uploadVariant(options.intentId, options.kind);
     this.#assertUploadAccess(options.actor, snapshot.media.uploaderId);
+    if (snapshot.intent.status !== "active" || snapshot.intent.expiresAt <= new Date()) {
+      throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
+    }
     const multipartParts = await this.#database
       .select()
       .from(schema.uploadParts)
@@ -848,7 +1073,20 @@ export class PhotoService {
     }
 
     await this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `upload-cleanup:${options.intentId}`);
       await this.#advisoryLock(transaction, `media:${snapshot.media.id}`);
+      const [currentIntent] = await transaction
+        .select()
+        .from(schema.uploadIntents)
+        .where(eq(schema.uploadIntents.id, options.intentId))
+        .limit(1);
+      if (
+        currentIntent === undefined ||
+        currentIntent.status !== "active" ||
+        currentIntent.expiresAt <= new Date()
+      ) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
+      }
       const [currentVariant] = await transaction
         .select()
         .from(schema.mediaVariants)

@@ -1,4 +1,5 @@
 import {
+  signLocalMultipartAbortUrl,
   signLocalMultipartCompleteUrl,
   signLocalMultipartPartUrl,
   signLocalObjectUrl,
@@ -37,6 +38,7 @@ export interface ObjectStorage {
     readonly contentType: string;
     readonly parts: readonly { readonly partNumber: number; readonly etag: string }[];
   }): Promise<void>;
+  abortMultipart(uploadId: string): Promise<void>;
   delete(key: string): Promise<void>;
   head(key: string): Promise<ObjectMetadata | null>;
 }
@@ -124,6 +126,19 @@ export class LocalObjectStorage implements ObjectStorage {
     if (!response.ok) {
       throw new Error(`Multipart completion failed with status ${response.status}`);
     }
+  }
+
+  async abortMultipart(uploadId: string): Promise<void> {
+    const response = await fetch(
+      signLocalMultipartAbortUrl({
+        baseUrl: this.#baseUrl,
+        uploadId,
+        secret: this.#secret,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      { method: "DELETE", signal: AbortSignal.timeout(10_000) },
+    );
+    if (!response.ok) throw new Error(`Multipart abort failed with status ${response.status}`);
   }
 
   async delete(key: string): Promise<void> {

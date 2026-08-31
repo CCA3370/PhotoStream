@@ -65,6 +65,7 @@ flowchart LR
 - 构建产物中的哈希静态资源发布至 OSS 的 `/assets/app/{releaseId}/`，经 CDN 公开长缓存。
 - PaddleOCR.js、OpenCV.js、ONNX Runtime WASM 和固定 OCR 模型作为哈希静态资源自托管，只有启用识别的上传/审核页面懒加载。
 - Service Worker 必须由主站同源提供，只缓存应用壳和上传任务元数据，不缓存受保护的相册 API 响应。
+- Next.js Proxy 为每个文档请求生成 CSP nonce；脚本保持严格策略，照片读取和 OSS 直传分别只开放配置中的精确 CDN/上传 origin。nonce 要求页面动态渲染，不能用 `unsafe-inline` 换回静态输出。
 
 ### 4.2 API
 

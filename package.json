@@ -9,7 +9,10 @@
   "scripts": {
     "build": "pnpm -r --workspace-concurrency=1 --if-present build",
     "dev": "pnpm --parallel --filter @photostream/api --filter @photostream/object-store --filter @photostream/web dev",
-    "lint": "node scripts/check-storybook-image-inputs.mjs && node scripts/check-bib-ocr-assets.mjs && biome check .",
+    "lint": "node scripts/check-storybook-image-inputs.mjs && node scripts/check-bib-ocr-assets.mjs && node scripts/check-bib-ocr-assets-negative.mjs && node scripts/check-backup-envelope.mjs && biome check .",
+    "db:backup": "node scripts/database-backup.mjs",
+    "db:restore": "node scripts/database-restore.mjs",
+    "photos:audit-local": "node scripts/audit-local-photos.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "test:db": "pnpm --filter @photostream/db test:integration",

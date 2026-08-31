@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { link, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises";
 
 import {
   type MultipartManifestEntry,
+  verifyLocalMultipartAbortRequest,
   verifyLocalMultipartCompleteRequest,
   verifyLocalMultipartPartRequest,
   verifyLocalObjectRequest,
@@ -344,6 +345,16 @@ async function handleDelete(response: ServerResponse, path: string): Promise<voi
   }
 }
 
+async function handleMultipartAbort(response: ServerResponse, path: string): Promise<void> {
+  try {
+    await rm(path, { recursive: true, force: true });
+    response.writeHead(204, { "cache-control": "no-store" });
+    response.end();
+  } catch {
+    sendJson(response, 500, { code: "MULTIPART_ABORT_FAILED" });
+  }
+}
+
 export function createObjectStoreServer(config: LocalObjectStoreConfig) {
   return createServer(async (request, response) => {
     try {
@@ -364,6 +375,22 @@ export function createObjectStoreServer(config: LocalObjectStoreConfig) {
       }
       const url = new URL(request.url, "http://local-object-store.invalid");
       if (url.pathname.startsWith("/multipart/")) {
+        if (url.pathname.endsWith("/abort")) {
+          const verified = verifyLocalMultipartAbortRequest({
+            url,
+            method: request.method,
+            secret: config.secret,
+          });
+          if (Number(request.headers["content-length"] ?? 0) !== 0) {
+            sendJson(response, 400, { code: "UNEXPECTED_REQUEST_BODY" });
+            return;
+          }
+          await handleMultipartAbort(
+            response,
+            objectPath(config.storageRoot, `.multipart/${verified.uploadId}`),
+          );
+          return;
+        }
         if (url.pathname.endsWith("/complete")) {
           const verified = verifyLocalMultipartCompleteRequest({
             url,

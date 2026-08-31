@@ -1,4 +1,8 @@
+import { readdir, readFile, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+
 import AxeBuilder from "@axe-core/playwright";
+import type { BibMediaState, InternalMediaList } from "@photostream/contracts";
 import {
   type Browser,
   type BrowserContext,
@@ -245,4 +249,114 @@ test("local OCR remains optional while confirmed bib search completes the passwo
     page.off("request", recordRequest);
     page.off("response", recordResponse);
   }
+});
+
+test("ignored local photo fixtures complete an unlabeled OCR smoke run", async () => {
+  test.setTimeout(10 * 60 * 1_000);
+  const fixtureDirectory = process.env.LOCAL_PHOTO_FIXTURE_DIR;
+  test.skip(fixtureDirectory === undefined, "LOCAL_PHOTO_FIXTURE_DIR is not configured");
+  test.skip(csrfToken === undefined, "E2E test account is not configured");
+  const directory = resolve(fixtureDirectory as string);
+  const ranked = await Promise.all(
+    (await readdir(directory, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && /\.jpe?g$/iu.test(entry.name))
+      .map(async (entry) => {
+        const path = resolve(directory, entry.name);
+        return { path, bytes: (await stat(path)).size };
+      }),
+  );
+  ranked.sort((left, right) => left.bytes - right.bytes);
+  const selected = [ranked[0], ranked[Math.floor(ranked.length / 2)], ranked.at(-1)].filter(
+    (item) => item !== undefined,
+  );
+  expect(selected).toHaveLength(3);
+
+  const writeHeaders = {
+    origin: baseUrl,
+    "x-csrf-token": csrfToken as string,
+  };
+  const created = await context.request.post(appUrl("/api/v1/albums"), {
+    data: {
+      title: `本地样片 OCR 烟测 ${Date.now()}`,
+      description: "Git 外无标注样片，仅验证执行与耗时",
+      publishMode: "auto",
+    },
+    headers: { ...writeHeaders, "idempotency-key": crypto.randomUUID() },
+  });
+  expect(created.status()).toBe(201);
+  const album = (await created.json()) as { album: { id: string } };
+  expect(
+    (
+      await context.request.post(appUrl(`/api/v1/albums/${album.album.id}/start`), {
+        headers: writeHeaders,
+      })
+    ).status(),
+  ).toBe(200);
+  const configured = await context.request.put(
+    appUrl(`/api/v1/albums/${album.album.id}/bib-config`),
+    {
+      headers: writeHeaders,
+      data: {
+        recognitionEnabled: true,
+        searchEnabled: false,
+        modelVersion: assetVersion,
+        patterns: Array.from({ length: 12 }, (_, index) => ({
+          totalLength: index + 1,
+          sortOrder: index,
+          enabled: true,
+          constraints: [],
+        })),
+        attributeOptions: [],
+        mappings: [],
+      },
+    },
+  );
+  expect(configured.status()).toBe(200);
+
+  await page.goto(appUrl(`/studio/albums/${album.album.id}/upload`));
+  const input = page.locator("#photo-files");
+  await expectReactHydrated(input);
+  const durations: number[] = [];
+  for (const [index, fixture] of selected.entries()) {
+    const label = `local-ocr-smoke-${String(index + 1).padStart(2, "0")}.jpg`;
+    const startedAt = performance.now();
+    await input.setInputFiles({
+      name: label,
+      mimeType: "image/jpeg",
+      buffer: await readFile(fixture.path),
+    });
+    const task = page.locator('[data-slot="card"]').filter({ hasText: label });
+    await expect(
+      task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
+    ).toBeVisible({ timeout: 90_000 });
+    await expect(task.getByText("OCR 已完成", { exact: true }).first()).toBeVisible({
+      timeout: 180_000,
+    });
+    durations.push(performance.now() - startedAt);
+  }
+
+  const mediaResponse = await context.request.get(
+    appUrl(`/api/v1/albums/${album.album.id}/media?limit=100`),
+  );
+  const media = (await mediaResponse.json()) as InternalMediaList;
+  expect(media.items).toHaveLength(3);
+  const candidateCounts: number[] = [];
+  for (const item of media.items) {
+    const response = await context.request.get(appUrl(`/api/v1/media/${item.id}/bib`));
+    expect(response.status()).toBe(200);
+    const state = (await response.json()) as BibMediaState;
+    expect(state.review.ocrStatus).toBe("completed");
+    candidateCounts.push(state.tags.length);
+  }
+  durations.sort((left, right) => left - right);
+  candidateCounts.sort((left, right) => left - right);
+  process.stdout.write(
+    `${JSON.stringify({
+      localOcrSmokeFixtures: selected.length,
+      ocrPipelineMedianMs: Math.round(durations[Math.floor(durations.length / 2)] ?? 0),
+      ocrPipelineObservedMaxMs: Math.round(durations.at(-1) ?? 0),
+      candidateCounts,
+      accuracyAssessed: false,
+    })}\n`,
+  );
 });

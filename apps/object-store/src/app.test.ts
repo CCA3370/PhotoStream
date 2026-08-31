@@ -3,6 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  signLocalMultipartAbortUrl,
   signLocalMultipartCompleteUrl,
   signLocalMultipartPartUrl,
   signLocalObjectUrl,
@@ -219,5 +220,33 @@ describe("local object store", () => {
     expect((await fetch(completeUrl, { method: "POST" })).status).toBe(201);
     expect(await readFile(join(storageRoot, key))).toEqual(Buffer.from([1, 2, 3, 4, 5]));
     expect((await fetch(completeUrl, { method: "POST" })).status).toBe(200);
+  });
+
+  it("aborts multipart state idempotently without touching completed objects", async () => {
+    const { storageRoot, baseUrl } = await fixture();
+    const uploadId = "019d43f4-7d20-7000-8000-000000000003";
+    const expiresAt = new Date(Date.now() + 60_000);
+    const partUrl = signLocalMultipartPartUrl({
+      baseUrl,
+      uploadId,
+      partNumber: 1,
+      secret,
+      expiresAt,
+      contentType: "image/jpeg",
+      contentLength: 3,
+    });
+    expect(
+      (
+        await fetch(partUrl, {
+          method: "PUT",
+          headers: { "content-type": "image/jpeg", origin: appOrigin },
+          body: new Uint8Array([1, 2, 3]),
+        })
+      ).status,
+    ).toBe(201);
+    const abortUrl = signLocalMultipartAbortUrl({ baseUrl, uploadId, secret, expiresAt });
+    expect((await fetch(abortUrl, { method: "DELETE" })).status).toBe(204);
+    expect((await fetch(abortUrl, { method: "DELETE" })).status).toBe(204);
+    await expect(readFile(join(storageRoot, `.multipart/${uploadId}/1`))).rejects.toThrow();
   });
 });

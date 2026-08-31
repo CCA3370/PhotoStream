@@ -229,6 +229,55 @@ export interface MultipartManifestEntry {
   readonly etag: string;
 }
 
+export function signLocalMultipartAbortUrl(options: {
+  readonly baseUrl: string;
+  readonly uploadId: string;
+  readonly secret: string;
+  readonly expiresAt: Date;
+}): string {
+  const url = new URL(options.baseUrl);
+  url.pathname = `/multipart/${options.uploadId}/abort`;
+  if (!/^[0-9a-f-]{36}$/u.test(options.uploadId)) throw new Error("Invalid multipart upload");
+  const expires = Math.floor(options.expiresAt.getTime() / 1_000).toString();
+  const canonical = canonicalValue({
+    method: "DELETE",
+    pathname: url.pathname,
+    expires,
+    contentType: "",
+    contentLength: "",
+  });
+  url.searchParams.set("expires", expires);
+  url.searchParams.set("signature", signature(options.secret, canonical));
+  return url.href;
+}
+
+export function verifyLocalMultipartAbortRequest(options: {
+  readonly url: URL;
+  readonly method: string;
+  readonly secret: string;
+  readonly now?: Date;
+}) {
+  if (options.method !== "DELETE") throw new Error("Unsupported method");
+  const match = /^\/multipart\/([0-9a-f-]{36})\/abort$/u.exec(options.url.pathname);
+  if (match === null) throw new Error("Invalid multipart abort path");
+  const expires = options.url.searchParams.get("expires") ?? "";
+  const suppliedSignature = options.url.searchParams.get("signature") ?? "";
+  if (!/^\d+$/u.test(expires)) throw new Error("Invalid expiry");
+  const expiresAt = new Date(Number(expires) * 1_000);
+  if (expiresAt <= (options.now ?? new Date())) throw new Error("Expired signature");
+  const canonical = canonicalValue({
+    method: options.method,
+    pathname: options.url.pathname,
+    expires,
+    contentType: "",
+    contentLength: "",
+  });
+  if (!safeEqual(signature(options.secret, canonical), suppliedSignature)) {
+    throw new Error("Invalid signature");
+  }
+  return { uploadId: match[1] as string, expiresAt };
+}
+
 export function signLocalMultipartCompleteUrl(options: {
   readonly baseUrl: string;
   readonly uploadId: string;

@@ -273,6 +273,25 @@ export async function registerPhotoRoutes(
   );
 
   typed.post(
+    "/api/v1/uploads/:id/cancel",
+    {
+      schema: {
+        operationId: "cancelPhotoUpload",
+        tags: ["uploads"],
+        params: idParamsSchema,
+        response: { 200: uploadIntentViewSchema, ...commonErrors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      return options.photoService.cancelUpload({
+        actor: actorFrom(session),
+        intentId: request.params.id,
+      });
+    },
+  );
+
+  typed.post(
     "/api/v1/uploads/:id/objects/:variant/sign",
     {
       schema: {

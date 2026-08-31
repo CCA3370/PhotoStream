@@ -1,3 +1,7 @@
+import { readdir, readFile, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import type { InternalMediaList } from "@photostream/contracts";
 import {
   type Browser,
   type BrowserContext,
@@ -14,6 +18,25 @@ let browser: Browser;
 let context: BrowserContext;
 let page: Page;
 let csrfToken: string | undefined;
+
+function webpChunkTypes(bytes: Buffer): readonly string[] {
+  if (
+    bytes.byteLength < 12 ||
+    bytes.toString("ascii", 0, 4) !== "RIFF" ||
+    bytes.toString("ascii", 8, 12) !== "WEBP"
+  ) {
+    throw new Error("Derived fixture is not a WebP container");
+  }
+  const chunks: string[] = [];
+  let offset = 12;
+  while (offset + 8 <= bytes.byteLength) {
+    const type = bytes.toString("ascii", offset, offset + 4);
+    const size = bytes.readUInt32LE(offset + 4);
+    chunks.push(type);
+    offset += 8 + size + (size % 2);
+  }
+  return chunks;
+}
 
 function appUrl(path: string): string {
   return new URL(path, baseUrl).href;
@@ -387,6 +410,16 @@ test("queue pause waits between objects and explicit cancel removes local recove
   const cancelUpload = new Promise<void>((resolve) => {
     observedCancelUpload = resolve;
   });
+  let controlPlaneCancelCompleted = false;
+  page.on("response", (response) => {
+    if (
+      response.request().method() === "POST" &&
+      /\/api\/v1\/uploads\/[0-9a-f-]{36}\/cancel$/u.test(new URL(response.url()).pathname) &&
+      response.status() === 200
+    ) {
+      controlPlaneCancelCompleted = true;
+    }
+  });
   await page.route(objectStoreRoute, async (route) => {
     observedCancelUpload();
     await cancelGate;
@@ -402,7 +435,153 @@ test("queue pause waits between objects and explicit cancel removes local recove
   await expect(
     cancelledTask.locator('[data-slot="card-description"]').getByText("已取消", { exact: true }),
   ).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => controlPlaneCancelCompleted).toBe(true);
   await page.unroute(objectStoreRoute);
   await page.reload();
   await expect(page.getByText(/发现 1 个可恢复任务/u)).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        await navigator.serviceWorker.ready;
+        return navigator.serviceWorker.controller !== null;
+      }),
+    )
+    .toBe(true);
+  const cachedPaths = await page.evaluate(async () => {
+    const paths: string[] = [];
+    for (const key of await caches.keys()) {
+      for (const request of await (await caches.open(key)).keys()) {
+        paths.push(new URL(request.url).pathname);
+      }
+    }
+    return paths;
+  });
+  expect(cachedPaths).toContain("/offline");
+  expect(
+    cachedPaths.some(
+      (path) =>
+        path.startsWith("/api/") ||
+        path.startsWith("/g/") ||
+        path.startsWith("/studio/") ||
+        path.startsWith("/assets/models/"),
+    ),
+  ).toBe(false);
+  await context.setOffline(true);
+  try {
+    await page.goto(appUrl(`/studio/albums/${album.album.id}/upload`));
+    await expect(page.getByRole("alert").getByText("当前处于离线状态")).toBeVisible();
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
+test("ignored local photo fixtures decode and strip metadata through the real worker", async () => {
+  test.setTimeout(10 * 60 * 1_000);
+  const fixtureDirectory = process.env.LOCAL_PHOTO_FIXTURE_DIR;
+  test.skip(fixtureDirectory === undefined, "LOCAL_PHOTO_FIXTURE_DIR is not configured");
+  test.skip(csrfToken === undefined, "E2E test account is not configured");
+  const directory = resolve(fixtureDirectory as string);
+  const entries = (await readdir(directory, { withFileTypes: true })).filter(
+    (entry) => entry.isFile() && /\.jpe?g$/iu.test(entry.name),
+  );
+  const ranked = await Promise.all(
+    entries.map(async (entry) => {
+      const path = resolve(directory, entry.name);
+      return { path, bytes: (await stat(path)).size };
+    }),
+  );
+  ranked.sort((left, right) => left.bytes - right.bytes);
+  const sampleCount = Math.min(12, ranked.length);
+  const selected = Array.from(
+    new Map(
+      Array.from({ length: sampleCount }, (_, index) => {
+        const position =
+          sampleCount === 1 ? 0 : Math.round((index * (ranked.length - 1)) / (sampleCount - 1));
+        const item = ranked[position];
+        return item === undefined ? ["missing", null] : [item.path, item];
+      }),
+    ).values(),
+  ).filter((item) => item !== null);
+  expect(selected).toHaveLength(sampleCount);
+
+  const created = await context.request.post(appUrl("/api/v1/albums"), {
+    data: {
+      title: `本地样片管线 ${Date.now()}`,
+      description: "Git 外授权样片聚合验证",
+      publishMode: "auto",
+    },
+    headers: {
+      origin: baseUrl,
+      "x-csrf-token": csrfToken as string,
+      "idempotency-key": crypto.randomUUID(),
+    },
+  });
+  expect(created.status()).toBe(201);
+  const album = (await created.json()) as {
+    album: { id: string };
+  };
+  expect(
+    (
+      await context.request.post(appUrl(`/api/v1/albums/${album.album.id}/start`), {
+        headers: { origin: baseUrl, "x-csrf-token": csrfToken as string },
+      })
+    ).status(),
+  ).toBe(200);
+
+  await page.goto(appUrl(`/studio/albums/${album.album.id}/upload`));
+  const input = page.locator("#photo-files");
+  await expectReactHydrated(input);
+  const durations: number[] = [];
+  for (const [index, fixture] of selected.entries()) {
+    const label = `local-fixture-${String(index + 1).padStart(2, "0")}.jpg`;
+    const startedAt = performance.now();
+    await input.setInputFiles({
+      name: label,
+      mimeType: "image/jpeg",
+      buffer: await readFile(fixture.path),
+    });
+    const task = page.locator('[data-slot="card"]').filter({ hasText: label });
+    await expect(
+      task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
+    ).toBeVisible({ timeout: 90_000 });
+    durations.push(performance.now() - startedAt);
+  }
+
+  const mediaResponse = await context.request.get(
+    appUrl(`/api/v1/albums/${album.album.id}/media?limit=100`),
+  );
+  expect(mediaResponse.status()).toBe(200);
+  const media = (await mediaResponse.json()) as InternalMediaList;
+  expect(media.items).toHaveLength(sampleCount);
+  const derivedBytes: number[] = [];
+  let originalsWithExif = 0;
+  for (const item of media.items) {
+    expect(item).toMatchObject({ width: 6_240, height: 4_160, ingestStatus: "ready" });
+    expect(item.variants).toHaveLength(4);
+    for (const variant of item.variants) {
+      const response = await context.request.get(variant.url);
+      expect(response.status()).toBe(200);
+      const bytes = await response.body();
+      if (variant.kind === "photo_original") {
+        if (bytes.includes(Buffer.from("Exif\0\0", "ascii"))) originalsWithExif += 1;
+        continue;
+      }
+      expect(variant.contentType).toBe("image/webp");
+      expect(webpChunkTypes(bytes)).not.toEqual(expect.arrayContaining(["EXIF", "XMP ", "ICCP"]));
+      derivedBytes.push(bytes.byteLength);
+    }
+  }
+  expect(originalsWithExif).toBe(sampleCount);
+  durations.sort((left, right) => left - right);
+  derivedBytes.sort((left, right) => left - right);
+  process.stdout.write(
+    `${JSON.stringify({
+      localPhotoFixtures: sampleCount,
+      pipelineMedianMs: Math.round(durations[Math.floor(durations.length / 2)] ?? 0),
+      pipelineP95Ms: Math.round(durations[Math.floor((durations.length - 1) * 0.95)] ?? 0),
+      derivedMedianBytes: derivedBytes[Math.floor(derivedBytes.length / 2)] ?? 0,
+      derivedMaxBytes: derivedBytes.at(-1) ?? 0,
+      exifStripped: sampleCount * 3,
+    })}\n`,
+  );
 });

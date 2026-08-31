@@ -159,6 +159,14 @@ export const ingestStatusSchema = z.enum([
   "failed",
   "cancelled",
 ]);
+export const uploadIntentStatusSchema = z.enum(["active", "completed", "cancelled", "expired"]);
+export const uploadCleanupStatusSchema = z.enum([
+  "not_needed",
+  "pending",
+  "processing",
+  "failed",
+  "completed",
+]);
 export const publicationStatusSchema = z.enum([
   "draft",
   "pending_review",
@@ -386,6 +394,9 @@ export const uploadIntentViewSchema = z
   .object({
     id: z.string().uuid(),
     mediaId: z.string().uuid(),
+    status: uploadIntentStatusSchema,
+    cleanupStatus: uploadCleanupStatusSchema,
+    cleanupLastErrorCode: z.string().max(100).nullable(),
     ingestStatus: ingestStatusSchema,
     publicationStatus: publicationStatusSchema,
     expiresAt: z.string().datetime(),

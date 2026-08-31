@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Writable } from "node:stream";
 import type { UserRole } from "@photostream/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -346,5 +347,106 @@ describe("API foundation", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({ code: "AUTH_ORIGIN_INVALID" });
     await app.close();
+  });
+
+  it("rejects untrusted Host headers before routing", async () => {
+    const app = await buildApp({
+      config,
+      authStore: new FakeAuthStore(),
+      passwordHasher: fakeHasher,
+      logger: false,
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/live",
+      headers: { host: "attacker.example" },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ code: "AUTH_ORIGIN_INVALID" });
+    await app.close();
+  });
+
+  it("uses __Host and Secure cookie invariants in production", async () => {
+    const productionConfig = {
+      ...config,
+      NODE_ENV: "production",
+      APP_ORIGIN: "https://photos.school.example",
+    } as const;
+    const app = await buildApp({
+      config: productionConfig,
+      authStore: new FakeAuthStore(),
+      passwordHasher: fakeHasher,
+      logger: false,
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      headers: {
+        host: "photos.school.example",
+        origin: productionConfig.APP_ORIGIN,
+      },
+      payload: { username: "admin", password: "correct horse battery staple" },
+    });
+    expect(login.statusCode).toBe(200);
+    expect(login.headers["set-cookie"]).toContain("__Host-photostream_session=");
+    expect(login.headers["set-cookie"]).toContain("Secure");
+    expect(login.headers["set-cookie"]).toContain("HttpOnly");
+    expect(login.headers["set-cookie"]).toContain("Path=/");
+    expect(login.headers["set-cookie"]).not.toContain("Domain=");
+    await app.close();
+  });
+
+  it("rate limits repeated login failures", async () => {
+    const app = await buildApp({
+      config,
+      authStore: new FakeAuthStore(),
+      passwordHasher: fakeHasher,
+      logger: false,
+    });
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        headers: requestHeaders(),
+        payload: { username: "admin", password: "wrong-password" },
+        remoteAddress: "198.51.100.20",
+      });
+      expect(response.statusCode).toBe(attempt < 5 ? 401 : 429);
+      if (attempt === 5) expect(response.json()).toMatchObject({ code: "AUTH_RATE_LIMITED" });
+    }
+    await app.close();
+  });
+
+  it("logs only route templates and never request secrets or raw addresses", async () => {
+    let logs = "";
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        logs += chunk.toString();
+        callback();
+      },
+    });
+    const app = await buildApp({
+      config,
+      authStore: new FakeAuthStore(),
+      passwordHasher: fakeHasher,
+      logger: { level: "info", stream },
+    });
+    const secretPassword = "never-log-this-password";
+    const secretCookie = "never-log-this-cookie";
+    const secretSignature = "never-log-this-signature";
+    const rawAddress = "203.0.113.77";
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/login?signature=${secretSignature}`,
+      headers: requestHeaders({ cookie: `photostream_session=${secretCookie}` }),
+      payload: { username: "admin", password: secretPassword },
+      remoteAddress: rawAddress,
+    });
+    await app.close();
+
+    expect(logs).toContain('"route":"/api/v1/auth/login"');
+    for (const secret of [secretPassword, secretCookie, secretSignature, rawAddress]) {
+      expect(logs).not.toContain(secret);
+    }
   });
 });

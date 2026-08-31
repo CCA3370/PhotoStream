@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  signLocalMultipartAbortUrl,
   signLocalMultipartCompleteUrl,
   signLocalMultipartPartUrl,
   signLocalObjectUrl,
+  verifyLocalMultipartAbortRequest,
   verifyLocalMultipartCompleteRequest,
   verifyLocalMultipartPartRequest,
   verifyLocalObjectRequest,
@@ -133,6 +135,36 @@ describe("local object protocol", () => {
       verifyLocalMultipartCompleteRequest({
         url: complete,
         method: "POST",
+        secret,
+        now: new Date("2029-01-01"),
+      }),
+    ).toThrow("Invalid signature");
+  });
+
+  it("binds multipart aborts to one exact upload ID and DELETE method", () => {
+    const expiresAt = new Date("2030-01-01T00:00:00.000Z");
+    const uploadId = "019d43f4-7d20-7000-8000-000000000001";
+    const abort = new URL(
+      signLocalMultipartAbortUrl({
+        baseUrl: "http://127.0.0.1:3002",
+        uploadId,
+        secret,
+        expiresAt,
+      }),
+    );
+    expect(
+      verifyLocalMultipartAbortRequest({
+        url: abort,
+        method: "DELETE",
+        secret,
+        now: new Date("2029-01-01"),
+      }),
+    ).toMatchObject({ uploadId, expiresAt });
+    abort.pathname = "/multipart/019d43f4-7d20-7000-8000-000000000002/abort";
+    expect(() =>
+      verifyLocalMultipartAbortRequest({
+        url: abort,
+        method: "DELETE",
         secret,
         now: new Date("2029-01-01"),
       }),

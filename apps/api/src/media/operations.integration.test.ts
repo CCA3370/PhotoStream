@@ -84,6 +84,8 @@ class FakeStorage implements ObjectStorage {
     throw new Error("not used");
   }
 
+  async abortMultipart(): Promise<void> {}
+
   async head(key: string): Promise<ObjectMetadata | null> {
     return this.objects.get(key) ?? null;
   }
@@ -418,6 +420,26 @@ maybeDescribe("stage 3 operations", () => {
         verified: true,
       },
     ]);
+    await database.insert(schema.mediaBibReviews).values({
+      mediaId: media.id,
+      decision: "numbers_confirmed",
+      reason: "deletion_fixture",
+    });
+    await database.insert(schema.mediaBibTags).values({
+      albumId,
+      mediaId: media.id,
+      numberCiphertext: "encrypted-number",
+      numberIv: "a".repeat(16),
+      numberAuthTag: "b".repeat(16),
+      blindIndex: "c".repeat(64),
+      keyVersion: "fixture-v1",
+      status: "confirmed",
+      source: "manual",
+      ruleVersion: 1,
+      createdBy: uploaderId,
+      confirmedBy: adminId,
+      confirmedAt: new Date(),
+    });
     for (const key of keys) {
       storage.objects.set(key, { bytes: 1, contentType: "image/jpeg", etag: key });
     }
@@ -439,6 +461,8 @@ maybeDescribe("stage 3 operations", () => {
         ?.publicationStatus,
     ).toBe("hidden");
     expect(await database.select().from(schema.mediaVariants)).toHaveLength(2);
+    expect(await database.select().from(schema.mediaBibTags)).toHaveLength(1);
+    expect(await database.select().from(schema.mediaBibReviews)).toHaveLength(1);
 
     cdn.failNext = true;
     const failedCdn = await service.retryDeletion({
@@ -456,6 +480,8 @@ maybeDescribe("stage 3 operations", () => {
     });
     expect(completed.status).toBe("completed");
     expect(await database.select().from(schema.mediaVariants)).toHaveLength(0);
+    expect(await database.select().from(schema.mediaBibTags)).toHaveLength(0);
+    expect(await database.select().from(schema.mediaBibReviews)).toHaveLength(0);
     expect(
       (await database.select().from(schema.media).where(eq(schema.media.id, media.id)))[0]
         ?.publicationStatus,
@@ -540,6 +566,89 @@ maybeDescribe("stage 3 operations", () => {
       now: new Date("2026-01-01T00:00:00.000Z"),
     });
     expect(await service.cleanupAnalytics(new Date("2026-02-15T00:00:00.000Z"))).toBe(1);
+  });
+
+  it("expires operational idempotency and session records after their retention windows", async () => {
+    const now = new Date("2026-08-30T12:00:00.000Z");
+    const old = new Date("2026-07-01T00:00:00.000Z");
+    const current = new Date("2026-08-20T00:00:00.000Z");
+    await database.insert(schema.operationRequests).values([
+      {
+        actorScope: "user:old",
+        operation: "fixture.old",
+        idempotencyKey: "old-operation-key",
+        requestHash: "a".repeat(64),
+        result: {},
+        createdAt: old,
+      },
+      {
+        actorScope: "user:current",
+        operation: "fixture.current",
+        idempotencyKey: "current-operation-key",
+        requestHash: "b".repeat(64),
+        result: {},
+        createdAt: current,
+      },
+    ]);
+    await database.insert(schema.mediaBatchRequests).values([
+      {
+        actorUserId: adminId,
+        idempotencyKey: "old-batch-key",
+        requestHash: "c".repeat(64),
+        result: {},
+        createdAt: old,
+      },
+      {
+        actorUserId: adminId,
+        idempotencyKey: "current-batch-key",
+        requestHash: "d".repeat(64),
+        result: {},
+        createdAt: current,
+      },
+    ]);
+    await database.insert(schema.sessions).values([
+      {
+        tokenHash: "e".repeat(64),
+        userId: adminId,
+        idleExpiresAt: old,
+        absoluteExpiresAt: old,
+      },
+      {
+        tokenHash: "f".repeat(64),
+        userId: adminId,
+        idleExpiresAt: new Date(now.getTime() + 60_000),
+        absoluteExpiresAt: new Date(now.getTime() + 120_000),
+      },
+    ]);
+    await database.insert(schema.visitorSessions).values([
+      {
+        tokenHash: "1".repeat(64),
+        albumId,
+        accessVersion: 1,
+        expiresAt: old,
+      },
+      {
+        tokenHash: "2".repeat(64),
+        albumId,
+        accessVersion: 1,
+        expiresAt: new Date(now.getTime() + 60_000),
+      },
+    ]);
+    await database
+      .update(schema.albums)
+      .set({ state: "ended" })
+      .where(eq(schema.albums.id, albumId));
+    await database.insert(schema.liveEvents).values([
+      { albumId, type: "fixture.old", payload: {}, createdAt: old },
+      { albumId, type: "fixture.current", payload: {}, createdAt: current },
+    ]);
+
+    expect(await service.cleanupOperationalRecords(now)).toBe(5);
+    expect(await database.select().from(schema.operationRequests)).toHaveLength(1);
+    expect(await database.select().from(schema.mediaBatchRequests)).toHaveLength(1);
+    expect(await database.select().from(schema.sessions)).toHaveLength(1);
+    expect(await database.select().from(schema.visitorSessions)).toHaveLength(1);
+    expect(await database.select().from(schema.liveEvents)).toHaveLength(1);
   });
 
   it("creates members idempotently, revokes changed sessions and guards the last admin", async () => {

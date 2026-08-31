@@ -128,6 +128,50 @@ maybeDescribe("PostgreSQL identity schema", () => {
     ]);
   });
 
+  it("persists upload cleanup recovery and key-rotation indexes", async () => {
+    const cleanupColumns = await pool.query<{ column_name: string }>(
+      `select column_name
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'upload_intents'
+         and column_name like 'cleanup_%'
+       order by column_name`,
+    );
+    expect(cleanupColumns.rows.map((row) => row.column_name)).toEqual([
+      "cleanup_attempts",
+      "cleanup_completed_at",
+      "cleanup_last_error_code",
+      "cleanup_next_attempt_at",
+      "cleanup_status",
+      "cleanup_successful_sweeps",
+    ]);
+    const cleanupStatuses = await pool.query<{ enumlabel: string }>(
+      `select enumlabel
+       from pg_enum
+       join pg_type on pg_type.oid = pg_enum.enumtypid
+       where pg_type.typname = 'upload_cleanup_status'
+       order by pg_enum.enumsortorder`,
+    );
+    expect(cleanupStatuses.rows.map((row) => row.enumlabel)).toEqual([
+      "not_needed",
+      "pending",
+      "processing",
+      "failed",
+      "completed",
+    ]);
+    const indexes = await pool.query<{ indexname: string }>(
+      `select indexname
+       from pg_indexes
+       where schemaname = 'public'
+         and indexname in ('upload_intents_cleanup_idx', 'media_bib_tags_key_version_idx')
+       order by indexname`,
+    );
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      "media_bib_tags_key_version_idx",
+      "upload_intents_cleanup_idx",
+    ]);
+  });
+
   async function insertAdmin() {
     const [created] = await database
       .insert(users)

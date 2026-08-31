@@ -31,6 +31,15 @@ const configSchema = z
       .string()
       .regex(/^[A-Za-z0-9._-]{1,40}$/u)
       .default("v1"),
+    BIB_DATA_KEY_PREVIOUS: z.preprocess(optionalEnvironmentValue, bibDataKeySchema.optional()),
+    BIB_SEARCH_KEY_PREVIOUS: z.preprocess(optionalEnvironmentValue, secretSchema.optional()),
+    BIB_KEY_VERSION_PREVIOUS: z.preprocess(
+      optionalEnvironmentValue,
+      z
+        .string()
+        .regex(/^[A-Za-z0-9._-]{1,40}$/u)
+        .optional(),
+    ),
     BIB_OCR_AUTOMATION_STATUS: z
       .enum(["disabled", "experimental", "qualified"])
       .default("experimental"),
@@ -45,6 +54,42 @@ const configSchema = z
         code: "custom",
         message: "BIB_DATA_KEY and BIB_SEARCH_KEY must be configured together",
         path: [value.BIB_DATA_KEY === undefined ? "BIB_DATA_KEY" : "BIB_SEARCH_KEY"],
+      });
+    }
+    const previous = [
+      value.BIB_DATA_KEY_PREVIOUS,
+      value.BIB_SEARCH_KEY_PREVIOUS,
+      value.BIB_KEY_VERSION_PREVIOUS,
+    ];
+    const previousCount = previous.filter((candidate) => candidate !== undefined).length;
+    if (previousCount !== 0 && previousCount !== previous.length) {
+      context.addIssue({
+        code: "custom",
+        message: "previous bib key material must be configured as one complete set",
+        path: [
+          value.BIB_DATA_KEY_PREVIOUS === undefined
+            ? "BIB_DATA_KEY_PREVIOUS"
+            : value.BIB_SEARCH_KEY_PREVIOUS === undefined
+              ? "BIB_SEARCH_KEY_PREVIOUS"
+              : "BIB_KEY_VERSION_PREVIOUS",
+        ],
+      });
+    }
+    if (previousCount > 0 && value.BIB_DATA_KEY === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "current bib key material is required during rotation",
+        path: ["BIB_DATA_KEY"],
+      });
+    }
+    if (
+      value.BIB_KEY_VERSION_PREVIOUS !== undefined &&
+      value.BIB_KEY_VERSION_PREVIOUS === value.BIB_KEY_VERSION
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "current and previous bib key versions must differ",
+        path: ["BIB_KEY_VERSION_PREVIOUS"],
       });
     }
   });

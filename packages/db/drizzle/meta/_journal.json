@@ -78,6 +78,27 @@
       "when": 1788019425503,
       "tag": "0010_secret_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788087376131,
+      "tag": "0011_freezing_apocalypse",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788105352062,
+      "tag": "0012_rapid_violations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788172048243,
+      "tag": "0013_crazy_plazm",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "upload_intents" ADD COLUMN "cleanup_successful_sweeps" integer DEFAULT 0 NOT NULL;

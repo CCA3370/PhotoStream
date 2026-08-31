@@ -60,6 +60,7 @@ class FakeObjectStorage implements ObjectStorage {
     return { url: "http://127.0.0.1:3002/upload", headers: {}, expiresAt: options.expiresAt };
   }
   async completeMultipart(): Promise<void> {}
+  async abortMultipart(): Promise<void> {}
   async delete(): Promise<void> {}
   async head(): Promise<ObjectMetadata | null> {
     return null;
@@ -983,5 +984,80 @@ maybeDescribe("bib configuration, privacy and search", () => {
       expect(response.statusCode).toBe(index < 30 ? 200 : 429);
     }
     await ipLimitedApp.close();
+  });
+
+  it("keeps old tags searchable and idempotent while rotating to the current key", async () => {
+    await service.updateConfig({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      input: validConfig(),
+      requestId: "bib-key-rotation-config",
+    });
+    const idempotencyKey = "bib-key-rotation-idempotency";
+    await service.addManualTag({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      number: "101999",
+      idempotencyKey,
+      requestId: "bib-key-rotation-create",
+    });
+    const [before] = await database.select().from(schema.mediaBibTags);
+    if (before === undefined) throw new Error("Expected a persisted bib tag");
+
+    const currentDataKey = Buffer.alloc(32, 10).toString("base64url");
+    const currentSearchKey = "current-bib-search-key-for-rotation-tests";
+    const currentOnlyConfig = {
+      ...config,
+      BIB_DATA_KEY: currentDataKey,
+      BIB_SEARCH_KEY: currentSearchKey,
+      BIB_KEY_VERSION: "test-v2",
+    };
+    await expect(
+      new BibService({ database, config: currentOnlyConfig, photoService }).assertKeyCoverage(),
+    ).rejects.toThrow("test-v1");
+
+    const rotatingConfig = {
+      ...currentOnlyConfig,
+      BIB_DATA_KEY_PREVIOUS: config.BIB_DATA_KEY,
+      BIB_SEARCH_KEY_PREVIOUS: config.BIB_SEARCH_KEY,
+      BIB_KEY_VERSION_PREVIOUS: config.BIB_KEY_VERSION,
+    };
+    const rotating = new BibService({ database, config: rotatingConfig, photoService });
+    await rotating.assertKeyCoverage();
+    expect(
+      await rotating.searchPublic({
+        slug: "bib-integration-one",
+        visitorToken,
+        number: "101999",
+        cursor: undefined,
+      }),
+    ).toMatchObject({ items: [{ id: mediaId }] });
+    expect(
+      await rotating.addManualTag({
+        actor: { id: reviewerId, role: "reviewer" },
+        mediaId,
+        number: "101999",
+        idempotencyKey,
+        requestId: "bib-key-rotation-retry",
+      }),
+    ).toMatchObject({ tags: [expect.objectContaining({ number: "101999" })] });
+    expect(await database.select().from(schema.mediaBibTags)).toHaveLength(1);
+
+    expect(await rotating.processKeyRotation()).toBe(1);
+    expect(await rotating.processKeyRotation()).toBe(0);
+    const [after] = await database.select().from(schema.mediaBibTags);
+    expect(after).toMatchObject({ keyVersion: "test-v2" });
+    expect(after?.numberCiphertext).not.toBe(before.numberCiphertext);
+    expect(after?.blindIndex).not.toBe(before.blindIndex);
+    const currentOnly = new BibService({ database, config: currentOnlyConfig, photoService });
+    await currentOnly.assertKeyCoverage();
+    expect(
+      await currentOnly.searchPublic({
+        slug: "bib-integration-one",
+        visitorToken,
+        number: "101999",
+        cursor: undefined,
+      }),
+    ).toMatchObject({ items: [{ id: mediaId }] });
   });
 });

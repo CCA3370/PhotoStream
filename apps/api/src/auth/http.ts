@@ -29,7 +29,12 @@ export function setInternalSessionCookie(
 }
 
 export function clearInternalSessionCookie(reply: FastifyReply, config: AppConfig): void {
-  reply.clearCookie(internalSessionCookieName(config), { path: "/" });
+  reply.clearCookie(internalSessionCookieName(config), {
+    httpOnly: true,
+    secure: config.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
 }
 
 export async function requireInternalSession(
