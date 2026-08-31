@@ -1,7 +1,7 @@
 # 领域模型与 API 设计
 
-状态：已批准的实施基线
-更新日期：2026-08-30
+状态：已批准的实施基线；人脸找图为未来阶段，尚未实现
+更新日期：2026-08-31
 
 ## 1. 设计原则
 
@@ -27,6 +27,9 @@
 | `BibTagSource` | `ocr`、`manual` | 号码来源 |
 | `BibReviewDecision` | `pending`、`numbers_confirmed`、`no_number_confirmed`、`needs_review` | 照片级号码复核结论 |
 | `BibAttributeDimension` | `grade`、`class` | 号码派生属性维度 |
+| `FaceIndexState` | `disabled`、`provisioning`、`indexing`、`ready`、`degraded`、`deleting`、`failed` | 未来相册人脸 Dataset 生命周期 |
+| `FaceMediaIndexStatus` | `pending`、`indexing`、`indexed`、`deleting`、`excluded`、`failed` | 未来逐媒体人脸索引状态 |
+| `FaceSearchStatus` | `awaiting_upload`、`processing`、`partial`、`completed`、`failed`、`cancelled`、`expired` | 未来访客私有搜索状态 |
 
 `IngestStatus` 与 `PublicationStatus` 必须独立保存。例如一张照片可以处于 `uploading_source + published`，表示浏览图已直播、原图仍在后台上传。
 
@@ -50,6 +53,7 @@
 - 口令摘要与 `accessVersion`；
 - 普通图、原图两个独立下载开关；
 - 号码识别/观众搜索开关、当前规则/映射版本和 OCR 模型版本；
+- 未来人脸找图开关、告知版本、授权确认时间、`FaceIndexState`、IMM Dataset 随机标识、索引删除期限和最后通用错误码；
 - 品牌展示名称、Logo 对象 key、强调色；
 - 创建者、创建/更新时间和发布序列计数器。
 
@@ -103,6 +107,16 @@
 `MediaBibReview` 保存照片、`BibReviewDecision`、决定人/时间和最后变更原因。OCR 无候选、OCR 失败或拒绝全部候选都不能自动写成 `no_number_confirmed`。
 
 一张照片可拥有多个确认号码；`album_id + media_id + blind_index + confirmed` 必须避免重复搜索标签。只有 `confirmed` 且规则版本有效的标签进入公共精确搜索。年级+班级筛选必须在同一 `MediaBibTag` 上同时匹配，不能跨两个号码组合属性。
+
+### 3.10 人脸索引与短期搜索（未来）
+
+`AlbumFaceIndex` 保存相册、功能开关、告知版本、授权核验时间、`FaceIndexState`、随机 IMM Dataset 标识、阈值版本、最近索引/聚类时间、删除期限和通用失败码。Dataset 标识不能从相册标题、slug 或学校信息推导。
+
+`MediaFaceIndexTask` 保存相册/媒体、`FaceMediaIndexStatus`、供应商任务关联、重试、下一次尝试时间和删除确认时间；不保存人脸框、向量、聚类、相似度或额外属性。`excluded` 是管理员明确退出索引的持久门禁，媒体恢复/重新发布不能自动覆盖。
+
+`FaceSearchIntent` 保存随机 ID、相册、访客会话摘要、`FaceSearchStatus`、随机临时对象 key、同意告知版本/声明类型、供应商任务关联、结果/参考照到期时间和通用失败码。短期候选单独保存媒体 ID 与过期时间；不保存供应商 URI、聚类 ID或相似度。
+
+`FaceIntegrationEvent` 只保存 EventBridge 事件 ID、已知任务 ID、处理结果和时间，用于幂等与审计；原始 payload 不落库。详细合同见[人脸候选找图](14-face-search.md)。
 
 ## 4. 状态转换
 
@@ -159,6 +173,10 @@ stateDiagram-v2
 | `POST /api/v1/albums/{id}/end` | 管理员 | 结束直播 |
 | `GET/POST/PATCH /api/v1/albums/{id}/categories` | 内部；写需管理员/审核员 | 一级分类管理 |
 | `GET/PUT /api/v1/albums/{id}/bib-config` | 内部；写仅管理员 | 号码规则、年级/班级映射、识别/搜索开关和模型状态 |
+| `GET/PUT /api/v1/albums/{id}/face-config` | 管理员 | 未来人脸开关、授权确认、告知版本、索引/保留状态 |
+| `POST /api/v1/albums/{id}/face-index/retry` | 管理员 | 重试未来人脸索引/删除失败任务 |
+| `POST /api/v1/albums/{id}/face-index/exclusions` | 管理员 | 让选定照片退出人脸索引但保留普通浏览 |
+| `DELETE /api/v1/albums/{id}/face-index` | 管理员 | 关闭未来人脸搜索并建立整册 Dataset 删除任务 |
 | `GET /api/v1/albums/{id}/media` | 内部 | 按状态、分类、上传者游标查询 |
 | `POST /api/v1/media/{id}/publish` | 管理员/审核员 | 幂等发布并分配发布序号 |
 | `POST /api/v1/media/{id}/hide` | 管理员/审核员 | 从公共流隐藏 |
@@ -190,7 +208,25 @@ stateDiagram-v2
 
 详细契约见[号码牌识别与筛选](12-bib-recognition.md)。
 
-## 8. 上传接口
+## 8. 人脸找图接口（未来）
+
+| 方法与路径 | 调用者 | 行为 |
+| --- | --- | --- |
+| `POST /api/v1/public/albums/{slug}/face-searches` | 已解锁观众 | 校验功能/限流/同意，创建私有意图并返回精确临时 OSS PUT |
+| `POST /api/v1/public/albums/{slug}/face-searches/{id}/complete` | 意图创建会话 | HEAD 验证参考照并幂等启动同步/异步搜索 |
+| `GET /api/v1/public/albums/{slug}/face-searches/{id}` | 意图创建会话 | 返回私有状态、短期媒体结果和结果游标 |
+| `DELETE /api/v1/public/albums/{slug}/face-searches/{id}` | 意图创建会话 | 取消展示并尽快清理参考照/短期结果 |
+| `POST /api/v1/integrations/aliyun/eventbridge` | EventBridge | 验签并幂等接收指定 IMM 任务事件 |
+
+创建意图只允许 `password + faceSearchEnabled + ready/degraded` 的相册，必须携带当前告知版本、`self` 或 `guardian_or_authorized` 声明，未知字段严格拒绝。每访客会话和每日轮换 IP-HMAC 每 10 分钟最多 3 次、每天最多 10 次。
+
+参考照只允许静态 JPEG/PNG/WebP 输入，浏览器必须先转为去 EXIF JPEG；最终对象不超过 3 MiB、最长边不超过 1920。临时 object key 由服务端分配且禁止覆盖。完成接口只 HEAD，不经香港下载图片。
+
+EventBridge 入口不接受 Cookie，必须验证 RSA 签名、官方证书 URL、60 秒时间窗、账号、杭州地域、IMM Project/Dataset、事件类型、已知 TaskId、body 上限和事件 ID 幂等。原始事件、供应商 URI、聚类、相似度和额外属性不得写日志或数据库。
+
+同步聚类与异步补查只生成候选；每次响应前重新过滤当前相册、`published`、未排除/未删除媒体。结果按发布序号倒序，不返回分数，不通过 SSE 广播。无匹配与被权威状态全部过滤使用相同空结果。
+
+## 9. 上传接口
 
 | 方法与路径 | 行为 |
 | --- | --- |
@@ -207,7 +243,7 @@ stateDiagram-v2
 
 客户端调用完成接口时必须携带幂等键。API 使用 HEAD 校验对象存在、大小和 Content-Type；不下载媒体正文。
 
-## 9. 观众接口
+## 10. 观众接口
 
 | 方法与路径 | 行为 |
 | --- | --- |
@@ -218,6 +254,7 @@ stateDiagram-v2
 | `GET /api/v1/public/albums/{slug}/changes` | SSE 不可用时的游标增量查询 |
 | `POST /api/v1/public/albums/{slug}/bib-search` | 口令相册精确查询已确认号码对应的已发布照片 |
 | `POST /api/v1/public/albums/{slug}/bib-attributes-filter` | 按年级或年级+班级筛选同一确认号码标签对应的已发布照片 |
+| `POST/GET/DELETE /api/v1/public/albums/{slug}/face-searches...` | 未来同意门禁的人脸候选搜索；私有任务与结果，不进入相册 SSE |
 | `POST /api/v1/public/albums/{slug}/downloads/{mediaId}/{kind}` | 校验相册开关、记录签发并返回 5 分钟 CDN 地址 |
 | `POST /api/v1/public/albums/{slug}/analytics/open` | 记录匿名打开，不接收原始 IP/UA 字段 |
 
@@ -227,26 +264,30 @@ stateDiagram-v2
 
 属性筛选要求 `gradeOptionId`，`classOptionId` 可选；提供班级时必须在同一确认标签上同时匹配该年级。无号码、待复核、属性缺失和旧映射版本照片不进入属性结果，但仍保留在普通相册流。公共配置可以返回年级/班级选项名称和排序，不返回号码规则范围、匹配数量或名单。
 
-## 10. SSE 契约
+## 11. SSE 契约
 
 每个事件包含：事件 ID、事件类型、相册 ID、媒体 ID、服务端时间和最小变更摘要。临时 CDN URL 不写入 outbox；客户端收到事件后通过增量接口取回当前媒体表示。
 
 号码确认、删除或失效使用通用 `media.bib.updated` 事件，载荷不得包含号码、blind index、置信度或框坐标。
 
+人脸索引可用性变化只允许使用不含任务、聚类、人物或结果的通用相册配置更新；个人参考照状态和结果永远不进入 SSE/outbox，由创建会话私有轮询。
+
 心跳每 20 秒发送一次。客户端最多立即重连 3 次，此后使用指数退避；微信切后台返回前台时先请求增量，再恢复 SSE。
 
-## 11. 错误与幂等
+## 12. 错误与幂等
 
 所有错误返回稳定机器码、中文用户消息、请求 ID 和可重试标志。不得向客户端返回 SQL、OSS Endpoint、Bucket、堆栈、密钥或签名计算细节。
 
-关键错误码至少包括：认证失败、角色不足、相册已结束、口令错误/限流、格式不支持、媒体超限、本地处理不支持、号码规则/属性映射无效、号码不匹配规则、属性映射冲突、OCR 候选过多/版本过期、已有号码不能确认无号码、号码/属性搜索禁用或限流、签名过期、对象校验失败、分片不完整、状态冲突和删除任务失败。
+关键错误码至少包括：认证失败、角色不足、相册已结束、口令错误/限流、格式不支持、媒体超限、本地处理不支持、号码规则/属性映射无效、号码不匹配规则、属性映射冲突、OCR 候选过多/版本过期、已有号码不能确认无号码、号码/属性搜索禁用或限流、未来人脸搜索关闭/索引未就绪/参考照无脸/多脸/质量不足/处理中/供应商不可用/清理失败、签名过期、对象校验失败、分片不完整、状态冲突和删除任务失败。
 
-创建上传、完成上传、发布、隐藏、批量操作和下载签发都接受幂等键。相同用户、路径和幂等键在有效期内必须返回同一业务结果。
+创建上传、完成上传、发布、隐藏、批量操作、下载签发、人脸搜索完成和 EventBridge 事件都接受或拥有可验证幂等标识。相同主体、路径和幂等键在有效期内必须返回同一业务结果。
 
-## 12. 删除语义
+## 13. 删除语义
 
 - “隐藏”只从相册列表移除，不删除 OSS 对象；已签发 URL 可能在短期有效期内继续访问。
 - “取消上传”写入持久清理状态，终止未完成 multipart，并删除未发布对象；失败按退避重试。若 480/960 已发布或待审核，则保留已验证预览，只清理未完成的后续对象。
-- “永久删除”删除全部变体、提交 CDN 刷新并保留不含媒体地址的审计记录。
-- 永久删除照片时同步删除全部号码密文、blind index、派生属性、复核结论和候选框；相册结束 30 天后清理未确认/已拒绝号码候选。
+- “永久删除”删除全部变体、提交 CDN 刷新并保留不含媒体地址的审计记录；未来启用人脸功能时还必须删除对应 IMM 文件元数据。
+- 永久删除照片时同步删除全部号码密文、blind index、派生属性、复核结论和候选框；相册结束 30 天后清理未确认/已拒绝号码候选，并删除整册 IMM Dataset。
+- 人脸参考照正常完成即删除，异常最长 1 小时、1 天生命周期兜底；短期结果最长 2 小时。相册改公开、关闭功能或授权范围失效时先阻止新搜索，再持久重试云端删除。
+- 管理员可让照片退出人脸索引而不删除普通照片；无法证明投诉/撤回范围完整时删除整册 Dataset，不能用只隐藏结果冒充云端删除。
 - 删除任务失败必须可重试，不能在部分失败时谎报成功。

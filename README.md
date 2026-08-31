@@ -8,6 +8,8 @@
 
 自动号码候选当前明确保持 **experimental**：用户已提供 813 张 Git 外本地测试照片，但尚无逐号码/四边形真值标注，也没有 Safari/移动设备召回率与性能门禁证据；手工标签和精确搜索闭环不依赖自动候选资格。项目仍未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、学校隐私流程与目标 2C2G 主机检查均为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)、[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)、[阶段 3 验证记录](docs/verification/phase-3-review-and-operations.md)、[阶段 4 验证记录](docs/verification/phase-4-bib-recognition.md)、[纯照片边界退役验证](docs/verification/photo-only-retirement.md)和[阶段 5 验证记录](docs/verification/phase-5-security-performance.md)。
 
+2026-08-31 另行批准了未来“人脸候选找图”文档基线：口令相册可在学校完成授权门禁后使用杭州阿里云 IMM 和 EventBridge，让观众提交一张参考照筛选可能包含同一人物的已发布照片。本轮只写文档；没有实现代码、开通云资源或处理人脸样本，全部人脸运行证据保持 **Unverified**。
+
 ## 本地开发
 
 要求 Node.js 24 与 pnpm 11。安装依赖后可运行：
@@ -33,9 +35,10 @@
 - 单学校、单团队、非商业使用，不开放公众注册。
 - 香港 2C2G Linux 主机承载主站、API 和 PostgreSQL；杭州 OSS 与中国内地 CDN 承载全部媒体内容。
 - 照片二进制不得经过香港应用服务器；香港侧只保存必要元数据与业务状态。
-- 阿里云只使用 OSS 与 CDN 的基础能力，不使用函数计算、云端媒体处理、DCDN/ESA、实时日志或其他可选增值服务。
+- 基础照片功能只使用 OSS 与 CDN；未来人脸找图另行授权后只允许 ADR-012 列出的 IMM、临时 OSS 和 EventBridge，不使用函数计算、MNS、事件仓、DCDN/ESA 或实时日志。
 - 照片在上传者浏览器本地生成 WebP 派生图。
 - 可按相册启用本地数字号码牌 OCR；自动结果只作候选，人工确认后自动派生年级/班级并供口令相册筛选；无候选照片必须人工确认“无号码”。
+- 未来可按口令相册启用同意门禁的人脸候选找图；只返回“可能包含”，不建立姓名身份库或跨相册人物搜索。
 - 新相册默认需要口令且禁止下载；管理员可对单场活动逐项放开。
 - 第一版重点服务小型活动，设计目标为每场 5,000 张照片、5 名并发上传者和 500 名并发观众。
 
@@ -47,15 +50,16 @@
 4. [照片处理与上传链路](docs/04-photo-pipeline.md)
 5. [前端与交互设计](docs/06-frontend-ux.md)
 6. [安全、隐私与合规](docs/07-security-privacy.md)
-7. [阿里云 OSS/CDN 配置](docs/08-aliyun-cdn-oss.md)
+7. [阿里云 OSS/CDN/IMM/EventBridge 配置](docs/08-aliyun-cdn-oss.md)
 8. [费用控制](docs/09-cost-controls.md)
 9. [测试与验收](docs/10-test-and-acceptance.md)
 10. [开发路线图](docs/11-development-roadmap.md)
 11. [号码牌识别与筛选](docs/12-bib-recognition.md)
-12. [部署前待提供信息](docs/deployment-inputs.md)
-13. [运维、备份与事件响应手册](docs/13-operations-runbook.md)
-14. [参考资料](docs/references.md)
-15. [架构决策记录](docs/adr/README.md)
+12. [人脸候选找图](docs/14-face-search.md)
+13. [部署前待提供信息](docs/deployment-inputs.md)
+14. [运维、备份与事件响应手册](docs/13-operations-runbook.md)
+15. [参考资料](docs/references.md)
+16. [架构决策记录](docs/adr/README.md)
 
 ## 下一道门禁
 
@@ -65,4 +69,5 @@
 - 真实微信/Safari 的 Tailwind/Base UI 风险继续按 **Unverified** 跟踪，不能用 Chromium 结果替代；
 - 媒体二进制不得进入 Fastify/Next.js/香港数据库的架构不变量保持不变；
 - 继续保持仅照片的产品、契约、数据库和测试边界，不增加其他媒体类型占位；
+- 人脸找图在独立编码、云端和授权样本门禁前保持未实现/关闭，不把文档批准写成已验证能力；
 - 用户提供并确认部署输入、学校隐私流程与目标主机权限；云端、DNS、部署、真实学生影像和生产发布仍需各自单独批准。

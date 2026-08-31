@@ -1,6 +1,6 @@
 # ADR-001：照片处理在上传者浏览器完成
 
-状态：Accepted；由 [ADR-011](011-photo-only-product-boundary.md) 修订
+状态：Accepted；由 [ADR-011](011-photo-only-product-boundary.md) 和 [ADR-012](012-consent-gated-face-photo-search.md) 修订
 日期：2026-08-26
 
 ## Context
@@ -12,7 +12,7 @@
 - 照片派生和 EXIF 清理在上传者浏览器本地完成。
 - 启用号码识别时，PaddleOCR.js 在上传者浏览器本地生成数字候选，人工确认后才进入搜索。
 - 原始/派生媒体从浏览器直接上传杭州 OSS，香港 API 只协调签名和状态。
-- 不支持本地处理时明确拒绝或使用规定回退，不调用云端处理。
+- 照片派生和号码 OCR 不支持本地处理时明确拒绝或使用规定回退，不调用云端处理。ADR-012 后续批准的杭州 IMM 人脸候选找图是发布后的独立旁路，不替代或回退本地派生/号码流程。
 
 ## Consequences
 
