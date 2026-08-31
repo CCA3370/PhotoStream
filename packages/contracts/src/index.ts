@@ -1,7 +1,9 @@
 import { bibMediaStateSchema } from "@photostream/contracts/bib";
+import { faceSearchSafeStateSchema } from "@photostream/contracts/face";
 import { z } from "zod";
 
 export * from "@photostream/contracts/bib";
+export * from "@photostream/contracts/face";
 
 export const userRoleSchema = z.enum(["admin", "reviewer", "uploader"]);
 export type UserRole = z.infer<typeof userRoleSchema>;
@@ -121,6 +123,16 @@ export const apiErrorCodeSchema = z.enum([
   "BIB_RULE_VERSION_MISMATCH",
   "BIB_SEARCH_DISABLED",
   "BIB_RECALCULATION_FAILED",
+  "FACE_SEARCH_DISABLED",
+  "FACE_INDEX_NOT_READY",
+  "FACE_REFERENCE_INVALID",
+  "FACE_NO_FACE",
+  "FACE_MULTIPLE_FACES",
+  "FACE_QUALITY_LOW",
+  "FACE_RATE_LIMITED",
+  "FACE_SEARCH_PROCESSING",
+  "FACE_PROVIDER_UNAVAILABLE",
+  "FACE_CLEANUP_FAILED",
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
 
@@ -444,6 +456,15 @@ export const publicMediaViewSchema = z
   .strict();
 export type PublicMediaView = z.infer<typeof publicMediaViewSchema>;
 
+export const faceSearchViewSchema = z
+  .object({
+    search: faceSearchSafeStateSchema,
+    items: z.array(publicMediaViewSchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+export type FaceSearchView = z.infer<typeof faceSearchViewSchema>;
+
 export const internalMediaViewSchema = z
   .object({
     id: z.string().uuid(),
@@ -486,6 +507,8 @@ export const publicAlbumViewSchema = z
     originalDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
     complaintContact: z.string().max(300),
+    faceSearchAvailable: z.boolean(),
+    faceSearchNoticeVersion: z.string().max(80).nullable(),
     bibSearchEnabled: z.boolean(),
     bibNumberLengths: z.array(z.number().int().min(1).max(12)),
     bibAttributeFilterEnabled: z.boolean(),

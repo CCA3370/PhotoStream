@@ -24,6 +24,13 @@ maybeDescribe("PostgreSQL identity schema", () => {
   });
 
   beforeEach(async () => {
+    await database.delete(schema.faceIntegrationEvents);
+    await database.delete(schema.faceSearchCandidates);
+    await database.delete(schema.faceSearchIntents);
+    await database.delete(schema.faceConsentReceipts);
+    await database.delete(schema.mediaFaceIndexTasks);
+    await database.delete(schema.faceAlbumJobs);
+    await database.delete(schema.albumFaceIndexes);
     await database.delete(schema.liveEvents);
     await database.delete(schema.analyticsEvents);
     await database.delete(schema.analyticsDaily);
@@ -170,6 +177,49 @@ maybeDescribe("PostgreSQL identity schema", () => {
       "media_bib_tags_key_version_idx",
       "upload_intents_cleanup_idx",
     ]);
+  });
+
+  it("persists only minimal face-search control-plane state", async () => {
+    const faceTables = await pool.query<{ table_name: string }>(
+      `select table_name
+       from information_schema.tables
+       where table_schema = 'public' and table_name like '%face%'
+       order by table_name`,
+    );
+    expect(faceTables.rows.map((row) => row.table_name)).toEqual([
+      "album_face_indexes",
+      "face_album_jobs",
+      "face_consent_receipts",
+      "face_integration_events",
+      "face_search_candidates",
+      "face_search_intents",
+      "media_face_index_tasks",
+    ]);
+
+    const forbiddenColumns = await pool.query<{ column_name: string }>(
+      `select column_name
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name in (
+           'album_face_indexes',
+           'face_album_jobs',
+           'face_consent_receipts',
+           'face_integration_events',
+           'face_search_candidates',
+           'face_search_intents',
+           'media_face_index_tasks'
+         )
+         and (
+           column_name like '%vector%'
+           or column_name like '%similarity%'
+           or column_name like '%cluster%'
+           or column_name like '%face_box%'
+           or column_name like '%payload%'
+           or column_name like '%uri%'
+           or column_name in ('name', 'ip_address', 'user_agent', 'image_body')
+         )`,
+    );
+    expect(forbiddenColumns.rows).toEqual([]);
   });
 
   async function insertAdmin() {

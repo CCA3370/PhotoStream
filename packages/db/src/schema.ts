@@ -101,6 +101,63 @@ export const bibRecalculationStatusEnum = pgEnum("bib_recalculation_status", [
   "failed",
   "completed",
 ]);
+export const faceIndexStateEnum = pgEnum("face_index_state", [
+  "disabled",
+  "provisioning",
+  "indexing",
+  "ready",
+  "degraded",
+  "deleting",
+  "failed",
+]);
+export const faceMediaIndexStatusEnum = pgEnum("face_media_index_status", [
+  "pending",
+  "indexing",
+  "indexed",
+  "deleting",
+  "excluded",
+  "failed",
+]);
+export const faceSearchStatusEnum = pgEnum("face_search_status", [
+  "awaiting_upload",
+  "processing",
+  "partial",
+  "completed",
+  "failed",
+  "cancelled",
+  "expired",
+]);
+export const faceConsentDeclarationEnum = pgEnum("face_consent_declaration", [
+  "self",
+  "guardian_or_authorized",
+]);
+export const faceAlbumJobKindEnum = pgEnum("face_album_job_kind", [
+  "provision_dataset",
+  "cluster",
+  "delete_dataset",
+]);
+export const faceJobStatusEnum = pgEnum("face_job_status", [
+  "pending",
+  "processing",
+  "failed",
+  "completed",
+  "cancelled",
+]);
+export const faceConsentResultEnum = pgEnum("face_consent_result", [
+  "created",
+  "completed_with_results",
+  "completed_empty",
+  "reference_rejected",
+  "cancelled",
+  "expired",
+  "provider_failed",
+  "cleanup_failed",
+]);
+export const faceEventProcessingResultEnum = pgEnum("face_event_processing_result", [
+  "processed",
+  "ignored",
+  "failed",
+]);
 
 function timestampColumns() {
   return {
@@ -389,6 +446,198 @@ export const visitorSessions = pgTable(
   (table) => [
     uniqueIndex("visitor_sessions_token_hash_unique").on(table.tokenHash),
     index("visitor_sessions_album_expiry_idx").on(table.albumId, table.expiresAt),
+  ],
+);
+
+export const albumFaceIndexes = pgTable(
+  "album_face_indexes",
+  {
+    albumId: uuid("album_id")
+      .primaryKey()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    noticeVersion: varchar("notice_version", { length: 80 }),
+    thresholdVersion: varchar("threshold_version", { length: 80 }).notNull(),
+    participantConsentRecordsConfirmed: boolean("participant_consent_records_confirmed")
+      .notNull()
+      .default(false),
+    guardianConsentRequirementsConfirmed: boolean("guardian_consent_requirements_confirmed")
+      .notNull()
+      .default(false),
+    impactAssessmentCompleted: boolean("impact_assessment_completed").notNull().default(false),
+    providerResourcesValidated: boolean("provider_resources_validated").notNull().default(false),
+    evaluationGatePassed: boolean("evaluation_gate_passed").notNull().default(false),
+    billingAlertsConfigured: boolean("billing_alerts_configured").notNull().default(false),
+    indexedFacesAuthorized: boolean("indexed_faces_authorized").notNull().default(false),
+    authorizationConfirmedAt: timestamp("authorization_confirmed_at", { withTimezone: true }),
+    indexState: faceIndexStateEnum("index_state").notNull().default("disabled"),
+    datasetName: varchar("dataset_name", { length: 128 }),
+    retentionDays: integer("retention_days").notNull().default(30),
+    lastIndexedAt: timestamp("last_indexed_at", { withTimezone: true }),
+    lastClusteredAt: timestamp("last_clustered_at", { withTimezone: true }),
+    deletionDueAt: timestamp("deletion_due_at", { withTimezone: true }),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("album_face_indexes_dataset_name_unique")
+      .on(table.datasetName)
+      .where(sql`${table.datasetName} is not null`),
+    index("album_face_indexes_state_due_idx").on(table.indexState, table.deletionDueAt),
+  ],
+);
+
+export const faceAlbumJobs = pgTable(
+  "face_album_jobs",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    kind: faceAlbumJobKindEnum("kind").notNull(),
+    status: faceJobStatusEnum("status").notNull().default("pending"),
+    providerTaskId: varchar("provider_task_id", { length: 256 }),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("face_album_jobs_active_kind_unique")
+      .on(table.albumId, table.kind)
+      .where(sql`${table.status} in ('pending', 'processing')`),
+    uniqueIndex("face_album_jobs_provider_task_unique")
+      .on(table.providerTaskId)
+      .where(sql`${table.providerTaskId} is not null`),
+    index("face_album_jobs_poll_idx").on(table.status, table.nextAttemptAt),
+  ],
+);
+
+export const mediaFaceIndexTasks = pgTable(
+  "media_face_index_tasks",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    status: faceMediaIndexStatusEnum("status").notNull().default("pending"),
+    providerTaskId: varchar("provider_task_id", { length: 256 }),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    deletionConfirmedAt: timestamp("deletion_confirmed_at", { withTimezone: true }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("media_face_index_tasks_media_unique").on(table.mediaId),
+    uniqueIndex("media_face_index_tasks_provider_task_unique")
+      .on(table.providerTaskId)
+      .where(sql`${table.providerTaskId} is not null`),
+    index("media_face_index_tasks_album_status_idx").on(table.albumId, table.status, table.id),
+    index("media_face_index_tasks_poll_idx").on(table.status, table.nextAttemptAt),
+  ],
+);
+
+export const faceConsentReceipts = pgTable(
+  "face_consent_receipts",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    noticeVersion: varchar("notice_version", { length: 80 }).notNull(),
+    declaration: faceConsentDeclarationEnum("declaration").notNull(),
+    resultCategory: faceConsentResultEnum("result_category").notNull().default("created"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("face_consent_receipts_album_occurred_idx").on(table.albumId, table.occurredAt),
+  ],
+);
+
+export const faceSearchIntents = pgTable(
+  "face_search_intents",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    visitorSessionDigest: varchar("visitor_session_digest", { length: 64 }).notNull(),
+    ipDailyDigest: varchar("ip_daily_digest", { length: 64 }).notNull(),
+    status: faceSearchStatusEnum("status").notNull().default("awaiting_upload"),
+    objectKey: varchar("object_key", { length: 512 }).notNull(),
+    expectedBytes: integer("expected_bytes").notNull(),
+    objectEtag: varchar("object_etag", { length: 128 }),
+    noticeVersion: varchar("notice_version", { length: 80 }).notNull(),
+    declaration: faceConsentDeclarationEnum("declaration").notNull(),
+    consentReceiptId: uuid("consent_receipt_id").references(() => faceConsentReceipts.id, {
+      onDelete: "set null",
+    }),
+    providerTaskId: varchar("provider_task_id", { length: 256 }),
+    referenceExpiresAt: timestamp("reference_expires_at", { withTimezone: true }).notNull(),
+    resultExpiresAt: timestamp("result_expires_at", { withTimezone: true }).notNull(),
+    referenceDeletedAt: timestamp("reference_deleted_at", { withTimezone: true }),
+    initialSearchCompletedAt: timestamp("initial_search_completed_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failureCode: varchar("failure_code", { length: 100 }),
+    cleanupAttempts: integer("cleanup_attempts").notNull().default(0),
+    cleanupNextAttemptAt: timestamp("cleanup_next_attempt_at", { withTimezone: true }),
+    cleanupLastErrorCode: varchar("cleanup_last_error_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("face_search_intents_object_key_unique").on(table.objectKey),
+    uniqueIndex("face_search_intents_provider_task_unique")
+      .on(table.providerTaskId)
+      .where(sql`${table.providerTaskId} is not null`),
+    index("face_search_intents_session_rate_idx").on(table.visitorSessionDigest, table.createdAt),
+    index("face_search_intents_ip_rate_idx").on(table.ipDailyDigest, table.createdAt),
+    index("face_search_intents_expiry_idx").on(table.status, table.resultExpiresAt),
+    index("face_search_intents_cleanup_idx").on(
+      table.referenceDeletedAt,
+      table.cleanupNextAttemptAt,
+    ),
+  ],
+);
+
+export const faceSearchCandidates = pgTable(
+  "face_search_candidates",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    searchIntentId: uuid("search_intent_id")
+      .notNull()
+      .references(() => faceSearchIntents.id, { onDelete: "cascade" }),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("face_search_candidates_intent_media_unique").on(
+      table.searchIntentId,
+      table.mediaId,
+    ),
+    index("face_search_candidates_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export const faceIntegrationEvents = pgTable(
+  "face_integration_events",
+  {
+    eventId: varchar("event_id", { length: 256 }).primaryKey(),
+    providerTaskId: varchar("provider_task_id", { length: 256 }).notNull(),
+    processingResult: faceEventProcessingResultEnum("processing_result").notNull(),
+    errorCode: varchar("error_code", { length: 100 }),
+    processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("face_integration_events_task_processed_idx").on(table.providerTaskId, table.processedAt),
   ],
 );
 
@@ -742,3 +991,9 @@ export type DeletionTaskRow = typeof deletionTasks.$inferSelect;
 export type BibPatternRow = typeof bibPatterns.$inferSelect;
 export type MediaBibTagRow = typeof mediaBibTags.$inferSelect;
 export type MediaBibReviewRow = typeof mediaBibReviews.$inferSelect;
+export type AlbumFaceIndexRow = typeof albumFaceIndexes.$inferSelect;
+export type FaceAlbumJobRow = typeof faceAlbumJobs.$inferSelect;
+export type MediaFaceIndexTaskRow = typeof mediaFaceIndexTasks.$inferSelect;
+export type FaceSearchIntentRow = typeof faceSearchIntents.$inferSelect;
+export type FaceSearchCandidateRow = typeof faceSearchCandidates.$inferSelect;
+export type FaceConsentReceiptRow = typeof faceConsentReceipts.$inferSelect;

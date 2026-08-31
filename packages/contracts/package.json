@@ -11,6 +11,10 @@
     "./bib": {
       "types": "./src/bib.ts",
       "import": "./src/bib.ts"
+    },
+    "./face": {
+      "types": "./src/face.ts",
+      "import": "./src/face.ts"
     }
   },
   "files": [
