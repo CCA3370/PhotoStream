@@ -113,10 +113,11 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 ### 5.1 IMM
 
 - Project 固定在华东 1（杭州），使用不可包含校名的部署标识；默认模板保持空，Dataset 明确使用 `Official:FaceManagement`。
+- Project 只绑定同地域媒体 Bucket 和临时参考照 Bucket；服务角色对媒体 Bucket 仅可读 `media/.../1920.*`，对临时 Bucket 仅可读 `face-search/`，不得访问备份、原图、480/960、品牌或静态资源前缀。
 - 每个相册创建独立、随机 Dataset；`CustomId` 只使用 PhotoStream 随机媒体 ID，不把相册标题、slug、姓名、学号或号码写入 IMM。
 - 只通过 `IndexFileMeta`/`BatchIndexFileMeta` 显式索引已经发布且验证完成的 `photo_1920`；不绑定 OSS 上传触发器，不自动索引 Bucket 其他对象。
 - 只允许索引、文件元数据删除、人物聚类、聚类查询、相似人脸搜索和 Dataset 生命周期 API。禁止标签、语义检索、故事、人物命名、视频、图片美化或其他算子。
-- 相册结束 30 天、改公开、管理员关闭或授权范围失效时删除 Dataset；逐照片隐藏/删除/退出索引使用 `DeleteFileMeta`/批量等价接口并读回结果。
+- 相册结束 30 天、改公开、管理员关闭或授权范围失效时，先分页 `BatchDeleteFileMeta` 清空文件元数据，再 `DeleteDataset` 并读回不存在；逐照片隐藏/删除/退出索引使用 `DeleteFileMeta`/批量等价接口并读回结果。
 - 应用只消费人脸数量/质量、聚类、URI、相似度和任务状态；年龄、性别、情绪、吸引力等额外字段不得持久化或输出。
 
 ### 5.2 EventBridge
