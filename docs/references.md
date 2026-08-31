@@ -1,12 +1,12 @@
 # 参考资料
 
-查阅日期：2026-08-25 至 2026-08-27。云产品能力、价格、法规和浏览器支持会变化；进入编码时复核 SDK/API，进入部署时再次复核计费和控制台选项。
+查阅日期：2026-08-25 至 2026-08-31。云产品能力、价格、法规和浏览器支持会变化；进入编码时复核 SDK/API，进入部署时再次复核计费和控制台选项。
 
 ## 1. 竞品与产品范围
 
 - [喔图云摄影官网](https://www.alltuu.com/)：用于理解照片直播、多端协作、AI、下载和营销等竞品边界；本项目只实现学校核心闭环，不复制其完整平台。
 - [喔图图片直播教程](https://faq.alltuu.com/)：用于了解摄影师上传、相册管理和现场协作场景。
-- [喔图 AI 找我/号码识别](https://faq.alltuu.com/04/a00d/9c62)：用于确认竞品号码识别的照片与字符边界；本项目不复制其人脸或模糊搜索能力。
+- [喔图 AI 找我/号码识别](https://faq.alltuu.com/04/a00d/9c62)：用于理解竞品号码/人脸找图场景；本项目不复制其公众人物库、跨相册或模糊搜索边界。
 
 ## 2. OSS 上传、存储与权限
 
@@ -39,7 +39,27 @@
 - [函数计算计费](https://help.aliyun.com/en/functioncompute/billing-overview-of-fc)：CU 与公网流量属于独立费用，故本项目不创建 FC。
 - [OSS 图片处理](https://help.aliyun.com/zh/oss/user-guide/overview-17/)：支持格式、QPS/吞吐和数据处理费用；本项目改为客户端派生。
 
-## 5. 图片与浏览器 OCR
+## 5. 人脸找图、IMM 与事件通知
+
+- [人脸识别技术应用安全管理办法](https://www.cac.gov.cn/2025-03/21/c_1744174262156096.htm)：特定目的、充分必要、显著告知、单独同意、不满十四周岁监护人同意、设备内存储/互联网传输、影响评估、替代方式和最短保存要求。
+- [人脸识别应用备案公告](https://www.cac.gov.cn/2025-05/30/c_1750315544241157.htm)：存储数量达到 10 万人的备案起点；低于阈值不等于免除其他义务。
+- [IMM 工作流模板与算子](https://help.aliyun.com/zh/imm/user-guide/workflow-templates-and-operators)：`Official:FaceManagement` 只启用 OSS 元信息与 FaceDetection，区别于标签/语义等更宽模板。
+- [IndexFileMeta](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-indexfilemeta)：显式索引 OSS 文件、异步完成和数据集边界。
+- [IMM 人脸聚类 FAQ](https://help.aliyun.com/zh/imm/support/faq-about-image-management/)：至少三张合格高清人脸、索引/聚类延迟、增量批处理、按聚类查询图片及异步搜索结果只由 Notification 返回。
+- [SearchImageFigureCluster](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-searchimagefigurecluster)：用 OSS 参考图匹配人物聚类并返回相似度。
+- [CreateFacesSearchingTask](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-createfacessearchingtask)：异步相似人脸图片搜索、最大 100 个候选和任务通知。
+- [SimpleQuery](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-simplequery)：按 `Figures.FigureClusterId` 分页获取聚类照片，单页最多 100 条。
+- [删除 IMM 文件元数据](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-batchdeletefilemeta)：删除索引元数据会同步影响人脸聚类，但不会删除 OSS 原照片。
+- [IMM 计费项](https://help.aliyun.com/zh/imm/product-overview/billable-items)：人脸检测、相似人脸图片、聚类、查询/索引存储和潜在 OSS 转换的独立计费依据。
+- [IMM EventBridge 事件](https://help.aliyun.com/zh/eventbridge/user-guide/imm-events)：`imm:Task:FacesSearching` 等官方事件及相似人脸结果结构。
+- [EventBridge HTTPS 签名](https://help.aliyun.com/zh/eventbridge/user-guide/signature-algorithm)：官方证书 URL、RSA 签名和 60 秒防重放验证流程。
+- [EventBridge 事件总线计费](https://help.aliyun.com/zh/eventbridge/product-overview/billing-of-event-buses)：云服务专用事件发布、自定义 HTTPS 目标和跨地域流量价格。
+- [MNS 计费](https://help.aliyun.com/zh/mns/product-overview/billing-overview)：杭州 Topic/Queue 按日资源占用费，是本项目选择 EventBridge 而非 MNS 的费用依据。
+- [腾讯云人脸搜索](https://cloud.tencent.com/document/product/867/44994)与[百度人脸库/搜索](https://cloud.baidu.com/doc/FACE/s/5k37c1ij0)：用于比较 Person/Face 人员库语义、Top N 上限和容量；未选为相册图库主方案。
+
+阿里 IMM 会返回年龄、性别、情绪、吸引力等额外属性。用户已选择未来后端忽略这些字段，但“不写入应用”不等于供应商没有处理；必须在告知和影响评估中如实覆盖。文档所列价格只用于 2026-08-31 数量级估算，不能替代开通前控制台和 PoC 账单。
+
+## 6. 图片与浏览器 OCR
 
 - [选择图片格式](https://web.dev/articles/choose-the-right-image-format)：WebP/AVIF 与传统格式的兼容和用途。
 - [AVIF 的压缩与部署](https://web.dev/articles/avif-updates-2023)：AVIF 可能比 WebP 更小，但编码成本和链路需评估。
@@ -52,7 +72,7 @@
 
 第三方浏览器媒体/OCR 库在进入编码前必须复核维护状态、许可证、包大小和安全记录；PaddleOCR.js 属于较新的浏览器 SDK，必须固定版本/资源哈希并以授权样本验证，文档选型不是跳过依赖审查的授权。
 
-## 6. 技术栈版本
+## 7. 技术栈版本
 
 - [Node.js 发布与 LTS](https://nodejs.org/en/about/previous-releases)：选择 Node.js 24 LTS，不使用 Current 或 EOL 线路。
 - [Next.js 16](https://nextjs.org/blog/next-16)：Next.js 16 的 Node/浏览器要求与自托管能力。
@@ -61,7 +81,7 @@
 
 依赖清单和精确锁定版本只在获得编码授权后创建；实现时固定当前安全小版本，不使用 `latest` 作为生产部署策略。
 
-## 7. UI 基础、性能与无障碍
+## 8. UI 基础、性能与无障碍
 
 - [Next.js Server 与 Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components)：保持服务端主体并缩小客户端边界，避免公共相册加载工作台或媒体处理代码。
 - [Next.js 懒加载](https://nextjs.org/docs/app/guides/lazy-loading)：灯箱与 OCR 等客户端模块按路由/操作加载。
@@ -88,7 +108,7 @@
 
 UI 依赖在进入编码前必须复核维护状态、许可证、React/Next.js 兼容、目标浏览器、按路由 gzip 包体和安全记录。Tailwind 主版本必须在生成 shadcn/ui 组件前固定；文档列出 v4 不代表可以跳过真实微信 WebView 门禁。
 
-## 8. 隐私与数据跨境
+## 9. 隐私与数据跨境
 
 - [中华人民共和国个人信息保护法](https://www.miit.gov.cn/jgsj/zfs/fl/art/2022/art_515a4b20c12f430eab54bb4f56d89f56.html)：个人信息处理、敏感信息、跨境提供和影响评估义务。
 - [促进和规范数据跨境流动规定](https://www.cac.gov.cn/2024-03/22/c_1712776611775634.htm)：数据出境条件、阈值与仍需履行的告知/同意义务。

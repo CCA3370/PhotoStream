@@ -1,7 +1,7 @@
 # 部署前待提供信息
 
-状态：待用户/学校补充外部值
-更新日期：2026-08-26
+状态：待用户/学校补充外部值；人脸找图输入未完成
+更新日期：2026-08-31
 
 本清单只记录标识、责任和准备状态。不得把密码、AccessKey Secret、Cookie 密钥、CDN 鉴权 key、私钥或真实相册口令写入本文件或 Git。
 
@@ -9,6 +9,7 @@
 
 - **编码前必需**：缺失会改变代码契约，开始编码前必须确定。
 - **号码识别阶段前必需**：不阻塞基础照片功能，但没有它不能校准或验收自动 OCR。
+- **人脸找图阶段前必需**：不阻塞现有照片/号码功能，但没有它不能编码、创建 PoC 资源或处理任何人脸样本。
 - **部署前必需**：代码通过环境变量适配，部署前提供即可。
 - **首场活动前必需**：不阻塞本地开发，但没有它不得使用真实学生影像。
 
@@ -33,6 +34,12 @@
 | 号码规则样例 | 号码识别阶段前 | 已确定支持任意位置/区间规则；需提供首场活动实际配置用于评测 | 用户 |
 | 年级/班级选项与映射 | 号码识别阶段前 | 待提供正式名称、排序和位置映射，例如第 1 位到年级、第 2–3 位到班级 | 用户/学校 |
 | 无号码复核口径 | 号码识别阶段前 | 已确定只能人工确认；学校需指定现场由上传者还是审核员优先处理 | 用户/学校 |
+| 人脸处理授权记录 | 人脸找图阶段前 | 用户表示已有逐人可追溯授权；需学校确认记录责任人、覆盖活动/用途/供应商/期限及未满十四周岁监护人同意 | 学校 |
+| 人脸个人信息保护影响评估 | 人脸找图阶段前 | 待形成并批准；需覆盖 IMM 额外属性、杭州处理、EventBridge 到香港、误关联、删除和供应商变化 | 学校/专业人员 |
+| 人脸单独告知正文/版本 | 人脸找图阶段前 | 待学校审核；每次参考照提交前展示，版本需可追溯 | 学校 |
+| 人脸投诉/撤回操作人 | 人脸找图阶段前 | 沿用公开投诉联系人；需指定有权执行媒体退出索引或整册 Dataset 删除的管理员 | 学校 |
+| 人脸评测照片与真值 | 人脸找图阶段前 | 待另行授权；Git 外至少 50 名人物及零脸/多脸/低质量/非相册负样本，不得复用未获人脸处理授权的号码样本 | 用户/学校 |
+| 人脸阈值验收责任人 | 人脸找图阶段前 | 待指定；高精度优先，阈值变化需重新评测 | 用户/学校 |
 
 ## 3. 主站域名与 TLS
 
@@ -59,7 +66,8 @@
 | Swap | 部署前 | 待检查；2GB 主机建议配置受控 swap 作为 OOM 兜底 |
 | 时间同步/时区 | 部署前 | NTP 正常；系统 UTC，业务展示 Asia/Shanghai |
 | 主机快照/备份 | 部署前 | 待确认云厂商基础能力；数据库另有 OSS 加密逻辑备份 |
-| 出站访问 | 部署前 | 需能访问杭州 OSS、阿里云控制 API、证书服务和容器镜像源 |
+| 出站访问 | 部署前 | 需能访问杭州 OSS、阿里云控制 API、证书服务和容器镜像源；未来人脸阶段还需访问杭州 IMM 与 EventBridge 官方证书地址 |
+| EventBridge 入站 | 人脸找图阶段前 | 现有 `APP_ORIGIN` 的 HTTPS API 可被 EventBridge 访问；不使用境内无备案 4C4G IP 作为浏览器/API 入口 |
 
 ## 5. 阿里云 OSS
 
@@ -68,6 +76,7 @@
 | 阿里云账号 UID | 部署前 | 待提供标识，不提供主账号密码 |
 | 媒体 Bucket 名 | 部署前 | 待创建/提供；必须杭州、标准、私有 |
 | 备份 Bucket 名 | 部署前 | 待创建/提供；必须杭州、标准、私有且不绑定 CDN |
+| 人脸参考照 Bucket 名 | 人脸找图阶段前 | 待另行批准创建；必须杭州、标准、私有、不绑定 CDN、全对象 1 天生命周期 |
 | Bucket 所属账号 | 部署前 | 应与 CDN 同账号；待确认 |
 | CORS 主站 Origin | 部署前 | 由最终 `APP_ORIGIN` 派生 |
 | OCR 模型静态前缀 | 部署前 | 固定为 `/assets/models/bib-ocr/{modelVersion}/`，需验证长缓存和 CORS |
@@ -76,6 +85,12 @@
 | 应用 RAM AccessKey ID | 部署前 | 只通过秘密存储提供，不写文档 |
 | 应用 RAM Policy | 部署前 | 按 `08-aliyun-cdn-oss.md` 最小权限创建并审查 |
 | OSS 资源包/计费方式 | 部署前 | 待用户在控制台确认，不由代码购买 |
+| IMM Project 名称 | 人脸找图阶段前 | 待提供不可含校名的随机部署标识；华东 1（杭州） |
+| IMM Dataset 配额/删除 | 人脸找图阶段前 | 待控制台/API 复核每相册 Dataset、FaceManagement、30 天删除和读回能力 |
+| IMM 数据处理说明 | 人脸找图阶段前 | 待学校确认供应商地域、保存/训练复用、额外属性与删除承诺 |
+| EventBridge 规则/目标 | 人脸找图阶段前 | 待批准；杭州云服务专用总线、精确 IMM 事件、`${APP_ORIGIN}` HTTPS 目标 |
+| 人脸 RAM Policy | 人脸找图阶段前 | 待按临时 OSS、媒体索引只读、IMM 运行和 EventBridge 配置职责拆分审查 |
+| 人脸费用提醒接收人 | 人脸找图阶段前 | 待提供；需在 PoC 后和首场活动后核对 IMM/OSS/EventBridge 账单 |
 
 ## 6. CDN 与 `cdn.cloverta.top`
 
@@ -110,6 +125,7 @@
 - `APP_ORIGIN`
 - `MEDIA_BASE_URL`
 - `PHOTO_UPLOAD_BASE_URL`（精确 OSS 上传 origin，不含对象路径或签名）
+- `FACE_REFERENCE_UPLOAD_BASE_URL`（未来参考照精确 OSS 上传 origin）
 - `DATABASE_URL`
 - `SESSION_SECRET_CURRENT`
 - `SESSION_SECRET_PREVIOUS`
@@ -118,8 +134,17 @@
 - `ALIYUN_OSS_REGION`
 - `ALIYUN_OSS_MEDIA_BUCKET`
 - `ALIYUN_OSS_BACKUP_BUCKET`
+- `ALIYUN_OSS_FACE_REFERENCE_BUCKET`
 - `ALIYUN_ACCESS_KEY_ID`
 - `ALIYUN_ACCESS_KEY_SECRET`
+- `ALIYUN_FACE_ACCESS_KEY_ID`
+- `ALIYUN_FACE_ACCESS_KEY_SECRET`
+- `ALIYUN_ACCOUNT_ID`
+- `ALIYUN_IMM_REGION`
+- `ALIYUN_IMM_PROJECT_NAME`
+- `FACE_SEARCH_GLOBAL_ENABLED`
+- `FACE_SEARCH_CONSENT_VERSION`
+- `FACE_SEARCH_THRESHOLD_VERSION`
 - `ALIYUN_CDN_AUTH_KEY_CURRENT`
 - `ALIYUN_CDN_AUTH_KEY_PREVIOUS`
 - `BACKUP_ENCRYPTION_PUBLIC_KEY_FILE`
@@ -144,3 +169,11 @@
 - 允许产生的最大小流量联调范围；
 - 回滚到哪个 CDN/源站配置；
 - 何时检查账单和由谁确认。
+
+未来人脸阶段还必须明确：
+
+- 获准创建/删除的临时 OSS、IMM Project/Dataset、EventBridge 规则和 RAM 身份精确清单；
+- 授权样本目录、处理起止时间、学校批准人和清理验收人；
+- 固定阈值/供应商版本、最大 PoC 人物/照片/查询数和预计费用；
+- 失败时关闭相册开关、删除临时对象/Dataset/EventBridge 规则并读回确认的顺序；
+- 香港接收人脸任务/结果的跨境评估结论和生产扩大使用的再次批准。
