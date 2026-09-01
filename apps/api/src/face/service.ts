@@ -9,7 +9,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, count, eq, gt, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { AppConfig } from "../config.js";
@@ -19,7 +19,7 @@ import type { FaceProvider } from "./provider.js";
 import type { FaceReferenceStorage } from "./reference-storage.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-const _terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
+const terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
 const readinessKeys = [
   "participantConsentRecordsConfirmed",
   "guardianConsentRequirementsConfirmed",
@@ -322,6 +322,16 @@ export class FaceService {
   async retry(actor: InternalActor, albumId: string): Promise<FaceConfigView> {
     requirePermission(actor, "album:configure");
     const now = new Date();
+    await this.#database
+      .update(schema.faceAlbumJobs)
+      .set({ providerTaskId: null, updatedAt: now })
+      .where(
+        and(
+          eq(schema.faceAlbumJobs.albumId, albumId),
+          eq(schema.faceAlbumJobs.kind, "cluster"),
+          eq(schema.faceAlbumJobs.status, "failed"),
+        ),
+      );
     await Promise.all([
       this.#database
         .update(schema.faceAlbumJobs)
@@ -1031,6 +1041,15 @@ export class FaceService {
           updatedAt: new Date(),
         })
         .where(eq(schema.faceSearchIntents.id, intent.id));
+      if (
+        intent.consentReceiptId !== null &&
+        !terminalStatuses.includes(intent.status as (typeof terminalStatuses)[number])
+      ) {
+        await transaction
+          .update(schema.faceConsentReceipts)
+          .set({ resultCategory: "expired", updatedAt: new Date() })
+          .where(eq(schema.faceConsentReceipts.id, intent.consentReceiptId));
+      }
     });
     await this.#deleteReference(intent);
     return { ...safeState(intent), status: "expired", failureCode: "expired" };
@@ -1108,9 +1127,14 @@ export class FaceService {
       .where(
         and(
           eq(schema.faceSearchIntents.albumId, albumId),
+          inArray(schema.faceSearchIntents.status, ["awaiting_upload", "processing", "partial"]),
           sql`${schema.faceSearchIntents.consentReceiptId} is not null`,
         ),
       );
+    await transaction
+      .update(schema.faceConsentReceipts)
+      .set({ resultCategory: "cancelled", updatedAt: new Date() })
+      .where(inArray(schema.faceConsentReceipts.id, receiptIds));
     await transaction
       .update(schema.faceSearchIntents)
       .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
@@ -1123,10 +1147,6 @@ export class FaceService {
     await transaction
       .delete(schema.faceSearchCandidates)
       .where(inArray(schema.faceSearchCandidates.searchIntentId, intentIds));
-    await transaction
-      .update(schema.faceConsentReceipts)
-      .set({ resultCategory: "cancelled", updatedAt: new Date() })
-      .where(inArray(schema.faceConsentReceipts.id, receiptIds));
   }
 
   async #cleanupAlbumReferences(albumId: string) {
@@ -1291,6 +1311,7 @@ export class FaceService {
             "FigureClustering",
           );
           if (taskStatus === "running") {
+            if (job.attempts + 1 >= 40) throw new Error("clustering_confirmation_timeout");
             await this.#database
               .update(schema.faceAlbumJobs)
               .set({ nextAttemptAt: new Date(Date.now() + 15_000), updatedAt: new Date() })
@@ -1418,12 +1439,7 @@ export class FaceService {
       .where(
         and(
           or(
-            inArray(schema.mediaFaceIndexTasks.status, [
-              "pending",
-              "indexing",
-              "deleting",
-              "failed",
-            ]),
+            inArray(schema.mediaFaceIndexTasks.status, ["pending", "indexing", "deleting"]),
             and(
               eq(schema.mediaFaceIndexTasks.status, "excluded"),
               isNull(schema.mediaFaceIndexTasks.deletionConfirmedAt),
@@ -1438,8 +1454,9 @@ export class FaceService {
       const uri = `oss://${this.#config.ALIYUN_OSS_MEDIA_BUCKET}/${row.objectKey}`;
       const deletionTask =
         !row.indexEnabled || row.task.status === "deleting" || row.task.status === "excluded";
+      let indexedNow = false;
       try {
-        if (!deletionTask && (row.task.status === "pending" || row.task.status === "failed")) {
+        if (!deletionTask && row.task.status === "pending") {
           const providerTaskId = await this.#provider.indexMedia({
             datasetName: row.datasetName,
             mediaId: row.task.mediaId,
@@ -1456,16 +1473,40 @@ export class FaceService {
             })
             .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
         } else if (!deletionTask && row.task.status === "indexing") {
-          if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId))
+          if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId)) {
+            indexedNow = true;
             await this.#database
               .update(schema.mediaFaceIndexTasks)
-              .set({ status: "indexed", lastErrorCode: null, updatedAt: new Date() })
+              .set({
+                status: "indexed",
+                attempts: row.task.attempts + 1,
+                lastErrorCode: null,
+                updatedAt: new Date(),
+              })
               .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
-          else
+          } else {
+            const attempts = row.task.attempts + 1;
             await this.#database
               .update(schema.mediaFaceIndexTasks)
-              .set({ nextAttemptAt: new Date(Date.now() + 15_000), updatedAt: new Date() })
+              .set({
+                status: attempts >= 20 ? "failed" : "indexing",
+                attempts,
+                nextAttemptAt: new Date(Date.now() + 15_000),
+                lastErrorCode: attempts >= 20 ? "index_confirmation_timeout" : null,
+                updatedAt: new Date(),
+              })
               .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
+            if (attempts >= 20) {
+              await this.#database
+                .update(schema.albumFaceIndexes)
+                .set({
+                  indexState: "degraded",
+                  lastErrorCode: "index_confirmation_timeout",
+                  updatedAt: new Date(),
+                })
+                .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
+            }
+          }
         } else {
           await this.#provider.deleteMedia(row.datasetName, [uri]);
           if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId))
@@ -1480,10 +1521,12 @@ export class FaceService {
               .delete(schema.mediaFaceIndexTasks)
               .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
         }
-        await this.#database
-          .update(schema.albumFaceIndexes)
-          .set({ lastIndexedAt: new Date(), updatedAt: new Date() })
-          .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
+        if (indexedNow) {
+          await this.#database
+            .update(schema.albumFaceIndexes)
+            .set({ lastIndexedAt: new Date(), updatedAt: new Date() })
+            .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
+        }
       } catch {
         const attempts = row.task.attempts + 1;
         await this.#database
@@ -1537,6 +1580,8 @@ export class FaceService {
         );
       if (
         (pending?.value ?? 0) > 0 ||
+        index.lastIndexedAt === null ||
+        (index.lastClusteredAt !== null && index.lastIndexedAt <= index.lastClusteredAt) ||
         (index.lastIndexedAt !== null && Date.now() - index.lastIndexedAt.getTime() < 10_000) ||
         (index.lastClusteredAt !== null &&
           Date.now() - index.lastClusteredAt.getTime() < 5 * 60_000)
@@ -1550,6 +1595,7 @@ export class FaceService {
   }
 
   async #cleanupExpiredSearches() {
+    const now = new Date();
     const intents = await this.#database
       .select()
       .from(schema.faceSearchIntents)
@@ -1557,26 +1603,38 @@ export class FaceService {
         or(
           and(
             ne(schema.faceSearchIntents.status, "expired"),
-            lte(schema.faceSearchIntents.resultExpiresAt, new Date()),
+            lte(schema.faceSearchIntents.resultExpiresAt, now),
           ),
           and(
             isNull(schema.faceSearchIntents.referenceDeletedAt),
             or(
-              lte(schema.faceSearchIntents.referenceExpiresAt, new Date()),
-              lte(schema.faceSearchIntents.cleanupNextAttemptAt, new Date()),
+              lte(schema.faceSearchIntents.referenceExpiresAt, now),
+              lte(schema.faceSearchIntents.cleanupNextAttemptAt, now),
             ),
           ),
         ),
       )
       .limit(100);
     for (const intent of intents) {
-      if (intent.resultExpiresAt <= new Date() && intent.status !== "expired")
+      if (intent.resultExpiresAt <= now && intent.status !== "expired")
         await this.#expireIntent(intent);
       else await this.#deleteReference(intent);
     }
     await this.#database
       .delete(schema.faceSearchCandidates)
-      .where(lte(schema.faceSearchCandidates.expiresAt, new Date()));
+      .where(lte(schema.faceSearchCandidates.expiresAt, now));
+    const historyCutoff = new Date(now.getTime() - 26 * 60 * 60_000);
+    await this.#database
+      .delete(schema.faceSearchIntents)
+      .where(
+        and(
+          lt(schema.faceSearchIntents.createdAt, historyCutoff),
+          sql`${schema.faceSearchIntents.referenceDeletedAt} is not null`,
+        ),
+      );
+    await this.#database
+      .delete(schema.faceIntegrationEvents)
+      .where(lt(schema.faceIntegrationEvents.processedAt, historyCutoff));
   }
 
   #notFound() {

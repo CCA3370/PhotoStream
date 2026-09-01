@@ -1888,9 +1888,14 @@ export class PhotoService {
       .where(
         and(
           eq(schema.faceSearchIntents.albumId, albumId),
+          inArray(schema.faceSearchIntents.status, ["awaiting_upload", "processing", "partial"]),
           isNotNull(schema.faceSearchIntents.consentReceiptId),
         ),
       );
+    await transaction
+      .update(schema.faceConsentReceipts)
+      .set({ resultCategory: "cancelled", updatedAt: now })
+      .where(inArray(schema.faceConsentReceipts.id, receiptIds));
     await transaction
       .update(schema.faceSearchIntents)
       .set({ status: "cancelled", completedAt: now, updatedAt: now })
@@ -1903,10 +1908,6 @@ export class PhotoService {
     await transaction
       .delete(schema.faceSearchCandidates)
       .where(inArray(schema.faceSearchCandidates.searchIntentId, intentIds));
-    await transaction
-      .update(schema.faceConsentReceipts)
-      .set({ resultCategory: "cancelled", updatedAt: now })
-      .where(inArray(schema.faceConsentReceipts.id, receiptIds));
   }
 
   async #albumById(executor: DbExecutor, albumId: string) {
