@@ -79,6 +79,7 @@
 - [Fastify LTS](https://fastify.dev/docs/v5.7.x/Reference/LTS/)：Fastify 5 支持策略。
 - [PostgreSQL 版本支持](https://www.postgresql.org/support/versioning/)：选择当前受支持的 PostgreSQL 18 小版本。
 - [Docker Engine 安装到 Debian](https://docs.docker.com/engine/install/debian/)：Debian 13 Trixie 官方 apt 仓库、冲突包和 Compose 插件安装依据。
+- [Debian 13 `util-linux` 文件清单](https://packages.debian.org/trixie/amd64/util-linux/filelist)：确认 `/usr/bin/flock` 由 `util-linux` 提供，供部署并发锁自动补齐依赖。
 - [Node 官方容器镜像](https://hub.docker.com/_/node)：生产构建/运行固定 Node.js 24 Trixie slim 标签，不使用浮动 `latest`。
 - [PostgreSQL 官方容器镜像](https://hub.docker.com/_/postgres)：固定 PostgreSQL 18.6 Trixie，并按 PostgreSQL 18 的 `/var/lib/postgresql` 卷布局持久化。
 - [Caddy 官方容器镜像](https://hub.docker.com/_/caddy)：固定 Caddy 2.11.4 Alpine，持久化 `/data` 中的证书和私钥。

@@ -10,7 +10,7 @@
 
 2026-09-01 已按 ADR-012 完成人脸候选找图的本地代码实现：口令相册可在学校完成授权门禁后使用杭州阿里云 IMM 和 EventBridge，让观众提交一张参考照筛选可能包含同一人物的已发布照片。全局开关默认关闭；没有开通云资源或处理人脸样本，云端、真实数据库、准确率、设备与生产运行证据保持 **Unverified**。
 
-同日已完成 Debian 13 生产部署代码：生产 API 使用杭州私有 OSS/内地 CDN，部署脚本交互收集并以 root-only 权限记忆配置，使用 Caddy + Docker Compose 蓝绿双槽更新到配置分支最新提交。目标 2C2G 主机、真实 Docker/Caddy、DNS/ACME 和阿里云链路尚未实际执行，仍保持 **Unverified**。
+同日已完成 Debian 13 生产部署代码；2026-09-02 又补全任意目录启动和自动克隆到 `/opt/photostream` 的部署入口。脚本交互收集并以 root-only 权限记忆配置；生产 API 使用杭州私有 OSS/内地 CDN，并通过 Caddy + Docker Compose 蓝绿双槽更新到配置分支最新提交。目标 2C2G 主机、真实 Docker/Caddy、DNS/ACME 和阿里云链路尚未实际执行，仍保持 **Unverified**。
 
 ## 本地开发
 

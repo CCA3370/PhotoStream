@@ -4,14 +4,14 @@
 
 适用版本：PhotoStream `main` 分支，Debian 13，Docker Compose 蓝绿部署
 
-最后更新：2026-09-01
+最后更新：2026-09-02
 
 ## 1. 文档目标与边界
 
 本手册供未参与开发的运维人员完成以下工作：
 
 1. 准备香港 Debian 13 服务器和杭州阿里云媒体数据面；
-2. 首次运行 `deploy/deploy.sh install`，通过交互输入全部外部配置；
+2. 从任意目录运行单个部署脚本，由脚本自动克隆仓库并通过交互输入全部外部配置；
 3. 验证 PostgreSQL、Fastify、Next.js、Caddy、HTTPS、OSS 直传和 CDN 读取；
 4. 后续在不停止当前服务的情况下更新到配置分支最新提交；
 5. 执行配置变更、应用回滚、日常巡检和常见故障排查。
@@ -119,7 +119,7 @@ dig +short A photos.example.edu
 dig +short AAAA photos.example.edu
 ```
 
-如果 DNS 尚未传播，脚本可以完成容器启动，但最后的公网 HTTPS 冒烟会失败。DNS 修复后重新运行 `sudo bash deploy/deploy.sh update` 即可自愈，不需要重新输入配置。
+如果 DNS 尚未传播，脚本可以完成容器启动，但最后的公网 HTTPS 冒烟会失败。DNS 修复后重新运行 `sudo bash /opt/photostream/deploy/deploy.sh update` 即可自愈，不需要重新输入配置。
 
 ### 3.4 杭州 OSS 媒体 Bucket
 
@@ -182,35 +182,34 @@ CDN CNAME、备案和 HTTPS 证书必须在首次应用冒烟前完成。不要�
 
 ### 3.7 Git 仓库访问
 
-服务器需要能读取部署分支的 remote。推荐固定目录：
+服务器需要能以 root 身份读取部署分支。首次运行前，只需通过受控渠道把仓库中的 `deploy/deploy.sh` 单独复制到服务器任意位置，例如 `/tmp/photostream-deploy.sh`；不需要人工创建或克隆 `/opt/photostream`。
+
+私有仓库需提前为 root 执行身份配置只读 deploy key、`known_hosts` 或受控凭证助手，并验证：
 
 ```bash
-sudo install -d -m 0755 /opt/photostream
-sudo chown "$USER":"$USER" /opt/photostream
-git clone <仓库地址> /opt/photostream
-cd /opt/photostream
-git remote -v
-git branch --show-current
-git status --short
-sudo git -C /opt/photostream fetch --dry-run origin main
+sudo -H git ls-remote <仓库地址> refs/heads/main
 ```
 
-将最后一条命令的 remote/分支替换为实际值。首次运行前 `git status --short` 必须没有输出，且 `sudo git ... fetch --dry-run` 必须成功，因为部署脚本以 root 执行后续 fetch。部署脚本拒绝任何已跟踪或未跟踪改动，以防本地文件进入镜像或更新时被覆盖。私有仓库需为 root 执行身份提前配置只读 deploy key、`known_hosts` 或受控凭证助手；不要把 token 写入 remote URL、脚本或环境文件。
+将分支替换为实际值，预期输出对应提交。不要把 token 写入仓库 URL、脚本或 shell history。
+
+脚本固定使用 `/opt/photostream` 作为受管仓库目录：目录不存在或为空时自动克隆；已经是完整 PhotoStream Git 仓库时安全复用；非空但不是完整仓库时立即停止，绝不会删除或覆盖其中内容。脚本启动位置和当前工作目录都不会改变该行为。
 
 ## 4. 首次部署
 
 ### 4.1 启动命令
 
-在仓库根目录执行：
+在任意目录执行已复制的脚本，例如：
 
 ```bash
-cd /opt/photostream
-sudo bash deploy/deploy.sh install
+cd /tmp
+sudo bash /tmp/photostream-deploy.sh install
 ```
 
-脚本先验证 Debian 13/架构/CPU/内存/磁盘，然后安装基础工具和 Docker 官方 Debian 13 软件源。如果发现 `docker.io`、`docker-compose`、`podman-docker`、`containerd` 或 `runc` 等冲突包，会显示精确列表并要求确认后才替换。已有可用的 `docker compose` 时不会重复安装。
+脚本先验证 Debian 13/架构/CPU/内存；缺少 Git 时自动安装，然后获取仓库地址和分支，将仓库克隆到 `/opt/photostream`，并用受管仓库内的部署脚本继续执行。随后验证部署文件和磁盘、安装或复用 Docker 官方 Debian 13 软件源。调用者当前目录不会被用作构建上下文，也不会产生部署文件。
 
-首次安装一旦保存了 `/etc/photostream/settings.sh`，再次执行 `install` 会主动拒绝。若后续构建、迁移、DNS/证书或公网冒烟失败，先按错误修复原因，再执行 `sudo bash deploy/deploy.sh update` 续跑；需要修改已保存的输入时执行 `configure`。
+如果启动脚本本身位于一个带 remote 的 PhotoStream checkout 中，仓库地址和当前分支会自动继承；单独复制的脚本则会先询问仓库地址和首次克隆分支。完成克隆后，这些值会写入 root-only 记忆配置。发现 `docker.io`、`docker-compose`、`podman-docker`、`containerd` 或 `runc` 等冲突包时，脚本会显示精确列表并要求确认后才替换。已有可用的 `docker compose` 时不会重复安装。
+
+首次安装一旦保存了 `/etc/photostream/settings.sh`，再次执行 `install` 会主动拒绝。若后续构建、迁移、DNS/证书或公网冒烟失败，先按错误修复原因，再执行 `sudo bash /opt/photostream/deploy/deploy.sh update` 续跑；需要修改已保存的输入时执行 `configure`。
 
 ### 4.2 交互输入说明
 
@@ -230,6 +229,7 @@ sudo bash deploy/deploy.sh install
 | 是否启用人脸候选找图 | 没有全部门禁时选择 `n`；这是推荐和默认选项 |
 | 首位管理员用户名 | 3–40 位，ASCII 字母/数字开头，可含 `.`、`_`、`-` |
 | 首位管理员展示名 | 1–80 字符，可使用中文 |
+| Git 仓库地址 | HTTPS、SSH 或 `git@host:path`；不能含空白，不要嵌入 token |
 | Git remote | 通常为 `origin` |
 | Git 分支 | 通常为 `main`，必须与当前检出分支一致 |
 | 是否创建 swap | 2 GiB 主机建议选择 `y` |
@@ -253,15 +253,16 @@ sudo bash deploy/deploy.sh install
 
 首次部署会按以下顺序执行：
 
-1. 保存交互配置到 root-only 文件；
-2. 没有 swap 且用户同意时创建精确 2 GiB `/swapfile` 并写入 `/etc/fstab`；
-3. `git fetch` 并 `merge --ff-only` 到配置分支最新提交；
-4. 串行构建 API 和 Web 镜像；
-5. 启动 PostgreSQL 并等待健康；
-6. 使用目标 API 镜像执行 Drizzle 数据库迁移；
-7. 启动首个蓝槽并等待 API ready 和 Web 健康；
-8. 启动 Caddy、申请证书并执行公网 HTTPS ready 冒烟；
-9. 创建首位管理员并只显示一次临时密码。
+1. 必要时安装 Git、克隆到 `/opt/photostream`，并切换到受管脚本；
+2. 保存交互配置到 root-only 文件；
+3. 没有 swap 且用户同意时创建精确 2 GiB `/swapfile` 并写入 `/etc/fstab`；
+4. `git fetch` 并 `merge --ff-only` 到配置分支最新提交；
+5. 串行构建 API 和 Web 镜像；
+6. 启动 PostgreSQL 并等待健康；
+7. 使用目标 API 镜像执行 Drizzle 数据库迁移；
+8. 启动首个蓝槽并等待 API ready 和 Web 健康；
+9. 启动 Caddy、申请证书并执行公网 HTTPS ready 冒烟；
+10. 创建首位管理员并只显示一次临时密码。
 
 构建和证书签发可能持续数分钟。不要在另一个 SSH 会话重复启动部署脚本；脚本使用 `/run/lock/photostream-deploy.lock` 防止并发部署。
 
@@ -280,7 +281,7 @@ The account must change this password at first login.
 如果应用已经上线但管理员创建步骤失败，修复错误后直接运行：
 
 ```bash
-sudo bash deploy/deploy.sh update
+sudo bash /opt/photostream/deploy/deploy.sh update
 ```
 
 同一提交会检查并自愈活动槽，然后补做未完成的管理员初始化，不会重新询问部署配置。
@@ -289,7 +290,7 @@ sudo bash deploy/deploy.sh update
 
 | 路径 | 内容 | 权限/说明 |
 | --- | --- | --- |
-| `/etc/photostream/settings.sh` | 用户输入和自动生成秘密的权威副本 | `root:root 0600`；Bash 转义格式 |
+| `/etc/photostream/settings.sh` | 用户输入、Git 仓库地址和自动生成秘密的权威副本 | `root:root 0600`；Bash 转义格式 |
 | `/etc/photostream/api.env` | API 所需数据库、RAM、CDN、号码/人脸配置 | `root:root 0600` |
 | `/etc/photostream/web.env` | Web 所需公开 origin | `root:root 0600`；不包含数据库/RAM 密钥 |
 | `/etc/photostream/caddy.env` | 主站域名和 ACME 邮箱 | `root:root 0600`；不包含应用秘密 |
@@ -301,7 +302,7 @@ sudo bash deploy/deploy.sh update
 运维人员平时不应直接编辑以上文件。外部值变更使用：
 
 ```bash
-sudo bash deploy/deploy.sh configure
+sudo bash /opt/photostream/deploy/deploy.sh configure
 ```
 
 输入界面会显示已有非秘密默认值；秘密项回车保留，备用 CDN Key 输入 `-` 才会清空。配置完成后会用同一提交创建新的带时间戳镜像标签，经蓝绿流程发布。
@@ -315,8 +316,7 @@ sudo bash deploy/deploy.sh configure
 ### 6.1 脚本状态与容器
 
 ```bash
-cd /opt/photostream
-sudo bash deploy/deploy.sh status
+sudo bash /opt/photostream/deploy/deploy.sh status
 sudo docker compose \
   --env-file /etc/photostream/compose.env \
   -f compose.production.yml \
@@ -327,7 +327,7 @@ sudo docker compose \
 
 - `postgres`、一个 API 槽和一个 Web 槽为 Up/healthy，`caddy` 为 Up；
 - 非活动槽为停止或不存在；
-- `status` 显示的活动提交等于 `git rev-parse --short=12 HEAD`，配置重发时可带时间戳后缀；
+- `status` 显示的活动提交等于 `git -C /opt/photostream rev-parse --short=12 HEAD`，配置重发时可带时间戳后缀；
 - 没有容器持续重启。
 
 ### 6.2 端口与网络边界
@@ -377,7 +377,7 @@ sudo docker compose \
   --profile blue --profile green logs --since 15m --tail 200 postgres caddy
 ```
 
-应用槽日志可先从 `sudo bash deploy/deploy.sh status` 确认活动槽，再把 `api-blue web-blue` 或 `api-green web-green` 加入命令。日志不得出现 Cookie、密码、RAM/CDN Key、号码明文、完整签名 URL 或原始 IP。
+应用槽日志可先从 `sudo bash /opt/photostream/deploy/deploy.sh status` 确认活动槽，再把 `api-blue web-blue` 或 `api-green web-green` 加入命令。日志不得出现 Cookie、密码、RAM/CDN Key、号码明文、完整签名 URL 或原始 IP。
 
 ### 6.5 数据库
 
@@ -415,7 +415,7 @@ sudo docker compose \
 
 选择低风险时段并确认：
 
-- `git status --short` 无输出；
+- `git -C /opt/photostream status --short` 无输出；
 - 最近一次加密数据库备份成功且可追溯；
 - 当前 `status`、ready、磁盘、内存正常；
 - 目标提交已经通过评审和仓库检查；
@@ -427,14 +427,13 @@ sudo docker compose \
 ### 7.2 执行更新
 
 ```bash
-cd /opt/photostream
-sudo bash deploy/deploy.sh
+sudo bash /opt/photostream/deploy/deploy.sh
 ```
 
 无参数等价于：
 
 ```bash
-sudo bash deploy/deploy.sh update
+sudo bash /opt/photostream/deploy/deploy.sh update
 ```
 
 脚本执行 `git fetch` 和 `merge --ff-only`，不会 `reset --hard` 或覆盖本地改动。更新过程：
@@ -454,9 +453,9 @@ sudo bash deploy/deploy.sh update
 重复第 6.1–6.4 节，另外确认：
 
 ```bash
-git rev-parse HEAD
-git rev-parse origin/main
-sudo bash deploy/deploy.sh status
+git -C /opt/photostream rev-parse HEAD
+git -C /opt/photostream rev-parse origin/main
+sudo bash /opt/photostream/deploy/deploy.sh status
 ```
 
 remote/分支不是 `origin/main` 时按实际配置比较。保留更新开始/结束时间、旧/新提交、活动槽、迁移结果、ready 结果和资源峰值，不记录秘密。
@@ -466,8 +465,7 @@ remote/分支不是 `origin/main` 时按实际配置比较。保留更新开始/
 ### 8.1 可回滚范围
 
 ```bash
-cd /opt/photostream
-sudo bash deploy/deploy.sh rollback
+sudo bash /opt/photostream/deploy/deploy.sh rollback
 ```
 
 回滚会启动另一个槽、等待内部健康、切换 Caddy、执行公网冒烟，再停止原槽。公网冒烟失败时会二次恢复原活动槽并停止失败目标。
@@ -496,7 +494,7 @@ sudo bash deploy/deploy.sh rollback
 
 ### 每日
 
-- `sudo bash deploy/deploy.sh status`；
+- `sudo bash /opt/photostream/deploy/deploy.sh status`；
 - 主站 live/ready 和 HTTPS 证书；
 - 容器重启次数、错误日志、磁盘、内存、swap；
 - PostgreSQL 加密备份结果、文件大小、SHA-256 和异地/备份 Bucket 上传结果；
@@ -526,8 +524,9 @@ sudo bash deploy/deploy.sh rollback
 | CPU/内存/磁盘不足 | `nproc`、`free -h`、`df -h` | 扩容或释放已批准空间；2 GiB 主机启用 swap |
 | Docker 冲突包 | 脚本列出的包、`dpkg -l` | 确认不会影响其他业务后允许脚本替换；共享主机需先评审 |
 | 80/443 被占用 | `sudo ss -lntup` | 停止或迁移未经计划的反向代理；不要改成暴露 3000/3001 |
-| 工作树不干净 | `git status --short` | 查明文件来源并提交/迁移到仓库外；不要 `reset --hard` |
-| Git 非快进 | `git log --oneline --decorate --graph --all -20` | 人工解决分支历史；脚本不会强推或重置 |
+| `/opt/photostream` 非空且不是仓库 | `sudo find /opt/photostream -mindepth 1 -maxdepth 2 -ls` | 确认内容归属后迁移到其他受控目录；脚本不会覆盖或自动删除 |
+| 工作树不干净 | `git -C /opt/photostream status --short` | 查明文件来源并提交/迁移到仓库外；不要 `reset --hard` |
+| Git 非快进 | `git -C /opt/photostream log --oneline --decorate --graph --all -20` | 人工解决分支历史；脚本不会强推或重置 |
 | 构建 OOM/很慢 | `free -h`、`swapon --show`、`docker stats` | 确认 2 GiB swap、磁盘与出站；不要并行运行第二次构建 |
 | PostgreSQL unhealthy | Compose logs、磁盘、volume | 保留 volume，检查磁盘/权限；不要删除数据库卷 |
 | API unhealthy | API logs、ready、PostgreSQL | 常见原因是配置校验、数据库不可达、号码密钥覆盖或迁移失败；不要打印 env 全量 |
@@ -610,23 +609,23 @@ CDN 有效/篡改/过期/缓存结果：
 
 ```bash
 # 首次安装
-sudo bash deploy/deploy.sh install
+sudo bash /tmp/photostream-deploy.sh install
 
 # 更新到配置分支最新提交；无新提交时自愈
-sudo bash deploy/deploy.sh
-sudo bash deploy/deploy.sh update
+sudo bash /opt/photostream/deploy/deploy.sh
+sudo bash /opt/photostream/deploy/deploy.sh update
 
 # 重新交互配置，回车保留已有值
-sudo bash deploy/deploy.sh configure
+sudo bash /opt/photostream/deploy/deploy.sh configure
 
 # 回到上一个应用槽；不逆向迁移数据库
-sudo bash deploy/deploy.sh rollback
+sudo bash /opt/photostream/deploy/deploy.sh rollback
 
 # 查看活动槽和容器状态
-sudo bash deploy/deploy.sh status
+sudo bash /opt/photostream/deploy/deploy.sh status
 
 # 显示脚本帮助
-bash deploy/deploy.sh --help
+bash /opt/photostream/deploy/deploy.sh --help
 ```
 
 仓库内脚本回归检查：
