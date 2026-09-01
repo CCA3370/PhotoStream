@@ -50,4 +50,26 @@ assert_file_excludes "$CADDY_ENV_FILE" 'exampleAccessSecret'
 assert_file_contains "$CADDY_STATE_DIR/active-public.caddy" 'reverse_proxy api-blue:3001'
 assert_file_contains "$CADDY_STATE_DIR/active-public.caddy" 'reverse_proxy web-blue:3000'
 
+rollback_trace="$TEST_ROOT/rollback.trace"
+if (
+  ACTIVE_SLOT=blue
+  GREEN_REVISION=previous-release
+  load_settings() { :; }
+  load_state() { :; }
+  render_runtime_envs() { :; }
+  compose() { printf 'compose' >>"$rollback_trace"; printf ' <%s>' "$@" >>"$rollback_trace"; printf '\n' >>"$rollback_trace"; }
+  wait_healthy() { :; }
+  reload_caddy_for_slot() { printf 'reload %s:%s\n' "$1" "$2" >>"$rollback_trace"; }
+  public_smoke() { return 1; }
+  save_state() { :; }
+  warn() { :; }
+  die() { exit 97; }
+  rollback_command
+); then
+  fail 'rollback must fail when the target public smoke check fails'
+fi
+assert_file_contains "$rollback_trace" 'reload green:blue'
+assert_file_contains "$rollback_trace" 'reload blue:green'
+assert_file_contains "$rollback_trace" 'compose <--profile> <green> <stop>'
+
 printf 'deploy tests passed\n'

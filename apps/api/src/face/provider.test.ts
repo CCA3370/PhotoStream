@@ -17,10 +17,11 @@ describe("Aliyun face provider allowlist mapping", () => {
       "no_face",
     );
     expect(
-      classifyDetectedFaces(
-        [supplierFaceWithExtraAttributes],
-        { quality: 0.8, sharpness: 0.6, faceEdge: 120 },
-      ),
+      classifyDetectedFaces([supplierFaceWithExtraAttributes], {
+        quality: 0.8,
+        sharpness: 0.6,
+        faceEdge: 120,
+      }),
     ).toBe("ok");
     expect(
       classifyDetectedFaces(

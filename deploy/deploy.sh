@@ -578,7 +578,16 @@ deploy_release() {
     local active_revision
     [[ "$ACTIVE_SLOT" == blue ]] && active_revision=$BLUE_REVISION || active_revision=$GREEN_REVISION
     if [[ "$active_revision" == "$base_revision" || "$active_revision" == "$base_revision"-* ]]; then
-      log "当前已经是最新提交 $base_revision，无需更新。"
+      log "当前已经是最新提交 $base_revision；检查并自愈活动槽。"
+      write_routes "$ACTIVE_SLOT"
+      compose up -d postgres caddy
+      compose --profile "$ACTIVE_SLOT" up -d --no-deps "api-$ACTIVE_SLOT" "web-$ACTIVE_SLOT"
+      wait_healthy postgres 180
+      wait_healthy "api-$ACTIVE_SLOT" 180
+      wait_healthy "web-$ACTIVE_SLOT" 180
+      wait_healthy caddy 60
+      compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+      public_smoke || die "活动槽公网健康检查失败。"
       bootstrap_admin "$ACTIVE_SLOT"
       return
     fi
@@ -607,6 +616,8 @@ deploy_release() {
     compose up -d caddy
     wait_healthy caddy 60
   else
+    compose up -d caddy
+    wait_healthy caddy 60
     reload_caddy_for_slot "$target" "$previous"
   fi
 
@@ -674,12 +685,20 @@ rollback_command() {
   [[ "$target" == blue ]] && target_revision=$BLUE_REVISION || target_revision=$GREEN_REVISION
   [[ -n "$target_revision" ]] || die "上一槽没有部署记录。"
   render_runtime_envs
+  compose up -d postgres caddy
+  wait_healthy postgres 180
+  wait_healthy caddy 60
   compose --profile "$target" up -d --no-deps "api-$target" "web-$target"
   wait_healthy "api-$target" 180
   wait_healthy "web-$target" 180
-  reload_caddy_for_slot "$target" "$ACTIVE_SLOT"
-  public_smoke || die "回滚槽公网健康检查失败。"
   local previous=$ACTIVE_SLOT
+  reload_caddy_for_slot "$target" "$previous"
+  if ! public_smoke; then
+    warn "回滚槽公网冒烟失败，恢复 $previous 槽。"
+    reload_caddy_for_slot "$previous" "$target"
+    compose --profile "$target" stop -t 30 "api-$target" "web-$target" || true
+    die "回滚槽公网健康检查失败，流量已恢复到原活动槽。"
+  fi
   ACTIVE_SLOT=$target
   save_state
   sleep 15
