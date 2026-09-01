@@ -4,11 +4,13 @@ import type {
   AlbumStatistics,
   AlbumView,
   BibConfigView,
+  FaceConfigView,
   UpdateAlbumRequest,
 } from "@photostream/contracts";
 import { KeyRoundIcon } from "lucide-react";
 import { useState } from "react";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
+import { FaceConfigEditor } from "@/components/face/face-config-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,10 +42,12 @@ function formatBytes(bytes: number): string {
 export function AlbumSettings({
   initialAlbum,
   bibConfig,
+  faceConfig,
   statistics,
 }: Readonly<{
   initialAlbum: AlbumView;
   bibConfig: BibConfigView;
+  faceConfig: FaceConfigView;
   statistics: AlbumStatistics;
 }>) {
   const [album, setAlbum] = useState(initialAlbum);
@@ -128,6 +132,7 @@ export function AlbumSettings({
           <TabsTrigger value="downloads">下载</TabsTrigger>
           <TabsTrigger value="privacy">隐私与投诉</TabsTrigger>
           <TabsTrigger value="bib">号码规则</TabsTrigger>
+          <TabsTrigger value="face">人脸找图</TabsTrigger>
           <TabsTrigger value="statistics">统计</TabsTrigger>
         </TabsList>
 
@@ -374,6 +379,9 @@ export function AlbumSettings({
         </TabsContent>
         <TabsContent value="bib">
           <BibConfigEditor initial={bibConfig} />
+        </TabsContent>
+        <TabsContent value="face">
+          <FaceConfigEditor initial={faceConfig} />
         </TabsContent>
       </Tabs>
     </div>

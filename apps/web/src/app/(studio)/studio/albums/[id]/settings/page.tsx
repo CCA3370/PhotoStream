@@ -1,4 +1,9 @@
-import type { AlbumStatistics, AlbumView, BibConfigView } from "@photostream/contracts";
+import type {
+  AlbumStatistics,
+  AlbumView,
+  BibConfigView,
+  FaceConfigView,
+} from "@photostream/contracts";
 
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
 import { AlbumSettings } from "@/components/albums/album-settings";
@@ -8,10 +13,11 @@ import { requireInternalSession } from "@/lib/server-auth";
 export default async function AlbumSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin"]);
   const { id } = await params;
-  const [album, statistics, bibConfig] = await Promise.all([
+  const [album, statistics, bibConfig, faceConfig] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
     serverApi<AlbumStatistics>(`/api/v1/albums/${id}/statistics`),
     serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
+    serverApi<FaceConfigView>(`/api/v1/albums/${id}/face-config`),
   ]);
   return (
     <section aria-labelledby="settings-heading" className="flex flex-col gap-4">
@@ -22,7 +28,12 @@ export default async function AlbumSettingsPage({ params }: { params: Promise<{ 
         </h2>
         <p className="text-muted-foreground">高风险更改会明确说明影响并由 API 重新校验权限。</p>
       </div>
-      <AlbumSettings bibConfig={bibConfig} initialAlbum={album} statistics={statistics} />
+      <AlbumSettings
+        bibConfig={bibConfig}
+        faceConfig={faceConfig}
+        initialAlbum={album}
+        statistics={statistics}
+      />
     </section>
   );
 }

@@ -15,6 +15,7 @@ export function contentSecurityPolicy(options: {
   readonly nonce: string;
   readonly mediaBaseUrl?: string;
   readonly uploadBaseUrl?: string;
+  readonly faceReferenceUploadBaseUrl?: string;
   readonly nodeEnvironment: string;
 }): string {
   if (!/^[A-Za-z0-9+/_=-]{16,256}$/u.test(options.nonce)) {
@@ -26,7 +27,14 @@ export function contentSecurityPolicy(options: {
     options.nodeEnvironment,
     "PHOTO_UPLOAD_BASE_URL",
   );
-  const connectionOrigins = [...new Set([origin, uploadOrigin])].join(" ");
+  const faceReferenceUploadOrigin = mediaOrigin(
+    options.faceReferenceUploadBaseUrl ?? options.uploadBaseUrl ?? options.mediaBaseUrl,
+    options.nodeEnvironment,
+    "FACE_REFERENCE_UPLOAD_BASE_URL",
+  );
+  const connectionOrigins = [...new Set([origin, uploadOrigin, faceReferenceUploadOrigin])].join(
+    " ",
+  );
   const development = options.nodeEnvironment === "development";
   const directives = [
     "default-src 'self'",

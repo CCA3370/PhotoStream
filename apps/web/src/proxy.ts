@@ -13,6 +13,9 @@ export function proxy(request: NextRequest): NextResponse {
     ...(process.env.PHOTO_UPLOAD_BASE_URL === undefined
       ? {}
       : { uploadBaseUrl: process.env.PHOTO_UPLOAD_BASE_URL }),
+    ...(process.env.FACE_REFERENCE_UPLOAD_BASE_URL === undefined
+      ? {}
+      : { faceReferenceUploadBaseUrl: process.env.FACE_REFERENCE_UPLOAD_BASE_URL }),
     nodeEnvironment: process.env.NODE_ENV ?? "production",
   });
   const requestHeaders = new Headers(request.headers);

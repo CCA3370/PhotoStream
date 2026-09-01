@@ -1,8 +1,9 @@
-import type { PublicMediaView } from "@photostream/contracts";
+import type { PublicAlbumView, PublicMediaView } from "@photostream/contracts";
 import Link from "next/link";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
+import { FaceSearchLauncher } from "@/components/gallery/face-search-launcher";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
@@ -10,30 +11,6 @@ import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { buttonVariants } from "@/components/ui/button";
 import { serverApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-interface PublicAlbum {
-  readonly slug: string;
-  readonly title: string;
-  readonly description: string;
-  readonly state: "live" | "ended" | "archived";
-  readonly accessRequired: boolean;
-  readonly privacyNotice: string;
-  readonly complaintContact: string;
-  readonly bibSearchEnabled: boolean;
-  readonly bibNumberLengths: readonly number[];
-  readonly bibAttributeFilterEnabled: boolean;
-  readonly bibAttributeOptions: readonly {
-    readonly id: string;
-    readonly dimension: "grade" | "class";
-    readonly displayName: string;
-    readonly sortOrder: number;
-  }[];
-  readonly bibAttributePairs: readonly {
-    readonly gradeOptionId: string;
-    readonly classOptionId: string | null;
-  }[];
-  readonly categories: readonly { readonly id: string; readonly name: string }[];
-}
 
 interface MediaList {
   readonly items: readonly PublicMediaView[];
@@ -50,7 +27,7 @@ export default async function GalleryPage({
 }) {
   const { slug } = await params;
   const requestedCategory = (await searchParams).category;
-  const album = await serverApi<PublicAlbum>(`/api/v1/public/albums/${slug}`);
+  const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
   if (album.accessRequired) {
     return (
       <PublicGalleryShell
@@ -110,6 +87,19 @@ export default async function GalleryPage({
         <h2 className="sr-only" id="gallery-heading">
           活动影像
         </h2>
+        {album.faceSearchAvailable && album.faceSearchNoticeVersion !== null ? (
+          <div className="flex flex-col items-start gap-1 rounded-xl border bg-card p-4">
+            <FaceSearchLauncher
+              complaintContact={album.complaintContact}
+              noticeVersion={album.faceSearchNoticeVersion}
+              privacyNotice={album.privacyNotice}
+              slug={slug}
+            />
+            <p className="text-sm text-muted-foreground">
+              最近发布的照片可能仍在建立找图索引；候选结果不用于身份核验。
+            </p>
+          </div>
+        ) : null}
         {album.bibSearchEnabled ? (
           <BibSearchPanel
             attributeFilterEnabled={album.bibAttributeFilterEnabled}

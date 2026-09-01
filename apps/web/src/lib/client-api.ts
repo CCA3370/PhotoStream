@@ -68,7 +68,12 @@ export async function clientMutation<T>(
 
 export async function publicMutation<T>(
   path: string,
-  options: { readonly body?: unknown; readonly idempotencyKey?: string } = {},
+  options: {
+    readonly body?: unknown;
+    readonly idempotencyKey?: string;
+    readonly method?: "POST" | "DELETE";
+    readonly signal?: AbortSignal;
+  } = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers["content-type"] = "application/json";
@@ -76,8 +81,10 @@ export async function publicMutation<T>(
     headers["idempotency-key"] = options.idempotencyKey;
   }
   const response = await fetch(path, {
-    method: "POST",
+    method: options.method ?? "POST",
     headers,
+    cache: "no-store",
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
   if (!response.ok) throw await errorFrom(response);

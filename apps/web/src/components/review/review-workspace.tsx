@@ -15,6 +15,7 @@ import { EyeIcon, EyeOffIcon, FolderInputIcon, RotateCcwIcon, SendIcon, XIcon } 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { BibReviewControls } from "@/components/bib/bib-review-controls";
+import { FaceIndexExclusionButton } from "@/components/face/face-index-exclusion-button";
 import { DeleteMediaButton } from "@/components/review/delete-media-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -97,6 +98,7 @@ export function ReviewWorkspace({
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<MediaBatchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [faceExclusionMessage, setFaceExclusionMessage] = useState<string | null>(null);
   const selectedCount = selected.size;
   const categoryItems = useMemo(
     () => [
@@ -560,6 +562,13 @@ export function ReviewWorkspace({
         </Alert>
       )}
 
+      {faceExclusionMessage === null ? null : (
+        <Alert>
+          <AlertTitle>人脸索引排除已接受</AlertTitle>
+          <AlertDescription>{faceExclusionMessage}</AlertDescription>
+        </Alert>
+      )}
+
       {media.length === 0 ? (
         <Empty className="min-h-64 border">
           <EmptyHeader>
@@ -819,6 +828,17 @@ export function ReviewWorkspace({
                 批量确认无号码
               </Button>
             </>
+          ) : null}
+          {userRole === "admin" ? (
+            <FaceIndexExclusionButton
+              albumId={albumId}
+              mediaIds={[...selected]}
+              onExcluded={(message) => {
+                setFaceExclusionMessage(message);
+                setSelected(new Set());
+                setRangeAnchor(null);
+              }}
+            />
           ) : null}
           <Button
             onClick={() => {

@@ -8,6 +8,8 @@ describe("contentSecurityPolicy", () => {
       nonce: "c3RyaWN0LWNzcC1ub25jZQ==",
       mediaBaseUrl: "https://cdn.cloverta.top/media/ignored",
       uploadBaseUrl: "https://school-media.oss-cn-hangzhou.aliyuncs.com/path",
+      faceReferenceUploadBaseUrl:
+        "https://school-face-reference.oss-cn-hangzhou.aliyuncs.com/private",
       nodeEnvironment: "production",
     });
 
@@ -16,7 +18,7 @@ describe("contentSecurityPolicy", () => {
     expect(policy).not.toContain("'unsafe-eval'");
     expect(policy).toContain("img-src 'self' data: blob: https://cdn.cloverta.top");
     expect(policy).toContain(
-      "connect-src 'self' https://cdn.cloverta.top https://school-media.oss-cn-hangzhou.aliyuncs.com",
+      "connect-src 'self' https://cdn.cloverta.top https://school-media.oss-cn-hangzhou.aliyuncs.com https://school-face-reference.oss-cn-hangzhou.aliyuncs.com",
     );
     expect(policy).toContain("media-src 'none'");
     expect(policy).toContain("object-src 'none'");
@@ -58,5 +60,12 @@ describe("contentSecurityPolicy", () => {
         nodeEnvironment: "production",
       }),
     ).toThrow("PHOTO_UPLOAD_BASE_URL must use HTTPS outside development");
+    expect(() =>
+      contentSecurityPolicy({
+        nonce: "c3RyaWN0LWNzcC1ub25jZQ==",
+        faceReferenceUploadBaseUrl: "http://school-face-reference.oss-cn-hangzhou.aliyuncs.com",
+        nodeEnvironment: "production",
+      }),
+    ).toThrow("FACE_REFERENCE_UPLOAD_BASE_URL must use HTTPS outside development");
   });
 });

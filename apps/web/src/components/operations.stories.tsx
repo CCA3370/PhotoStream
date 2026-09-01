@@ -4,6 +4,7 @@ import type {
   AuditLogList,
   BibConfigView,
   BibMediaState,
+  FaceConfigView,
   InternalMediaView,
 } from "@photostream/contracts";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -12,6 +13,7 @@ import { AlbumSettings } from "@/components/albums/album-settings";
 import { AuditLogTable } from "@/components/audit/audit-log-table";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
+import { FaceSearchPanel } from "@/components/gallery/face-search-panel";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
 import { UserManagement } from "@/components/users/user-management";
 
@@ -225,9 +227,45 @@ const bibConfig: BibConfigView = {
   updatedAt: createdAt,
 };
 
+const faceConfig: FaceConfigView = {
+  albumId,
+  enabled: false,
+  readyToEnable: false,
+  noticeVersion: "face-notice-2026-08-31",
+  thresholdVersion: "unqualified",
+  indexState: "disabled",
+  authorizationConfirmedAt: null,
+  retentionDays: 30,
+  readiness: {
+    participantConsentRecordsConfirmed: false,
+    guardianConsentRequirementsConfirmed: false,
+    impactAssessmentCompleted: false,
+    providerResourcesValidated: false,
+    evaluationGatePassed: false,
+    billingAlertsConfigured: false,
+    indexedFacesAuthorized: false,
+    globalFeatureEnabled: false,
+    passwordAccess: true,
+    privacyNoticeConfigured: true,
+    complaintContactConfigured: true,
+    noticeVersionCurrent: false,
+    thresholdVersionQualified: false,
+  },
+  counts: { pending: 0, indexed: 0, failed: 0, excluded: 0 },
+  lastIndexedAt: null,
+  lastClusteredAt: null,
+  deletionDueAt: null,
+  lastErrorCode: null,
+};
+
 export const SettingsAndStatistics: Story = {
   render: () => (
-    <AlbumSettings bibConfig={bibConfig} initialAlbum={album} statistics={statistics} />
+    <AlbumSettings
+      bibConfig={bibConfig}
+      faceConfig={faceConfig}
+      initialAlbum={album}
+      statistics={statistics}
+    />
   ),
 };
 
@@ -249,6 +287,20 @@ export const PublicBibSearch: Story = {
     >
       <div className="min-h-48 rounded-xl border bg-muted p-6">普通相册流占位</div>
     </BibSearchPanel>
+  ),
+};
+
+export const FaceSearchConsent: Story = {
+  render: () => (
+    <div className="public-theme min-h-screen bg-background">
+      <FaceSearchPanel
+        complaintContact="校内影像管理员"
+        noticeVersion="face-notice-2026-08-31"
+        onClose={() => undefined}
+        privacyNotice="参考照仅用于本相册短期候选检索。"
+        slug="storybook-face-album"
+      />
+    </div>
   ),
 };
 

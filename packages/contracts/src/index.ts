@@ -534,6 +534,7 @@ export const publicAlbumViewSchema = z
     categories: z.array(categoryViewSchema),
   })
   .strict();
+export type PublicAlbumView = z.infer<typeof publicAlbumViewSchema>;
 
 export const unlockAlbumRequestSchema = z.object({ password: z.string().min(1).max(128) }).strict();
 export const unlockAlbumResponseSchema = z.object({ unlocked: z.literal(true) }).strict();
