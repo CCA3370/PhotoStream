@@ -1,6 +1,6 @@
 # 参考资料
 
-查阅日期：2026-08-25 至 2026-08-31。云产品能力、价格、法规和浏览器支持会变化；进入编码时复核 SDK/API，进入部署时再次复核计费和控制台选项。
+查阅日期：2026-08-25 至 2026-09-01。云产品能力、价格、法规和浏览器支持会变化；进入编码时复核 SDK/API，进入部署时再次复核计费和控制台选项。
 
 ## 1. 竞品与产品范围
 
@@ -24,7 +24,7 @@
 
 - [通过 CDN 加速 OSS](https://help.aliyun.com/zh/oss/user-guide/cdn-acceleration)：私有回源、缓存、URL 鉴权和流量风险。
 - [配置 URL 鉴权](https://help.aliyun.com/zh/cdn/user-guide/configure-url-signing)：临时媒体 URL、规则条件和鉴权失败费用边界。
-- [鉴权方式 C](https://help.aliyun.com/zh/cdn/user-guide/type-c-signing)：查询参数型签名与鉴权后统一 Cache Key。
+- [鉴权方式 A](https://help.aliyun.com/zh/cdn/user-guide/type-a-signing)：`auth_key=timestamp-rand-uid-md5` 的查询参数型签名、有效时间和签名串规则。
 - [自定义 Cache Key](https://help.aliyun.com/zh/cdn/user-guide/create-custom-cache-keys/)：避免无关参数造成重复缓存与回源。
 - [CDN 加速应用场景](https://help.aliyun.com/zh/cdn/product-overview/scenarios)：图片小文件和业务类型影响。
 - [CDN 计费概述](https://help.aliyun.com/zh/cdn/product-overview/billing-overview)：基础下行与可选增值项目。
@@ -78,6 +78,10 @@
 - [Next.js 16](https://nextjs.org/blog/next-16)：Next.js 16 的 Node/浏览器要求与自托管能力。
 - [Fastify LTS](https://fastify.dev/docs/v5.7.x/Reference/LTS/)：Fastify 5 支持策略。
 - [PostgreSQL 版本支持](https://www.postgresql.org/support/versioning/)：选择当前受支持的 PostgreSQL 18 小版本。
+- [Docker Engine 安装到 Debian](https://docs.docker.com/engine/install/debian/)：Debian 13 Trixie 官方 apt 仓库、冲突包和 Compose 插件安装依据。
+- [Node 官方容器镜像](https://hub.docker.com/_/node)：生产构建/运行固定 Node.js 24 Trixie slim 标签，不使用浮动 `latest`。
+- [PostgreSQL 官方容器镜像](https://hub.docker.com/_/postgres)：固定 PostgreSQL 18.6 Trixie，并按 PostgreSQL 18 的 `/var/lib/postgresql` 卷布局持久化。
+- [Caddy 官方容器镜像](https://hub.docker.com/_/caddy)：固定 Caddy 2.11.4 Alpine，持久化 `/data` 中的证书和私钥。
 
 依赖清单和精确锁定版本只在获得编码授权后创建；实现时固定当前安全小版本，不使用 `latest` 作为生产部署策略。
 

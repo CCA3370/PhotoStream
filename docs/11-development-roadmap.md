@@ -139,6 +139,8 @@
 
 ## 9. 阶段 6：部署与试运行
 
+当前状态：Debian 13 交互部署、root-only 配置记忆、阿里云 OSS/CDN 生产适配、Caddy 双槽切流、失败回切和按 Git 最新提交更新的本地代码已完成，并通过仓库检查与脚本测试。目标 Debian 13 2C2G、Docker Compose/Caddy 实际解析、真实 OSS/CDN/DNS/ACME、数据库迁移、管理员初始化、资源峰值、云端冒烟和试运行仍为 **Unverified**；没有执行部署或修改任何外部资源。证据见[阶段 6 部署代码验证](verification/phase-6-deployment-code.md)。
+
 1. 用户提供并确认 `deployment-inputs.md` 中全部必需值。
 2. 在获得明确授权后配置杭州 OSS、RAM、CDN、CNAME 和证书。
 3. 香港主机使用 Docker Compose 部署 Caddy、Web、API 和 PostgreSQL。
