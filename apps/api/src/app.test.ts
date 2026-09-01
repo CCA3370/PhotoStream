@@ -417,6 +417,33 @@ describe("API foundation", () => {
     await app.close();
   });
 
+  it("accepts forwarded client addresses only from private reverse proxies", async () => {
+    const app = await buildApp({
+      config,
+      authStore: new FakeAuthStore(),
+      passwordHasher: fakeHasher,
+      logger: false,
+    });
+    app.get("/proxy-address-test", (request) => ({ ip: request.ip }));
+
+    const proxied = await app.inject({
+      method: "GET",
+      url: "/proxy-address-test",
+      headers: requestHeaders({ "x-forwarded-for": "198.51.100.42" }),
+      remoteAddress: "172.20.0.2",
+    });
+    expect(proxied.json()).toEqual({ ip: "198.51.100.42" });
+
+    const forged = await app.inject({
+      method: "GET",
+      url: "/proxy-address-test",
+      headers: requestHeaders({ "x-forwarded-for": "198.51.100.42" }),
+      remoteAddress: "203.0.113.20",
+    });
+    expect(forged.json()).toEqual({ ip: "203.0.113.20" });
+    await app.close();
+  });
+
   it("logs only route templates and never request secrets or raw addresses", async () => {
     let logs = "";
     const stream = new Writable({

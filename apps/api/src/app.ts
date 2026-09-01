@@ -17,9 +17,9 @@ import type { AuthStore, PasswordHasher } from "./auth/types.js";
 import type { UserAdminService } from "./auth/user-admin-service.js";
 import type { BibService } from "./bib/service.js";
 import type { AppConfig } from "./config.js";
+import { AppError } from "./errors.js";
 import type { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import type { FaceService } from "./face/service.js";
-import { AppError } from "./errors.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
 import type { OperationsService } from "./media/operations-service.js";
@@ -73,7 +73,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       disableRequestLogging: true,
       requestIdLogLabel: "requestId",
     }),
-    trustProxy: ["127.0.0.1", "::1"],
+    // The production API is not published; Caddy reaches it over a private Docker network.
+    // Trust only loopback/link-local/private proxy hops so a direct public peer cannot forge XFF.
+    trustProxy: ["loopback", "linklocal", "uniquelocal"],
   };
   const app: FastifyInstance = Fastify(serverOptions);
 
