@@ -1,0 +1,1 @@
+ALTER TABLE "media_variants" ADD COLUMN "provider_multipart_upload_id" varchar(256);

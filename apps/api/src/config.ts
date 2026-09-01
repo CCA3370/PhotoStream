@@ -31,6 +31,7 @@ const configSchema = z
     ALBUM_PASSWORD_GENERATION_SECRET: secretSchema,
     USER_PASSWORD_GENERATION_SECRET: secretSchema,
     ANALYTICS_HMAC_SECRET: secretSchema,
+    OBJECT_STORAGE_DRIVER: z.enum(["local", "aliyun"]).default("local"),
     BIB_DATA_KEY: z.preprocess(optionalEnvironmentValue, bibDataKeySchema.optional()),
     BIB_SEARCH_KEY: z.preprocess(optionalEnvironmentValue, secretSchema.optional()),
     BIB_KEY_VERSION: z
@@ -49,9 +50,7 @@ const configSchema = z
     BIB_OCR_AUTOMATION_STATUS: z
       .enum(["disabled", "experimental", "qualified"])
       .default("experimental"),
-    FACE_SEARCH_GLOBAL_ENABLED: z
-      .preprocess(environmentBoolean, z.boolean())
-      .default(false),
+    FACE_SEARCH_GLOBAL_ENABLED: z.preprocess(environmentBoolean, z.boolean()).default(false),
     FACE_SEARCH_NOTICE_VERSION: z.string().min(1).max(80).default("face-notice-2026-08-31"),
     FACE_SEARCH_THRESHOLD_VERSION: z.string().min(1).max(80).default("unqualified"),
     FACE_SEARCH_CLUSTER_THRESHOLD: z.coerce.number().min(0).max(1).default(0.92),
@@ -73,16 +72,55 @@ const configSchema = z
       z.string().min(3).optional(),
     ),
     ALIYUN_OSS_ENDPOINT: z.string().url().default("https://oss-cn-hangzhou.aliyuncs.com"),
+    ALIYUN_OSS_REGION: z.literal("oss-cn-hangzhou").default("oss-cn-hangzhou"),
+    ALIYUN_ACCESS_KEY_ID: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
+    ALIYUN_ACCESS_KEY_SECRET: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
+    ALIYUN_CDN_AUTH_KEY_CURRENT: z.preprocess(
+      optionalEnvironmentValue,
+      z.string().min(16).optional(),
+    ),
+    ALIYUN_CDN_AUTH_KEY_PREVIOUS: z.preprocess(
+      optionalEnvironmentValue,
+      z.string().min(16).optional(),
+    ),
+    ALIYUN_CDN_AUTH_VALIDITY_SECONDS: z.coerce.number().int().min(60).max(86_400).default(7_200),
     EVENTBRIDGE_SIGNATURE_TOKEN: z.preprocess(
       optionalEnvironmentValue,
       z.string().min(16).optional(),
     ),
-    LOCAL_OBJECT_SECRET: secretSchema,
+    LOCAL_OBJECT_SECRET: z.preprocess(optionalEnvironmentValue, secretSchema.optional()),
     LOCAL_OBJECT_BASE_URL: z.string().url().default("http://127.0.0.1:3002"),
     BOOTSTRAP_ADMIN_TOKEN: secretSchema.optional(),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   })
   .superRefine((value, context) => {
+    if (value.OBJECT_STORAGE_DRIVER === "local" && value.LOCAL_OBJECT_SECRET === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "LOCAL_OBJECT_SECRET is required for local object storage",
+        path: ["LOCAL_OBJECT_SECRET"],
+      });
+    }
+    if (value.NODE_ENV === "production" && value.OBJECT_STORAGE_DRIVER !== "aliyun") {
+      context.addIssue({
+        code: "custom",
+        message: "production requires the Aliyun OSS/CDN data plane",
+        path: ["OBJECT_STORAGE_DRIVER"],
+      });
+    }
+    if (value.OBJECT_STORAGE_DRIVER === "aliyun") {
+      const required = [
+        "ALIYUN_ACCESS_KEY_ID",
+        "ALIYUN_ACCESS_KEY_SECRET",
+        "ALIYUN_OSS_MEDIA_BUCKET",
+        "ALIYUN_CDN_AUTH_KEY_CURRENT",
+      ] as const;
+      for (const field of required) {
+        if (value[field] === undefined) {
+          context.addIssue({ code: "custom", message: `${field} is required`, path: [field] });
+        }
+      }
+    }
     if ((value.BIB_DATA_KEY === undefined) !== (value.BIB_SEARCH_KEY === undefined)) {
       context.addIssue({
         code: "custom",

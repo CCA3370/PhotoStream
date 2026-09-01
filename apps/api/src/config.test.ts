@@ -92,6 +92,34 @@ describe("configuration", () => {
     ).toMatchObject({ BIB_KEY_VERSION: "v2", BIB_KEY_VERSION_PREVIOUS: "v1" });
   });
 
+  it("requires the Aliyun OSS/CDN data plane in production", () => {
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        APP_ORIGIN: "https://photos.test",
+      }),
+    ).toThrowError(expect.objectContaining({ fields: ["OBJECT_STORAGE_DRIVER"] }));
+
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        APP_ORIGIN: "https://photos.test",
+        OBJECT_STORAGE_DRIVER: "aliyun",
+        LOCAL_OBJECT_SECRET: "",
+        ALIYUN_ACCESS_KEY_ID: "deployment-access-key",
+        ALIYUN_ACCESS_KEY_SECRET: "deployment-access-secret",
+        ALIYUN_OSS_MEDIA_BUCKET: "photostream-private-media",
+        ALIYUN_CDN_AUTH_KEY_CURRENT: "c".repeat(32),
+      }),
+    ).toMatchObject({
+      NODE_ENV: "production",
+      OBJECT_STORAGE_DRIVER: "aliyun",
+      LOCAL_OBJECT_SECRET: undefined,
+    });
+  });
+
   it("keeps face search off by default and requires isolated qualified cloud resources", () => {
     expect(loadConfig(validEnvironment)).toMatchObject({
       FACE_SEARCH_GLOBAL_ENABLED: false,

@@ -36,6 +36,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@alicloud/cdn20180510':
+        specifier: 9.2.0
+        version: 9.2.0
       '@alicloud/imm20200930':
         specifier: 5.0.1
         version: 5.0.1
@@ -214,6 +217,9 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
+
+  '@alicloud/cdn20180510@9.2.0':
+    resolution: {integrity: sha512-Kp+PjiwfAOBEtacnvsrx92TdOIAnFSWmo6/tNgggGsys/94ru6lU/5jfTagFyR5Io8cu62NcbRvAyn9v67/v5g==}
 
   '@alicloud/credentials@2.4.7':
     resolution: {integrity: sha512-pVeLM4Mjdh2PSs+h36CDBOCsvXyZTBG3tgT7chzH8jqWgVGU4UIgYw2h76ZviBpqADFPs3QReYg2AX/gzmqwOw==}
@@ -4603,6 +4609,15 @@ packages:
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
+
+  '@alicloud/cdn20180510@9.2.0':
+    dependencies:
+      '@alicloud/openapi-core': 1.0.8
+      '@darabonba/typescript': 1.0.5
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   '@alicloud/credentials@2.4.7':
     dependencies:

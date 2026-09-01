@@ -14,6 +14,7 @@
     "test:capacity": "vitest run --config vitest.capacity.config.ts"
   },
   "dependencies": {
+    "@alicloud/cdn20180510": "9.2.0",
     "@alicloud/imm20200930": "5.0.1",
     "@alicloud/openapi-core": "1.0.8",
     "@fastify/cookie": "11.1.2",

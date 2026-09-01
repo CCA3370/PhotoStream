@@ -353,6 +353,7 @@ export const mediaVariants = pgTable(
     expectedBytes: bigint("expected_bytes", { mode: "number" }).notNull(),
     bytes: bigint("bytes", { mode: "number" }),
     etag: varchar("etag", { length: 128 }),
+    providerMultipartUploadId: varchar("provider_multipart_upload_id", { length: 256 }),
     verified: boolean("verified").notNull().default(false),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

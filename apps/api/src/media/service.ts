@@ -838,7 +838,12 @@ export class PhotoService {
     const cleanedVariants = variants.filter((variant) => !(preserveVerified && variant.verified));
     try {
       for (const variant of variants) {
-        if (multipartVariantIds.has(variant.id)) await this.#storage.abortMultipart(variant.id);
+        if (multipartVariantIds.has(variant.id)) {
+          await this.#storage.abortMultipart(
+            variant.providerMultipartUploadId ?? variant.id,
+            variant.objectKey,
+          );
+        }
       }
       for (const variant of cleanedVariants) await this.#storage.delete(variant.objectKey);
     } catch {
@@ -932,7 +937,7 @@ export class PhotoService {
         statusCode: 409,
       });
     }
-    const signed = this.#storage.signPut({
+    const signed = await this.#storage.signPut({
       key: row.variant.objectKey,
       contentType: row.variant.contentType,
       bytes: row.variant.expectedBytes,
@@ -962,8 +967,10 @@ export class PhotoService {
     if (row.variant.verified || row.part.completedAt !== null) {
       throw new AppError({ code: "STATE_CONFLICT", message: "该分片已经完成", statusCode: 409 });
     }
-    const signed = this.#storage.signMultipartPart({
-      uploadId: row.variant.id,
+    const providerUploadId = await this.#ensureMultipartUpload(row.variant);
+    const signed = await this.#storage.signMultipartPart({
+      key: row.variant.objectKey,
+      uploadId: providerUploadId,
       partNumber: row.part.partNumber,
       contentType: row.variant.contentType,
       bytes: row.part.expectedBytes,
@@ -1053,7 +1060,7 @@ export class PhotoService {
         });
       }
       await this.#storage.completeMultipart({
-        uploadId: snapshot.variant.id,
+        uploadId: await this.#ensureMultipartUpload(snapshot.variant),
         key: snapshot.variant.objectKey,
         contentType: snapshot.variant.contentType,
         parts: multipartParts.map((part) => ({
@@ -2003,6 +2010,50 @@ export class PhotoService {
       .limit(1);
     if (row === undefined) throw this.#uploadNotFound();
     return row;
+  }
+
+  async #ensureMultipartUpload(variant: typeof schema.mediaVariants.$inferSelect): Promise<string> {
+    if (variant.providerMultipartUploadId !== null) return variant.providerMultipartUploadId;
+    const created =
+      (await this.#storage.createMultipartUpload?.({
+        clientUploadId: variant.id,
+        contentType: variant.contentType,
+        key: variant.objectKey,
+      })) ?? variant.id;
+    try {
+      const [claimed] = await this.#database
+        .update(schema.mediaVariants)
+        .set({ providerMultipartUploadId: created })
+        .where(
+          and(
+            eq(schema.mediaVariants.id, variant.id),
+            isNull(schema.mediaVariants.providerMultipartUploadId),
+          ),
+        )
+        .returning({ providerMultipartUploadId: schema.mediaVariants.providerMultipartUploadId });
+      if (
+        claimed?.providerMultipartUploadId !== null &&
+        claimed?.providerMultipartUploadId !== undefined
+      ) {
+        return claimed.providerMultipartUploadId;
+      }
+      const [winner] = await this.#database
+        .select({ providerMultipartUploadId: schema.mediaVariants.providerMultipartUploadId })
+        .from(schema.mediaVariants)
+        .where(eq(schema.mediaVariants.id, variant.id))
+        .limit(1);
+      if (
+        winner?.providerMultipartUploadId === null ||
+        winner?.providerMultipartUploadId === undefined
+      ) {
+        throw new Error("Multipart upload state disappeared");
+      }
+      await this.#storage.abortMultipart(created, variant.objectKey).catch(() => undefined);
+      return winner.providerMultipartUploadId;
+    } catch (error) {
+      await this.#storage.abortMultipart(created, variant.objectKey).catch(() => undefined);
+      throw error;
+    }
   }
 
   async #markSourceUploading(mediaId: string): Promise<void> {

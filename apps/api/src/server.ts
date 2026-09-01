@@ -13,8 +13,9 @@ import {
   UnavailableFaceReferenceStorage,
 } from "./face/reference-storage.js";
 import { FaceService } from "./face/service.js";
+import { AliyunCdnInvalidator, LocalCdnInvalidator } from "./media/cdn-invalidator.js";
 import { LiveEventBroker } from "./media/live-event-broker.js";
-import { LocalObjectStorage } from "./media/object-storage.js";
+import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
 import { PhotoService } from "./media/service.js";
 
@@ -24,22 +25,43 @@ const database = createDatabase(pool);
 const authStore = new PostgresAuthStore(database);
 const broker = new LiveEventBroker();
 await broker.start(pool);
-const storage = new LocalObjectStorage({
-  baseUrl: config.LOCAL_OBJECT_BASE_URL,
-  secret: config.LOCAL_OBJECT_SECRET,
-});
+const storage =
+  config.OBJECT_STORAGE_DRIVER === "aliyun"
+    ? new AliyunObjectStorage({
+        accessKeyId: config.ALIYUN_ACCESS_KEY_ID as string,
+        accessKeySecret: config.ALIYUN_ACCESS_KEY_SECRET as string,
+        bucket: config.ALIYUN_OSS_MEDIA_BUCKET as string,
+        cdnAuthKey: config.ALIYUN_CDN_AUTH_KEY_CURRENT as string,
+        cdnAuthValiditySeconds: config.ALIYUN_CDN_AUTH_VALIDITY_SECONDS,
+        endpoint: config.ALIYUN_OSS_ENDPOINT,
+        mediaBaseUrl: config.MEDIA_BASE_URL,
+        region: config.ALIYUN_OSS_REGION,
+      })
+    : new LocalObjectStorage({
+        baseUrl: config.LOCAL_OBJECT_BASE_URL,
+        secret: config.LOCAL_OBJECT_SECRET as string,
+      });
+const cdnInvalidator =
+  config.OBJECT_STORAGE_DRIVER === "aliyun"
+    ? new AliyunCdnInvalidator({
+        accessKeyId: config.ALIYUN_ACCESS_KEY_ID as string,
+        accessKeySecret: config.ALIYUN_ACCESS_KEY_SECRET as string,
+        mediaBaseUrl: config.MEDIA_BASE_URL,
+      })
+    : new LocalCdnInvalidator();
 const photoService = new PhotoService({
   database,
   storage,
   passwordHasher: argon2PasswordHasher,
   config,
+  cdnInvalidator,
 });
 const userAdminService = new UserAdminService({
   database,
   passwordHasher: argon2PasswordHasher,
   config,
 });
-const operationsService = new OperationsService({ database, storage, config });
+const operationsService = new OperationsService({ database, storage, config, cdnInvalidator });
 const bibService = new BibService({ database, config, photoService });
 const faceProvider = config.FACE_SEARCH_GLOBAL_ENABLED
   ? new AliyunFaceProvider(config)
