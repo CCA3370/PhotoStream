@@ -1,6 +1,6 @@
 # 领域模型与 API 设计
 
-状态：已批准的实施基线；人脸找图为未来阶段，尚未实现
+状态：已批准的实施基线；人脸找图契约与 API 已本地实现，云端未启用
 更新日期：2026-08-31
 
 ## 1. 设计原则
@@ -27,8 +27,8 @@
 | `BibTagSource` | `ocr`、`manual` | 号码来源 |
 | `BibReviewDecision` | `pending`、`numbers_confirmed`、`no_number_confirmed`、`needs_review` | 照片级号码复核结论 |
 | `BibAttributeDimension` | `grade`、`class` | 号码派生属性维度 |
-| `FaceIndexState` | `disabled`、`provisioning`、`indexing`、`ready`、`degraded`、`deleting`、`failed` | 未来相册人脸 Dataset 生命周期 |
-| `FaceMediaIndexStatus` | `pending`、`indexing`、`indexed`、`deleting`、`excluded`、`failed` | 未来逐媒体人脸索引状态 |
+| `FaceIndexState` | `disabled`、`provisioning`、`indexing`、`ready`、`degraded`、`deleting`、`failed` | 相册人脸 Dataset 生命周期 |
+| `FaceMediaIndexStatus` | `pending`、`indexing`、`indexed`、`deleting`、`excluded`、`failed` | 逐媒体人脸索引状态 |
 | `FaceSearchStatus` | `awaiting_upload`、`processing`、`partial`、`completed`、`failed`、`cancelled`、`expired` | 未来访客私有搜索状态 |
 
 `IngestStatus` 与 `PublicationStatus` 必须独立保存。例如一张照片可以处于 `uploading_source + published`，表示浏览图已直播、原图仍在后台上传。
@@ -108,7 +108,7 @@
 
 一张照片可拥有多个确认号码；`album_id + media_id + blind_index + confirmed` 必须避免重复搜索标签。只有 `confirmed` 且规则版本有效的标签进入公共精确搜索。年级+班级筛选必须在同一 `MediaBibTag` 上同时匹配，不能跨两个号码组合属性。
 
-### 3.10 人脸索引与短期搜索（未来）
+### 3.10 人脸索引与短期搜索
 
 `AlbumFaceIndex` 保存相册、功能开关、告知版本、授权核验时间、`FaceIndexState`、随机 IMM Dataset 标识、阈值版本、最近索引/聚类时间、删除期限和通用失败码。Dataset 标识不能从相册标题、slug 或学校信息推导。
 
@@ -173,10 +173,10 @@ stateDiagram-v2
 | `POST /api/v1/albums/{id}/end` | 管理员 | 结束直播 |
 | `GET/POST/PATCH /api/v1/albums/{id}/categories` | 内部；写需管理员/审核员 | 一级分类管理 |
 | `GET/PUT /api/v1/albums/{id}/bib-config` | 内部；写仅管理员 | 号码规则、年级/班级映射、识别/搜索开关和模型状态 |
-| `GET/PUT /api/v1/albums/{id}/face-config` | 管理员 | 未来人脸开关、授权确认、告知版本、索引/保留状态 |
-| `POST /api/v1/albums/{id}/face-index/retry` | 管理员 | 重试未来人脸索引/删除失败任务 |
+| `GET/PUT /api/v1/albums/{id}/face-config` | 管理员 | 人脸开关、授权确认、告知版本、索引/保留状态 |
+| `POST /api/v1/albums/{id}/face-index/retry` | 管理员 | 重试人脸索引/删除失败任务 |
 | `POST /api/v1/albums/{id}/face-index/exclusions` | 管理员 | 让选定照片退出人脸索引但保留普通浏览 |
-| `DELETE /api/v1/albums/{id}/face-index` | 管理员 | 关闭未来人脸搜索并建立整册 Dataset 删除任务 |
+| `DELETE /api/v1/albums/{id}/face-index` | 管理员 | 关闭人脸搜索并建立整册 Dataset 删除任务 |
 | `GET /api/v1/albums/{id}/media` | 内部 | 按状态、分类、上传者游标查询 |
 | `POST /api/v1/media/{id}/publish` | 管理员/审核员 | 幂等发布并分配发布序号 |
 | `POST /api/v1/media/{id}/hide` | 管理员/审核员 | 从公共流隐藏 |
@@ -208,7 +208,7 @@ stateDiagram-v2
 
 详细契约见[号码牌识别与筛选](12-bib-recognition.md)。
 
-## 8. 人脸找图接口（未来）
+## 8. 人脸找图接口
 
 | 方法与路径 | 调用者 | 行为 |
 | --- | --- | --- |
