@@ -1,0 +1,20 @@
+{
+	email {$ACME_EMAIL}
+	admin 0.0.0.0:2019
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For X-Real-IP
+	}
+}
+
+{$APP_HOST} {
+	encode zstd gzip
+	header {
+		-Server
+	}
+	import /etc/caddy/routes/active-public.caddy
+}
+
+:8080 {
+	import /etc/caddy/routes/active-api.caddy
+}

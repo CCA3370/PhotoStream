@@ -1,0 +1,149 @@
+name: photostream
+
+x-runtime-common: &runtime-common
+  restart: unless-stopped
+  networks:
+    - internal
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+x-api-common: &api-common
+  <<: *runtime-common
+  env_file:
+    - ${PHOTOSTREAM_API_ENV:?PHOTOSTREAM_API_ENV is required}
+  depends_on:
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+    interval: 5s
+    timeout: 3s
+    retries: 24
+    start_period: 15s
+  mem_limit: 320m
+  cpus: 1.25
+
+x-web-common: &web-common
+  <<: *runtime-common
+  env_file:
+    - ${PHOTOSTREAM_WEB_ENV:?PHOTOSTREAM_WEB_ENV is required}
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+    interval: 5s
+    timeout: 3s
+    retries: 24
+    start_period: 15s
+  mem_limit: 320m
+  cpus: 1.25
+
+services:
+  postgres:
+    image: postgres:18.6-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: photostream
+      POSTGRES_USER: photostream
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: --data-checksums --encoding=UTF8
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - max_connections=60
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U photostream -d photostream"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 15s
+    mem_limit: 512m
+    cpus: 1.25
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    env_file:
+      - ${PHOTOSTREAM_CADDY_ENV:?PHOTOSTREAM_CADDY_ENV is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${PHOTOSTREAM_CADDY_STATE:?PHOTOSTREAM_CADDY_STATE is required}:/etc/caddy/routes:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - internal
+    mem_limit: 96m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  api-blue:
+    <<: *api-common
+    image: ${BLUE_API_IMAGE:?BLUE_API_IMAGE is required}
+    profiles: [blue]
+
+  web-blue:
+    <<: *web-common
+    image: ${BLUE_WEB_IMAGE:?BLUE_WEB_IMAGE is required}
+    profiles: [blue]
+
+  api-green:
+    <<: *api-common
+    image: ${GREEN_API_IMAGE:?GREEN_API_IMAGE is required}
+    profiles: [green]
+
+  web-green:
+    <<: *web-common
+    image: ${GREEN_WEB_IMAGE:?GREEN_WEB_IMAGE is required}
+    profiles: [green]
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

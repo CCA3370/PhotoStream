@@ -1,0 +1,16 @@
+.git
+.github
+.local-data
+.next
+**/.next
+**/dist
+**/node_modules
+**/storybook-static
+node_modules
+playwright-report
+test-results
+test_photos
+*.log
+.env
+.env.*
+!.env.example

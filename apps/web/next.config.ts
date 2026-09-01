@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const apiTarget = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:3001";
+const mediaUrl = new URL(process.env.MEDIA_BASE_URL ?? "https://cdn.cloverta.top");
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
@@ -11,9 +12,10 @@ const nextConfig: NextConfig = {
     unoptimized: true,
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "cdn.cloverta.top",
-        pathname: "/media/**",
+        protocol: mediaUrl.protocol === "http:" ? "http" : "https",
+        hostname: mediaUrl.hostname,
+        port: mediaUrl.port,
+        pathname: "/**",
       },
       {
         protocol: "http",
