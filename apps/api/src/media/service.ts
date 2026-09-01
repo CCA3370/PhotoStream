@@ -289,6 +289,7 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw new Error("Album state update returned no row");
+      await this.#applyFaceAlbumState(transaction, album.id, "live", now);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.started",
@@ -369,6 +370,9 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
+      if (accessChanged && options.input.access === "public") {
+        await this.#disableFaceForPublicAccess(transaction, album.id, now);
+      }
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.settings.updated",
@@ -1797,6 +1801,7 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
+      await this.#applyFaceAlbumState(transaction, album.id, options.to, now);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: options.action,
@@ -1812,6 +1817,96 @@ export class PhotoService {
 
   async #advisoryLock(executor: DbExecutor, value: string): Promise<void> {
     await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended(${value}, 0))`);
+  }
+
+  async #applyFaceAlbumState(
+    transaction: Transaction,
+    albumId: string,
+    state: AlbumView["state"],
+    now: Date,
+  ): Promise<void> {
+    if (state === "live") {
+      await transaction
+        .update(schema.albumFaceIndexes)
+        .set({ deletionDueAt: null, updatedAt: now })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId));
+      return;
+    }
+    if (state !== "ended") return;
+    const [index] = await transaction
+      .select({
+        deletionDueAt: schema.albumFaceIndexes.deletionDueAt,
+        retentionDays: schema.albumFaceIndexes.retentionDays,
+      })
+      .from(schema.albumFaceIndexes)
+      .where(eq(schema.albumFaceIndexes.albumId, albumId))
+      .limit(1);
+    if (index === undefined || index.deletionDueAt !== null) return;
+    await transaction
+      .update(schema.albumFaceIndexes)
+      .set({
+        deletionDueAt: new Date(now.getTime() + index.retentionDays * 86_400_000),
+        updatedAt: now,
+      })
+      .where(eq(schema.albumFaceIndexes.albumId, albumId));
+  }
+
+  async #disableFaceForPublicAccess(
+    transaction: Transaction,
+    albumId: string,
+    now: Date,
+  ): Promise<void> {
+    const [index] = await transaction
+      .select({ datasetName: schema.albumFaceIndexes.datasetName })
+      .from(schema.albumFaceIndexes)
+      .where(eq(schema.albumFaceIndexes.albumId, albumId))
+      .limit(1);
+    if (index === undefined) return;
+    await transaction
+      .update(schema.albumFaceIndexes)
+      .set({
+        enabled: false,
+        indexState: index.datasetName === null ? "disabled" : "deleting",
+        indexedFacesAuthorized: false,
+        authorizationConfirmedAt: null,
+        updatedAt: now,
+      })
+      .where(eq(schema.albumFaceIndexes.albumId, albumId));
+    if (index.datasetName !== null) {
+      await transaction
+        .insert(schema.faceAlbumJobs)
+        .values({ albumId, kind: "delete_dataset", nextAttemptAt: now })
+        .onConflictDoNothing();
+    }
+    const intentIds = transaction
+      .select({ id: schema.faceSearchIntents.id })
+      .from(schema.faceSearchIntents)
+      .where(eq(schema.faceSearchIntents.albumId, albumId));
+    const receiptIds = transaction
+      .select({ id: schema.faceSearchIntents.consentReceiptId })
+      .from(schema.faceSearchIntents)
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          isNotNull(schema.faceSearchIntents.consentReceiptId),
+        ),
+      );
+    await transaction
+      .update(schema.faceSearchIntents)
+      .set({ status: "cancelled", completedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          inArray(schema.faceSearchIntents.status, ["awaiting_upload", "processing", "partial"]),
+        ),
+      );
+    await transaction
+      .delete(schema.faceSearchCandidates)
+      .where(inArray(schema.faceSearchCandidates.searchIntentId, intentIds));
+    await transaction
+      .update(schema.faceConsentReceipts)
+      .set({ resultCategory: "cancelled", updatedAt: now })
+      .where(inArray(schema.faceConsentReceipts.id, receiptIds));
   }
 
   async #albumById(executor: DbExecutor, albumId: string) {

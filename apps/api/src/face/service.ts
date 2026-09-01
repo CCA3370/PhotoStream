@@ -9,7 +9,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, count, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { AppConfig } from "../config.js";
@@ -44,7 +44,7 @@ const eventSchema = z
         DatasetName: z.string(),
         TaskType: z.literal("FacesSearching"),
         TaskId: z.string().min(1).max(256),
-        Status: z.string(),
+        Status: z.enum(["Succeeded", "Failed"]),
         SimilarFaces: z
           .array(
             z
@@ -96,6 +96,16 @@ function providerFailure(): AppError {
   });
 }
 
+function requireRecentAuthentication(authenticatedAt: Date): void {
+  if (Date.now() - authenticatedAt.getTime() > 15 * 60_000) {
+    throw new AppError({
+      code: "RECENT_AUTH_REQUIRED",
+      message: "请重新登录后执行此敏感操作",
+      statusCode: 403,
+    });
+  }
+}
+
 function boundedJson(value: unknown): boolean {
   const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
   let nodes = 0;
@@ -138,12 +148,12 @@ export class FaceService {
   }
 
   async getConfig(actor: InternalActor, albumId: string): Promise<FaceConfigView> {
-    requirePermission(actor, "album:read");
+    requirePermission(actor, "album:configure");
     return this.#configView(albumId);
   }
 
   async updateConfig(options: {
-    actor: InternalActor;
+    actor: InternalActor & { authenticatedAt: Date };
     albumId: string;
     input: FaceConfigUpdate;
     requestId: string;
@@ -171,6 +181,24 @@ export class FaceService {
       });
     }
     const existing = await this.#index(options.albumId);
+    if (options.input.enabled && existing?.enabled === false && existing.datasetName !== null) {
+      throw new AppError({
+        code: "FACE_INDEX_NOT_READY",
+        message: "整册索引仍在删除中，请等待删除完成后重新启用",
+        statusCode: 409,
+        retryable: true,
+      });
+    }
+    if ((existing?.enabled ?? false) !== options.input.enabled) {
+      requireRecentAuthentication(options.actor.authenticatedAt);
+    }
+    const requestedDeletionDueAt = new Date(Date.now() + options.input.retentionDays * 86_400_000);
+    const deletionDueAt =
+      album.state !== "ended" && album.state !== "archived"
+        ? null
+        : existing?.deletionDueAt === null || existing?.deletionDueAt === undefined
+          ? requestedDeletionDueAt
+          : new Date(Math.min(existing.deletionDueAt.getTime(), requestedDeletionDueAt.getTime()));
     const datasetName = existing?.datasetName ?? `face_${randomBytes(18).toString("hex")}`;
     await this.#database.transaction(async (transaction) => {
       await transaction
@@ -183,14 +211,15 @@ export class FaceService {
           ...options.input.readiness,
           authorizationConfirmedAt: options.input.enabled ? new Date() : null,
           indexState: options.input.enabled
-            ? existing?.datasetName == null
-              ? "provisioning"
-              : "indexing"
+            ? existing?.enabled === true
+              ? existing.indexState
+              : "provisioning"
             : existing?.datasetName === null || existing === null
               ? "disabled"
               : "deleting",
           datasetName: options.input.enabled ? datasetName : existing?.datasetName,
           retentionDays: options.input.retentionDays,
+          deletionDueAt,
           lastErrorCode: null,
           updatedAt: new Date(),
         })
@@ -203,30 +232,21 @@ export class FaceService {
             ...options.input.readiness,
             authorizationConfirmedAt: options.input.enabled ? new Date() : null,
             indexState: options.input.enabled
-              ? existing?.datasetName == null
-                ? "provisioning"
-                : "indexing"
+              ? existing?.enabled === true
+                ? existing.indexState
+                : "provisioning"
               : existing?.datasetName == null
                 ? "disabled"
                 : "deleting",
             datasetName: options.input.enabled ? datasetName : existing?.datasetName,
             retentionDays: options.input.retentionDays,
+            deletionDueAt,
             lastErrorCode: null,
             updatedAt: new Date(),
           },
         });
       if (options.input.enabled) {
-        await transaction
-          .update(schema.faceAlbumJobs)
-          .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-          .where(
-            and(
-              eq(schema.faceAlbumJobs.albumId, options.albumId),
-              eq(schema.faceAlbumJobs.kind, "delete_dataset"),
-              eq(schema.faceAlbumJobs.status, "pending"),
-            ),
-          );
-        if (existing?.datasetName == null) {
+        if (existing?.enabled !== true) {
           await transaction
             .insert(schema.faceAlbumJobs)
             .values({ albumId: options.albumId, kind: "provision_dataset" })
@@ -254,12 +274,13 @@ export class FaceService {
   }
 
   async excludeMedia(options: {
-    actor: InternalActor;
+    actor: InternalActor & { authenticatedAt: Date };
     albumId: string;
     mediaIds: readonly string[];
     requestId: string;
   }): Promise<FaceConfigView> {
     requirePermission(options.actor, "album:configure");
+    requireRecentAuthentication(options.actor.authenticatedAt);
     const rows = await this.#database
       .select({ id: schema.media.id })
       .from(schema.media)
@@ -334,20 +355,28 @@ export class FaceService {
   }
 
   async deleteIndex(
-    actor: InternalActor,
+    actor: InternalActor & { authenticatedAt: Date },
     albumId: string,
     requestId: string,
   ): Promise<FaceConfigView> {
     requirePermission(actor, "album:configure");
+    requireRecentAuthentication(actor.authenticatedAt);
+    const index = await this.#index(albumId);
     await this.#database.transaction(async (transaction) => {
       await transaction
         .update(schema.albumFaceIndexes)
-        .set({ enabled: false, indexState: "deleting", updatedAt: new Date() })
+        .set({
+          enabled: false,
+          indexState: index?.datasetName == null ? "disabled" : "deleting",
+          updatedAt: new Date(),
+        })
         .where(eq(schema.albumFaceIndexes.albumId, albumId));
-      await transaction
-        .insert(schema.faceAlbumJobs)
-        .values({ albumId, kind: "delete_dataset" })
-        .onConflictDoNothing();
+      if (index?.datasetName != null) {
+        await transaction
+          .insert(schema.faceAlbumJobs)
+          .values({ albumId, kind: "delete_dataset" })
+          .onConflictDoNothing();
+      }
       await this.#cancelAlbumSearches(transaction, albumId);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: actor.id,
@@ -629,7 +658,7 @@ export class FaceService {
           gtNow(schema.faceSearchCandidates.expiresAt),
           eq(schema.media.albumId, context.album.id),
           eq(schema.media.publicationStatus, "published"),
-          ne(schema.mediaFaceIndexTasks.status, "excluded"),
+          eq(schema.mediaFaceIndexTasks.status, "indexed"),
         ),
       );
     const media = await this.#photoService.listPublicMedia({
@@ -649,7 +678,7 @@ export class FaceService {
     visitorToken: string | undefined;
     ip: string;
   }) {
-    const context = await this.#authorizedSearchContext(options);
+    const context = await this.#ownedSearchContext(options);
     const intent = await this.#ownedIntent(
       options.searchId,
       context.album.id,
@@ -727,6 +756,29 @@ export class FaceService {
         .onConflictDoNothing()
         .returning({ eventId: schema.faceIntegrationEvents.eventId });
       if (claimed.length === 0) return false;
+      const terminalClaim = await transaction
+        .update(schema.faceSearchIntents)
+        .set({
+          status: successful ? "completed" : "failed",
+          failureCode: successful ? null : "provider_unavailable",
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.faceSearchIntents.id, intent.intent.id),
+            inArray(schema.faceSearchIntents.status, ["processing", "partial"]),
+            gt(schema.faceSearchIntents.resultExpiresAt, new Date()),
+          ),
+        )
+        .returning({ id: schema.faceSearchIntents.id });
+      if (terminalClaim.length === 0) {
+        await transaction
+          .update(schema.faceIntegrationEvents)
+          .set({ processingResult: "ignored", errorCode: "task_not_active" })
+          .where(eq(schema.faceIntegrationEvents.eventId, event.id));
+        return true;
+      }
       await this.#insertAuthorizedCandidates(
         transaction,
         intent.intent.id,
@@ -826,6 +878,21 @@ export class FaceService {
     };
   }
 
+  async #ownedSearchContext(options: { slug: string; visitorToken: string | undefined }) {
+    const token = options.visitorToken;
+    if (token === undefined) throw this.#notFound();
+    const [album] = await this.#database
+      .select({ id: schema.albums.id })
+      .from(schema.albums)
+      .where(eq(schema.albums.slug, options.slug))
+      .limit(1);
+    if (album === undefined) throw this.#notFound();
+    return {
+      album,
+      sessionDigest: digest(this.#config.VISITOR_SESSION_SECRET, token),
+    };
+  }
+
   async #ownedIntent(id: string, albumId: string, sessionDigest: string) {
     const [intent] = await this.#database
       .select()
@@ -862,7 +929,7 @@ export class FaceService {
           eq(schema.media.albumId, albumId),
           eq(schema.media.publicationStatus, "published"),
           inArray(schema.media.id, [...new Set(mediaIds)]),
-          ne(schema.mediaFaceIndexTasks.status, "excluded"),
+          eq(schema.mediaFaceIndexTasks.status, "indexed"),
         ),
       );
     if (authorized.length === 0) return;
@@ -1011,7 +1078,7 @@ export class FaceService {
       albumId,
       enabled: index?.enabled ?? false,
       readyToEnable: Object.values(readiness).every(Boolean),
-      noticeVersion: index?.noticeVersion ?? null,
+      noticeVersion: index?.noticeVersion ?? this.#config.FACE_SEARCH_NOTICE_VERSION,
       thresholdVersion: index?.thresholdVersion ?? this.#config.FACE_SEARCH_THRESHOLD_VERSION,
       indexState: index?.indexState ?? "disabled",
       authorizationConfirmedAt: index?.authorizationConfirmedAt?.toISOString() ?? null,
@@ -1085,12 +1152,20 @@ export class FaceService {
         await this.#database.transaction(async (transaction) => {
           await transaction
             .update(schema.albumFaceIndexes)
-            .set({ enabled: false, indexState: "deleting", updatedAt: new Date() })
+            .set({
+              enabled: false,
+              indexState: index.datasetName === null ? "disabled" : "deleting",
+              indexedFacesAuthorized: false,
+              authorizationConfirmedAt: null,
+              updatedAt: new Date(),
+            })
             .where(eq(schema.albumFaceIndexes.albumId, album.id));
-          await transaction
-            .insert(schema.faceAlbumJobs)
-            .values({ albumId: album.id, kind: "delete_dataset" })
-            .onConflictDoNothing();
+          if (index.datasetName !== null) {
+            await transaction
+              .insert(schema.faceAlbumJobs)
+              .values({ albumId: album.id, kind: "delete_dataset" })
+              .onConflictDoNothing();
+          }
           await this.#cancelAlbumSearches(transaction, album.id);
         });
         await this.#cleanupAlbumReferences(album.id);
@@ -1142,6 +1217,12 @@ export class FaceService {
     for (const job of jobs) {
       const index = await this.#index(job.albumId);
       if (index?.datasetName == null) {
+        if (job.kind === "delete_dataset") {
+          await this.#database
+            .update(schema.albumFaceIndexes)
+            .set({ indexState: "disabled", lastErrorCode: null, updatedAt: new Date() })
+            .where(eq(schema.albumFaceIndexes.albumId, job.albumId));
+        }
         await this.#database
           .update(schema.faceAlbumJobs)
           .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
@@ -1318,6 +1399,7 @@ export class FaceService {
       .select({
         task: schema.mediaFaceIndexTasks,
         datasetName: schema.albumFaceIndexes.datasetName,
+        indexEnabled: schema.albumFaceIndexes.enabled,
         objectKey: schema.mediaVariants.objectKey,
       })
       .from(schema.mediaFaceIndexTasks)
@@ -1354,8 +1436,10 @@ export class FaceService {
     for (const row of tasks) {
       if (row.datasetName === null || row.objectKey === null) continue;
       const uri = `oss://${this.#config.ALIYUN_OSS_MEDIA_BUCKET}/${row.objectKey}`;
+      const deletionTask =
+        !row.indexEnabled || row.task.status === "deleting" || row.task.status === "excluded";
       try {
-        if (row.task.status === "pending" || row.task.status === "failed") {
+        if (!deletionTask && (row.task.status === "pending" || row.task.status === "failed")) {
           const providerTaskId = await this.#provider.indexMedia({
             datasetName: row.datasetName,
             mediaId: row.task.mediaId,
@@ -1371,7 +1455,7 @@ export class FaceService {
               updatedAt: new Date(),
             })
             .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
-        } else if (row.task.status === "indexing") {
+        } else if (!deletionTask && row.task.status === "indexing") {
           if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId))
             await this.#database
               .update(schema.mediaFaceIndexTasks)
@@ -1402,7 +1486,6 @@ export class FaceService {
           .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
       } catch {
         const attempts = row.task.attempts + 1;
-        const deletionTask = row.task.status === "deleting" || row.task.status === "excluded";
         await this.#database
           .update(schema.mediaFaceIndexTasks)
           .set({

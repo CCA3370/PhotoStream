@@ -10,7 +10,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { safeEqual } from "../auth/crypto.js";
 import type { AppConfig } from "../config.js";
 import { AppError } from "../errors.js";
@@ -308,6 +308,20 @@ export class OperationsService {
       if (media.publicationStatus !== "hidden") {
         await this.#hideInTransaction(transaction, media, options.actor.id, options.requestId);
       }
+      await transaction
+        .update(schema.mediaFaceIndexTasks)
+        .set({
+          status: "deleting",
+          deletionConfirmedAt: null,
+          nextAttemptAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.mediaFaceIndexTasks.mediaId, media.id),
+            ne(schema.mediaFaceIndexTasks.status, "excluded"),
+          ),
+        );
       const [task] = await transaction
         .insert(schema.deletionTasks)
         .values({
@@ -338,7 +352,7 @@ export class OperationsService {
         actorId: options.actor.id,
         action: "media.deletion.requested",
         targetId: media.id,
-        changedFields: ["publicationStatus", "deletionTask"],
+        changedFields: ["publicationStatus", "deletionTask", "faceIndexTask"],
         requestId: options.requestId,
       });
       return task.id;
@@ -429,6 +443,29 @@ export class OperationsService {
       return updated ?? null;
     });
     if (claimed === null) return;
+    const [faceTask] = await this.#database
+      .select({
+        status: schema.mediaFaceIndexTasks.status,
+        deletionConfirmedAt: schema.mediaFaceIndexTasks.deletionConfirmedAt,
+      })
+      .from(schema.mediaFaceIndexTasks)
+      .where(eq(schema.mediaFaceIndexTasks.mediaId, claimed.mediaId))
+      .limit(1);
+    if (
+      faceTask !== undefined &&
+      !(faceTask.status === "excluded" && faceTask.deletionConfirmedAt !== null)
+    ) {
+      await this.#database
+        .update(schema.deletionTasks)
+        .set({
+          status: "pending",
+          lastErrorCode: null,
+          nextAttemptAt: new Date(now.getTime() + 30_000),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.deletionTasks.id, claimed.id));
+      return;
+    }
     const objects = await this.#database
       .select()
       .from(schema.deletionTaskObjects)
@@ -505,6 +542,9 @@ export class OperationsService {
         .delete(schema.mediaBibReviews)
         .where(eq(schema.mediaBibReviews.mediaId, claimed.mediaId));
       await transaction
+        .delete(schema.mediaFaceIndexTasks)
+        .where(eq(schema.mediaFaceIndexTasks.mediaId, claimed.mediaId));
+      await transaction
         .update(schema.deletionTaskObjects)
         .set({ objectKey: null })
         .where(eq(schema.deletionTaskObjects.taskId, taskId));
@@ -534,7 +574,7 @@ export class OperationsService {
         actorId: claimed.requestedBy,
         action: "media.deletion.completed",
         targetId: claimed.mediaId,
-        changedFields: ["objects", "cdn", "bibData", "publicationStatus"],
+        changedFields: ["objects", "cdn", "bibData", "faceIndexTask", "publicationStatus"],
         requestId: claimed.requestId,
       });
     });

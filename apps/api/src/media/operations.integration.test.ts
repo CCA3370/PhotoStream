@@ -138,6 +138,13 @@ maybeDescribe("stage 3 operations", () => {
     await database.delete(schema.liveEvents);
     await database.delete(schema.analyticsEvents);
     await database.delete(schema.analyticsDaily);
+    await database.delete(schema.faceSearchCandidates);
+    await database.delete(schema.faceIntegrationEvents);
+    await database.delete(schema.faceSearchIntents);
+    await database.delete(schema.faceConsentReceipts);
+    await database.delete(schema.mediaFaceIndexTasks);
+    await database.delete(schema.faceAlbumJobs);
+    await database.delete(schema.albumFaceIndexes);
     await database.delete(schema.deletionTaskObjects);
     await database.delete(schema.deletionTasks);
     await database.delete(schema.mediaBatchRequests);
@@ -494,6 +501,65 @@ maybeDescribe("stage 3 operations", () => {
     expect(JSON.stringify(await database.select().from(schema.auditLogs))).not.toContain(
       "media/delete",
     );
+  });
+
+  it("does not complete permanent deletion before face metadata deletion is confirmed", async () => {
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "published",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+        publishSequence: 1,
+        publishedAt: new Date(),
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("media fixture missing");
+    const objectKey = "media/face-gated/1920.jpg";
+    await database.insert(schema.mediaVariants).values({
+      mediaId: media.id,
+      kind: "photo_1920",
+      objectKey,
+      format: "jpeg",
+      contentType: "image/jpeg",
+      width: 100,
+      height: 100,
+      expectedBytes: 100,
+      bytes: 100,
+      verified: true,
+    });
+    await database.insert(schema.mediaFaceIndexTasks).values({
+      albumId,
+      mediaId: media.id,
+      status: "indexed",
+    });
+    storage.objects.set(objectKey, { bytes: 100, contentType: "image/jpeg", etag: "fixture" });
+    const now = new Date();
+    const pending = await service.requestDeletion({
+      actor: { id: adminId, role: "admin", authenticatedAt: now },
+      mediaId: media.id,
+      confirmation: "运营相册",
+      requestId: "face-gated-delete",
+      now,
+    });
+    expect(pending).toMatchObject({ status: "pending", lastErrorCode: null });
+    expect(storage.objects.has(objectKey)).toBe(true);
+    expect((await database.select().from(schema.mediaFaceIndexTasks))[0]?.status).toBe("deleting");
+
+    await database
+      .delete(schema.mediaFaceIndexTasks)
+      .where(eq(schema.mediaFaceIndexTasks.mediaId, media.id));
+    await service.processDeletionTask(pending.id, new Date(now.getTime() + 31_000));
+
+    expect((await service.getDeletionTask({ id: adminId, role: "admin" }, pending.id)).status).toBe(
+      "completed",
+    );
+    expect(storage.objects.has(objectKey)).toBe(false);
   });
 
   it("enforces download switches and keeps anonymous analytics unlinkable from raw visitors", async () => {

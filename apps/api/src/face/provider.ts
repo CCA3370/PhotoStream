@@ -260,6 +260,7 @@ export class AliyunFaceProvider implements FaceProvider {
 
     const mediaIds: string[] = [];
     let nextToken: string | undefined;
+    const seenTokens = new Set<string>();
     do {
       const response = await this.#client.simpleQuery(
         new SimpleQueryRequest({
@@ -279,7 +280,12 @@ export class AliyunFaceProvider implements FaceProvider {
       for (const file of response.body?.files ?? []) {
         if (typeof file.customId === "string") mediaIds.push(file.customId);
       }
-      nextToken = response.body?.nextToken || undefined;
+      const candidateToken = response.body?.nextToken || undefined;
+      if (candidateToken !== undefined && seenTokens.has(candidateToken)) {
+        throw new Error("SimpleQuery returned a repeated pagination token");
+      }
+      if (candidateToken !== undefined) seenTokens.add(candidateToken);
+      nextToken = candidateToken;
     } while (nextToken !== undefined);
     return [...new Set(mediaIds)];
   }
@@ -297,6 +303,8 @@ export class AliyunFaceProvider implements FaceProvider {
   }
 
   async deleteDatasetContents(datasetName: string): Promise<void> {
+    let previousBatch = "";
+    let repeatedBatchCount = 0;
     for (;;) {
       const response = await this.#client.simpleQuery(
         new SimpleQueryRequest({
@@ -311,6 +319,12 @@ export class AliyunFaceProvider implements FaceProvider {
         typeof file.URI === "string" ? [file.URI] : [],
       );
       if (uris.length === 0) return;
+      const batch = [...uris].sort().join("\n");
+      repeatedBatchCount = batch === previousBatch ? repeatedBatchCount + 1 : 0;
+      if (repeatedBatchCount >= 2) {
+        throw new Error("Dataset contents deletion was not confirmed");
+      }
+      previousBatch = batch;
       await this.deleteMedia(datasetName, uris);
     }
   }

@@ -90,7 +90,7 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
       return options.faceService.updateConfig({
-        actor: actorFrom(session),
+        actor: { ...actorFrom(session), authenticatedAt: session.record.createdAt },
         albumId: request.params.id,
         input: request.body,
         requestId: request.id,
@@ -113,7 +113,7 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
       return options.faceService.excludeMedia({
-        actor: actorFrom(session),
+        actor: { ...actorFrom(session), authenticatedAt: session.record.createdAt },
         albumId: request.params.id,
         mediaIds: request.body.mediaIds,
         requestId: request.id,
@@ -151,7 +151,11 @@ export async function registerFaceRoutes(
     async (request, reply) => {
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
-      return options.faceService.deleteIndex(actorFrom(session), request.params.id, request.id);
+      return options.faceService.deleteIndex(
+        { ...actorFrom(session), authenticatedAt: session.record.createdAt },
+        request.params.id,
+        request.id,
+      );
     },
   );
 
