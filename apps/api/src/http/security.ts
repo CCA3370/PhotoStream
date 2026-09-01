@@ -5,6 +5,7 @@ import { trustedHosts } from "../config.js";
 import { AppError } from "../errors.js";
 
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const signedIntegrationPath = "/api/v1/integrations/aliyun/eventbridge";
 
 export function assertRequestOrigin(request: FastifyRequest, config: AppConfig): void {
   const host = request.headers.host;
@@ -16,7 +17,8 @@ export function assertRequestOrigin(request: FastifyRequest, config: AppConfig):
     });
   }
 
-  if (!safeMethods.has(request.method)) {
+  const path = request.url.split("?", 1)[0];
+  if (!safeMethods.has(request.method) && !(request.method === "POST" && path === signedIntegrationPath)) {
     const origin = request.headers.origin;
     if (origin !== config.APP_ORIGIN) {
       throw new AppError({

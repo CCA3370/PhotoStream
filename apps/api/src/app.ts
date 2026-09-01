@@ -17,6 +17,8 @@ import type { AuthStore, PasswordHasher } from "./auth/types.js";
 import type { UserAdminService } from "./auth/user-admin-service.js";
 import type { BibService } from "./bib/service.js";
 import type { AppConfig } from "./config.js";
+import type { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
+import type { FaceService } from "./face/service.js";
 import { AppError } from "./errors.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
@@ -24,6 +26,7 @@ import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBibRoutes } from "./routes/bib.js";
+import { registerFaceRoutes } from "./routes/face.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
 import { registerUserRoutes } from "./routes/users.js";
@@ -37,6 +40,8 @@ export interface BuildAppOptions {
   readonly userAdminService?: UserAdminService;
   readonly operationsService?: OperationsService;
   readonly bibService?: BibService;
+  readonly faceService?: FaceService;
+  readonly eventBridgeVerifier?: EventBridgeVerifier;
   readonly logger?: NonNullable<FastifyServerOptions["logger"]>;
 }
 
@@ -48,6 +53,8 @@ function loggerOptions(config: AppConfig): NonNullable<FastifyServerOptions["log
         "req.headers.authorization",
         "req.headers.cookie",
         "req.headers.x-csrf-token",
+        "req.headers.x-eventbridge-signature-v2",
+        "req.headers.x-eventbridge-signature-token",
         "res.headers.set-cookie",
         "password",
         "currentPassword",
@@ -248,6 +255,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     await registerBibRoutes(app, {
       authService,
       bibService: options.bibService,
+      config: options.config,
+    });
+  }
+  if (options.faceService !== undefined && options.eventBridgeVerifier !== undefined) {
+    await registerFaceRoutes(app, {
+      authService,
+      faceService: options.faceService,
+      eventBridgeVerifier: options.eventBridgeVerifier,
       config: options.config,
     });
   }

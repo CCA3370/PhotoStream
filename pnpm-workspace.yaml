@@ -9,6 +9,7 @@ minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 
 allowBuilds:
+  '@alicloud/openapi-core': true
   agent-browser: true
   argon2: true
   esbuild: true

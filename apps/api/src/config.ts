@@ -2,6 +2,12 @@ import { z } from "zod";
 
 const secretSchema = z.string().min(32);
 const optionalEnvironmentValue = (value: unknown): unknown => (value === "" ? undefined : value);
+const environmentBoolean = (value: unknown): unknown => {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+};
 const bibDataKeySchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]+$/u, "must use base64url characters")
@@ -43,6 +49,34 @@ const configSchema = z
     BIB_OCR_AUTOMATION_STATUS: z
       .enum(["disabled", "experimental", "qualified"])
       .default("experimental"),
+    FACE_SEARCH_GLOBAL_ENABLED: z
+      .preprocess(environmentBoolean, z.boolean())
+      .default(false),
+    FACE_SEARCH_NOTICE_VERSION: z.string().min(1).max(80).default("face-notice-2026-08-31"),
+    FACE_SEARCH_THRESHOLD_VERSION: z.string().min(1).max(80).default("unqualified"),
+    FACE_SEARCH_CLUSTER_THRESHOLD: z.coerce.number().min(0).max(1).default(0.92),
+    FACE_SEARCH_ASYNC_THRESHOLD: z.coerce.number().min(0).max(1).default(0.92),
+    FACE_SEARCH_MIN_QUALITY: z.coerce.number().min(0).max(1).default(0.8),
+    FACE_SEARCH_MIN_SHARPNESS: z.coerce.number().min(0).max(1).default(0.6),
+    FACE_SEARCH_MIN_FACE_EDGE: z.coerce.number().int().min(32).max(1_920).default(120),
+    ALIYUN_FACE_ACCESS_KEY_ID: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
+    ALIYUN_FACE_ACCESS_KEY_SECRET: z.preprocess(
+      optionalEnvironmentValue,
+      z.string().min(1).optional(),
+    ),
+    ALIYUN_ACCOUNT_ID: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
+    ALIYUN_IMM_REGION: z.literal("cn-hangzhou").default("cn-hangzhou"),
+    ALIYUN_IMM_PROJECT_NAME: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
+    ALIYUN_OSS_MEDIA_BUCKET: z.preprocess(optionalEnvironmentValue, z.string().min(3).optional()),
+    ALIYUN_OSS_FACE_REFERENCE_BUCKET: z.preprocess(
+      optionalEnvironmentValue,
+      z.string().min(3).optional(),
+    ),
+    ALIYUN_OSS_ENDPOINT: z.string().url().default("https://oss-cn-hangzhou.aliyuncs.com"),
+    EVENTBRIDGE_SIGNATURE_TOKEN: z.preprocess(
+      optionalEnvironmentValue,
+      z.string().min(16).optional(),
+    ),
     LOCAL_OBJECT_SECRET: secretSchema,
     LOCAL_OBJECT_BASE_URL: z.string().url().default("http://127.0.0.1:3002"),
     BOOTSTRAP_ADMIN_TOKEN: secretSchema.optional(),
@@ -91,6 +125,35 @@ const configSchema = z
         message: "current and previous bib key versions must differ",
         path: ["BIB_KEY_VERSION_PREVIOUS"],
       });
+    }
+    if (value.FACE_SEARCH_GLOBAL_ENABLED) {
+      const required = [
+        "ALIYUN_FACE_ACCESS_KEY_ID",
+        "ALIYUN_FACE_ACCESS_KEY_SECRET",
+        "ALIYUN_ACCOUNT_ID",
+        "ALIYUN_IMM_PROJECT_NAME",
+        "ALIYUN_OSS_MEDIA_BUCKET",
+        "ALIYUN_OSS_FACE_REFERENCE_BUCKET",
+      ] as const;
+      for (const field of required) {
+        if (value[field] === undefined) {
+          context.addIssue({ code: "custom", message: `${field} is required`, path: [field] });
+        }
+      }
+      if (value.FACE_SEARCH_THRESHOLD_VERSION === "unqualified") {
+        context.addIssue({
+          code: "custom",
+          message: "a qualified threshold version is required",
+          path: ["FACE_SEARCH_THRESHOLD_VERSION"],
+        });
+      }
+      if (value.ALIYUN_OSS_MEDIA_BUCKET === value.ALIYUN_OSS_FACE_REFERENCE_BUCKET) {
+        context.addIssue({
+          code: "custom",
+          message: "media and temporary face references must use separate buckets",
+          path: ["ALIYUN_OSS_FACE_REFERENCE_BUCKET"],
+        });
+      }
     }
   });
 

@@ -1460,6 +1460,21 @@ export class PhotoService {
   async getPublicAlbum(slug: string, visitorToken?: string) {
     const album = await this.#publicAlbumBySlug(slug);
     const unlocked = await this.#isVisitorAuthorized(album, visitorToken);
+    const [faceIndex] = await this.#database
+      .select({
+        enabled: schema.albumFaceIndexes.enabled,
+        noticeVersion: schema.albumFaceIndexes.noticeVersion,
+        indexState: schema.albumFaceIndexes.indexState,
+      })
+      .from(schema.albumFaceIndexes)
+      .where(eq(schema.albumFaceIndexes.albumId, album.id))
+      .limit(1);
+    const faceSearchAvailable =
+      this.#config.FACE_SEARCH_GLOBAL_ENABLED &&
+      unlocked &&
+      album.access === "password" &&
+      faceIndex?.enabled === true &&
+      (faceIndex.indexState === "ready" || faceIndex.indexState === "degraded");
     const categories = await this.#database
       .select()
       .from(schema.categories)
@@ -1539,6 +1554,8 @@ export class PhotoService {
         originalDownloadEnabled: album.originalDownloadEnabled,
         privacyNotice: album.privacyNotice,
         complaintContact: album.complaintContact,
+        faceSearchAvailable,
+        faceSearchNoticeVersion: faceSearchAvailable ? (faceIndex.noticeVersion ?? null) : null,
         bibSearchEnabled,
         bibNumberLengths,
         bibAttributeFilterEnabled,

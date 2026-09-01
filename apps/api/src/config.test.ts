@@ -91,4 +91,48 @@ describe("configuration", () => {
       }),
     ).toMatchObject({ BIB_KEY_VERSION: "v2", BIB_KEY_VERSION_PREVIOUS: "v1" });
   });
+
+  it("keeps face search off by default and requires isolated qualified cloud resources", () => {
+    expect(loadConfig(validEnvironment)).toMatchObject({
+      FACE_SEARCH_GLOBAL_ENABLED: false,
+      FACE_SEARCH_THRESHOLD_VERSION: "unqualified",
+    });
+    expect(() =>
+      loadConfig({ ...validEnvironment, FACE_SEARCH_GLOBAL_ENABLED: "true" }),
+    ).toThrowError(
+      expect.objectContaining({
+        fields: expect.arrayContaining([
+          "ALIYUN_FACE_ACCESS_KEY_ID",
+          "ALIYUN_OSS_FACE_REFERENCE_BUCKET",
+          "FACE_SEARCH_THRESHOLD_VERSION",
+        ]),
+      }),
+    );
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        FACE_SEARCH_GLOBAL_ENABLED: "true",
+        FACE_SEARCH_THRESHOLD_VERSION: "face-threshold-2026-09",
+        ALIYUN_FACE_ACCESS_KEY_ID: "test-access-key",
+        ALIYUN_FACE_ACCESS_KEY_SECRET: "test-access-secret",
+        ALIYUN_ACCOUNT_ID: "123456789",
+        ALIYUN_IMM_PROJECT_NAME: "face-test-project",
+        ALIYUN_OSS_MEDIA_BUCKET: "media-private-bucket",
+        ALIYUN_OSS_FACE_REFERENCE_BUCKET: "face-reference-private-bucket",
+      }),
+    ).toMatchObject({ FACE_SEARCH_GLOBAL_ENABLED: true });
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        FACE_SEARCH_GLOBAL_ENABLED: "true",
+        FACE_SEARCH_THRESHOLD_VERSION: "face-threshold-2026-09",
+        ALIYUN_FACE_ACCESS_KEY_ID: "test-access-key",
+        ALIYUN_FACE_ACCESS_KEY_SECRET: "test-access-secret",
+        ALIYUN_ACCOUNT_ID: "123456789",
+        ALIYUN_IMM_PROJECT_NAME: "face-test-project",
+        ALIYUN_OSS_MEDIA_BUCKET: "shared-bucket",
+        ALIYUN_OSS_FACE_REFERENCE_BUCKET: "shared-bucket",
+      }),
+    ).toThrowError(expect.objectContaining({ fields: ["ALIYUN_OSS_FACE_REFERENCE_BUCKET"] }));
+  });
 });

@@ -133,6 +133,7 @@ export const apiErrorCodeSchema = z.enum([
   "FACE_SEARCH_PROCESSING",
   "FACE_PROVIDER_UNAVAILABLE",
   "FACE_CLEANUP_FAILED",
+  "FACE_EVENT_SIGNATURE_INVALID",
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
 

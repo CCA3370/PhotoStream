@@ -6,6 +6,13 @@ import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { UserAdminService } from "./auth/user-admin-service.js";
 import { BibService } from "./bib/service.js";
 import { loadConfig } from "./config.js";
+import { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
+import { AliyunFaceProvider, UnavailableFaceProvider } from "./face/provider.js";
+import {
+  AliyunFaceReferenceStorage,
+  UnavailableFaceReferenceStorage,
+} from "./face/reference-storage.js";
+import { FaceService } from "./face/service.js";
 import { LiveEventBroker } from "./media/live-event-broker.js";
 import { LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
@@ -34,6 +41,20 @@ const userAdminService = new UserAdminService({
 });
 const operationsService = new OperationsService({ database, storage, config });
 const bibService = new BibService({ database, config, photoService });
+const faceProvider = config.FACE_SEARCH_GLOBAL_ENABLED
+  ? new AliyunFaceProvider(config)
+  : new UnavailableFaceProvider();
+const faceReferenceStorage = config.FACE_SEARCH_GLOBAL_ENABLED
+  ? new AliyunFaceReferenceStorage(config)
+  : new UnavailableFaceReferenceStorage();
+const faceService = new FaceService({
+  database,
+  config,
+  photoService,
+  provider: faceProvider,
+  references: faceReferenceStorage,
+});
+const eventBridgeVerifier = new EventBridgeVerifier(config);
 await bibService.assertKeyCoverage();
 const app = await buildApp({
   config,
@@ -43,6 +64,8 @@ const app = await buildApp({
   userAdminService,
   operationsService,
   bibService,
+  faceService,
+  eventBridgeVerifier,
 });
 const deletionPoll = setInterval(() => {
   void Promise.all([
@@ -84,6 +107,15 @@ const bibMaintenance = setInterval(() => {
   });
 }, 30_000);
 bibMaintenance.unref();
+const faceMaintenance = setInterval(() => {
+  void faceService.runMaintenance().catch((error: unknown) => {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : "unknown" },
+      "face maintenance poll failed",
+    );
+  });
+}, 30_000);
+faceMaintenance.unref();
 const bibCleanup = setInterval(
   () => {
     void bibService.cleanupStaleCandidates().catch((error: unknown) => {
@@ -101,6 +133,7 @@ async function shutdown(signal: string): Promise<void> {
   clearInterval(deletionPoll);
   clearInterval(analyticsCleanup);
   clearInterval(bibMaintenance);
+  clearInterval(faceMaintenance);
   clearInterval(bibCleanup);
   app.log.info({ signal }, "shutdown requested");
   await app.close();
