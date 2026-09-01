@@ -18,6 +18,7 @@
 - `/etc/photostream/settings.sh` 记忆用户输入和 CSPRNG 密钥；无参数复跑直接更新，`configure` 回车保留已有值。
 - 更新只允许干净工作树和 `git fetch` + `merge --ff-only`；目标槽迁移并健康后才热重载 Caddy。公网冒烟失败会恢复原槽；回滚冒烟失败也会二次恢复原槽。
 - PostgreSQL 始终单实例持久运行；回滚不执行逆向迁移，后续迁移必须继续采用扩展后收缩的向前兼容方式。
+- `docs/15-debian13-deployment.md` 已扩写为完整操作手册，覆盖上线准备、全部交互输入、首次部署、秘密/状态文件、部署后验收、无停机更新、回滚、巡检、故障排查、备份恢复和验收记录模板。
 
 ## 新鲜证据
 
@@ -29,6 +30,8 @@
 | `bash deploy/deploy.test.sh` | 退出 0 | 四份环境文件秘密隔离、槽镜像状态、Caddy 路由、回滚公网失败二次回切 |
 | `pnpm --filter @photostream/api deploy --prod --legacy <临时目录>` | 生产依赖与 `dist/server.js` 生成 | Dockerfile API deploy 步骤的本地等价探针；工作区依赖随后按锁文件恢复 |
 | `pnpm --filter @photostream/db db:generate` | 无额外 schema 变化 | 迁移与 schema 快照一致 |
+| `git diff --check` | 退出 0 | 完整部署操作手册、README 入口与验证记录无空白错误 |
+| PowerShell Markdown 结构与本地链接检查 | 通过 | 代码围栏/H1 结构正确，`docs/15-debian13-deployment.md` 引用的仓库内文档均存在 |
 
 失败路径复查先发现 Windows CRLF 检出导致 OCR 清单和 Biome 门禁失败；`.gitattributes` 固定 LF 后，当前工作树只在“LF 后匹配既有哈希”的文件上机械还原，再次整仓检查通过。独立复查还发现最初 `rollback` 公网冒烟失败后没有恢复原槽；已增加二次回切、停止失败目标槽和确定性脚本回归。
 
