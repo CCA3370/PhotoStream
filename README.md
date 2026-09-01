@@ -58,8 +58,9 @@
 12. [人脸候选找图](docs/14-face-search.md)
 13. [部署前待提供信息](docs/deployment-inputs.md)
 14. [运维、备份与事件响应手册](docs/13-operations-runbook.md)
-15. [参考资料](docs/references.md)
-16. [架构决策记录](docs/adr/README.md)
+15. [Debian 13 生产部署](docs/15-debian13-deployment.md)
+16. [参考资料](docs/references.md)
+17. [架构决策记录](docs/adr/README.md)
 
 ## 下一道门禁
 
