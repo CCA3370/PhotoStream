@@ -4,7 +4,9 @@ IFS=$'\n\t'
 umask 077
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+PROJECT_DIR="${PHOTOSTREAM_PROJECT_DIR:-/opt/photostream}"
+[[ "$PROJECT_DIR" == / ]] || PROJECT_DIR=${PROJECT_DIR%/}
+readonly PROJECT_DIR
 readonly COMPOSE_FILE="$PROJECT_DIR/compose.production.yml"
 readonly SETTINGS_DIR="${PHOTOSTREAM_SETTINGS_DIR:-/etc/photostream}"
 readonly SETTINGS_FILE="$SETTINGS_DIR/settings.sh"
@@ -36,8 +38,9 @@ ALIYUN_OSS_FACE_REFERENCE_BUCKET=""
 FACE_SEARCH_THRESHOLD_VERSION="unqualified"
 ADMIN_USERNAME="admin"
 ADMIN_DISPLAY_NAME="系统管理员"
-GIT_REMOTE="origin"
-GIT_BRANCH="main"
+GIT_REPOSITORY_URL="${PHOTOSTREAM_BOOTSTRAP_REPOSITORY_URL:-}"
+GIT_REMOTE="${PHOTOSTREAM_BOOTSTRAP_REMOTE:-origin}"
+GIT_BRANCH="${PHOTOSTREAM_BOOTSTRAP_BRANCH:-}"
 CREATE_SWAP="true"
 POSTGRES_PASSWORD=""
 SESSION_SECRET_CURRENT=""
@@ -73,7 +76,8 @@ trap on_error ERR
 
 usage() {
   cat <<'EOF'
-用法：sudo bash deploy/deploy.sh [命令]
+用法：sudo bash /任意路径/deploy.sh [命令]
+      sudo bash /opt/photostream/deploy/deploy.sh [命令]
 
   install      首次交互配置并部署；配置会保存，下次不再询问
   update       拉取配置分支最新提交并执行蓝绿无停机更新
@@ -81,6 +85,9 @@ usage() {
   rollback     切回上一部署槽（数据库迁移不会逆向回滚）
   status       显示当前版本与容器状态
   help         显示帮助
+
+首次运行会把仓库克隆到 /opt/photostream，然后从受管副本继续部署。
+当前工作目录不影响部署。
 
 不带命令时：未安装则执行 install；已安装则直接执行 update。
 EOF
@@ -90,10 +97,181 @@ require_root() {
   [[ ${EUID:-$(id -u)} -eq 0 ]] || die "请使用 sudo 运行此脚本。"
 }
 
+ensure_lock_tool() {
+  command -v flock >/dev/null 2>&1 && return
+  [[ -r /etc/os-release ]] || die "无法识别操作系统。"
+  # shellcheck source=/etc/os-release
+  source /etc/os-release
+  [[ "${ID:-}" == debian && "${VERSION_ID:-}" == 13 ]] || \
+    die "此脚本仅支持 Debian 13；当前为 ${PRETTY_NAME:-unknown}。"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends util-linux
+  command -v flock >/dev/null 2>&1 || die "安装 util-linux 后仍找不到 flock。"
+}
+
 acquire_lock() {
+  if [[ "${PHOTOSTREAM_LOCK_INHERITED:-false}" == true ]] && flock -n 9 2>/dev/null; then
+    return
+  fi
   mkdir -p -- "$(dirname -- "$LOCK_FILE")"
   exec 9>"$LOCK_FILE"
   flock -n 9 || die "另一项 PhotoStream 部署操作正在运行。"
+}
+
+validate_project_dir() {
+  [[ "$PROJECT_DIR" == /* && "$PROJECT_DIR" != / ]] || \
+    die "受管部署目录必须是非根绝对路径：$PROJECT_DIR"
+  [[ ! -L "$PROJECT_DIR" ]] || die "受管部署目录不能是符号链接：$PROJECT_DIR"
+}
+
+check_bootstrap_platform() {
+  [[ -r /etc/os-release ]] || die "无法识别操作系统。"
+  # shellcheck source=/etc/os-release
+  source /etc/os-release
+  [[ "${ID:-}" == debian && "${VERSION_ID:-}" == 13 ]] || \
+    die "此脚本仅支持 Debian 13；当前为 ${PRETTY_NAME:-unknown}。"
+  case "$(dpkg --print-architecture)" in amd64|arm64) ;; *) die "仅支持 amd64/arm64。" ;; esac
+  (( $(nproc) >= 2 )) || die "至少需要 2 个 CPU 核心。"
+  local memory_kib
+  memory_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+  (( memory_kib >= 1800000 )) || die "内存不足：至少需要约 2GiB。"
+}
+
+repository_url_is_valid() {
+  local repository_url=$1
+  [[ -n "$repository_url" && "$repository_url" != -* && \
+    "$repository_url" != *[$'\t\r\n ']* ]] || return 1
+  (( ${#repository_url} <= 2048 )) || return 1
+  case "$repository_url" in
+    https://*|ssh://*|file:///*|/*|[A-Za-z0-9._-]*@[A-Za-z0-9._-]*:*) ;;
+    *) return 1 ;;
+  esac
+}
+
+ask_repository_url() {
+  local current=$GIT_REPOSITORY_URL value prompt_suffix
+  while true; do
+    [[ -n "$current" ]] && prompt_suffix="（默认：$current）" || prompt_suffix=''
+    read -r -p "Git 仓库地址（HTTPS/SSH）$prompt_suffix：" value
+    [[ -n "$value" ]] || value=$current
+    if repository_url_is_valid "$value"; then
+      GIT_REPOSITORY_URL=$value
+      return
+    fi
+    warn "Git 仓库地址必须是 HTTPS、SSH/scp、file:// 或绝对本地路径，且不能包含空白。"
+  done
+}
+
+validate_repository_configuration() {
+  repository_url_is_valid "$GIT_REPOSITORY_URL" || \
+    die "Git 仓库地址必须是 HTTPS、SSH/scp、file:// 或绝对本地路径，且不能包含空白。"
+  [[ "$GIT_REMOTE" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "Git remote 名格式无效。"
+  [[ "$GIT_BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]] || die "Git 分支格式无效。"
+}
+
+managed_checkout_is_complete() {
+  [[ -d "$PROJECT_DIR/.git" && -f "$PROJECT_DIR/deploy/deploy.sh" && \
+    -f "$PROJECT_DIR/compose.production.yml" && -f "$PROJECT_DIR/Dockerfile" ]]
+}
+
+running_from_managed_checkout() {
+  managed_checkout_is_complete || return 1
+  [[ "$(readlink -f -- "${BASH_SOURCE[0]}")" == \
+    "$(readlink -f -- "$PROJECT_DIR/deploy/deploy.sh")" ]]
+}
+
+hydrate_repository_defaults() {
+  local current_branch remote_url
+  [[ -d "$PROJECT_DIR/.git" ]] || return
+  if [[ -z "$GIT_BRANCH" ]]; then
+    current_branch=$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)
+    GIT_BRANCH=${current_branch:-main}
+  fi
+  if [[ -z "$GIT_REPOSITORY_URL" ]]; then
+    remote_url=$(git -C "$PROJECT_DIR" remote get-url "$GIT_REMOTE" 2>/dev/null || true)
+    GIT_REPOSITORY_URL=$remote_url
+  fi
+}
+
+hydrate_bootstrap_defaults() {
+  local source_root source_branch source_url
+  if [[ -f "$SETTINGS_FILE" ]]; then
+    assert_secure_file "$SETTINGS_FILE"
+    # shellcheck source=/dev/null
+    source "$SETTINGS_FILE"
+  fi
+  if [[ -z "$GIT_REPOSITORY_URL" ]] && \
+    source_root=$(git -C "$SCRIPT_DIR/.." rev-parse --show-toplevel 2>/dev/null); then
+    if [[ -f "$source_root/deploy/deploy.sh" && -f "$source_root/compose.production.yml" && \
+      -f "$source_root/Dockerfile" ]]; then
+      source_url=$(git -C "$source_root" remote get-url "$GIT_REMOTE" 2>/dev/null || true)
+      source_branch=$(git -C "$source_root" branch --show-current 2>/dev/null || true)
+      GIT_REPOSITORY_URL=$source_url
+      [[ -n "$GIT_BRANCH" ]] || GIT_BRANCH=$source_branch
+    fi
+  fi
+  if [[ -z "$GIT_REPOSITORY_URL" ]]; then
+    ask_repository_url
+  fi
+  if [[ -z "$GIT_BRANCH" ]]; then
+    GIT_BRANCH=main
+    ask_value GIT_BRANCH "首次克隆分支" '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$'
+  fi
+  validate_repository_configuration
+}
+
+ensure_git_available_for_clone() {
+  if command -v git >/dev/null 2>&1 && command -v ssh >/dev/null 2>&1 && \
+    [[ -s /etc/ssl/certs/ca-certificates.crt ]]; then
+    return
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends ca-certificates git openssh-client
+}
+
+ensure_managed_checkout() {
+  validate_project_dir
+  if managed_checkout_is_complete; then
+    hydrate_repository_defaults
+    return
+  fi
+  if [[ -e "$PROJECT_DIR" && ! -d "$PROJECT_DIR" ]]; then
+    die "受管部署路径已存在且不是目录：$PROJECT_DIR"
+  fi
+  if [[ -d "$PROJECT_DIR/.git" ]]; then
+    die "受管仓库缺少 deploy/deploy.sh、compose.production.yml 或 Dockerfile：$PROJECT_DIR"
+  fi
+  if [[ -d "$PROJECT_DIR" && -n $(find "$PROJECT_DIR" -mindepth 1 -print -quit) ]]; then
+    die "受管部署目录非空且不是 Git 仓库，拒绝覆盖：$PROJECT_DIR"
+  fi
+  hydrate_bootstrap_defaults
+  mkdir -p -- "$(dirname -- "$PROJECT_DIR")"
+  log "克隆 Git 仓库到受管目录 $PROJECT_DIR。"
+  git clone --branch "$GIT_BRANCH" --single-branch -- "$GIT_REPOSITORY_URL" "$PROJECT_DIR"
+  managed_checkout_is_complete || die "克隆完成，但仓库缺少生产部署文件。"
+  hydrate_repository_defaults
+}
+
+handoff_to_managed_checkout() {
+  validate_project_dir
+  running_from_managed_checkout && return
+  if ! managed_checkout_is_complete; then
+    check_bootstrap_platform
+    ensure_git_available_for_clone
+  fi
+  ensure_managed_checkout
+  hydrate_repository_defaults
+  validate_repository_configuration
+  log "切换到受管部署脚本 $PROJECT_DIR/deploy/deploy.sh。"
+  export PHOTOSTREAM_PROJECT_DIR="$PROJECT_DIR"
+  export PHOTOSTREAM_BOOTSTRAP_REPOSITORY_URL="$GIT_REPOSITORY_URL"
+  export PHOTOSTREAM_BOOTSTRAP_REMOTE="$GIT_REMOTE"
+  export PHOTOSTREAM_BOOTSTRAP_BRANCH="$GIT_BRANCH"
+  export PHOTOSTREAM_BOOTSTRAP_GIT_READY=true
+  export PHOTOSTREAM_LOCK_INHERITED=true
+  exec bash "$PROJECT_DIR/deploy/deploy.sh" "$@"
 }
 
 assert_secure_file() {
@@ -127,7 +305,7 @@ save_settings() {
   mkdir -p -- "$SETTINGS_DIR"
   temp=$(mktemp "$SETTINGS_DIR/settings.XXXXXX")
   {
-    printf 'SETTINGS_VERSION=1\n'
+    printf 'SETTINGS_VERSION=2\n'
     local name
     for name in \
       APP_HOST ACME_EMAIL MEDIA_BASE_URL ALIYUN_OSS_MEDIA_BUCKET ALIYUN_OSS_ENDPOINT \
@@ -135,7 +313,8 @@ save_settings() {
       ALIYUN_CDN_AUTH_KEY_PREVIOUS ALIYUN_CDN_AUTH_VALIDITY_SECONDS \
       FACE_SEARCH_GLOBAL_ENABLED ALIYUN_FACE_ACCESS_KEY_ID ALIYUN_FACE_ACCESS_KEY_SECRET \
       ALIYUN_ACCOUNT_ID ALIYUN_IMM_PROJECT_NAME ALIYUN_OSS_FACE_REFERENCE_BUCKET \
-      FACE_SEARCH_THRESHOLD_VERSION ADMIN_USERNAME ADMIN_DISPLAY_NAME GIT_REMOTE GIT_BRANCH \
+      FACE_SEARCH_THRESHOLD_VERSION ADMIN_USERNAME ADMIN_DISPLAY_NAME GIT_REPOSITORY_URL \
+      GIT_REMOTE GIT_BRANCH \
       CREATE_SWAP POSTGRES_PASSWORD SESSION_SECRET_CURRENT CSRF_SECRET CURSOR_SIGNING_SECRET \
       VISITOR_SESSION_SECRET ALBUM_PASSWORD_GENERATION_SECRET USER_PASSWORD_GENERATION_SECRET \
       ANALYTICS_HMAC_SECRET BIB_DATA_KEY BIB_SEARCH_KEY EVENTBRIDGE_SIGNATURE_TOKEN; do
@@ -274,8 +453,15 @@ configure_settings() {
 
   ask_value ADMIN_USERNAME "首位管理员用户名" '^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$'
   ask_value ADMIN_DISPLAY_NAME "首位管理员展示名" '^.{1,80}$'
-  ask_value GIT_REMOTE "更新使用的 Git remote" '^[A-Za-z0-9._-]{1,64}$'
-  ask_value GIT_BRANCH "更新使用的分支" '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$'
+  hydrate_repository_defaults
+  if [[ "${PHOTOSTREAM_BOOTSTRAP_GIT_READY:-false}" == true && ! -f "$SETTINGS_FILE" ]]; then
+    log "Git 仓库地址、remote 和分支已由首次克隆确定并将保存。"
+  else
+    ask_repository_url
+    ask_value GIT_REMOTE "更新使用的 Git remote" '^[A-Za-z0-9._-]{1,64}$'
+    ask_value GIT_BRANCH "更新使用的分支" '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$'
+  fi
+  validate_repository_configuration
   ask_yes_no CREATE_SWAP "没有 swap 时是否创建 2GiB /swapfile（2GiB 主机建议启用）"
 
   ensure_generated_secrets
@@ -378,16 +564,8 @@ render_runtime_envs() {
 }
 
 check_host() {
-  [[ -r /etc/os-release ]] || die "无法识别操作系统。"
-  # shellcheck source=/etc/os-release
-  source /etc/os-release
-  [[ "${ID:-}" == debian && "${VERSION_ID:-}" == 13 ]] || \
-    die "此脚本仅支持 Debian 13；当前为 ${PRETTY_NAME:-unknown}。"
-  case "$(dpkg --print-architecture)" in amd64|arm64) ;; *) die "仅支持 amd64/arm64。" ;; esac
-  (( $(nproc) >= 2 )) || die "至少需要 2 个 CPU 核心。"
-  local memory_kib free_kib
-  memory_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
-  (( memory_kib >= 1800000 )) || die "内存不足：至少需要约 2GiB。"
+  check_bootstrap_platform
+  local free_kib
   free_kib=$(df -Pk "$PROJECT_DIR" | awk 'NR==2 {print $4}')
   (( free_kib >= 8 * 1024 * 1024 )) || die "项目磁盘至少需要 8GiB 可用空间。"
   [[ -f "$COMPOSE_FILE" && -f "$PROJECT_DIR/Dockerfile" ]] || die "部署文件不完整。"
@@ -396,7 +574,7 @@ check_host() {
 install_docker() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y --no-install-recommends ca-certificates curl git openssl util-linux
+  apt-get install -y --no-install-recommends ca-certificates curl git openssh-client openssl util-linux
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     log "安装 Docker 官方 Debian 13 软件源与 Compose 插件。"
     local conflicting_packages=() package
@@ -457,6 +635,12 @@ sync_latest_commit() {
   current_branch=$(git -C "$PROJECT_DIR" branch --show-current)
   [[ "$current_branch" == "$GIT_BRANCH" ]] || \
     die "当前分支为 $current_branch，配置要求 $GIT_BRANCH。"
+  validate_repository_configuration
+  if git -C "$PROJECT_DIR" remote get-url "$GIT_REMOTE" >/dev/null 2>&1; then
+    git -C "$PROJECT_DIR" remote set-url "$GIT_REMOTE" "$GIT_REPOSITORY_URL"
+  else
+    git -C "$PROJECT_DIR" remote add "$GIT_REMOTE" "$GIT_REPOSITORY_URL"
+  fi
   log "获取 $GIT_REMOTE/$GIT_BRANCH 的最新提交。"
   git -C "$PROJECT_DIR" fetch --prune "$GIT_REMOTE" "$GIT_BRANCH"
   git -C "$PROJECT_DIR" merge --ff-only "$GIT_REMOTE/$GIT_BRANCH"
@@ -645,6 +829,7 @@ install_command() {
   [[ ! -f "$SETTINGS_FILE" ]] || die "已经安装；请使用 update 或 configure。"
   check_host
   install_docker
+  hydrate_repository_defaults
   configure_settings
   ensure_swap
   load_state
@@ -655,6 +840,14 @@ install_command() {
 
 update_command() {
   load_settings
+  local settings_need_repository_upgrade=false
+  [[ -n "$GIT_REPOSITORY_URL" ]] || settings_need_repository_upgrade=true
+  hydrate_repository_defaults
+  if [[ "$settings_need_repository_upgrade" == true ]]; then
+    validate_repository_configuration
+    save_settings
+    log "已把现有 Git remote 地址补充到记忆配置。"
+  fi
   load_state
   check_host
   install_docker
@@ -666,6 +859,7 @@ update_command() {
 
 configure_command() {
   load_settings
+  hydrate_repository_defaults
   load_state
   check_host
   install_docker
@@ -719,18 +913,26 @@ status_command() {
 main() {
   local command=${1:-}
   case "$command" in help|-h|--help) usage; return ;; esac
+  case "$command" in ''|install|update|configure|rollback|status) ;; *) usage; die "未知命令：$command" ;; esac
   require_root
+  ensure_lock_tool
   acquire_lock
   if [[ -z "$command" ]]; then
     [[ -f "$SETTINGS_FILE" ]] && command=update || command=install
   fi
+  if [[ "$command" == install && -f "$SETTINGS_FILE" ]]; then
+    die "已经安装；请使用 update 或 configure。"
+  fi
+  if [[ "$command" != install && ! -f "$SETTINGS_FILE" ]]; then
+    die "尚未安装；请先运行 install。"
+  fi
+  handoff_to_managed_checkout "$command"
   case "$command" in
     install) install_command ;;
     update) update_command ;;
     configure) configure_command ;;
     rollback) rollback_command ;;
     status) status_command ;;
-    *) usage; die "未知命令：$command" ;;
   esac
 }
 
