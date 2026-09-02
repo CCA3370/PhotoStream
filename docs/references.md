@@ -45,6 +45,8 @@
 - [人脸识别技术应用安全管理办法](https://www.cac.gov.cn/2025-03/21/c_1744174262156096.htm)：特定目的、充分必要、显著告知、单独同意、不满十四周岁监护人同意、设备内存储/互联网传输、影响评估、替代方式和最短保存要求。
 - [人脸识别应用备案公告](https://www.cac.gov.cn/2025-05/30/c_1750315544241157.htm)：存储数量达到 10 万人的备案起点；低于阈值不等于免除其他义务。
 - [IMM 服务接入点](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-endpoint)：新版 IMM 支持华北 2（北京）`cn-beijing`，公网 Endpoint 为 `imm.cn-beijing.aliyuncs.com`。
+- [IMM 使用限制与各地域支持功能](https://help.aliyun.com/zh/imm/product-overview/limits)：北京明确支持人脸检测/相似度以及 Dataset 创建、元数据索引、文件查询和人脸聚类，不只是存在基础服务 Endpoint。
+- [新版 IMM 人脸聚类示例](https://help.aliyun.com/zh/imm/user-guide/face-clustering-3)：官方示例使用 `imm.cn-beijing.aliyuncs.com`，并说明聚类、`SimpleQuery` 与 `CreateFacesSearchingTask` 的流程和结果边界。
 - [IMM 的 OSS 数据处理指南](https://help.aliyun.com/zh/imm/developer-reference/user-guide-for-x-oss-process)：要求调用地域与 OSS 数据地域一致，以减少跨地域延迟和费用；ADR-013 因此不保留杭州 IMM。
 - [IMM 工作流模板与算子](https://help.aliyun.com/zh/imm/user-guide/workflow-templates-and-operators)：`Official:FaceManagement` 只启用 OSS 元信息与 FaceDetection，区别于标签/语义等更宽模板。
 - [IndexFileMeta](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-indexfilemeta)：显式索引 OSS 文件、异步完成和数据集边界。

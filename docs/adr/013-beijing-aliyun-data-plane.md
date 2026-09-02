@@ -9,7 +9,7 @@
 
 原架构把媒体、备份、临时人脸参考照、IMM 和 EventBridge 固定在华东 1（杭州）。用户现要求把 OSS 地域改为华北 2（北京），并要求若 IMM 只能在杭州则维持原地域。
 
-阿里云当前官方资料确认：OSS 在北京的公网 Endpoint 为 `oss-cn-beijing.aliyuncs.com`；新版 IMM 支持北京 `cn-beijing` 和 `imm.cn-beijing.aliyuncs.com`；EventBridge 也支持北京。IMM 官方资料要求所用 OSS Bucket 与 Project 地域一致，以避免跨地域延迟和费用。因此“IMM 只能在杭州”的兜底条件没有触发，也不应把北京 OSS 与杭州 IMM 拼接成跨地域链路。
+阿里云当前官方资料确认：OSS 在北京的公网 Endpoint 为 `oss-cn-beijing.aliyuncs.com`；新版 IMM 支持北京 `cn-beijing` 和 `imm.cn-beijing.aliyuncs.com`，功能地域表明确列出北京支持人脸检测/相似度、Dataset、元数据索引、文件查询和人脸聚类，官方人脸聚类示例也使用北京 Endpoint 并覆盖相似人脸搜索；EventBridge 同样支持北京。IMM 官方资料要求所用 OSS Bucket 与 Project 地域一致，以避免跨地域延迟和费用。因此“IMM 只能在杭州”的兜底条件没有触发，也不应把北京 OSS 与杭州 IMM 拼接成跨地域链路。
 
 截至本决策，仓库没有创建、迁移或验证任何真实 OSS、IMM、EventBridge、CDN 或生产资源；既有云端状态仍为 **Unverified**。
 

@@ -45,7 +45,7 @@ PhotoStream 的当前本地契约已从杭州统一改为华北 2（北京）：
 ## 官方能力复核
 
 - [OSS 地域与 Endpoint](../references.md#2-oss-上传存储与权限)确认北京公网 Endpoint 为 `oss-cn-beijing.aliyuncs.com`。
-- [IMM 接入点与同地域要求](../references.md#5-人脸找图imm-与事件通知)确认新版 IMM 支持北京 `cn-beijing`，且所用 OSS Bucket 应与 Project 同地域。
+- [IMM 接入点、功能地域表、人脸聚类示例与同地域要求](../references.md#5-人脸找图imm-与事件通知)确认新版 IMM 支持北京 `cn-beijing`，北京开放本项目依赖的人脸检测/相似度、Dataset、索引、查询、聚类与相似搜索流程，且所用 OSS Bucket 应与 Project 同地域；用户提出的“IMM 只能杭州”兜底条件未触发。
 - [EventBridge 地域资料](../references.md#5-人脸找图imm-与事件通知)确认北京接入点可用。
 
 这些资料只证明产品当前公开的地域能力和本地选型依据，不证明账号已开通、具体 API/事件已在真实北京资源上成功运行。
