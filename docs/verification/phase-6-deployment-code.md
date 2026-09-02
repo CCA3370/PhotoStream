@@ -6,7 +6,7 @@
 
 ## 结论
 
-本阶段为 **Confirmed（本地实现范围）/ Partial（生产部署目标）**。用户要求的任意目录启动、自动克隆到受管目录、交互输入、值记忆、无须手改环境文件、拉取配置分支最新提交、健康检查后切流、失败回切和单版本应用回滚均已进入代码。当前 Linux amd64 环境已完成 API 生产镜像构建及容器入口模块解析探针；完整 Compose/Caddy、带生产配置的健康启动和真实 2C2G Debian 13 主机仍未由本地验证覆盖，也没有获得 DNS、OSS/CDN、云端或生产发布授权，因此这些边界保持 **Unverified**。
+本阶段为 **Confirmed（本地实现范围）/ Partial（生产部署目标）**。用户要求的任意目录启动、自动克隆到受管目录、交互输入、值记忆、无须手改环境文件、拉取配置分支最新提交、健康检查后切流、失败回切和单版本应用回滚均已进入代码。当前 Linux amd64 环境已完成 API 生产镜像构建、容器入口模块解析探针及固定版本 Caddy 完整配置校验；带生产配置的健康启动、实际热重载和真实 2C2G Debian 13 主机仍未由本地验证覆盖，也没有获得 DNS、OSS/CDN、云端或生产发布授权，因此这些边界保持 **Unverified**。
 
 ## 变更与契约
 
@@ -19,6 +19,8 @@
 - `/etc/photostream/settings.sh` 记忆用户输入和 CSPRNG 密钥；无参数复跑直接更新，`configure` 回车保留已有值。
 - 单个脚本可从任意当前目录运行；首次将仓库克隆到 `/opt/photostream` 并 `exec` 受管副本，后续复用该 checkout。仓库 URL/remote/分支进入 root-only 记忆配置，非空非 Git 目标会拒绝覆盖。
 - 更新只允许干净工作树和 `git fetch` + `merge --ff-only`；目标槽迁移并健康后才热重载 Caddy。公网冒烟失败会恢复原槽；回滚冒烟失败也会二次恢复原槽。
+- Caddy 的 `:8080` Web 服务端内部 API 路由在 blue/green 切换时统一把上游 `Host` 设置为配置的 `APP_HOST`；API 继续只信任正式应用域名和既有本地开发 Host，公网 `/api/*` 路由不改写 Host。
+- Web 服务端会话读取只把 `401 AUTH_REQUIRED` 映射为未登录；来源校验、账号停用及其他 API 错误保留为显式失败，不再静默重定向到登录页。
 - 部署脚本的幂等早退显式返回成功：禁用 swap、系统已有活动 swap，以及首位管理员已经初始化时均继续执行，不会被 `set -e` 误判为部署失败。
 - PostgreSQL 始终单实例持久运行；回滚不执行逆向迁移，后续迁移必须继续采用扩展后收缩的向前兼容方式。
 - `docs/15-debian13-deployment.md` 已扩写为完整操作手册，覆盖上线准备、全部交互输入、首次部署、秘密/状态文件、部署后验收、无停机更新、回滚、巡检、故障排查、备份恢复和验收记录模板。
@@ -28,9 +30,11 @@
 | 检查 | 结果 | 范围 |
 | --- | --- | --- |
 | `pnpm --filter @photostream/api test` | 9 个文件、35 项通过 | 配置门禁、CDN 官方签名样例、反向代理信任及既有 API 单元行为 |
-| `pnpm check` | 退出 0 | 232 个文件 lint；全 workspace 类型、单元测试与串行构建；API 包含 migrate CLI，Next 14 个页面生成 |
+| `pnpm check` | 退出 0 | 233 个文件 lint；全 workspace 类型、81 项单元测试与串行构建；API 包含 migrate CLI，Next 14 个页面生成 |
+| `pnpm --filter @photostream/web test` | 6 个文件、17 项通过 | 服务端会话成功、失效、来源错误、账号停用及其他 401 错误分类 |
 | `bash -n deploy/deploy.sh deploy/deploy.test.sh` | 退出 0 | Bash 语法 |
-| `bash deploy/deploy.test.sh` | 退出 0 | 配置/仓库值记忆、swap 禁用/已启用幂等早退、管理员已初始化早退、任意启动目录、自动克隆、受管脚本交接、错误目录拒绝、四份环境文件秘密隔离、槽镜像状态、Caddy 路由、回滚公网失败二次回切 |
+| `bash deploy/deploy.test.sh` | 退出 0 | 配置/仓库值记忆、swap 禁用/已启用幂等早退、管理员已初始化早退、任意启动目录、自动克隆、受管脚本交接、错误目录拒绝、四份环境文件秘密隔离、blue/green 内部 API 目标和 Host 重写、公网路由不重写 Host、回滚公网失败二次回切 |
+| `docker run --rm ... caddy:2.11.4-alpine caddy validate --config /etc/caddy/Caddyfile` | 退出 0，`Valid configuration` | 用 `write_routes blue` 实际生成的动态路由片段验证完整 Caddy 配置语法 |
 | 修复前：`pnpm --filter @photostream/api deploy --prod --legacy <临时目录>` 后执行 `node dist/server.js` | 退出 1，复现 `ERR_MODULE_NOT_FOUND` | `dist/server.js` 保留 `@photostream/local-object-protocol` 导入，但 deploy 输出没有该包声明的 `src/index.ts`；工作区依赖随后按冻结锁文件恢复 |
 | 修复后：`pnpm --filter @photostream/api build` 与 `rg -n '@photostream/' apps/api/dist -g '*.js'` | 构建退出 0；`rg` 退出 1、无匹配 | 三个 API JavaScript 入口均不再保留工作区运行时导入 |
 | `docker build --target api --tag photostream-api:bundle-fix-local .` | API 镜像生成 | 实际执行 Node 24.20.0 API build、production deploy、迁移目录复制及非 root runtime 层组装 |
@@ -48,9 +52,11 @@
 
 同日一次清空后重装在保存 root-only 配置后于 `install_command` 的 `ensure_swap` 调用失败；主机证据确认 `/swapfile` 已启用、2 GiB、权限 `0600`、`TYPE="swap"` 且 `/etc/fstab` 已持久化。根因是 `[[ 条件 ]] || return` 的裸 `return` 继承失败条件的退出码 1，并被 `set -e` 当作错误。修复为显式 `return 0`，并覆盖禁用创建、已有活动 swap 和管理员已初始化三个正常幂等分支。
 
+同日生产首次登录在跳往 `/change-password` 后返回 `/login`。根因是 Web 使用 `API_INTERNAL_URL=http://caddy:8080` 读取会话时，内部 Caddy 反代沿用 `caddy:8080` 作为 Host，被 API 的全局来源校验以 `AUTH_ORIGIN_INVALID` 拒绝；会话读取又把全部 403 当作未登录。修复在动态 `active-api.caddy` 中对整个内部 API 入口统一写入配置的 `APP_HOST`，没有扩大 API trusted hosts；同时仅把 `401 AUTH_REQUIRED` 降级为无会话。
+
 ## 未验证与上线门禁
 
-- 当前环境仅实际构建并检查了 API target；尚未执行 Web target、完整 `docker compose config`、Caddy validate/reload、带生产环境文件的 API 健康启动、PostgreSQL 18.6 空库迁移或管理员初始化。
+- 当前环境仅实际构建并检查了 API target，并以固定生产版本镜像完成 Caddy 配置校验；尚未执行 Web target、完整 `docker compose config`、Caddy reload、带生产环境文件的 API 健康启动、PostgreSQL 18.6 空库迁移或管理员初始化。
 - 当前 Git for Windows 没有真实 `flock`，脚本测试验证了锁文件描述符跨受管脚本交接仍保持打开，但 `util-linux` 自动安装、Linux `flock` 互斥、root SSH/HTTPS 克隆仍需在 Debian 13 目标机验证。
 - 未在 Debian 13 amd64/arm64、真实 2 vCPU/2 GiB/swap 上测量构建峰值、双槽并存 RSS、切流延迟、SSE 重连和磁盘增长。
 - 未调用真实 OSS V4/multipart/CDN RefreshObjectCaches，未验证 CORS、私有回源、Type A 控制台有效期、Cache Key、Range、账单或删除一致性。
