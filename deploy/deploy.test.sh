@@ -105,6 +105,16 @@ assert_file_contains "$CADDY_ENV_FILE" 'APP_HOST=photos.example.com'
 assert_file_excludes "$CADDY_ENV_FILE" 'exampleAccessSecret'
 assert_file_contains "$CADDY_STATE_DIR/active-public.caddy" 'reverse_proxy api-blue:3001'
 assert_file_contains "$CADDY_STATE_DIR/active-public.caddy" 'reverse_proxy web-blue:3000'
+assert_file_contains "$CADDY_STATE_DIR/active-api.caddy" 'reverse_proxy api-blue:3001'
+assert_file_contains "$CADDY_STATE_DIR/active-api.caddy" 'header_up Host photos.example.com'
+assert_file_excludes "$CADDY_STATE_DIR/active-api.caddy" 'reverse_proxy api-green:3001'
+assert_file_excludes "$CADDY_STATE_DIR/active-public.caddy" 'header_up Host'
+
+write_routes green
+assert_file_contains "$CADDY_STATE_DIR/active-api.caddy" 'reverse_proxy api-green:3001'
+assert_file_contains "$CADDY_STATE_DIR/active-api.caddy" 'header_up Host photos.example.com'
+assert_file_excludes "$CADDY_STATE_DIR/active-api.caddy" 'reverse_proxy api-blue:3001'
+write_routes blue
 
 rollback_trace="$TEST_ROOT/rollback.trace"
 if (

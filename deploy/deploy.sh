@@ -696,7 +696,8 @@ write_routes() {
   api_temp=$(mktemp "$CADDY_STATE_DIR/api.XXXXXX")
   printf 'handle /api/* {\n\treverse_proxy api-%s:3001\n}\nhandle {\n\treverse_proxy web-%s:3000\n}\n' \
     "$slot" "$slot" >"$public_temp"
-  printf 'reverse_proxy api-%s:3001\n' "$slot" >"$api_temp"
+  printf 'reverse_proxy api-%s:3001 {\n\theader_up Host %s\n}\n' \
+    "$slot" "$APP_HOST" >"$api_temp"
   chmod 644 "$public_temp" "$api_temp"
   mv -f -- "$public_temp" "$CADDY_STATE_DIR/active-public.caddy"
   mv -f -- "$api_temp" "$CADDY_STATE_DIR/active-api.caddy"
