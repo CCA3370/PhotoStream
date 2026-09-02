@@ -12,7 +12,7 @@
 
 同日已完成 Debian 13 生产部署代码；2026-09-02 又补全任意目录启动和自动克隆到 `/opt/photostream` 的部署入口。脚本交互收集并以 root-only 权限记忆配置；生产 API 使用北京私有 OSS/内地 CDN，并通过 Caddy + Docker Compose 蓝绿双槽更新到配置分支最新提交。目标 2C2G 主机、真实 Docker/Caddy、DNS/ACME 和阿里云链路尚未实际执行，仍保持 **Unverified**。
 
-2026-09-02 的 [ADR-013](docs/adr/013-beijing-aliyun-data-plane.md) 将 OSS、IMM 与 EventBridge 统一固定到华北 2（北京）。这只是代码、部署契约和文档更新：没有创建、复制、切换或删除任何云资源；旧杭州部署配置必须先完成另行批准的数据迁移，再通过 `configure` 升级，不能直接 `update` 静默切换。
+2026-09-02 的 [ADR-013](docs/adr/013-beijing-aliyun-data-plane.md) 将 OSS、IMM 与 EventBridge 统一固定到华北 2（北京）。这只是代码、部署契约和文档更新：没有创建、复制、切换或删除任何云资源；旧杭州部署配置必须先完成另行批准的数据迁移，再通过 `configure` 升级，不能直接 `update` 静默切换。新鲜本地证据见[北京阿里云数据面变更验证](docs/verification/beijing-aliyun-data-plane.md)。
 
 ## 本地开发
 
