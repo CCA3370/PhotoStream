@@ -68,6 +68,27 @@ fi
   acquire_lock
 )
 
+if ! (
+  CREATE_SWAP=false
+  ensure_swap
+); then
+  fail 'ensure_swap must succeed when swap creation is disabled'
+fi
+if ! (
+  CREATE_SWAP=true
+  swapon() { printf '/swapfile\n'; }
+  ensure_swap
+); then
+  fail 'ensure_swap must succeed when swap is already active'
+fi
+if ! (
+  ADMIN_BOOTSTRAPPED=true
+  compose() { fail 'bootstrap_admin invoked compose after initialization'; }
+  bootstrap_admin blue
+); then
+  fail 'bootstrap_admin must succeed when the administrator already exists'
+fi
+
 set_slot_release blue abcdef123456
 render_runtime_envs
 write_routes blue

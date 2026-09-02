@@ -618,8 +618,8 @@ install_docker() {
 }
 
 ensure_swap() {
-  [[ "$CREATE_SWAP" == true ]] || return
-  [[ -z $(swapon --noheadings --show=NAME) ]] || return
+  [[ "$CREATE_SWAP" == true ]] || return 0
+  [[ -z $(swapon --noheadings --show=NAME) ]] || return 0
   if [[ -e /swapfile ]]; then
     die "/swapfile 已存在但未启用；为避免覆盖，请先人工核查。"
   fi
@@ -752,7 +752,7 @@ public_smoke() {
 }
 
 bootstrap_admin() {
-  [[ "$ADMIN_BOOTSTRAPPED" == false ]] || return
+  [[ "$ADMIN_BOOTSTRAPPED" == false ]] || return 0
   local slot=$1 token
   token=$(random_hex 32)
   log "创建首位管理员；一次性临时密码将在下面显示一次。"

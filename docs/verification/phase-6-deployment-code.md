@@ -19,6 +19,7 @@
 - `/etc/photostream/settings.sh` 记忆用户输入和 CSPRNG 密钥；无参数复跑直接更新，`configure` 回车保留已有值。
 - 单个脚本可从任意当前目录运行；首次将仓库克隆到 `/opt/photostream` 并 `exec` 受管副本，后续复用该 checkout。仓库 URL/remote/分支进入 root-only 记忆配置，非空非 Git 目标会拒绝覆盖。
 - 更新只允许干净工作树和 `git fetch` + `merge --ff-only`；目标槽迁移并健康后才热重载 Caddy。公网冒烟失败会恢复原槽；回滚冒烟失败也会二次恢复原槽。
+- 部署脚本的幂等早退显式返回成功：禁用 swap、系统已有活动 swap，以及首位管理员已经初始化时均继续执行，不会被 `set -e` 误判为部署失败。
 - PostgreSQL 始终单实例持久运行；回滚不执行逆向迁移，后续迁移必须继续采用扩展后收缩的向前兼容方式。
 - `docs/15-debian13-deployment.md` 已扩写为完整操作手册，覆盖上线准备、全部交互输入、首次部署、秘密/状态文件、部署后验收、无停机更新、回滚、巡检、故障排查、备份恢复和验收记录模板。
 
@@ -29,7 +30,7 @@
 | `pnpm --filter @photostream/api test` | 9 个文件、35 项通过 | 配置门禁、CDN 官方签名样例、反向代理信任及既有 API 单元行为 |
 | `pnpm check` | 退出 0 | 232 个文件 lint；全 workspace 类型、单元测试与串行构建；API 包含 migrate CLI，Next 14 个页面生成 |
 | `bash -n deploy/deploy.sh deploy/deploy.test.sh` | 退出 0 | Bash 语法 |
-| `bash deploy/deploy.test.sh` | 退出 0 | 配置/仓库值记忆、任意启动目录、自动克隆、受管脚本交接、错误目录拒绝、四份环境文件秘密隔离、槽镜像状态、Caddy 路由、回滚公网失败二次回切 |
+| `bash deploy/deploy.test.sh` | 退出 0 | 配置/仓库值记忆、swap 禁用/已启用幂等早退、管理员已初始化早退、任意启动目录、自动克隆、受管脚本交接、错误目录拒绝、四份环境文件秘密隔离、槽镜像状态、Caddy 路由、回滚公网失败二次回切 |
 | 修复前：`pnpm --filter @photostream/api deploy --prod --legacy <临时目录>` 后执行 `node dist/server.js` | 退出 1，复现 `ERR_MODULE_NOT_FOUND` | `dist/server.js` 保留 `@photostream/local-object-protocol` 导入，但 deploy 输出没有该包声明的 `src/index.ts`；工作区依赖随后按冻结锁文件恢复 |
 | 修复后：`pnpm --filter @photostream/api build` 与 `rg -n '@photostream/' apps/api/dist -g '*.js'` | 构建退出 0；`rg` 退出 1、无匹配 | 三个 API JavaScript 入口均不再保留工作区运行时导入 |
 | `docker build --target api --tag photostream-api:bundle-fix-local .` | API 镜像生成 | 实际执行 Node 24.20.0 API build、production deploy、迁移目录复制及非 root runtime 层组装 |
@@ -44,6 +45,8 @@
 失败路径复查先发现 Windows CRLF 检出导致 OCR 清单和 Biome 门禁失败；`.gitattributes` 固定 LF 后，当前工作树只在“LF 后匹配既有哈希”的文件上机械还原，再次整仓检查通过。独立复查还发现最初 `rollback` 公网冒烟失败后没有恢复原槽；已增加二次回切、停止失败目标槽和确定性脚本回归。
 
 2026-09-02 API 蓝槽首次生产启动日志暴露 `@photostream/local-object-protocol/src/index.ts` 缺失。修复前已用 Dockerfile 等价 deploy 产物确定性复现；根因是该工作区依赖加入 API 后没有同步进入 tsup 的内联名单，而工作区包导出仍指向不会进入 production deploy 输出的 `src/index.ts`。修复采用 `@photostream/*` 统一内联规则，而不是只追加当前包名，避免相同遗漏随下一个内部依赖再次发生。
+
+同日一次清空后重装在保存 root-only 配置后于 `install_command` 的 `ensure_swap` 调用失败；主机证据确认 `/swapfile` 已启用、2 GiB、权限 `0600`、`TYPE="swap"` 且 `/etc/fstab` 已持久化。根因是 `[[ 条件 ]] || return` 的裸 `return` 继承失败条件的退出码 1，并被 `set -e` 当作错误。修复为显式 `return 0`，并覆盖禁用创建、已有活动 swap 和管理员已初始化三个正常幂等分支。
 
 ## 未验证与上线门禁
 
