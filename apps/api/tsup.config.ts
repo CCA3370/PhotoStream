@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   splitting: false,
-  noExternal: ["@photostream/contracts", "@photostream/db"],
+  noExternal: [/^@photostream\//u],
 });
