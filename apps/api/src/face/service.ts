@@ -1308,7 +1308,7 @@ export class FaceService {
         } else {
           const taskStatus = await this.#provider.taskStatus(
             job.providerTaskId,
-            "FigureClustering",
+            "FaceClustering",
           );
           if (taskStatus === "running") {
             if (job.attempts + 1 >= 40) throw new Error("clustering_confirmation_timeout");

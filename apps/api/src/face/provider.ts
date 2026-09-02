@@ -68,7 +68,7 @@ export interface FaceProvider {
   mediaIndexed(datasetName: string, mediaId: string): Promise<boolean>;
   deleteMedia(datasetName: string, uris: readonly string[]): Promise<void>;
   cluster(datasetName: string): Promise<string>;
-  taskStatus(taskId: string, taskType: "FigureClustering"): Promise<ProviderTaskStatus>;
+  taskStatus(taskId: string, taskType: "FaceClustering"): Promise<ProviderTaskStatus>;
   validateReference(uri: string): Promise<ReferenceValidation>;
   findSynchronousCandidates(datasetName: string, referenceUri: string): Promise<string[]>;
   startAsyncSearch(datasetName: string, referenceUri: string): Promise<string>;
