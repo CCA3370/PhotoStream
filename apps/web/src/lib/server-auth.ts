@@ -1,9 +1,24 @@
-import { type AuthSession, authSessionSchema, type UserRole } from "@photostream/contracts";
+import {
+  type ApiError,
+  type AuthSession,
+  apiErrorSchema,
+  authSessionSchema,
+  type UserRole,
+} from "@photostream/contracts";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import { apiInternalUrl } from "@/lib/api";
+import { ApiRequestError, apiInternalUrl } from "./api";
+
+async function readApiError(response: Response): Promise<ApiError | null> {
+  try {
+    const parsed = apiErrorSchema.safeParse(await response.json());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
 
 export const getServerSession = cache(async (): Promise<AuthSession | null> => {
   const cookieHeader = (await headers()).get("cookie") ?? "";
@@ -11,11 +26,12 @@ export const getServerSession = cache(async (): Promise<AuthSession | null> => {
     cache: "no-store",
     headers: { cookie: cookieHeader },
   });
-  if (response.status === 401 || response.status === 403) {
-    return null;
-  }
   if (!response.ok) {
-    throw new Error(`Authentication API failed with status ${response.status}`);
+    const error = await readApiError(response);
+    if (response.status === 401 && error?.code === "AUTH_REQUIRED") {
+      return null;
+    }
+    throw new ApiRequestError(response.status, error);
   }
   return authSessionSchema.parse(await response.json());
 });
