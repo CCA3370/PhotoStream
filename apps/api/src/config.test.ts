@@ -42,6 +42,26 @@ describe("configuration", () => {
     );
   });
 
+  it("pins the Aliyun OSS, IMM, and EventBridge data plane to Beijing", () => {
+    expect(loadConfig(validEnvironment)).toMatchObject({
+      ALIYUN_IMM_REGION: "cn-beijing",
+      ALIYUN_OSS_ENDPOINT: "https://oss-cn-beijing.aliyuncs.com",
+      ALIYUN_OSS_REGION: "oss-cn-beijing",
+    });
+    expect(() =>
+      loadConfig({ ...validEnvironment, ALIYUN_IMM_REGION: "cn-hangzhou" }),
+    ).toThrowError(expect.objectContaining({ fields: ["ALIYUN_IMM_REGION"] }));
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        ALIYUN_OSS_ENDPOINT: "https://oss-cn-hangzhou.aliyuncs.com",
+      }),
+    ).toThrowError(expect.objectContaining({ fields: ["ALIYUN_OSS_ENDPOINT"] }));
+    expect(() =>
+      loadConfig({ ...validEnvironment, ALIYUN_OSS_REGION: "oss-cn-hangzhou" }),
+    ).toThrowError(expect.objectContaining({ fields: ["ALIYUN_OSS_REGION"] }));
+  });
+
   it("requires bib encryption and search keys as one independent pair", () => {
     expect(() =>
       loadConfig({

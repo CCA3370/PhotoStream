@@ -1,7 +1,7 @@
 # 系统架构
 
 状态：已批准的实施基线；人脸找图控制面已本地实现，云端链路未启用
-更新日期：2026-08-31
+更新日期：2026-09-02
 
 ## 1. 架构目标
 
@@ -36,7 +36,7 @@ flowchart LR
         HK <--> DB
     end
 
-    subgraph 阿里云杭州
+    subgraph 阿里云北京
         OSS[(私有 OSS 标准存储)]
         FOSS[(未来：临时参考照私有 OSS)]
         CDN[中国内地 CDN\ncdn.cloverta.top]
@@ -54,9 +54,9 @@ flowchart LR
 | 上传者设备 | 原始照片、本地照片派生、本地号码 OCR、上传临时状态 | 不保存云端长期密钥 |
 | 观众设备（人脸找图启用时） | 当前参考照内存、去 EXIF JPEG、当前短期结果 | 人脸模型、整册人脸向量、持久参考照或结果 |
 | 香港应用主机 | 账号、相册、分类、对象 key、宽高、大小、状态、加密号码标签/框坐标、年级/班级派生属性、无号码复核结论、未来人脸任务状态/短期媒体结果/最小同意回执、匿名统计、审计 | 照片/参考照正文、缩略图、BlurHash、GPS、原始文件名、号码明文、人脸向量、供应商额外人脸属性或长期相似度/聚类历史 |
-| 杭州媒体 OSS | 原图、WebP 派生图、静态构建/OCR 模型资源、加密数据库备份 | 公开读 ACL、号码 OCR 结果、人脸裁剪图或姓名标签 |
-| 杭州临时 OSS（未来） | 随机 key 的去 EXIF 单次参考照，最长 1 小时 | CDN 绑定、公开读、原文件名或长期保存 |
-| 杭州 IMM（另行授权后） | 每相册人脸 Dataset、检测/聚类/相似搜索元数据 | 跨相册搜索、姓名/学号/号码映射 |
+| 北京媒体 OSS | 原图、WebP 派生图、静态构建/OCR 模型资源、加密数据库备份 | 公开读 ACL、号码 OCR 结果、人脸裁剪图或姓名标签 |
+| 北京临时 OSS（未来） | 随机 key 的去 EXIF 单次参考照，最长 1 小时 | CDN 绑定、公开读、原文件名或长期保存 |
+| 北京 IMM（另行授权后） | 每相册人脸 Dataset、检测/聚类/相似搜索元数据 | 跨相册搜索、姓名/学号/号码映射 |
 | EventBridge（未来） | 指定 IMM 任务事件 | 参考照正文、通用审计转发、事件仓或长期业务分析 |
 | 中国内地 CDN | OSS 静态对象缓存 | 动态 API、远程鉴权、实时日志 |
 
@@ -94,7 +94,7 @@ flowchart LR
 - PostgreSQL 18 当前稳定小版本，数据库运行于香港主机本地 Docker 卷。
 - Drizzle 维护显式 SQL 迁移。
 - 事件 outbox、定时任务和 SSE 重放均使用 PostgreSQL，不引入 Redis。未来人脸索引、短期搜索和删除任务同样使用持久 PostgreSQL 状态；EventBridge 只传递供应商完成事件，不替代业务状态存储。
-- 每日执行加密逻辑备份，备份进入杭州 OSS 的独立私有前缀。
+- 每日执行加密逻辑备份，备份进入北京 OSS 的独立私有前缀。
 
 ### 4.4 反向代理
 
@@ -110,7 +110,7 @@ flowchart LR
 sequenceDiagram
     participant B as 上传者浏览器
     participant A as 香港 API
-    participant O as 杭州 OSS
+    participant O as 北京 OSS
     participant P as PostgreSQL/SSE
     participant V as 观众浏览器
 
@@ -136,8 +136,8 @@ sequenceDiagram
 sequenceDiagram
     participant V as 观众浏览器
     participant A as 香港 API
-    participant O as 杭州临时 OSS
-    participant I as 杭州 IMM
+    participant O as 北京临时 OSS
+    participant I as 北京 IMM
     participant E as EventBridge
     participant D as PostgreSQL
 
@@ -207,7 +207,7 @@ sequenceDiagram
 - 不允许在香港生成缩略图、BlurHash 或执行照片格式转换。
 - 不允许在香港或第三方服务运行号码 OCR、保存号码明文日志或执行号码到姓名映射。
 - 不允许用客户端持有的长期 AccessKey 代替预签名上传。
-- 除 ADR-012 明确限定的杭州 IMM 人脸处理和 EventBridge 官方任务事件外，不允许云端视觉/OCR、消息队列、事件仓、函数计算或第三方分析服务；号码 OCR 仍不得离开上传设备。
+- 除 ADR-012 明确限定的北京 IMM 人脸处理和 EventBridge 官方任务事件外，不允许云端视觉/OCR、消息队列、事件仓、函数计算或第三方分析服务；号码 OCR 仍不得离开上传设备。
 - 不允许把 IMM 的年龄、性别、情绪、吸引力等额外属性写入应用、日志、数据库、备份或 UI。
 - 不允许把人脸向量或整册人脸索引下发到观众浏览器，也不允许通过香港代理参考照或相册照片。
 - 不允许在没有新 ADR 的情况下加入 Redis、MNS、RocketMQ、RDS、函数计算或其他云端媒体处理。

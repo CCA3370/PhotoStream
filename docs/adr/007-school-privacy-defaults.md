@@ -1,7 +1,9 @@
 # ADR-007：学校相册采用口令、审核与禁下载默认值
 
-状态：Accepted，部分由 ADR-012 修订
+状态：Accepted，部分由 [ADR-012](012-consent-gated-face-photo-search.md) 与 [ADR-013](013-beijing-aliyun-data-plane.md) 修订
 日期：2026-08-26
+
+> 地域更新：本记录中的杭州 IMM 是原始例外描述；当前该例外统一使用北京 IMM/OSS/EventBridge。
 
 ## Context
 

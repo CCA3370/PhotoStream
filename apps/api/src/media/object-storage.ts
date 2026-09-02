@@ -7,6 +7,8 @@ import {
 } from "@photostream/local-object-protocol";
 import OSS from "ali-oss";
 
+import type { AliyunOssRegion } from "../config.js";
+
 export interface ObjectMetadata {
   readonly bytes: number;
   readonly contentType: string;
@@ -198,7 +200,7 @@ interface AliyunObjectStorageOptions {
   readonly cdnAuthValiditySeconds: number;
   readonly endpoint: string;
   readonly mediaBaseUrl: string;
-  readonly region: "oss-cn-hangzhou";
+  readonly region: AliyunOssRegion;
 }
 
 interface AliyunErrorLike {

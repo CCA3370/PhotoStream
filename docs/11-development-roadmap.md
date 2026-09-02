@@ -1,13 +1,13 @@
 # 开发路线图
 
-状态：已批准的开发顺序；阶段 1–5 已完成本地实现，人脸找图仅完成文档阶段
-更新日期：2026-08-31
+状态：已批准的开发顺序；阶段 1–7 与部署入口已完成本地实现，云端和真实环境仍未验证
+更新日期：2026-09-02
 
 ## 1. 当前硬门禁
 
-用户已于 2026-08-27 在文档交付后明确授权编码，阶段 0 的“仅文档”门禁已解除。阶段 1–5 本地实现和自动验证记录见[阶段 1 工程基础验证](verification/phase-1-engineering-foundation.md)、[阶段 2 照片纵向闭环验证](verification/phase-2-photo-vertical-slice.md)、[阶段 3 审核运营验证](verification/phase-3-review-and-operations.md)、[阶段 4 号码牌验证](verification/phase-4-bib-recognition.md)和[阶段 5 安全性能验证](verification/phase-5-security-performance.md)。
+用户已于 2026-08-27 在文档交付后明确授权编码，阶段 0 的“仅文档”门禁已解除。阶段 1–7 本地实现和自动验证记录见 `docs/verification/` 下对应阶段记录；部署入口另见[阶段 6 部署代码验证](verification/phase-6-deployment-code.md)，人脸实现另见[阶段 7 验证](verification/phase-7-face-search.md)。
 
-编码授权不包含部署、DNS、OSS/CDN 配置、真实学生数据、云端资源或发布。2026-08-31 新增的人脸找图只获得文档授权；代码、IMM/EventBridge/临时 OSS、授权样本和部署均需新的明确授权。真实微信/Safari/辅助技术检查仍为 **Unverified**，不得用 Chromium 自动结果替代。
+编码授权不包含部署、DNS、OSS/CDN 配置、真实学生数据或云端资源。人脸找图代码已于 2026-09-01 完成，但 IMM/EventBridge/临时 OSS、授权样本和生产启用仍需新的明确授权。真实微信/Safari/辅助技术检查仍为 **Unverified**，不得用 Chromium 自动结果替代。
 
 ## 2. 阶段总览
 
@@ -142,7 +142,7 @@
 当前状态：Debian 13 交互部署、root-only 配置记忆、阿里云 OSS/CDN 生产适配、Caddy 双槽切流、失败回切和按 Git 最新提交更新的本地代码已完成，并通过仓库检查与脚本测试。目标 Debian 13 2C2G、Docker Compose/Caddy 实际解析、真实 OSS/CDN/DNS/ACME、数据库迁移、管理员初始化、资源峰值、云端冒烟和试运行仍为 **Unverified**；没有执行部署或修改任何外部资源。证据见[阶段 6 部署代码验证](verification/phase-6-deployment-code.md)。
 
 1. 用户提供并确认 `deployment-inputs.md` 中全部必需值。
-2. 在获得明确授权后配置杭州 OSS、RAM、CDN、CNAME 和证书。
+2. 在获得明确授权后配置北京 OSS、RAM、CDN、CNAME 和证书。
 3. 香港主机使用 Docker Compose 部署 Caddy、Web、API 和 PostgreSQL。
 4. 只上传一组测试媒体和固定 OCR 模型资源，完成基础 OSS/CDN 云端冒烟、第三方请求检查和账单检查；不顺带创建人脸资源。
 5. 在 iOS/Android 微信、系统浏览器和校园网络人工验收。
@@ -159,14 +159,14 @@
 
 - 用户明确授权人脸功能编码；
 - 学校完成参与者单独同意、不满十四周岁监护人同意、专门处理规则、个人信息保护影响评估和投诉负责人；
-- 明确授权一组 Git 外人脸评测样本，并允许创建/删除专用杭州 IMM、临时 OSS 和 EventBridge 测试资源；
+- 明确授权一组 Git 外人脸评测样本，并允许创建/删除专用北京 IMM、临时 OSS 和 EventBridge 测试资源；
 - 在控制台复核当前 API、地域、删除能力、供应商数据处理说明和全部计费项；
 - 核心照片相册已在阶段 6 小流量试运行稳定，人脸失败可独立关闭。
 
 ### 工作包
 
 1. 实现共享契约、迁移、相册/媒体索引任务、短期搜索/结果、同意回执、EventBridge 幂等和可重试删除状态。
-2. 实现杭州临时参考照预签名、IMM 每相册 Dataset、显式 1920 索引、增量聚类、同步聚类查询与异步相似补查适配器。
+2. 实现北京临时参考照预签名、IMM 每相册 Dataset、显式 1920 索引、增量聚类、同步聚类查询与异步相似补查适配器。
 3. 实现 EventBridge 签名验证、严格事件绑定、原始响应字段允许列表和供应商失败降级。
 4. 实现管理端授权门禁/索引状态/媒体排除/整册删除，以及观众单独同意、单图直传、阶段进度和“可能包含”结果。
 5. 完成[测试与验收](10-test-and-acceptance.md)的人脸单元、数据库、API、浏览器、安全、授权样本、微信/Safari、删除和费用矩阵。

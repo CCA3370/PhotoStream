@@ -51,7 +51,7 @@ export class AliyunFaceReferenceStorage implements FaceReferenceStorage {
       accessKeySecret: config.ALIYUN_FACE_ACCESS_KEY_SECRET,
       bucket: this.#bucket,
       endpoint: config.ALIYUN_OSS_ENDPOINT,
-      region: `oss-${config.ALIYUN_IMM_REGION}`,
+      region: config.ALIYUN_OSS_REGION,
       secure: true,
       authorizationV4: true,
     });

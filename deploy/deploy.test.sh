@@ -41,9 +41,11 @@ EVENTBRIDGE_SIGNATURE_TOKEN=eventbridge-secret-eventbridge-secret
 GIT_REPOSITORY_URL=https://git.example.com/photostream.git
 GIT_REMOTE=origin
 GIT_BRANCH=main
+SETTINGS_VERSION=3
 mkdir -p -- "$SETTINGS_DIR" "$STATE_DIR"
 
 save_settings
+assert_file_contains "$SETTINGS_FILE" 'SETTINGS_VERSION=3'
 assert_file_contains "$SETTINGS_FILE" 'GIT_REPOSITORY_URL=https://git.example.com/photostream.git'
 GIT_REPOSITORY_URL=''
 GIT_BRANCH=''
@@ -53,6 +55,12 @@ source "$SETTINGS_FILE"
 [[ "$GIT_REPOSITORY_URL" == https://git.example.com/photostream.git ]] || \
   fail 'saved repository URL was not restored'
 [[ "$GIT_BRANCH" == main ]] || fail 'saved repository branch was not restored'
+if (
+  SETTINGS_VERSION=2
+  require_current_settings_version
+) 2>/dev/null; then
+  fail 'legacy Hangzhou settings must require explicit reconfiguration'
+fi
 
 (
   exec 9>"$LOCK_FILE"
@@ -65,7 +73,11 @@ render_runtime_envs
 write_routes blue
 
 assert_file_contains "$API_ENV_FILE" 'DATABASE_URL=postgresql://photostream:database-secret@postgres:5432/photostream'
+assert_file_contains "$API_ENV_FILE" 'ALIYUN_OSS_REGION=oss-cn-beijing'
+assert_file_contains "$API_ENV_FILE" 'ALIYUN_OSS_ENDPOINT=https://oss-cn-beijing.aliyuncs.com'
+assert_file_contains "$API_ENV_FILE" 'ALIYUN_IMM_REGION=cn-beijing'
 assert_file_contains "$WEB_ENV_FILE" 'MEDIA_BASE_URL=https://cdn.example.com'
+assert_file_contains "$WEB_ENV_FILE" 'PHOTO_UPLOAD_BASE_URL=https://media-private-test.oss-cn-beijing.aliyuncs.com'
 assert_file_excludes "$WEB_ENV_FILE" 'database-secret'
 assert_file_excludes "$WEB_ENV_FILE" 'exampleAccessSecret'
 assert_file_contains "$CADDY_ENV_FILE" 'APP_HOST=photos.example.com'

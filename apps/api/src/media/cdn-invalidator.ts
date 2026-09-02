@@ -1,6 +1,8 @@
 import CdnClient, { RefreshObjectCachesRequest } from "@alicloud/cdn20180510/dist/client.js";
 import { $OpenApiUtil } from "@alicloud/openapi-core";
 
+import { ALIYUN_REGION } from "../config.js";
+
 export interface CdnInvalidator {
   invalidate(paths: readonly string[]): Promise<void>;
 }
@@ -29,7 +31,7 @@ export class AliyunCdnInvalidator implements CdnInvalidator {
         accessKeyId: options.accessKeyId,
         accessKeySecret: options.accessKeySecret,
         endpoint: "cdn.aliyuncs.com",
-        regionId: "cn-hangzhou",
+        regionId: ALIYUN_REGION,
       }),
     );
     this.#mediaBaseUrl = new URL(options.mediaBaseUrl);

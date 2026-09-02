@@ -1,19 +1,19 @@
 # 阿里云 OSS/CDN/IMM/EventBridge 配置
 
 状态：已批准的目标配置；人脸资源为未来阶段；尚未在云端执行
-更新日期：2026-08-31
+更新日期：2026-09-02
 
-本文件定义未来部署时的控制台配置与验收步骤。当前文档阶段不得创建、修改或删除任何阿里云资源。
+本文件定义未来部署时的控制台配置与验收步骤。本文件和本地代码不授权创建、修改或删除任何阿里云资源。
 
 ## 1. 资源边界
 
 基础照片功能只允许使用原 OSS/CDN 边界。未来人脸找图另行获得云端授权后，只允许增加以下明确资源：
 
-1. 杭州地域私有 OSS 媒体 Bucket；
-2. 杭州地域私有 OSS 数据库备份 Bucket；
-3. 杭州地域私有 OSS 临时参考照 Bucket；
+1. 北京地域私有 OSS 媒体 Bucket；
+2. 北京地域私有 OSS 数据库备份 Bucket；
+3. 北京地域私有 OSS 临时参考照 Bucket；
 4. 已存在的阿里云 CDN 加速域名 `cdn.cloverta.top`；
-5. 杭州 IMM Project 与每相册独立 Dataset；
+5. 北京 IMM Project 与每相册独立 Dataset；
 6. EventBridge 云服务专用总线、精确 IMM 事件规则和一个香港 HTTPS 目标；
 7. 按职责拆分的 RAM 用户/角色与必要控制 API。
 
@@ -25,7 +25,8 @@
 
 | 配置 | 目标值 |
 | --- | --- |
-| 地域 | 华东 1（杭州） |
+| 地域 | 华北 2（北京） |
+| 签名地域/公网 Endpoint | `oss-cn-beijing` / `https://oss-cn-beijing.aliyuncs.com` |
 | 存储类型 | 标准存储 |
 | 读写权限 | 私有 |
 | 版本控制 | 关闭；对象本身不可覆盖 |
@@ -78,11 +79,12 @@ multipart 初始化、签名、完成和终止由香港 API 协调；浏览器�
 
 ## 3. OSS 临时参考照 Bucket（未来）
 
-参考照使用独立杭州私有标准 Bucket，不绑定 CDN，也不与媒体/备份对象混放：
+参考照使用独立北京私有标准 Bucket，不绑定 CDN，也不与媒体/备份对象混放：
 
 | 配置 | 目标值 |
 | --- | --- |
-| 地域/类型 | 华东 1（杭州）、标准存储 |
+| 地域/类型 | 华北 2（北京）、标准存储 |
+| 签名地域/公网 Endpoint | `oss-cn-beijing` / `https://oss-cn-beijing.aliyuncs.com` |
 | ACL/版本控制 | 私有；版本控制关闭；禁止覆盖 |
 | 唯一前缀 | `face-search/{searchId}/reference.jpg` |
 | 生命周期 | 全部对象 1 天后强制删除；应用正常/失败后仍需立即删除 |
@@ -99,7 +101,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 
 | 配置 | 目标值 |
 | --- | --- |
-| 地域/类型 | 杭州、标准存储 |
+| 地域/类型 | 北京、标准存储 |
 | ACL | 私有 |
 | CDN | 不绑定 |
 | 内容 | 客户端加密后的 PostgreSQL 逻辑备份 |
@@ -112,7 +114,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 
 ### 5.1 IMM
 
-- Project 固定在华东 1（杭州），使用不可包含校名的部署标识；默认模板保持空，Dataset 明确使用 `Official:FaceManagement`。
+- Project 固定在华北 2（北京），使用不可包含校名的部署标识；默认模板保持空，Dataset 明确使用 `Official:FaceManagement`。
 - Project 只绑定同地域媒体 Bucket 和临时参考照 Bucket；服务角色对媒体 Bucket 仅可读 `media/.../1920.*`，对临时 Bucket 仅可读 `face-search/`，不得访问备份、原图、480/960、品牌或静态资源前缀。
 - 每个相册创建独立、随机 Dataset；`CustomId` 只使用 PhotoStream 随机媒体 ID，不把相册标题、slug、姓名、学号或号码写入 IMM。
 - 只通过 `IndexFileMeta`/`BatchIndexFileMeta` 显式索引已经发布且验证完成的 `photo_1920`；不绑定 OSS 上传触发器，不自动索引 Bucket 其他对象。
@@ -122,7 +124,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 
 ### 5.2 EventBridge
 
-- 使用杭州云服务专用总线接收阿里云官方 IMM 事件，不创建自定义总线、事件流或事件仓。
+- 使用北京云服务专用总线接收阿里云官方 IMM 事件，不创建自定义总线、事件流或事件仓。
 - 规则只匹配确切账号、地域、Project 及 `imm:FileMeta:Index`、`imm:Task:FigureClustering`、`imm:Task:FacesSearching` 等实现所需事件；不得转发 ActionTrail 通用事件。
 - 唯一目标为 `${APP_ORIGIN}/api/v1/integrations/aliyun/eventbridge`，只发送完整必要事件；不投递参考照正文、凭证或额外调试信息。
 - API 验证 EventBridge v2 RSA 签名、官方证书 URL、60 秒时间窗、账号/地域/Project/Dataset/TaskId 和事件 ID 幂等；失败返回非 2xx 触发受控重试。
@@ -155,7 +157,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 | 域名 | `cdn.cloverta.top` |
 | 加速区域 | 中国内地 |
 | 业务类型 | 图片小文件 |
-| 源站 | 杭州媒体 Bucket 外网 OSS 域名 |
+| 源站 | 北京媒体 Bucket 外网 OSS 域名 |
 | 私有回源 | 开启，同账号只读角色 |
 | 回源协议 | HTTPS |
 | 客户端协议 | HTTPS；HTTP 强制 301 到 HTTPS |

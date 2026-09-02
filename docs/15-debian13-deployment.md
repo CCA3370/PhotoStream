@@ -10,7 +10,7 @@
 
 本手册供未参与开发的运维人员完成以下工作：
 
-1. 准备香港 Debian 13 服务器和杭州阿里云媒体数据面；
+1. 准备香港 Debian 13 服务器和北京阿里云媒体数据面；
 2. 从任意目录运行单个部署脚本，由脚本自动克隆仓库并通过交互输入全部外部配置；
 3. 验证 PostgreSQL、Fastify、Next.js、Caddy、HTTPS、OSS 直传和 CDN 读取；
 4. 后续在不停止当前服务的情况下更新到配置分支最新提交；
@@ -35,7 +35,7 @@ Caddy ── 当前活动路由 ──► Web blue/green (Next.js :3000)
                               ▼
                        PostgreSQL 18.6
 
-浏览器 ── 预签名 PUT ──► 杭州私有 OSS
+浏览器 ── 预签名 PUT ──► 北京私有 OSS
 浏览器 ◄─ 鉴权 URL ──── 内地 CDN ◄── 私有 OSS
 ```
 
@@ -78,7 +78,7 @@ Caddy ── 当前活动路由 ──► Web blue/green (Next.js :3000)
 | 权限 | 可通过 `sudo` 获得 root；SSH 私钥不放进仓库 |
 | 时间 | NTP 正常；服务器建议使用 UTC，业务显示由应用处理 |
 | 入站 | 22/TCP 仅允许受控来源；80/TCP、443/TCP、443/UDP 公网可达 |
-| 出站 | 可访问 Git remote、Docker apt/镜像仓库、ACME CA、杭州 OSS 和阿里云 CDN API |
+| 出站 | 可访问 Git remote、Docker apt/镜像仓库、ACME CA、北京 OSS 和阿里云 CDN API |
 
 在服务器执行只读检查：
 
@@ -121,13 +121,14 @@ dig +short AAAA photos.example.edu
 
 如果 DNS 尚未传播，脚本可以完成容器启动，但最后的公网 HTTPS 冒烟会失败。DNS 修复后重新运行 `sudo bash /opt/photostream/deploy/deploy.sh update` 即可自愈，不需要重新输入配置。
 
-### 3.4 杭州 OSS 媒体 Bucket
+### 3.4 北京 OSS 媒体 Bucket
 
 按[阿里云 OSS/CDN 配置](08-aliyun-cdn-oss.md)创建或确认媒体 Bucket：
 
 | 配置 | 目标值 |
 | --- | --- |
-| 地域 | 华东 1（杭州） |
+| 地域 | 华北 2（北京） |
+| 签名地域/公网 Endpoint | `oss-cn-beijing` / `https://oss-cn-beijing.aliyuncs.com` |
 | 存储类型 | 标准存储 |
 | ACL | 私有 |
 | 版本控制 | 关闭 |
@@ -164,7 +165,7 @@ dig +short AAAA photos.example.edu
 | --- | --- |
 | 加速区域 | 中国内地 |
 | 业务类型 | 图片小文件 |
-| 源站 | 上述杭州媒体 Bucket 外网 OSS 域名 |
+| 源站 | 上述北京媒体 Bucket 外网 OSS 域名 |
 | 私有回源 | 开启；官方服务角色仅可读媒体 Bucket |
 | 回源/客户端协议 | HTTPS；HTTP 301 到 HTTPS |
 | TLS | 1.2/1.3 |
@@ -220,7 +221,7 @@ sudo bash /tmp/photostream-deploy.sh install
 | 主站域名 | 仅域名，如 `photos.example.edu`；不要输入 `https://` 或路径 |
 | ACME 邮箱 | 可接收到期/异常通知的运维邮箱 |
 | 媒体 CDN HTTPS Origin | 如 `https://cdn.example.edu`；必须 HTTPS、无路径、无末尾 `/` |
-| 杭州私有媒体 OSS Bucket | 真实 Bucket 名，小写字母/数字/连字符 |
+| 北京私有媒体 OSS Bucket | 真实 Bucket 名，小写字母/数字/连字符 |
 | 应用 RAM AccessKey ID | 专用最小权限凭证；秘密输入 |
 | 应用 RAM AccessKey Secret | 与上述 ID 配对；秘密输入 |
 | CDN Type A 当前鉴权 Key | 与 CDN 控制台当前 Key 完全一致，至少 16 字符 |
@@ -234,7 +235,7 @@ sudo bash /tmp/photostream-deploy.sh install
 | Git 分支 | 通常为 `main`，必须与当前检出分支一致 |
 | 是否创建 swap | 2 GiB 主机建议选择 `y` |
 
-只有明确获准启用人脸功能时，脚本才会继续询问独立人脸 RAM AccessKey、阿里云 UID、杭州 IMM Project、独立参考照 Bucket 和已验证阈值版本。参考照 Bucket 不能与媒体 Bucket 相同，阈值不能填写 `unqualified`。
+只有明确获准启用人脸功能时，脚本才会继续询问独立人脸 RAM AccessKey、阿里云 UID、北京 IMM Project、独立参考照 Bucket 和已验证阈值版本。参考照 Bucket 不能与媒体 Bucket 相同，阈值不能填写 `unqualified`。
 
 ### 4.3 自动生成的内容
 
@@ -460,6 +461,21 @@ sudo bash /opt/photostream/deploy/deploy.sh status
 
 remote/分支不是 `origin/main` 时按实际配置比较。保留更新开始/结束时间、旧/新提交、活动槽、迁移结果、ready 结果和资源峰值，不记录秘密。
 
+### 7.4 从旧杭州数据面迁移
+
+ADR-013 以前的部署记忆配置版本为 2，代表杭州 OSS/IMM/EventBridge。OSS Bucket 创建后不能原地修改地域；新版脚本会拒绝直接用 `update` 把旧 Bucket 名配到北京 Endpoint。不得通过手工把 `SETTINGS_VERSION` 改成 3 绕过门禁。
+
+只有获得独立云端、数据迁移和生产切换授权后，才按以下顺序执行：
+
+1. 暂停新上传和人脸搜索，记录杭州媒体/备份/参考照 Bucket、CDN 源站、IMM Project/Dataset 和 EventBridge 规则的可回滚快照；
+2. 在华北 2（北京）创建符合第 3 节的全新私有 Bucket；复制对象后按对象数、key、大小、ETag/独立哈希和抽样读取核对，CORS、生命周期、ACL、RAM 与 CDN 私有回源配置不能依赖复制自动带入；
+3. 人脸功能保持关闭，在北京重建 IMM Project、每相册 Dataset 和 EventBridge 云服务专用总线规则；旧杭州人脸索引不能当作已迁移，必须从北京媒体 Bucket 的已发布 `photo_1920` 重新建立并通过独立 PoC；
+4. 把 CDN 源站切到北京媒体 Bucket，在专用小流量对象上验证回源、鉴权、缓存和删除刷新；公网稳定前保留杭州只读回滚窗口，不删除任何旧资源；
+5. 执行 `sudo bash /opt/photostream/deploy/deploy.sh configure`，明确输入北京媒体/参考照 Bucket；脚本会重写 root-only 配置为版本 3，并固定 `oss-cn-beijing`、北京 Endpoint 和 `cn-beijing`；
+6. 完成第 6 节全部验证、真实北京 OSS V4/IMM/EventBridge 验收和账单对账后，才恢复上传；旧资源的停止复制、保留期和删除必须另行批准并读回确认。
+
+仓库当前没有执行上述云端步骤；北京链路和任何真实数据迁移均保持 **Unverified**。
+
 ## 8. 回滚
 
 ### 8.1 可回滚范围
@@ -534,7 +550,7 @@ sudo bash /opt/photostream/deploy/deploy.sh rollback
 | Caddy/ACME 失败 | Caddy logs、A/AAAA、80/443、系统时间 | 修复 DNS/安全组/错误 AAAA；然后重新 `update` |
 | HTTPS 本机成功、外网失败 | 外部网络 curl、云安全组 | 检查 NAT、安全组、防火墙和运营商网络 |
 | OSS PUT CORS 失败 | 浏览器网络面板、OSS CORS | Origin 必须精确，允许实际签名头；不要改成 `*` |
-| OSS 403/SignatureDoesNotMatch | API 时间、Bucket/region、RAM 权限 | 核对杭州 endpoint、系统时间、签名头和最小权限 |
+| OSS 403/SignatureDoesNotMatch | API 时间、Bucket/region、RAM 权限 | 核对北京 endpoint、系统时间、签名头和最小权限 |
 | CDN 403 | Type A Key/有效期、签名 URL 时间 | 控制台有效期必须与脚本输入一致；核对主/备 Key |
 | CDN 能访问但不缓存 | `Age`、Cache Key、回源日志 | 鉴权后剥离 `auth_key`，对象不可覆盖；不要关闭鉴权测试缓存 |
 | 更新目标槽失败 | `status` 和目标槽日志 | 旧活动槽仍服务；修复后重跑 `update` |

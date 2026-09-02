@@ -8,9 +8,11 @@
 
 自动号码候选当前明确保持 **experimental**：用户已提供 813 张 Git 外本地测试照片，但尚无逐号码/四边形真值标注，也没有 Safari/移动设备召回率与性能门禁证据；手工标签和精确搜索闭环不依赖自动候选资格。项目仍未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、学校隐私流程与目标 2C2G 主机检查均为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)、[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)、[阶段 3 验证记录](docs/verification/phase-3-review-and-operations.md)、[阶段 4 验证记录](docs/verification/phase-4-bib-recognition.md)、[纯照片边界退役验证](docs/verification/photo-only-retirement.md)和[阶段 5 验证记录](docs/verification/phase-5-security-performance.md)。
 
-2026-09-01 已按 ADR-012 完成人脸候选找图的本地代码实现：口令相册可在学校完成授权门禁后使用杭州阿里云 IMM 和 EventBridge，让观众提交一张参考照筛选可能包含同一人物的已发布照片。全局开关默认关闭；没有开通云资源或处理人脸样本，云端、真实数据库、准确率、设备与生产运行证据保持 **Unverified**。
+2026-09-01 已按 ADR-012 完成人脸候选找图的本地代码实现：口令相册可在学校完成授权门禁后使用北京阿里云 IMM 和 EventBridge，让观众提交一张参考照筛选可能包含同一人物的已发布照片。全局开关默认关闭；没有开通云资源或处理人脸样本，云端、真实数据库、准确率、设备与生产运行证据保持 **Unverified**。
 
-同日已完成 Debian 13 生产部署代码；2026-09-02 又补全任意目录启动和自动克隆到 `/opt/photostream` 的部署入口。脚本交互收集并以 root-only 权限记忆配置；生产 API 使用杭州私有 OSS/内地 CDN，并通过 Caddy + Docker Compose 蓝绿双槽更新到配置分支最新提交。目标 2C2G 主机、真实 Docker/Caddy、DNS/ACME 和阿里云链路尚未实际执行，仍保持 **Unverified**。
+同日已完成 Debian 13 生产部署代码；2026-09-02 又补全任意目录启动和自动克隆到 `/opt/photostream` 的部署入口。脚本交互收集并以 root-only 权限记忆配置；生产 API 使用北京私有 OSS/内地 CDN，并通过 Caddy + Docker Compose 蓝绿双槽更新到配置分支最新提交。目标 2C2G 主机、真实 Docker/Caddy、DNS/ACME 和阿里云链路尚未实际执行，仍保持 **Unverified**。
+
+2026-09-02 的 [ADR-013](docs/adr/013-beijing-aliyun-data-plane.md) 将 OSS、IMM 与 EventBridge 统一固定到华北 2（北京）。这只是代码、部署契约和文档更新：没有创建、复制、切换或删除任何云资源；旧杭州部署配置必须先完成另行批准的数据迁移，再通过 `configure` 升级，不能直接 `update` 静默切换。
 
 ## 本地开发
 
@@ -35,7 +37,7 @@
 ## 已确定的核心约束
 
 - 单学校、单团队、非商业使用，不开放公众注册。
-- 香港 2C2G Linux 主机承载主站、API 和 PostgreSQL；杭州 OSS 与中国内地 CDN 承载全部媒体内容。
+- 香港 2C2G Linux 主机承载主站、API 和 PostgreSQL；北京 OSS 与中国内地 CDN 承载全部媒体内容。
 - 照片二进制不得经过香港应用服务器；香港侧只保存必要元数据与业务状态。
 - 基础照片功能只使用 OSS 与 CDN；人脸找图另行取得云端授权后只允许 ADR-012 列出的 IMM、临时 OSS 和 EventBridge，不使用函数计算、MNS、事件仓、DCDN/ESA 或实时日志。
 - 照片在上传者浏览器本地生成 WebP 派生图。

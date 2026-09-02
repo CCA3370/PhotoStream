@@ -1,7 +1,9 @@
 # ADR-012：口令相册采用同意门禁的云端人脸候选找图
 
-状态：Accepted
+状态：Accepted；由 [ADR-013](013-beijing-aliyun-data-plane.md) 修订地域
 日期：2026-08-31
+
+> 地域更新：本记录保留最初的杭州方案作为历史；当前人脸参考照 OSS、IMM 与 EventBridge 均固定在北京，其他人脸处理边界不变。
 
 ## Context
 

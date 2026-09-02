@@ -27,7 +27,7 @@ function headers(timestamp = Date.now()) {
     "x-eventbridge-hash-method": "SHA256",
     "x-eventbridge-signature-version": "1.0",
     "x-eventbridge-signature-url":
-      "https://cn-hangzhou-eventbridge.oss-accelerate.aliyuncs.com/x509_public_certificate_test.pem",
+      "https://cn-beijing-eventbridge.oss-accelerate.aliyuncs.com/x509_public_certificate_test.pem",
     "x-eventbridge-signature-token": "t".repeat(32),
   };
 }

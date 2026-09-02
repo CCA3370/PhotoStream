@@ -1,6 +1,6 @@
 # 参考资料
 
-查阅日期：2026-08-25 至 2026-09-01。云产品能力、价格、法规和浏览器支持会变化；进入编码时复核 SDK/API，进入部署时再次复核计费和控制台选项。
+查阅日期：2026-08-25 至 2026-09-02。云产品能力、价格、法规和浏览器支持会变化；进入编码时复核 SDK/API，进入部署时再次复核计费和控制台选项。
 
 ## 1. 竞品与产品范围
 
@@ -10,6 +10,7 @@
 
 ## 2. OSS 上传、存储与权限
 
+- [OSS 地域与 Endpoint](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)：华北 2（北京）地域 ID 为 `cn-beijing`，公网 Endpoint 为 `oss-cn-beijing.aliyuncs.com`；ADR-013 的固定值来源。
 - [客户端直接上传 OSS](https://help.aliyun.com/zh/oss/user-guide/uploading-objects-to-oss-directly-from-clients/)：直传相对业务服务器中转的优势与安全方式。
 - [使用预签名 URL 上传文件](https://help.aliyun.com/zh/oss/user-guide/upload-files-using-presigned-urls)：V4 预签名 PUT 与 multipart 协调流程。
 - [Node.js SDK 生成预签名上传 URL](https://help.aliyun.com/zh/oss/developer-reference/upload-objects-using-a-signed-url-generated-with-oss-sdk-for-node-js)：服务器本地签名实现依据。
@@ -43,6 +44,8 @@
 
 - [人脸识别技术应用安全管理办法](https://www.cac.gov.cn/2025-03/21/c_1744174262156096.htm)：特定目的、充分必要、显著告知、单独同意、不满十四周岁监护人同意、设备内存储/互联网传输、影响评估、替代方式和最短保存要求。
 - [人脸识别应用备案公告](https://www.cac.gov.cn/2025-05/30/c_1750315544241157.htm)：存储数量达到 10 万人的备案起点；低于阈值不等于免除其他义务。
+- [IMM 服务接入点](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-endpoint)：新版 IMM 支持华北 2（北京）`cn-beijing`，公网 Endpoint 为 `imm.cn-beijing.aliyuncs.com`。
+- [IMM 的 OSS 数据处理指南](https://help.aliyun.com/zh/imm/developer-reference/user-guide-for-x-oss-process)：要求调用地域与 OSS 数据地域一致，以减少跨地域延迟和费用；ADR-013 因此不保留杭州 IMM。
 - [IMM 工作流模板与算子](https://help.aliyun.com/zh/imm/user-guide/workflow-templates-and-operators)：`Official:FaceManagement` 只启用 OSS 元信息与 FaceDetection，区别于标签/语义等更宽模板。
 - [IndexFileMeta](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-indexfilemeta)：显式索引 OSS 文件、异步完成和数据集边界。
 - [IMM 人脸聚类 FAQ](https://help.aliyun.com/zh/imm/support/faq-about-image-management/)：至少三张合格高清人脸、索引/聚类延迟、增量批处理、按聚类查询图片及异步搜索结果只由 Notification 返回。
@@ -52,9 +55,10 @@
 - [删除 IMM 文件元数据](https://help.aliyun.com/zh/imm/developer-reference/api-imm-2020-09-30-batchdeletefilemeta)：删除索引元数据会同步影响人脸聚类，但不会删除 OSS 原照片。
 - [IMM 计费项](https://help.aliyun.com/zh/imm/product-overview/billable-items)：人脸检测、相似人脸图片、聚类、查询/索引存储和潜在 OSS 转换的独立计费依据。
 - [IMM EventBridge 事件](https://help.aliyun.com/zh/eventbridge/user-guide/imm-events)：`imm:Task:FacesSearching` 等官方事件及相似人脸结果结构。
+- [EventBridge 地域与 Endpoint](https://help.aliyun.com/zh/eventbridge/regions-and-endpoints)：EventBridge 支持北京 `cn-beijing` 的公网和 VPC 接入点。
 - [EventBridge HTTPS 签名](https://help.aliyun.com/zh/eventbridge/user-guide/signature-algorithm)：官方证书 URL、RSA 签名和 60 秒防重放验证流程。
 - [EventBridge 事件总线计费](https://help.aliyun.com/zh/eventbridge/product-overview/billing-of-event-buses)：云服务专用事件发布、自定义 HTTPS 目标和跨地域流量价格。
-- [MNS 计费](https://help.aliyun.com/zh/mns/product-overview/billing-overview)：杭州 Topic/Queue 按日资源占用费，是本项目选择 EventBridge 而非 MNS 的费用依据。
+- [MNS 计费](https://help.aliyun.com/zh/mns/product-overview/billing-overview)：北京 Topic/Queue 按日资源占用费，是本项目选择 EventBridge 而非 MNS 的费用依据。
 - [腾讯云人脸搜索](https://cloud.tencent.com/document/product/867/44994)与[百度人脸库/搜索](https://cloud.baidu.com/doc/FACE/s/5k37c1ij0)：用于比较 Person/Face 人员库语义、Top N 上限和容量；未选为相册图库主方案。
 
 阿里 IMM 会返回年龄、性别、情绪、吸引力等额外属性。用户已选择未来后端忽略这些字段，但“不写入应用”不等于供应商没有处理；必须在告知和影响评估中如实覆盖。文档所列价格只用于 2026-08-31 数量级估算，不能替代开通前控制台和 PoC 账单。
@@ -120,4 +124,4 @@ UI 依赖在进入编码前必须复核维护状态、许可证、React/Next.js 
 - [网络数据安全管理条例](https://app.www.gov.cn/govdata/gov/202409/30/520076/article.html)：自 2025 年实施的安全、备份、访问控制和跨境要求。
 - [跨境规定答记者问](https://www.cac.gov.cn/2024-03/22/c_1712776611649184.htm)：未成年人信息等敏感个人信息范围说明。
 
-学校使用、人数较少和媒体文件保存在杭州不能自动免除所有隐私、肖像或出境义务。上线前应由学校根据真实业务和主体身份完成正式判断。
+学校使用、人数较少和媒体文件保存在北京不能自动免除所有隐私、肖像或出境义务。上线前应由学校根据真实业务和主体身份完成正式判断。

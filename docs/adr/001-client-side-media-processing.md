@@ -1,7 +1,9 @@
 # ADR-001：照片处理在上传者浏览器完成
 
-状态：Accepted；由 [ADR-011](011-photo-only-product-boundary.md) 和 [ADR-012](012-consent-gated-face-photo-search.md) 修订
+状态：Accepted；由 [ADR-011](011-photo-only-product-boundary.md)、[ADR-012](012-consent-gated-face-photo-search.md) 和 [ADR-013](013-beijing-aliyun-data-plane.md) 修订
 日期：2026-08-26
+
+> 地域更新：本记录中的杭州数据面是原始决定；当前 OSS、IMM 与 EventBridge 地域已由 ADR-013 统一改为北京。
 
 ## Context
 

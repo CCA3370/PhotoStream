@@ -12,7 +12,7 @@ import { schema } from "@photostream/db";
 import { and, asc, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import type { AppConfig } from "../config.js";
+import { ALIYUN_REGION, type AppConfig } from "../config.js";
 import { AppError } from "../errors.js";
 import type { InternalActor, PhotoService } from "../media/service.js";
 import type { FaceProvider } from "./provider.js";
@@ -37,7 +37,7 @@ const eventSchema = z
     specversion: z.literal("1.0"),
     type: z.literal("imm:Task:FacesSearching"),
     aliyunaccountid: z.string(),
-    aliyunregionid: z.literal("cn-hangzhou"),
+    aliyunregionid: z.literal(ALIYUN_REGION),
     data: z
       .object({
         ProjectName: z.string(),

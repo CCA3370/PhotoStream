@@ -279,7 +279,7 @@ export function FaceSearchPanel({
               <AlertTitle>单独同意与处理说明</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
                 <p>
-                  学校作为处理者，将参考照直传至杭州临时私有 OSS，并由阿里云 IMM
+                  学校作为处理者，将参考照直传至北京临时私有 OSS，并由阿里云 IMM
                   检测一张人脸、匹配本相册候选；香港 API 只接收随机任务和短期媒体结果。
                 </p>
                 <p>

@@ -18,12 +18,16 @@ readonly STATE_DIR="${PHOTOSTREAM_STATE_DIR:-/var/lib/photostream}"
 readonly STATE_FILE="$STATE_DIR/deploy-state.sh"
 readonly CADDY_STATE_DIR="$STATE_DIR/caddy"
 readonly LOCK_FILE="${PHOTOSTREAM_LOCK_FILE:-/run/lock/photostream-deploy.lock}"
+readonly CURRENT_SETTINGS_VERSION=3
+readonly TARGET_ALIYUN_OSS_ENDPOINT="https://oss-cn-beijing.aliyuncs.com"
+readonly TARGET_ALIYUN_OSS_REGION="oss-cn-beijing"
+readonly TARGET_ALIYUN_IMM_REGION="cn-beijing"
 
+SETTINGS_VERSION=""
 APP_HOST=""
 ACME_EMAIL=""
 MEDIA_BASE_URL=""
 ALIYUN_OSS_MEDIA_BUCKET=""
-ALIYUN_OSS_ENDPOINT="https://oss-cn-hangzhou.aliyuncs.com"
 ALIYUN_ACCESS_KEY_ID=""
 ALIYUN_ACCESS_KEY_SECRET=""
 ALIYUN_CDN_AUTH_KEY_CURRENT=""
@@ -287,6 +291,11 @@ load_settings() {
   source "$SETTINGS_FILE"
 }
 
+require_current_settings_version() {
+  [[ "${SETTINGS_VERSION:-}" == "$CURRENT_SETTINGS_VERSION" ]] || \
+    die "现有配置仍属于杭州数据面；请先按迁移手册准备北京 OSS/IMM/EventBridge，再运行 configure 重新确认 Bucket。"
+}
+
 load_state() {
   if [[ -f "$STATE_FILE" ]]; then
     assert_secure_file "$STATE_FILE"
@@ -305,10 +314,10 @@ save_settings() {
   mkdir -p -- "$SETTINGS_DIR"
   temp=$(mktemp "$SETTINGS_DIR/settings.XXXXXX")
   {
-    printf 'SETTINGS_VERSION=2\n'
+    printf 'SETTINGS_VERSION=%s\n' "$CURRENT_SETTINGS_VERSION"
     local name
     for name in \
-      APP_HOST ACME_EMAIL MEDIA_BASE_URL ALIYUN_OSS_MEDIA_BUCKET ALIYUN_OSS_ENDPOINT \
+      APP_HOST ACME_EMAIL MEDIA_BASE_URL ALIYUN_OSS_MEDIA_BUCKET \
       ALIYUN_ACCESS_KEY_ID ALIYUN_ACCESS_KEY_SECRET ALIYUN_CDN_AUTH_KEY_CURRENT \
       ALIYUN_CDN_AUTH_KEY_PREVIOUS ALIYUN_CDN_AUTH_VALIDITY_SECONDS \
       FACE_SEARCH_GLOBAL_ENABLED ALIYUN_FACE_ACCESS_KEY_ID ALIYUN_FACE_ACCESS_KEY_SECRET \
@@ -429,7 +438,7 @@ configure_settings() {
   ask_value ACME_EMAIL "ACME 证书通知邮箱" "$email_pattern"
   [[ -n "$MEDIA_BASE_URL" ]] || MEDIA_BASE_URL="https://cdn.$APP_HOST"
   ask_value MEDIA_BASE_URL "媒体 CDN HTTPS Origin（不含路径）" "$url_pattern"
-  ask_value ALIYUN_OSS_MEDIA_BUCKET "杭州私有媒体 OSS Bucket" "$bucket_pattern"
+  ask_value ALIYUN_OSS_MEDIA_BUCKET "北京私有媒体 OSS Bucket" "$bucket_pattern"
   ask_value ALIYUN_ACCESS_KEY_ID "应用 RAM AccessKey ID" "$credential_pattern" true
   ask_value ALIYUN_ACCESS_KEY_SECRET "应用 RAM AccessKey Secret" "$credential_pattern" true
   ask_value ALIYUN_CDN_AUTH_KEY_CURRENT "CDN Type A 当前鉴权 Key" "$cdn_key_pattern" true
@@ -443,8 +452,8 @@ configure_settings() {
     ask_value ALIYUN_FACE_ACCESS_KEY_ID "人脸专用 RAM AccessKey ID" "$credential_pattern" true
     ask_value ALIYUN_FACE_ACCESS_KEY_SECRET "人脸专用 RAM AccessKey Secret" "$credential_pattern" true
     ask_value ALIYUN_ACCOUNT_ID "阿里云账号 UID" '^[0-9]{6,32}$'
-    ask_value ALIYUN_IMM_PROJECT_NAME "杭州 IMM Project 名" '^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$'
-    ask_value ALIYUN_OSS_FACE_REFERENCE_BUCKET "杭州私有人脸参考照 Bucket" "$bucket_pattern"
+    ask_value ALIYUN_IMM_PROJECT_NAME "北京 IMM Project 名" '^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$'
+    ask_value ALIYUN_OSS_FACE_REFERENCE_BUCKET "北京私有人脸参考照 Bucket" "$bucket_pattern"
     ask_value FACE_SEARCH_THRESHOLD_VERSION "已验证的人脸阈值版本" '^[A-Za-z0-9._-]{1,80}$'
     [[ "$FACE_SEARCH_THRESHOLD_VERSION" != unqualified ]] || die "启用人脸找图时不能使用 unqualified 阈值。"
     [[ "$ALIYUN_OSS_FACE_REFERENCE_BUCKET" != "$ALIYUN_OSS_MEDIA_BUCKET" ]] || \
@@ -465,6 +474,7 @@ configure_settings() {
   ask_yes_no CREATE_SWAP "没有 swap 时是否创建 2GiB /swapfile（2GiB 主机建议启用）"
 
   ensure_generated_secrets
+  SETTINGS_VERSION=$CURRENT_SETTINGS_VERSION
   save_settings
   log "配置已按 root-only 权限保存；后续 update 不会再次询问这些值。"
 }
@@ -484,10 +494,11 @@ install_env_file() {
 
 render_runtime_envs() {
   local temp photo_upload_origin face_upload_origin
-  photo_upload_origin="https://${ALIYUN_OSS_MEDIA_BUCKET}.oss-cn-hangzhou.aliyuncs.com"
+  require_current_settings_version
+  photo_upload_origin="https://${ALIYUN_OSS_MEDIA_BUCKET}.${TARGET_ALIYUN_OSS_REGION}.aliyuncs.com"
   face_upload_origin=$photo_upload_origin
   [[ -z "$ALIYUN_OSS_FACE_REFERENCE_BUCKET" ]] || \
-    face_upload_origin="https://${ALIYUN_OSS_FACE_REFERENCE_BUCKET}.oss-cn-hangzhou.aliyuncs.com"
+    face_upload_origin="https://${ALIYUN_OSS_FACE_REFERENCE_BUCKET}.${TARGET_ALIYUN_OSS_REGION}.aliyuncs.com"
   temp=$(mktemp "$SETTINGS_DIR/api.env.XXXXXX")
   {
     write_env NODE_ENV production
@@ -508,8 +519,8 @@ render_runtime_envs() {
     write_env BIB_KEY_VERSION v1
     write_env BIB_OCR_AUTOMATION_STATUS experimental
     write_env OBJECT_STORAGE_DRIVER aliyun
-    write_env ALIYUN_OSS_REGION oss-cn-hangzhou
-    write_env ALIYUN_OSS_ENDPOINT "$ALIYUN_OSS_ENDPOINT"
+    write_env ALIYUN_OSS_REGION "$TARGET_ALIYUN_OSS_REGION"
+    write_env ALIYUN_OSS_ENDPOINT "$TARGET_ALIYUN_OSS_ENDPOINT"
     write_env ALIYUN_OSS_MEDIA_BUCKET "$ALIYUN_OSS_MEDIA_BUCKET"
     write_env ALIYUN_ACCESS_KEY_ID "$ALIYUN_ACCESS_KEY_ID"
     write_env ALIYUN_ACCESS_KEY_SECRET "$ALIYUN_ACCESS_KEY_SECRET"
@@ -521,7 +532,7 @@ render_runtime_envs() {
     write_env ALIYUN_FACE_ACCESS_KEY_ID "$ALIYUN_FACE_ACCESS_KEY_ID"
     write_env ALIYUN_FACE_ACCESS_KEY_SECRET "$ALIYUN_FACE_ACCESS_KEY_SECRET"
     write_env ALIYUN_ACCOUNT_ID "$ALIYUN_ACCOUNT_ID"
-    write_env ALIYUN_IMM_REGION cn-hangzhou
+    write_env ALIYUN_IMM_REGION "$TARGET_ALIYUN_IMM_REGION"
     write_env ALIYUN_IMM_PROJECT_NAME "$ALIYUN_IMM_PROJECT_NAME"
     write_env ALIYUN_OSS_FACE_REFERENCE_BUCKET "$ALIYUN_OSS_FACE_REFERENCE_BUCKET"
     write_env EVENTBRIDGE_SIGNATURE_TOKEN "$EVENTBRIDGE_SIGNATURE_TOKEN"
@@ -840,6 +851,7 @@ install_command() {
 
 update_command() {
   load_settings
+  require_current_settings_version
   local settings_need_repository_upgrade=false
   [[ -n "$GIT_REPOSITORY_URL" ]] || settings_need_repository_upgrade=true
   hydrate_repository_defaults

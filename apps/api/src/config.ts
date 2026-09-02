@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const ALIYUN_REGION = "cn-beijing" as const;
+export const ALIYUN_OSS_REGION = "oss-cn-beijing" as const;
+export const ALIYUN_OSS_ENDPOINT = "https://oss-cn-beijing.aliyuncs.com" as const;
+export type AliyunOssRegion = typeof ALIYUN_OSS_REGION;
+
 const secretSchema = z.string().min(32);
 const optionalEnvironmentValue = (value: unknown): unknown => (value === "" ? undefined : value);
 const environmentBoolean = (value: unknown): unknown => {
@@ -64,15 +69,15 @@ const configSchema = z
       z.string().min(1).optional(),
     ),
     ALIYUN_ACCOUNT_ID: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
-    ALIYUN_IMM_REGION: z.literal("cn-hangzhou").default("cn-hangzhou"),
+    ALIYUN_IMM_REGION: z.literal(ALIYUN_REGION).default(ALIYUN_REGION),
     ALIYUN_IMM_PROJECT_NAME: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
     ALIYUN_OSS_MEDIA_BUCKET: z.preprocess(optionalEnvironmentValue, z.string().min(3).optional()),
     ALIYUN_OSS_FACE_REFERENCE_BUCKET: z.preprocess(
       optionalEnvironmentValue,
       z.string().min(3).optional(),
     ),
-    ALIYUN_OSS_ENDPOINT: z.string().url().default("https://oss-cn-hangzhou.aliyuncs.com"),
-    ALIYUN_OSS_REGION: z.literal("oss-cn-hangzhou").default("oss-cn-hangzhou"),
+    ALIYUN_OSS_ENDPOINT: z.literal(ALIYUN_OSS_ENDPOINT).default(ALIYUN_OSS_ENDPOINT),
+    ALIYUN_OSS_REGION: z.literal(ALIYUN_OSS_REGION).default(ALIYUN_OSS_REGION),
     ALIYUN_ACCESS_KEY_ID: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
     ALIYUN_ACCESS_KEY_SECRET: z.preprocess(optionalEnvironmentValue, z.string().min(1).optional()),
     ALIYUN_CDN_AUTH_KEY_CURRENT: z.preprocess(
