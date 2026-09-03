@@ -180,10 +180,7 @@ export class EventBridgeVerifier {
       url.hostname !== expectedHost ||
       url.port !== "" ||
       url.username !== "" ||
-      url.password !== "" ||
-      url.search !== "" ||
-      url.hash !== "" ||
-      !/^\/x509_public_certificate_[A-Za-z0-9._-]+\.pem$/u.test(url.pathname)
+      url.password !== ""
     ) {
       throw invalidSignature("certificate_url");
     }
