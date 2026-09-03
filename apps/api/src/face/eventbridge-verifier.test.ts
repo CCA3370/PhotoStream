@@ -48,7 +48,7 @@ describe("EventBridgeVerifier", () => {
         "x-eventbridge-signature-version: 1.0\n" +
         `x-eventbridge-signature-url: ${unsigned["x-eventbridge-signature-url"]}\n` +
         `x-eventbridge-signature-token: ${unsigned["x-eventbridge-signature-token"]}\n` +
-        '{"id":"evt-1"}\n',
+        '{"id":"evt-1"}',
       "utf8",
     );
     expect(
