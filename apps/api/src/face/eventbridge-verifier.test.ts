@@ -66,7 +66,7 @@ describe("EventBridgeVerifier", () => {
     expect(certificateLoader).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects stale events and certificate URL substitutions before fetching", async () => {
+  it("reports timestamp, token, and certificate URL stages without exposing secret values", async () => {
     const certificateLoader = vi.fn(async () => "unused");
     const verifier = new EventBridgeVerifier(config, { certificateLoader });
     await expect(
@@ -74,7 +74,23 @@ describe("EventBridgeVerifier", () => {
         { ...headers(Date.now() - 60_001), "x-eventbridge-signature-v2": "AA==" },
         Buffer.from("{}"),
       ),
-    ).rejects.toMatchObject({ code: "FACE_EVENT_SIGNATURE_INVALID" });
+    ).rejects.toMatchObject({
+      code: "FACE_EVENT_SIGNATURE_INVALID",
+      stage: "timestamp",
+    });
+    await expect(
+      verifier.verify(
+        {
+          ...headers(),
+          "x-eventbridge-signature-token": "wrong-token-value",
+          "x-eventbridge-signature-v2": "AA==",
+        },
+        Buffer.from("{}"),
+      ),
+    ).rejects.toMatchObject({
+      code: "FACE_EVENT_SIGNATURE_INVALID",
+      stage: "token",
+    });
     await expect(
       verifier.verify(
         {
@@ -84,7 +100,10 @@ describe("EventBridgeVerifier", () => {
         },
         Buffer.from("{}"),
       ),
-    ).rejects.toMatchObject({ code: "FACE_EVENT_SIGNATURE_INVALID" });
+    ).rejects.toMatchObject({
+      code: "FACE_EVENT_SIGNATURE_INVALID",
+      stage: "certificate_url",
+    });
     expect(certificateLoader).not.toHaveBeenCalled();
   });
 });
