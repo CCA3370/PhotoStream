@@ -66,6 +66,35 @@ describe("EventBridgeVerifier", () => {
     expect(certificateLoader).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts certificate paths and query parameters on the configured official host", async () => {
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const certificateLoader = vi.fn(async () =>
+      publicKey.export({ type: "spki", format: "pem" }).toString(),
+    );
+    const verifier = new EventBridgeVerifier(config, { certificateLoader });
+    const body = Buffer.from('{"id":"evt-2"}', "utf8");
+    const unsigned = {
+      ...headers(),
+      "x-eventbridge-signature-url":
+        "https://cn-beijing-eventbridge.oss-accelerate.aliyuncs.com/certificates/current?version=2",
+    };
+    const signature = sign(
+      "RSA-SHA256",
+      eventBridgeStringToSign(
+        "https://example.test/api/v1/integrations/aliyun/eventbridge",
+        unsigned,
+        body,
+      ),
+      privateKey,
+    ).toString("base64");
+
+    await verifier.verify({ ...unsigned, "x-eventbridge-signature-v2": signature }, body);
+    expect(certificateLoader).toHaveBeenCalledTimes(1);
+    expect(certificateLoader.mock.calls[0]?.[0].hostname).toBe(
+      "cn-beijing-eventbridge.oss-accelerate.aliyuncs.com",
+    );
+  });
+
   it("reports timestamp, token, and certificate URL stages without exposing secret values", async () => {
     const certificateLoader = vi.fn(async () => "unused");
     const verifier = new EventBridgeVerifier(config, { certificateLoader });
