@@ -41,30 +41,24 @@ describe("EventBridgeVerifier", () => {
     const verifier = new EventBridgeVerifier(config, { certificateLoader });
     const body = Buffer.from('{"id":"evt-1"}', "utf8");
     const unsigned = headers();
-    expect(
-      eventBridgeStringToSign(
-        "https://example.test/api/v1/integrations/aliyun/eventbridge",
-        unsigned,
-        body,
-      ).toString("utf8"),
-    ).toBe(
+    const canonical = Buffer.from(
       `https://example.test/api/v1/integrations/aliyun/eventbridge\n` +
         `x-eventbridge-signature-timestamp: ${unsigned["x-eventbridge-signature-timestamp"]}\n` +
         "x-eventbridge-hash-method: SHA256\n" +
         "x-eventbridge-signature-version: 1.0\n" +
         `x-eventbridge-signature-url: ${unsigned["x-eventbridge-signature-url"]}\n` +
-        `x-eventbridge-signature-token: ${unsigned["x-eventbridge-signature-token"]}\n\n` +
-        '{"id":"evt-1"}',
+        `x-eventbridge-signature-token: ${unsigned["x-eventbridge-signature-token"]}\n` +
+        '{"id":"evt-1"}\n',
+      "utf8",
     );
-    const signature = sign(
-      "RSA-SHA256",
+    expect(
       eventBridgeStringToSign(
         "https://example.test/api/v1/integrations/aliyun/eventbridge",
         unsigned,
         body,
       ),
-      privateKey,
-    ).toString("base64");
+    ).toEqual(canonical);
+    const signature = sign("RSA-SHA256", canonical, privateKey).toString("base64");
     const signed = { ...unsigned, "x-eventbridge-signature-v2": signature };
 
     await verifier.verify(signed, body);
