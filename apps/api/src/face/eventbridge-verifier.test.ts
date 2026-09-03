@@ -66,13 +66,42 @@ describe("EventBridgeVerifier", () => {
     expect(certificateLoader).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts certificate paths and query parameters on the configured official host", async () => {
+  it("accepts official EventBridge certificate hosts even when the certificate region differs", async () => {
     const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const certificateLoader = vi.fn(async () =>
       publicKey.export({ type: "spki", format: "pem" }).toString(),
     );
     const verifier = new EventBridgeVerifier(config, { certificateLoader });
     const body = Buffer.from('{"id":"evt-2"}', "utf8");
+    const unsigned = {
+      ...headers(),
+      "x-eventbridge-signature-url":
+        "https://cn-hangzhou-eventbridge.oss-accelerate.aliyuncs.com/x509_public_certificate_2021012501.pem",
+    };
+    const signature = sign(
+      "RSA-SHA256",
+      eventBridgeStringToSign(
+        "https://example.test/api/v1/integrations/aliyun/eventbridge",
+        unsigned,
+        body,
+      ),
+      privateKey,
+    ).toString("base64");
+
+    await verifier.verify({ ...unsigned, "x-eventbridge-signature-v2": signature }, body);
+    expect(certificateLoader).toHaveBeenCalledTimes(1);
+    expect(certificateLoader.mock.calls[0]?.[0].hostname).toBe(
+      "cn-hangzhou-eventbridge.oss-accelerate.aliyuncs.com",
+    );
+  });
+
+  it("accepts certificate paths and query parameters on an official host", async () => {
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const certificateLoader = vi.fn(async () =>
+      publicKey.export({ type: "spki", format: "pem" }).toString(),
+    );
+    const verifier = new EventBridgeVerifier(config, { certificateLoader });
+    const body = Buffer.from('{"id":"evt-3"}', "utf8");
     const unsigned = {
       ...headers(),
       "x-eventbridge-signature-url":
@@ -90,9 +119,6 @@ describe("EventBridgeVerifier", () => {
 
     await verifier.verify({ ...unsigned, "x-eventbridge-signature-v2": signature }, body);
     expect(certificateLoader).toHaveBeenCalledTimes(1);
-    expect(certificateLoader.mock.calls[0]?.[0].hostname).toBe(
-      "cn-beijing-eventbridge.oss-accelerate.aliyuncs.com",
-    );
   });
 
   it("reports timestamp, token, and certificate hostname stages without exposing secrets", async () => {
@@ -133,7 +159,7 @@ describe("EventBridgeVerifier", () => {
       code: "FACE_EVENT_SIGNATURE_INVALID",
       stage: "certificate_url_hostname",
       context: {
-        expectedCertificateHost: "cn-beijing-eventbridge.oss-accelerate.aliyuncs.com",
+        allowedCertificateHostSuffix: "-eventbridge.oss-accelerate.aliyuncs.com",
         actualCertificateHost: "evil.example",
       },
     });
