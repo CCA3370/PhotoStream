@@ -48,7 +48,11 @@ export function eventBridgeStringToSign(
   if (typeof token === "string" && token !== "") {
     lines.push(`x-eventbridge-signature-token: ${token}`);
   }
-  return Buffer.concat([Buffer.from(`${lines.join("\n")}\n\n`, "utf8"), body]);
+  return Buffer.concat([
+    Buffer.from(`${lines.join("\n")}\n`, "utf8"),
+    body,
+    Buffer.from("\n", "utf8"),
+  ]);
 }
 
 async function loadCertificate(url: URL): Promise<string> {
