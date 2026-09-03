@@ -286,7 +286,10 @@ export async function registerFaceRoutes(
       } catch (error) {
         if (error instanceof EventBridgeVerificationError) {
           request.log.warn(
-            { eventBridgeVerificationStage: error.stage },
+            {
+              eventBridgeVerificationStage: error.stage,
+              ...error.context,
+            },
             "EventBridge signature rejected",
           );
         }
