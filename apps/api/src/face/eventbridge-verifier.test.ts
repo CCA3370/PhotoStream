@@ -95,7 +95,7 @@ describe("EventBridgeVerifier", () => {
     );
   });
 
-  it("reports timestamp, token, and certificate URL stages without exposing secret values", async () => {
+  it("reports timestamp, token, and certificate hostname stages without exposing secrets", async () => {
     const certificateLoader = vi.fn(async () => "unused");
     const verifier = new EventBridgeVerifier(config, { certificateLoader });
     await expect(
@@ -131,8 +131,56 @@ describe("EventBridgeVerifier", () => {
       ),
     ).rejects.toMatchObject({
       code: "FACE_EVENT_SIGNATURE_INVALID",
-      stage: "certificate_url",
+      stage: "certificate_url_hostname",
+      context: {
+        expectedCertificateHost: "cn-beijing-eventbridge.oss-accelerate.aliyuncs.com",
+        actualCertificateHost: "evil.example",
+      },
     });
+    expect(certificateLoader).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes certificate URL scheme, port, and credential failures", async () => {
+    const certificateLoader = vi.fn(async () => "unused");
+    const verifier = new EventBridgeVerifier(config, { certificateLoader });
+    const signature = "AA==";
+
+    await expect(
+      verifier.verify(
+        {
+          ...headers(),
+          "x-eventbridge-signature-url":
+            "http://cn-beijing-eventbridge.oss-accelerate.aliyuncs.com/cert.pem",
+          "x-eventbridge-signature-v2": signature,
+        },
+        Buffer.from("{}"),
+      ),
+    ).rejects.toMatchObject({ stage: "certificate_url_scheme" });
+
+    await expect(
+      verifier.verify(
+        {
+          ...headers(),
+          "x-eventbridge-signature-url":
+            "https://cn-beijing-eventbridge.oss-accelerate.aliyuncs.com:8443/cert.pem",
+          "x-eventbridge-signature-v2": signature,
+        },
+        Buffer.from("{}"),
+      ),
+    ).rejects.toMatchObject({ stage: "certificate_url_port" });
+
+    await expect(
+      verifier.verify(
+        {
+          ...headers(),
+          "x-eventbridge-signature-url":
+            "https://user:pass@cn-beijing-eventbridge.oss-accelerate.aliyuncs.com/cert.pem",
+          "x-eventbridge-signature-v2": signature,
+        },
+        Buffer.from("{}"),
+      ),
+    ).rejects.toMatchObject({ stage: "certificate_url_credentials" });
+
     expect(certificateLoader).not.toHaveBeenCalled();
   });
 });
