@@ -13,22 +13,46 @@ const maximumBodyBytes = 512 * 1024;
 const maximumCertificateBytes = 64 * 1024;
 
 export type EventBridgeHeaders = Readonly<Record<string, string | string[] | undefined>>;
+export type EventBridgeVerificationStage =
+  | "body"
+  | "hash_method"
+  | "signature_version"
+  | "timestamp"
+  | "token"
+  | "certificate_url"
+  | "signature"
+  | "certificate_fetch"
+  | "rsa_signature";
 type CertificateLoader = (url: URL) => Promise<string>;
 
-function oneHeader(headers: EventBridgeHeaders, name: string): string {
-  const value = headers[name];
-  if (typeof value !== "string" || value === "") {
-    throw invalidSignature();
+export class EventBridgeVerificationError extends AppError {
+  readonly stage: EventBridgeVerificationStage;
+
+  constructor(stage: EventBridgeVerificationStage) {
+    super({
+      code: "FACE_EVENT_SIGNATURE_INVALID",
+      message: "事件签名无效",
+      statusCode: 403,
+    });
+    this.name = "EventBridgeVerificationError";
+    this.stage = stage;
   }
-  return value;
 }
 
-function invalidSignature(): AppError {
-  return new AppError({
-    code: "FACE_EVENT_SIGNATURE_INVALID",
-    message: "事件签名无效",
-    statusCode: 403,
-  });
+function invalidSignature(stage: EventBridgeVerificationStage): EventBridgeVerificationError {
+  return new EventBridgeVerificationError(stage);
+}
+
+function oneHeader(
+  headers: EventBridgeHeaders,
+  name: string,
+  stage: EventBridgeVerificationStage = "signature",
+): string {
+  const value = headers[name];
+  if (typeof value !== "string" || value === "") {
+    throw invalidSignature(stage);
+  }
+  return value;
 }
 
 function equalSecret(left: string, right: string): boolean {
@@ -60,11 +84,13 @@ async function loadCertificate(url: URL): Promise<string> {
       signal: controller.signal,
       headers: { accept: "application/x-pem-file,text/plain" },
     });
-    if (!response.ok) throw invalidSignature();
+    if (!response.ok) throw invalidSignature("certificate_fetch");
     const length = Number(response.headers.get("content-length") ?? 0);
-    if (length > maximumCertificateBytes) throw invalidSignature();
+    if (length > maximumCertificateBytes) throw invalidSignature("certificate_fetch");
     const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > maximumCertificateBytes) throw invalidSignature();
+    if (Buffer.byteLength(text, "utf8") > maximumCertificateBytes) {
+      throw invalidSignature("certificate_fetch");
+    }
     return text;
   } finally {
     clearTimeout(timeout);
@@ -89,14 +115,22 @@ export class EventBridgeVerifier {
   }
 
   async verify(headers: EventBridgeHeaders, body: Buffer): Promise<void> {
-    if (body.byteLength === 0 || body.byteLength > maximumBodyBytes) throw invalidSignature();
-    if (oneHeader(headers, "x-eventbridge-hash-method") !== "SHA256") throw invalidSignature();
-    if (oneHeader(headers, "x-eventbridge-signature-version") !== "1.0") {
-      throw invalidSignature();
+    if (body.byteLength === 0 || body.byteLength > maximumBodyBytes) {
+      throw invalidSignature("body");
     }
-    const timestamp = Number(oneHeader(headers, "x-eventbridge-signature-timestamp"));
+    if (oneHeader(headers, "x-eventbridge-hash-method", "hash_method") !== "SHA256") {
+      throw invalidSignature("hash_method");
+    }
+    if (
+      oneHeader(headers, "x-eventbridge-signature-version", "signature_version") !== "1.0"
+    ) {
+      throw invalidSignature("signature_version");
+    }
+    const timestamp = Number(
+      oneHeader(headers, "x-eventbridge-signature-timestamp", "timestamp"),
+    );
     if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() - timestamp) > 60_000) {
-      throw invalidSignature();
+      throw invalidSignature("timestamp");
     }
     const expectedToken = this.#config.EVENTBRIDGE_SIGNATURE_TOKEN;
     const suppliedToken = headers["x-eventbridge-signature-token"];
@@ -104,26 +138,33 @@ export class EventBridgeVerifier {
       expectedToken !== undefined &&
       (typeof suppliedToken !== "string" || !equalSecret(suppliedToken, expectedToken))
     ) {
-      throw invalidSignature();
+      throw invalidSignature("token");
     }
 
-    const certificateUrl = this.#certificateUrl(oneHeader(headers, "x-eventbridge-signature-url"));
-    const signature = oneHeader(headers, "x-eventbridge-signature-v2");
+    const certificateUrl = this.#certificateUrl(
+      oneHeader(headers, "x-eventbridge-signature-url", "certificate_url"),
+    );
+    const signature = oneHeader(headers, "x-eventbridge-signature-v2", "signature");
     let signatureBytes: Buffer;
     try {
       signatureBytes = Buffer.from(signature, "base64");
     } catch {
-      throw invalidSignature();
+      throw invalidSignature("signature");
     }
-    if (signatureBytes.byteLength === 0) throw invalidSignature();
+    if (signatureBytes.byteLength === 0) throw invalidSignature("signature");
     const certificate = await this.#certificate(certificateUrl);
-    const valid = verify(
-      "RSA-SHA256",
-      eventBridgeStringToSign(this.#targetUrl, headers, body),
-      certificate,
-      signatureBytes,
-    );
-    if (!valid) throw invalidSignature();
+    let valid: boolean;
+    try {
+      valid = verify(
+        "RSA-SHA256",
+        eventBridgeStringToSign(this.#targetUrl, headers, body),
+        certificate,
+        signatureBytes,
+      );
+    } catch {
+      throw invalidSignature("rsa_signature");
+    }
+    if (!valid) throw invalidSignature("rsa_signature");
   }
 
   #certificateUrl(raw: string): URL {
@@ -131,7 +172,7 @@ export class EventBridgeVerifier {
     try {
       url = new URL(raw);
     } catch {
-      throw invalidSignature();
+      throw invalidSignature("certificate_url");
     }
     const expectedHost = `${this.#config.ALIYUN_IMM_REGION}-eventbridge.oss-accelerate.aliyuncs.com`;
     if (
@@ -144,7 +185,7 @@ export class EventBridgeVerifier {
       url.hash !== "" ||
       !/^\/x509_public_certificate_[A-Za-z0-9._-]+\.pem$/u.test(url.pathname)
     ) {
-      throw invalidSignature();
+      throw invalidSignature("certificate_url");
     }
     return url;
   }
@@ -155,8 +196,9 @@ export class EventBridgeVerifier {
     let pem: string;
     try {
       pem = await this.#loadCertificate(url);
-    } catch {
-      throw invalidSignature();
+    } catch (error) {
+      if (error instanceof EventBridgeVerificationError) throw error;
+      throw invalidSignature("certificate_fetch");
     }
     this.#cache.set(url.href, { pem, expiresAt: Date.now() + 5 * 60_000 });
     return pem;
