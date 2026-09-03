@@ -19,7 +19,10 @@ import { z } from "zod";
 import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
-import type { EventBridgeVerifier } from "../face/eventbridge-verifier.js";
+import {
+  EventBridgeVerificationError,
+  type EventBridgeVerifier,
+} from "../face/eventbridge-verifier.js";
 import type { FaceService } from "../face/service.js";
 import { visitorSessionToken } from "../media/visitor-http.js";
 
@@ -278,7 +281,17 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       const body = (request as FastifyRequest & { faceRawBody?: Buffer }).faceRawBody;
       if (body === undefined) throw new Error("raw event body unavailable");
-      await options.eventBridgeVerifier.verify(request.headers, body);
+      try {
+        await options.eventBridgeVerifier.verify(request.headers, body);
+      } catch (error) {
+        if (error instanceof EventBridgeVerificationError) {
+          request.log.warn(
+            { eventBridgeVerificationStage: error.stage },
+            "EventBridge signature rejected",
+          );
+        }
+        throw error;
+      }
       return options.faceService.processEvent(request.body);
     },
   );
