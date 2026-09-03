@@ -11,6 +11,7 @@ const signatureHeaders = [
 ] as const;
 const maximumBodyBytes = 512 * 1024;
 const maximumCertificateBytes = 64 * 1024;
+const eventBridgeCertificateHostSuffix = "-eventbridge.oss-accelerate.aliyuncs.com";
 
 export type EventBridgeHeaders = Readonly<Record<string, string | string[] | undefined>>;
 export type EventBridgeVerificationStage =
@@ -72,6 +73,12 @@ function equalSecret(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function isOfficialEventBridgeCertificateHost(hostname: string): boolean {
+  if (!hostname.endsWith(eventBridgeCertificateHostSuffix)) return false;
+  const regionId = hostname.slice(0, -eventBridgeCertificateHostSuffix.length);
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(regionId);
 }
 
 export function eventBridgeStringToSign(
@@ -187,15 +194,14 @@ export class EventBridgeVerifier {
     } catch {
       throw invalidSignature("certificate_url_parse");
     }
-    const expectedHost = `${this.#config.ALIYUN_IMM_REGION}-eventbridge.oss-accelerate.aliyuncs.com`;
     if (url.protocol !== "https:") {
       throw invalidSignature("certificate_url_scheme", {
         actualCertificateScheme: url.protocol,
       });
     }
-    if (url.hostname !== expectedHost) {
+    if (!isOfficialEventBridgeCertificateHost(url.hostname)) {
       throw invalidSignature("certificate_url_hostname", {
-        expectedCertificateHost: expectedHost,
+        allowedCertificateHostSuffix: eventBridgeCertificateHostSuffix,
         actualCertificateHost: url.hostname,
       });
     }
