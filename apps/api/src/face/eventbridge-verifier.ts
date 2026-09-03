@@ -20,15 +20,24 @@ export type EventBridgeVerificationStage =
   | "timestamp"
   | "token"
   | "certificate_url"
+  | "certificate_url_parse"
+  | "certificate_url_scheme"
+  | "certificate_url_hostname"
+  | "certificate_url_port"
+  | "certificate_url_credentials"
   | "signature"
   | "certificate_fetch"
   | "rsa_signature";
+export type EventBridgeVerificationContext = Readonly<
+  Record<string, string | number | boolean>
+>;
 type CertificateLoader = (url: URL) => Promise<string>;
 
 export class EventBridgeVerificationError extends AppError {
   readonly stage: EventBridgeVerificationStage;
+  readonly context?: EventBridgeVerificationContext;
 
-  constructor(stage: EventBridgeVerificationStage) {
+  constructor(stage: EventBridgeVerificationStage, context?: EventBridgeVerificationContext) {
     super({
       code: "FACE_EVENT_SIGNATURE_INVALID",
       message: "事件签名无效",
@@ -36,11 +45,15 @@ export class EventBridgeVerificationError extends AppError {
     });
     this.name = "EventBridgeVerificationError";
     this.stage = stage;
+    this.context = context;
   }
 }
 
-function invalidSignature(stage: EventBridgeVerificationStage): EventBridgeVerificationError {
-  return new EventBridgeVerificationError(stage);
+function invalidSignature(
+  stage: EventBridgeVerificationStage,
+  context?: EventBridgeVerificationContext,
+): EventBridgeVerificationError {
+  return new EventBridgeVerificationError(stage, context);
 }
 
 function oneHeader(
@@ -172,17 +185,29 @@ export class EventBridgeVerifier {
     try {
       url = new URL(raw);
     } catch {
-      throw invalidSignature("certificate_url");
+      throw invalidSignature("certificate_url_parse");
     }
     const expectedHost = `${this.#config.ALIYUN_IMM_REGION}-eventbridge.oss-accelerate.aliyuncs.com`;
-    if (
-      url.protocol !== "https:" ||
-      url.hostname !== expectedHost ||
-      url.port !== "" ||
-      url.username !== "" ||
-      url.password !== ""
-    ) {
-      throw invalidSignature("certificate_url");
+    if (url.protocol !== "https:") {
+      throw invalidSignature("certificate_url_scheme", {
+        actualCertificateScheme: url.protocol,
+      });
+    }
+    if (url.hostname !== expectedHost) {
+      throw invalidSignature("certificate_url_hostname", {
+        expectedCertificateHost: expectedHost,
+        actualCertificateHost: url.hostname,
+      });
+    }
+    if (url.port !== "") {
+      throw invalidSignature("certificate_url_port", {
+        actualCertificatePort: url.port,
+      });
+    }
+    if (url.username !== "" || url.password !== "") {
+      throw invalidSignature("certificate_url_credentials", {
+        hasCertificateUrlCredentials: true,
+      });
     }
     return url;
   }
