@@ -180,7 +180,6 @@ export class AliyunFaceProvider implements FaceProvider {
         file: new InputFile({
           URI: input.uri,
           customId: input.mediaId,
-          contentType: "image/jpeg",
           mediaType: "image",
         }),
       }),
@@ -224,7 +223,7 @@ export class AliyunFaceProvider implements FaceProvider {
     return required(response.body?.taskId, "CreateFigureClusteringTask");
   }
 
-  async taskStatus(taskId: string, taskType: "FigureClustering"): Promise<ProviderTaskStatus> {
+  async taskStatus(taskId: string, taskType: "FaceClustering"): Promise<ProviderTaskStatus> {
     const response = await this.#client.getTask(
       new GetTaskRequest({ projectName: this.#projectName, taskId, taskType }),
     );
