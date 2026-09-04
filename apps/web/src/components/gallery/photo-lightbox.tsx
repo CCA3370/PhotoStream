@@ -4,6 +4,7 @@ import type { PublicMediaView } from "@photostream/contracts";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  DownloadIcon,
   Maximize2Icon,
   Minimize2Icon,
   MinusIcon,
@@ -79,6 +80,7 @@ export function PhotoLightbox({
   const [loaded, setLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -132,6 +134,7 @@ export function PhotoLightbox({
   useEffect(() => {
     if (selectedId === null) return;
     setLoaded(false);
+    setDownloadMenuOpen(false);
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
@@ -253,6 +256,13 @@ export function PhotoLightbox({
   if (selected === null || large === null) return null;
 
   const canNavigate = items.length > 1;
+  const canDownloadPreview =
+    slug !== undefined && selected.downloads.preview && preview1920 !== null;
+  const canDownloadOriginal =
+    slug !== undefined &&
+    selected.downloads.original &&
+    selected.downloads.originalBytes !== null;
+  const canDownload = canDownloadPreview || canDownloadOriginal;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
   return (
@@ -374,68 +384,130 @@ export function PhotoLightbox({
                 <span>{Math.round(zoom * 100)}%</span>
               </div>
 
-              <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/35 p-1 backdrop-blur-md">
-                <Button
-                  aria-label="缩小"
-                  className="text-white hover:bg-white/15 hover:text-white"
-                  disabled={zoom <= minZoom}
-                  onClick={() => changeZoom(zoom - 0.5)}
-                  size="icon-sm"
-                  title="缩小 (-)"
-                  type="button"
-                  variant="ghost"
+              <div className="ml-auto flex max-w-full items-center overflow-hidden rounded-xl border border-white/10 bg-black/35 p-1 backdrop-blur-md">
+                <div
+                  aria-hidden={downloadMenuOpen}
+                  className={cn(
+                    "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                    downloadMenuOpen
+                      ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
+                      : "max-w-48 translate-x-0 opacity-100",
+                  )}
                 >
-                  <MinusIcon />
-                </Button>
-                <Button
-                  aria-label="恢复适应屏幕"
-                  className="min-w-14 text-white hover:bg-white/15 hover:text-white"
-                  disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
-                  onClick={resetView}
-                  size="sm"
-                  title="适应屏幕 (0)"
-                  type="button"
-                  variant="ghost"
-                >
-                  <RotateCcwIcon />
-                  适应
-                </Button>
-                <Button
-                  aria-label="放大"
-                  className="text-white hover:bg-white/15 hover:text-white"
-                  disabled={zoom >= maxZoom}
-                  onClick={() => changeZoom(zoom + 0.5)}
-                  size="icon-sm"
-                  title="放大 (+)"
-                  type="button"
-                  variant="ghost"
-                >
-                  <PlusIcon />
-                </Button>
-              </div>
-
-              {slug === undefined ? null : (
-                <div className="flex flex-wrap items-end justify-end gap-2">
-                  {selected.downloads.preview && preview1920 !== null ? (
-                    <DownloadButton
-                      bytes={preview1920.bytes}
-                      kind="preview"
-                      label="普通图"
-                      mediaId={selected.id}
-                      slug={slug}
-                    />
-                  ) : null}
-                  {selected.downloads.original && selected.downloads.originalBytes !== null ? (
-                    <DownloadButton
-                      bytes={selected.downloads.originalBytes}
-                      kind="original"
-                      label="原图"
-                      mediaId={selected.id}
-                      slug={slug}
-                    />
-                  ) : null}
+                  <Button
+                    aria-label="缩小"
+                    className="text-white hover:bg-white/15 hover:text-white"
+                    disabled={zoom <= minZoom}
+                    onClick={() => changeZoom(zoom - 0.5)}
+                    size="icon-sm"
+                    title="缩小 (-)"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <MinusIcon />
+                  </Button>
+                  <Button
+                    aria-label="恢复适应屏幕"
+                    className="min-w-14 text-white hover:bg-white/15 hover:text-white"
+                    disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
+                    onClick={resetView}
+                    size="sm"
+                    title="适应屏幕 (0)"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <RotateCcwIcon />
+                    适应
+                  </Button>
+                  <Button
+                    aria-label="放大"
+                    className="text-white hover:bg-white/15 hover:text-white"
+                    disabled={zoom >= maxZoom}
+                    onClick={() => changeZoom(zoom + 0.5)}
+                    size="icon-sm"
+                    title="放大 (+)"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <PlusIcon />
+                  </Button>
                 </div>
-              )}
+
+                {canDownload ? (
+                  <>
+                    <div
+                      aria-hidden={downloadMenuOpen}
+                      className={cn(
+                        "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                        downloadMenuOpen
+                          ? "pointer-events-none max-w-0 translate-x-2 opacity-0"
+                          : "max-w-36 translate-x-0 opacity-100",
+                      )}
+                    >
+                      <Button
+                        className="h-8 border-0 bg-transparent px-3 text-white shadow-none hover:bg-white/15 hover:text-white"
+                        onClick={() => setDownloadMenuOpen(true)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <DownloadIcon data-icon="inline-start" />
+                        下载图片
+                      </Button>
+                    </div>
+
+                    <div
+                      aria-hidden={!downloadMenuOpen}
+                      className={cn(
+                        "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                        downloadMenuOpen
+                          ? "max-w-[20rem] translate-x-0 opacity-100"
+                          : "pointer-events-none max-w-0 translate-x-4 opacity-0",
+                      )}
+                    >
+                      <div className="flex items-center gap-1">
+                        {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
+                          <DownloadButton
+                            bytes={preview1920.bytes}
+                            className="h-8 border-0 bg-transparent px-3 text-white shadow-none hover:bg-white/15 hover:text-white"
+                            kind="preview"
+                            label="普通图"
+                            mediaId={selected.id}
+                            showBytes={false}
+                            showIcon={false}
+                            slug={slug}
+                          />
+                        ) : null}
+                        {canDownloadOriginal &&
+                        slug !== undefined &&
+                        selected.downloads.originalBytes !== null ? (
+                          <DownloadButton
+                            bytes={selected.downloads.originalBytes}
+                            className="h-8 border-0 bg-transparent px-3 text-white shadow-none hover:bg-white/15 hover:text-white"
+                            kind="original"
+                            label="原图"
+                            mediaId={selected.id}
+                            showBytes={false}
+                            showIcon={false}
+                            slug={slug}
+                          />
+                        ) : null}
+                        <Button
+                          aria-label="收起下载选项"
+                          className="size-8 shrink-0 rounded-lg text-white hover:bg-white/15 hover:text-white"
+                          onClick={() => setDownloadMenuOpen(false)}
+                          size="icon-sm"
+                          title="收起下载选项"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <XIcon />
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
