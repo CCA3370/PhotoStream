@@ -5,6 +5,7 @@ import { DownloadIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { publicMutation } from "@/lib/client-api";
 
 interface SignedDownload {
@@ -17,6 +18,13 @@ interface SignedDownload {
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function downloadErrorMessage(caught: unknown): string {
+  if (caught instanceof TypeError) {
+    return "无法连接图片下载服务，请稍后重试。";
+  }
+  return caught instanceof Error ? caught.message : "下载失败，请稍后重试。";
 }
 
 export function DownloadButton({
@@ -47,8 +55,9 @@ export function DownloadButton({
       const response = await fetch(signed.url, {
         cache: "no-store",
         credentials: "omit",
+        mode: "cors",
       });
-      if (!response.ok) throw new Error("图片下载失败，请稍后重试");
+      if (!response.ok) throw new Error("图片下载失败，请稍后重试。");
 
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -62,19 +71,19 @@ export function DownloadButton({
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "下载失败，请稍后重试");
+      setError(downloadErrorMessage(caught));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <>
       <Button disabled={pending} onClick={() => void download()} type="button" variant="outline">
         <DownloadIcon data-icon="inline-start" />
         {pending ? "正在下载…" : `${label}（约 ${formatBytes(bytes)}）`}
       </Button>
-      {error === null ? null : <p className="text-sm text-destructive">{error}</p>}
-    </div>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="下载失败" />
+    </>
   );
 }
