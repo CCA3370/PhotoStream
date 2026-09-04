@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { clientMutation } from "@/lib/client-api";
@@ -33,15 +34,17 @@ export function CategoryForm({ albumId }: Readonly<{ albumId: string }>) {
   }
 
   return (
-    <form action={submit} className="flex max-w-md items-end gap-2">
-      <Field data-invalid={error === null ? undefined : true}>
-        <FieldLabel htmlFor="category-name">新增一级分类</FieldLabel>
-        <Input aria-invalid={error === null ? undefined : true} id="category-name" name="name" />
-        {error === null ? null : <p className="text-sm text-destructive">{error}</p>}
-      </Field>
-      <Button disabled={pending} type="submit" variant="outline">
-        {pending ? "添加中…" : "添加"}
-      </Button>
-    </form>
+    <>
+      <form action={submit} className="flex max-w-md items-end gap-2">
+        <Field data-invalid={error === null ? undefined : true}>
+          <FieldLabel htmlFor="category-name">新增一级分类</FieldLabel>
+          <Input aria-invalid={error === null ? undefined : true} id="category-name" name="name" />
+        </Field>
+        <Button disabled={pending} type="submit" variant="outline">
+          {pending ? "添加中…" : "添加"}
+        </Button>
+      </form>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="创建分类失败" />
+    </>
   );
 }
