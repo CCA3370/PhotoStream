@@ -3,7 +3,11 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import { loadConfig } from "../config.js";
-import { EventBridgeVerifier, eventBridgeStringToSign } from "./eventbridge-verifier.js";
+import {
+  EventBridgeVerifier,
+  eventBridgeReferenceStringToSign,
+  eventBridgeStringToSign,
+} from "./eventbridge-verifier.js";
 
 const config = loadConfig({
   NODE_ENV: "test",
@@ -63,6 +67,26 @@ describe("EventBridgeVerifier", () => {
 
     await verifier.verify(signed, body);
     await verifier.verify(signed, body);
+    expect(certificateLoader).toHaveBeenCalledTimes(1);
+  });
+
+  it("verifies the Alibaba reference canonical form with a trailing body newline", async () => {
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const certificateLoader = vi.fn(async () =>
+      publicKey.export({ type: "spki", format: "pem" }).toString(),
+    );
+    const verifier = new EventBridgeVerifier(config, { certificateLoader });
+    const body = Buffer.from('{"id":"evt-reference"}', "utf8");
+    const unsigned = headers();
+    const canonical = eventBridgeReferenceStringToSign(
+      "https://example.test/api/v1/integrations/aliyun/eventbridge",
+      unsigned,
+      body,
+    );
+    expect(canonical.subarray(-1).toString("utf8")).toBe("\n");
+    const signature = sign("RSA-SHA256", canonical, privateKey).toString("base64");
+
+    await verifier.verify({ ...unsigned, "x-eventbridge-signature-v2": signature }, body);
     expect(certificateLoader).toHaveBeenCalledTimes(1);
   });
 
