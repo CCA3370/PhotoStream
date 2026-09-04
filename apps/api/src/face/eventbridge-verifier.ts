@@ -12,6 +12,7 @@ const signatureHeaders = [
 const maximumBodyBytes = 512 * 1024;
 const maximumCertificateBytes = 64 * 1024;
 const eventBridgeCertificateHostSuffix = "-eventbridge.oss-accelerate.aliyuncs.com";
+const lineFeed = Buffer.from("\n", "utf8");
 
 export type EventBridgeHeaders = Readonly<Record<string, string | string[] | undefined>>;
 export type EventBridgeVerificationStage =
@@ -93,6 +94,14 @@ export function eventBridgeStringToSign(
     lines.push(`x-eventbridge-signature-token: ${token}`);
   }
   return Buffer.concat([Buffer.from(`${lines.join("\n")}\n`, "utf8"), body]);
+}
+
+export function eventBridgeReferenceStringToSign(
+  targetUrl: string,
+  headers: EventBridgeHeaders,
+  body: Buffer,
+): Buffer {
+  return Buffer.concat([eventBridgeStringToSign(targetUrl, headers, body), lineFeed]);
 }
 
 async function loadCertificate(url: URL): Promise<string> {
@@ -181,10 +190,24 @@ export class EventBridgeVerifier {
         certificate,
         signatureBytes,
       );
+      if (!valid) {
+        valid = verify(
+          "RSA-SHA256",
+          eventBridgeReferenceStringToSign(this.#targetUrl, headers, body),
+          certificate,
+          signatureBytes,
+        );
+      }
     } catch {
       throw invalidSignature("rsa_signature");
     }
-    if (!valid) throw invalidSignature("rsa_signature");
+    if (!valid) {
+      throw invalidSignature("rsa_signature", {
+        configuredTargetUrl: this.#targetUrl,
+        triedDocumentedCanonicalForm: true,
+        triedReferenceCanonicalForm: true,
+      });
+    }
   }
 
   #certificateUrl(raw: string): URL {
