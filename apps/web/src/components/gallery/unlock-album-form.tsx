@@ -5,8 +5,8 @@ import { LockKeyholeIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 
@@ -41,32 +41,29 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
   }
 
   return (
-    <form action={submit} className="mx-auto flex min-h-64 max-w-md flex-col justify-center gap-5">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>无法进入相册</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Field data-invalid={error === null ? undefined : true}>
-        <FieldLabel htmlFor="album-password">相册口令</FieldLabel>
-        <InputGroup className="min-h-11">
-          <InputGroupAddon aria-hidden="true">
-            <LockKeyholeIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            aria-invalid={error === null ? undefined : true}
-            autoComplete="off"
-            id="album-password"
-            name="password"
-            type="password"
-          />
-        </InputGroup>
-        <FieldDescription>口令只用于本次解锁，不会保存在浏览器存储中。</FieldDescription>
-      </Field>
-      <Button className="min-h-11" disabled={pending} type="submit">
-        {pending ? "正在验证…" : "进入相册"}
-      </Button>
-    </form>
+    <>
+      <form action={submit} className="mx-auto flex min-h-64 max-w-md flex-col justify-center gap-5">
+        <Field data-invalid={error === null ? undefined : true}>
+          <FieldLabel htmlFor="album-password">相册口令</FieldLabel>
+          <InputGroup className="min-h-11">
+            <InputGroupAddon aria-hidden="true">
+              <LockKeyholeIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              aria-invalid={error === null ? undefined : true}
+              autoComplete="off"
+              id="album-password"
+              name="password"
+              type="password"
+            />
+          </InputGroup>
+          <FieldDescription>口令只用于本次解锁，不会保存在浏览器存储中。</FieldDescription>
+        </Field>
+        <Button className="min-h-11" disabled={pending} type="submit">
+          {pending ? "正在验证…" : "进入相册"}
+        </Button>
+      </form>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="无法进入相册" />
+    </>
   );
 }
