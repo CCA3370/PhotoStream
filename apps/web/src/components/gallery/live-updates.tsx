@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 
-import { Button } from "@/components/ui/button";
 import { clientGet } from "@/lib/client-api";
 
 interface PublicChange {
@@ -22,8 +21,7 @@ export function LiveUpdates({
   slug: string;
 }>) {
   const router = useRouter();
-  const [count, setCount] = useState(0);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const lastEventId = useRef(initialEventId);
   const knownIds = useRef(new Set(knownMediaIds));
 
@@ -40,12 +38,13 @@ export function LiveUpdates({
       if (event.id <= lastEventId.current) return;
       lastEventId.current = event.id;
       if (event.type === "media.published") {
-        window.dispatchEvent(
-          new CustomEvent("photostream:media-published", { detail: { mediaId: event.mediaId } }),
-        );
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
-          setCount((current) => current + 1);
+          window.dispatchEvent(
+            new CustomEvent("photostream:media-published", {
+              detail: { mediaId: event.mediaId },
+            }),
+          );
         }
         return;
       }
@@ -136,21 +135,5 @@ export function LiveUpdates({
     };
   }, [router, slug]);
 
-  if (count === 0) return null;
-  return (
-    <Button
-      className="fixed top-4 left-1/2 -translate-x-1/2"
-      disabled={pending}
-      onClick={() => {
-        startTransition(() => {
-          router.refresh();
-          setCount(0);
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        });
-      }}
-      type="button"
-    >
-      {pending ? "正在更新…" : `有 ${count} 条新影像`}
-    </Button>
-  );
+  return null;
 }
