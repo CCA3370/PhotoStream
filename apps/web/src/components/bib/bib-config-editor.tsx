@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
   Field,
   FieldContent,
@@ -244,12 +245,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
   return (
     <div className="flex flex-col gap-4">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>号码配置未完成</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       <Alert>
         <AlertTitle>
           规则版本 {saved.ruleVersion} · 映射版本 {saved.mappingVersion}
@@ -864,11 +859,11 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           <Field data-invalid={testNumberInvalid || undefined}>
             <FieldLabel htmlFor="bib-test-number">测试号码</FieldLabel>
             <Input
+              aria-invalid={testNumberInvalid || undefined}
               id="bib-test-number"
               inputMode="numeric"
               maxLength={12}
               onChange={(event) => setTestNumber(event.currentTarget.value)}
-              aria-invalid={testNumberInvalid || undefined}
               value={testNumber}
             />
           </Field>
@@ -955,6 +950,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <SaveIcon data-icon="inline-start" />
         {pending ? "正在保存…" : "保存号码规则与映射"}
       </Button>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="号码配置失败" />
     </div>
   );
 }
