@@ -5,11 +5,10 @@ import { SearchIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useEffectEvent, useState } from "react";
 
+import type { FaceSearchPanelProps } from "@/components/gallery/face-search-launcher";
+import { FaceSearchLauncher } from "@/components/gallery/face-search-launcher";
 import { MediaGrid } from "@/components/gallery/media-grid";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,24 +40,33 @@ interface AttributePair {
   readonly classOptionId: string | null;
 }
 
+type SearchMode = "attributes" | "face" | "number";
+
+type FaceSearchOptions = Readonly<Omit<FaceSearchPanelProps, "onClose">>;
+
 export function BibSearchPanel({
   attributeFilterEnabled,
   attributeOptions,
   attributePairs,
+  bibSearchEnabled,
   categoryId,
   children,
+  faceSearch,
   numberLengths,
   slug,
 }: Readonly<{
   attributeFilterEnabled: boolean;
   attributeOptions: readonly AttributeOption[];
   attributePairs: readonly AttributePair[];
+  bibSearchEnabled: boolean;
   categoryId?: string;
   children: ReactNode;
+  faceSearch?: FaceSearchOptions;
   numberLengths: readonly number[];
   slug: string;
 }>) {
-  const [mode, setMode] = useState<"attributes" | "number">("number");
+  const [expanded, setExpanded] = useState(false);
+  const [mode, setMode] = useState<SearchMode>(bibSearchEnabled ? "number" : "face");
   const [number, setNumber] = useState("");
   const [gradeOptionId, setGradeOptionId] = useState<string | null>(null);
   const [classOptionId, setClassOptionId] = useState<string | null>(null);
@@ -79,7 +87,7 @@ export function BibSearchPanel({
   const numberPlaceholder =
     numberLengths.length === 0
       ? "输入完整号码"
-      : `支持 ${numberLengths.map((length) => `${length} 位`).join("或")}`;
+      : `输入号码（${numberLengths.map((length) => `${length} 位`).join("或")}）`;
 
   function clearSearchResult(): void {
     setResult(null);
@@ -87,7 +95,7 @@ export function BibSearchPanel({
   }
 
   async function search(cursor?: string): Promise<void> {
-    if (pending) return;
+    if (pending || mode === "face") return;
     if (mode === "number" && number.length === 0) return;
     if (mode === "attributes" && gradeOptionId === null) return;
     setPending(true);
@@ -115,8 +123,9 @@ export function BibSearchPanel({
         for (const item of page.items) byId.set(item.id, item);
         return { ...page, items: [...byId.values()] };
       });
+      if (cursor === undefined) setExpanded(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "号码搜索失败");
+      setError(caught instanceof Error ? caught.message : "查找失败");
       if (cursor === undefined) setResult({ items: [], nextCursor: null, eventCursor: 0 });
     } finally {
       setPending(false);
@@ -139,43 +148,74 @@ export function BibSearchPanel({
     };
   }, [hasSearchResult]);
 
+  function changeMode(nextMode: SearchMode): void {
+    setMode(nextMode);
+    if (nextMode === "number") {
+      setGradeOptionId(null);
+      setClassOptionId(null);
+    } else if (nextMode === "attributes") {
+      setNumber("");
+    }
+    clearSearchResult();
+  }
+
+  function clearAll(): void {
+    setResult(null);
+    setError(null);
+    setNumber("");
+    setGradeOptionId(null);
+    setClassOptionId(null);
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>找照片</CardTitle>
-          <CardDescription>
-            只返回人工确认且已发布的照片；号码不会写入网址或浏览器持久存储。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          aria-expanded={expanded}
+          className="rounded-full"
+          onClick={() => setExpanded((current) => !current)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <SearchIcon data-icon="inline-start" />
+          找照片
+        </Button>
+        {result === null ? null : (
+          <Button className="rounded-full" onClick={clearAll} size="sm" type="button" variant="ghost">
+            <XIcon data-icon="inline-start" />
+            清除
+          </Button>
+        )}
+      </div>
+
+      {expanded ? (
+        <div className="flex flex-col gap-3 rounded-xl border bg-card/50 p-3 sm:max-w-xl sm:p-4">
           <ToggleGroup
             aria-label="找照片方式"
             onValueChange={(values) => {
               const value = values[0];
-              if (value === "number" || value === "attributes") {
-                setMode(value);
-                if (value === "number") {
-                  setGradeOptionId(null);
-                  setClassOptionId(null);
-                } else {
-                  setNumber("");
-                }
-                clearSearchResult();
+              if (value === "number" || value === "attributes" || value === "face") {
+                changeMode(value);
               }
             }}
             spacing={2}
             value={[mode]}
           >
-            <ToggleGroupItem value="number">按号码</ToggleGroupItem>
-            <ToggleGroupItem disabled={!attributeFilterEnabled} value="attributes">
-              按年级班级
-            </ToggleGroupItem>
+            {bibSearchEnabled ? <ToggleGroupItem value="number">号码</ToggleGroupItem> : null}
+            {attributeFilterEnabled ? (
+              <ToggleGroupItem value="attributes">年级班级</ToggleGroupItem>
+            ) : null}
+            {faceSearch === undefined ? null : (
+              <ToggleGroupItem value="face">人脸</ToggleGroupItem>
+            )}
           </ToggleGroup>
 
-          {mode === "number" ? (
+          {mode === "number" && bibSearchEnabled ? (
             <Field>
-              <FieldLabel htmlFor="public-bib-number">输入号码找照片</FieldLabel>
+              <FieldLabel className="sr-only" htmlFor="public-bib-number">
+                输入号码找照片
+              </FieldLabel>
               <Input
                 autoComplete="off"
                 id="public-bib-number"
@@ -189,7 +229,9 @@ export function BibSearchPanel({
                 value={number}
               />
             </Field>
-          ) : (
+          ) : null}
+
+          {mode === "attributes" && attributeFilterEnabled ? (
             <FieldGroup className="flex flex-col gap-3 sm:flex-row">
               <Field>
                 <FieldLabel htmlFor="public-bib-grade">年级</FieldLabel>
@@ -205,7 +247,7 @@ export function BibSearchPanel({
                   }}
                   value={gradeOptionId}
                 >
-                  <SelectTrigger className="min-h-11" id="public-bib-grade">
+                  <SelectTrigger className="min-h-10" id="public-bib-grade">
                     <SelectValue>
                       {(value) =>
                         value === null
@@ -243,7 +285,7 @@ export function BibSearchPanel({
                   }}
                   value={classOptionId ?? "all"}
                 >
-                  <SelectTrigger className="min-h-11" id="public-bib-class">
+                  <SelectTrigger className="min-h-10" id="public-bib-class">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -259,72 +301,61 @@ export function BibSearchPanel({
                 </Select>
               </Field>
             </FieldGroup>
-          )}
+          ) : null}
 
-          <div className="flex flex-wrap gap-2">
+          {mode === "face" && faceSearch !== undefined ? (
+            <FaceSearchLauncher {...faceSearch} />
+          ) : null}
+
+          {mode === "face" ? null : (
             <Button
+              className="w-fit"
               disabled={
                 pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)
               }
               onClick={() => void search()}
+              size="sm"
               type="button"
             >
               <SearchIcon data-icon="inline-start" />
-              {pending ? "正在查找…" : "查找照片"}
+              {pending ? "查找中…" : "查找"}
             </Button>
-            {result === null ? null : (
-              <Button
-                onClick={() => {
-                  setResult(null);
-                  setError(null);
-                  setNumber("");
-                  setGradeOptionId(null);
-                  setClassOptionId(null);
-                }}
-                type="button"
-                variant="ghost"
-              >
-                <XIcon data-icon="inline-start" />
-                清除筛选
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+      ) : null}
 
       {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>没有找到照片</AlertTitle>
-          <AlertDescription>请检查号码或筛选条件；空结果不会透露号码是否存在。</AlertDescription>
-        </Alert>
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
       )}
 
       {result === null ? (
         children
       ) : (
-        <section aria-label="号码筛选结果" className="flex flex-col gap-4">
-          <p aria-live="polite" className="text-sm text-muted-foreground">
-            当前已加载 {result.items.length} 张匹配照片
-          </p>
+        <section aria-label="照片查找结果" className="flex flex-col gap-4">
           {result.items.length === 0 ? (
-            <Empty className="min-h-64 border">
-              <EmptyHeader>
-                <EmptyTitle>没有匹配照片</EmptyTitle>
-                <EmptyDescription>无匹配、未发布匹配和号码不存在使用相同空结果。</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+              没有匹配照片
+            </div>
           ) : (
-            <MediaGrid items={result.items} slug={slug} />
+            <>
+              <p aria-live="polite" className="text-sm text-muted-foreground">
+                找到 {result.items.length} 张照片
+              </p>
+              <MediaGrid items={result.items} slug={slug} />
+            </>
           )}
           {result.nextCursor === null ? null : (
             <Button
               className="self-center"
               disabled={pending}
               onClick={() => void search(result.nextCursor ?? undefined)}
+              size="sm"
               type="button"
               variant="outline"
             >
-              加载更多匹配照片
+              加载更多
             </Button>
           )}
         </section>
