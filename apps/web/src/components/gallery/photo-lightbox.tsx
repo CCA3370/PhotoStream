@@ -23,6 +23,10 @@ import {
 } from "react";
 
 import { DownloadButton } from "@/components/gallery/download-button";
+import {
+  PhotoLikeButton,
+  type PhotoLikeState,
+} from "@/components/gallery/photo-like-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -53,15 +57,19 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 export function PhotoLightbox({
   items,
+  likeStates,
   selectedId,
   slug,
   onClose,
+  onLikeChange,
   onSelect,
 }: Readonly<{
   items: readonly PublicMediaView[];
+  likeStates: ReadonlyMap<string, PhotoLikeState>;
   selectedId: string | null;
   slug?: string;
   onClose: () => void;
+  onLikeChange: (state: PhotoLikeState) => void;
   onSelect: (mediaId: string) => void;
 }>) {
   const selectedIndex =
@@ -261,6 +269,7 @@ export function PhotoLightbox({
   const canDownloadOriginal =
     slug !== undefined && selected.downloads.original && selected.downloads.originalBytes !== null;
   const canDownload = canDownloadPreview || canDownloadOriginal;
+  const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
   return (
@@ -389,9 +398,13 @@ export function PhotoLightbox({
                     "flex min-w-0 flex-1 items-center gap-1 overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                     downloadMenuOpen
                       ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
-                      : canDownload
-                        ? "max-w-[70%] translate-x-0 opacity-100 sm:max-w-48"
-                        : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
+                      : canDownload && slug !== undefined
+                        ? "max-w-[45%] translate-x-0 opacity-100 sm:max-w-48"
+                        : slug !== undefined
+                          ? "max-w-[80%] translate-x-0 opacity-100 sm:max-w-48"
+                          : canDownload
+                            ? "max-w-[65%] translate-x-0 opacity-100 sm:max-w-48"
+                            : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
                   )}
                 >
                   <Button
@@ -433,6 +446,26 @@ export function PhotoLightbox({
                   </Button>
                 </div>
 
+                {slug === undefined ? null : (
+                  <div
+                    aria-hidden={downloadMenuOpen}
+                    className={cn(
+                      "flex min-w-0 items-center justify-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
+                      downloadMenuOpen
+                        ? "pointer-events-none max-w-0 opacity-0"
+                        : "max-w-[20%] opacity-100 sm:max-w-20",
+                    )}
+                  >
+                    <PhotoLikeButton
+                      mediaId={selected.id}
+                      mode="toolbar"
+                      onChange={onLikeChange}
+                      slug={slug}
+                      state={selectedLikeState}
+                    />
+                  </div>
+                )}
+
                 {canDownload ? (
                   <>
                     <div
@@ -441,7 +474,7 @@ export function PhotoLightbox({
                         "flex min-w-0 flex-1 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                         downloadMenuOpen
                           ? "pointer-events-none max-w-0 translate-x-2 opacity-0"
-                          : "max-w-[30%] translate-x-0 opacity-100 sm:max-w-36",
+                          : "max-w-[35%] translate-x-0 opacity-100 sm:max-w-36",
                       )}
                     >
                       <Button
