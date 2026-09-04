@@ -25,7 +25,11 @@ const mediaLikeListSchema = z.object({ items: z.array(mediaLikeStateSchema) }).s
 
 function parseMediaIds(value: string): string[] {
   const ids = [...new Set(value.split(",").filter((candidate) => candidate.length > 0))];
-  if (ids.length === 0 || ids.length > 120 || ids.some((id) => !z.string().uuid().safeParse(id).success)) {
+  if (
+    ids.length === 0 ||
+    ids.length > 120 ||
+    ids.some((id) => !z.string().uuid().safeParse(id).success)
+  ) {
     throw new AppError({ code: "BAD_REQUEST", message: "照片列表无效", statusCode: 400 });
   }
   return ids;
