@@ -22,7 +22,11 @@ function MediaTile({
   const preview = variant(media, "photo_480") ?? variant(media, "photo_960");
   if (preview === null) {
     return (
-      <div aria-hidden="true" className="aspect-[4/3] rounded-lg bg-muted" data-media-id={media.id} />
+      <div
+        aria-hidden="true"
+        className="aspect-[4/3] rounded-lg bg-muted"
+        data-media-id={media.id}
+      />
     );
   }
   return (
