@@ -48,7 +48,7 @@ export function BibSearchPanel({
   attributeFilterEnabled,
   attributeOptions,
   attributePairs,
-  bibSearchEnabled,
+  bibSearchEnabled = true,
   categoryId,
   children,
   faceSearch,
@@ -58,7 +58,7 @@ export function BibSearchPanel({
   attributeFilterEnabled: boolean;
   attributeOptions: readonly AttributeOption[];
   attributePairs: readonly AttributePair[];
-  bibSearchEnabled: boolean;
+  bibSearchEnabled?: boolean;
   categoryId?: string;
   children: ReactNode;
   faceSearch?: FaceSearchOptions;
@@ -203,7 +203,7 @@ export function BibSearchPanel({
             value={[mode]}
           >
             {bibSearchEnabled ? <ToggleGroupItem value="number">号码</ToggleGroupItem> : null}
-            {attributeFilterEnabled ? (
+            {bibSearchEnabled && attributeFilterEnabled ? (
               <ToggleGroupItem value="attributes">年级班级</ToggleGroupItem>
             ) : null}
             {faceSearch === undefined ? null : (
@@ -231,7 +231,7 @@ export function BibSearchPanel({
             </Field>
           ) : null}
 
-          {mode === "attributes" && attributeFilterEnabled ? (
+          {mode === "attributes" && bibSearchEnabled && attributeFilterEnabled ? (
             <FieldGroup className="flex flex-col gap-3 sm:flex-row">
               <Field>
                 <FieldLabel htmlFor="public-bib-grade">年级</FieldLabel>
