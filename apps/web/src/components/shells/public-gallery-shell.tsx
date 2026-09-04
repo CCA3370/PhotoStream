@@ -17,7 +17,7 @@ export function PublicGalleryShell({
   status = "直播中",
 }: PublicGalleryShellProps) {
   return (
-    <div className="public-theme min-h-screen bg-background pb-8 text-foreground">
+    <div className="public-theme min-h-screen bg-background pb-12 text-foreground">
       <a
         className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
         href="#gallery-main"
@@ -54,11 +54,10 @@ export function PublicGalleryShell({
         {children}
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-40 h-8 border-t bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-full max-w-[1560px] items-center justify-center px-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          <p className="truncate">
-            © 2026 CCA3370. All rights reserved. · Image copyright © 2026 学生会电视台.
-          </p>
+      <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur">
+        <div className="mx-auto flex min-h-12 max-w-[1560px] flex-col items-center justify-center px-4 py-1 text-center text-[11px] leading-4 text-muted-foreground sm:px-6 sm:text-xs lg:px-8">
+          <p>© 2026 CCA3370. All rights reserved.</p>
+          <p>Images © 2026 学生会电视台. All rights reserved.</p>
         </div>
       </footer>
     </div>

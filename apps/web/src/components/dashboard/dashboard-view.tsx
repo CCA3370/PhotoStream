@@ -442,17 +442,14 @@ export function DashboardView({
                         />
                       )}
                       <Badge
-                        className="absolute top-1 left-1 h-6 min-w-6 justify-center px-1.5"
+                        className="absolute top-1 left-1 h-6 px-1.5 text-[11px] shadow-sm"
                         variant="secondary"
                       >
-                        {index + 1}
+                        第 {index + 1} 名
                       </Badge>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{photo.albumTitle}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        照片 #{photo.publishSequence}
-                      </p>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className="text-sm font-semibold tabular-nums">
                           {numberFormatter.format(photo.downloads)} 次下载

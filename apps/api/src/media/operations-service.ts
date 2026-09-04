@@ -656,7 +656,7 @@ export class OperationsService {
       });
     }
     const expiresAt = new Date(Date.now() + 5 * 60 * 1_000);
-    const filename = `${safeFilenamePart(album.title)}-${media.publishSequence}-${options.kind}.${variant.format === "jpeg" ? "jpg" : variant.format}`;
+    const filename = `${safeFilenamePart(album.title)}-${media.id.slice(0, 8)}-${options.kind}.${variant.format === "jpeg" ? "jpg" : variant.format}`;
     const record = {
       objectKey: variant.objectKey,
       filename,
