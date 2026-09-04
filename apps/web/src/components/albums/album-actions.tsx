@@ -5,8 +5,8 @@ import { ArchiveIcon, RadioTowerIcon, StopCircleIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientMutation } from "@/lib/client-api";
 
 export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
@@ -32,12 +32,6 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
 
   return (
     <div className="flex flex-col gap-3">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>操作失败</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       {album.state === "draft" ? (
         <Button disabled={pending} onClick={() => void mutate("start")}>
           <RadioTowerIcon data-icon="inline-start" />
@@ -68,6 +62,7 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
           {pending ? "正在恢复…" : "恢复为已结束活动"}
         </Button>
       ) : null}
+      <ErrorDialog message={error} onClose={() => setError(null)} title="操作失败" />
     </div>
   );
 }
