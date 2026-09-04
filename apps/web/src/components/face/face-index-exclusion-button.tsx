@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { clientMutation } from "@/lib/client-api";
@@ -59,43 +60,46 @@ export function FaceIndexExclusionButton({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger disabled={!validCount} render={<Button size="sm" variant="outline" />}>
-        <UserRoundXIcon data-icon="inline-start" />
-        退出人脸索引
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>让选中的 {mediaIds.length} 张照片退出人脸索引？</AlertDialogTitle>
-          <AlertDialogDescription>
-            本地门禁会立即阻止这些照片进入人脸结果，并持久重试供应商元数据删除。隐藏、恢复或重新发布都不会自动取消排除；普通相册照片不受影响。此操作需要近期认证。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <Field data-invalid={error === null ? undefined : true}>
-          <FieldLabel htmlFor="face-exclusion-confirmation">
-            输入“{confirmationText}”二次确认
-          </FieldLabel>
-          <Input
-            aria-invalid={error === null ? undefined : true}
-            id="face-exclusion-confirmation"
-            onChange={(event) => setConfirmation(event.currentTarget.value)}
-            value={confirmation}
-          />
-          <FieldDescription>
-            {error ?? (validCount ? "单次最多处理 200 张照片。" : "请选择 1–200 张照片后操作。")}
-          </FieldDescription>
-        </Field>
-        <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={pending || !validCount || confirmation !== confirmationText}
-            onClick={() => void exclude()}
-            variant="destructive"
-          >
-            {pending ? "正在建立任务…" : "确认持久排除"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger disabled={!validCount} render={<Button size="sm" variant="outline" />}>
+          <UserRoundXIcon data-icon="inline-start" />
+          退出人脸索引
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>让选中的 {mediaIds.length} 张照片退出人脸索引？</AlertDialogTitle>
+            <AlertDialogDescription>
+              本地门禁会立即阻止这些照片进入人脸结果，并持久重试供应商元数据删除。隐藏、恢复或重新发布都不会自动取消排除；普通相册照片不受影响。此操作需要近期认证。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Field data-invalid={error === null ? undefined : true}>
+            <FieldLabel htmlFor="face-exclusion-confirmation">
+              输入“{confirmationText}”二次确认
+            </FieldLabel>
+            <Input
+              aria-invalid={error === null ? undefined : true}
+              id="face-exclusion-confirmation"
+              onChange={(event) => setConfirmation(event.currentTarget.value)}
+              value={confirmation}
+            />
+            <FieldDescription>
+              {validCount ? "单次最多处理 200 张照片。" : "请选择 1–200 张照片后操作。"}
+            </FieldDescription>
+          </Field>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending || !validCount || confirmation !== confirmationText}
+              onClick={() => void exclude()}
+              variant="destructive"
+            >
+              {pending ? "正在建立任务…" : "确认持久排除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="退出人脸索引失败" />
+    </>
   );
 }
