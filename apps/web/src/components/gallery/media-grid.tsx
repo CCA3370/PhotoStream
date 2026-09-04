@@ -184,7 +184,7 @@ export function MediaGrid({
         onClose={() => setSelectedId(null)}
         onSelect={setSelectedId}
         selectedId={selectedId}
-        slug={slug}
+        {...(slug === undefined ? {} : { slug })}
       />
     </>
   );
