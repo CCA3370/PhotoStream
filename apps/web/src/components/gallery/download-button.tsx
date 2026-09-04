@@ -103,7 +103,7 @@ export function DownloadButton({
         variant="outline"
       >
         {showIcon ? <DownloadIcon data-icon="inline-start" /> : null}
-        {pending ? "正在下载…" : showBytes ? `${label}（约 ${formatBytes(bytes)}）` : label}
+        {pending ? "正在下载…" : showBytes ? `${label}（${formatBytes(bytes)}）` : label}
       </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="下载失败" />
     </>
