@@ -23,10 +23,7 @@ import {
 } from "react";
 
 import { DownloadButton } from "@/components/gallery/download-button";
-import {
-  PhotoLikeButton,
-  type PhotoLikeState,
-} from "@/components/gallery/photo-like-button";
+import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
