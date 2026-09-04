@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -354,15 +355,6 @@ export function DashboardView({
         </CardContent>
       </Card>
 
-      {error === null ? null : (
-        <div
-          className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
-
       <div className={cn("grid gap-4 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
         {kpis.map(({ label, value, detail, icon: Icon }) => (
           <Card className="overflow-hidden" key={label}>
@@ -560,6 +552,8 @@ export function DashboardView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ErrorDialog message={error} onClose={() => setError(null)} title="统计操作失败" />
     </section>
   );
 }
