@@ -49,6 +49,12 @@ export function LiveUpdates({
         }
         return;
       }
+      if (event.type === "media.likes.updated" && event.mediaId !== null) {
+        window.dispatchEvent(
+          new CustomEvent("photostream:likes-updated", { detail: { mediaId: event.mediaId } }),
+        );
+        return;
+      }
       if (event.type === "media.updated") {
         startTransition(() => router.refresh());
         return;
@@ -109,12 +115,14 @@ export function LiveUpdates({
     };
     const published = (event: Event) => receiveSse("media.published", event);
     const updated = (event: Event) => receiveSse("media.updated", event);
+    const likesUpdated = (event: Event) => receiveSse("media.likes.updated", event);
     const hidden = (event: Event) => receiveSse("media.hidden", event);
     const deleted = (event: Event) => receiveSse("media.deleted", event);
     const restored = (event: Event) => receiveSse("media.restored", event);
     const bibUpdated = (event: Event) => receiveSse("media.bib.updated", event);
     events.addEventListener("media.published", published);
     events.addEventListener("media.updated", updated);
+    events.addEventListener("media.likes.updated", likesUpdated);
     events.addEventListener("media.hidden", hidden);
     events.addEventListener("media.deleted", deleted);
     events.addEventListener("media.restored", restored);
