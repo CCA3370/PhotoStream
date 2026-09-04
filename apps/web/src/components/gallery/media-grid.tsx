@@ -2,15 +2,14 @@
 
 import type { PublicMediaView } from "@photostream/contracts";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { DownloadIcon, Maximize2Icon } from "lucide-react";
+import { Maximize2Icon } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { DownloadButton } from "@/components/gallery/download-button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 
 function variant(media: PublicMediaView, kind: "photo_480" | "photo_960" | "photo_1920") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
@@ -23,17 +22,13 @@ function MediaTile({
   const preview = variant(media, "photo_480") ?? variant(media, "photo_960");
   if (preview === null) {
     return (
-      <div
-        aria-hidden="true"
-        className="aspect-[4/3] rounded-2xl bg-muted"
-        data-media-id={media.id}
-      />
+      <div aria-hidden="true" className="aspect-[4/3] rounded-lg bg-muted" data-media-id={media.id} />
     );
   }
   return (
     <button
       aria-label={`打开活动照片 ${media.publishSequence}`}
-      className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-2xl bg-muted shadow-sm ring-1 ring-border/60 transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring"
+      className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60 transition hover:ring-border focus-visible:ring-2 focus-visible:ring-ring"
       data-media-id={media.id}
       onClick={() => onOpen(media)}
       type="button"
@@ -46,8 +41,8 @@ function MediaTile({
         style={{ objectFit: "cover" }}
         unoptimized
       />
-      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/65 via-black/15 to-transparent p-3 pt-10 text-white opacity-95 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100">
-        <span className="text-xs font-medium tracking-wide">#{media.publishSequence}</span>
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent p-2.5 pt-8 text-white opacity-90 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100">
+        <span className="text-xs font-medium">#{media.publishSequence}</span>
         <Maximize2Icon aria-hidden="true" className="size-4" />
       </div>
     </button>
@@ -56,10 +51,10 @@ function MediaTile({
 
 function gridLayout(width: number): { columns: number; gap: number } {
   if (width < 480) return { columns: 2, gap: 8 };
-  if (width < 768) return { columns: 3, gap: 10 };
-  if (width < 1_024) return { columns: 4, gap: 12 };
-  if (width < 1_440) return { columns: 5, gap: 14 };
-  return { columns: 6, gap: 16 };
+  if (width < 768) return { columns: 3, gap: 8 };
+  if (width < 1_024) return { columns: 4, gap: 10 };
+  if (width < 1_440) return { columns: 5, gap: 10 };
+  return { columns: 6, gap: 12 };
 }
 
 function VirtualMediaGrid({
@@ -109,7 +104,7 @@ function VirtualMediaGrid({
   if (layout.width === 0) {
     return (
       <section aria-label="活动影像网格" className="w-full" ref={containerRef}>
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 md:gap-3 xl:grid-cols-5 2xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {items.slice(0, 18).map((media) => (
             <MediaTile key={media.id} media={media} onOpen={onOpen} />
           ))}
@@ -163,10 +158,9 @@ export function MediaGrid({
 
   if (items.length === 0) {
     return (
-      <Empty className="min-h-72 rounded-2xl border border-dashed bg-muted/20">
+      <Empty className="min-h-64 rounded-xl border border-dashed">
         <EmptyHeader>
-          <EmptyTitle>还没有已发布影像</EmptyTitle>
-          <EmptyDescription>新照片发布后会自动出现在这里。</EmptyDescription>
+          <EmptyTitle>暂无照片</EmptyTitle>
         </EmptyHeader>
       </Empty>
     );
@@ -179,7 +173,7 @@ export function MediaGrid({
       {items.length > 200 ? (
         <VirtualMediaGrid items={items} onOpen={setSelected} />
       ) : (
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 md:gap-3 xl:grid-cols-5 xl:gap-4 2xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {items.map((media) => (
             <MediaTile key={media.id} media={media} onOpen={setSelected} />
           ))}
@@ -190,8 +184,8 @@ export function MediaGrid({
           <DialogTitle className="sr-only">活动照片预览</DialogTitle>
           <DialogDescription className="sr-only">完整比例查看当前活动照片</DialogDescription>
           {large === null || selected === null ? null : (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="relative h-[min(72dvh,820px)] min-h-72 overflow-hidden rounded-xl bg-black/95">
+            <div className="flex flex-col gap-3">
+              <div className="relative h-[min(78dvh,900px)] min-h-72 overflow-hidden rounded-lg bg-black/95">
                 <Image
                   alt="活动照片"
                   fill
@@ -201,20 +195,10 @@ export function MediaGrid({
                   unoptimized
                 />
               </div>
-              <aside className="flex flex-col gap-4 rounded-xl border bg-card p-4">
-                <div>
-                  <Badge variant="secondary">照片 #{selected.publishSequence}</Badge>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    选择已开放的下载规格。下载次数会计入活动统计。
-                  </p>
-                </div>
-
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">#{selected.publishSequence}</Badge>
                 {slug === undefined ? null : (
-                  <div className="flex flex-col gap-2">
-                    <div className="mb-1 flex items-center gap-2 text-sm font-medium">
-                      <DownloadIcon aria-hidden="true" className="size-4" />
-                      下载
-                    </div>
+                  <>
                     {selected.downloads.preview && variant(selected, "photo_1920") !== null ? (
                       <DownloadButton
                         bytes={(variant(selected, "photo_1920") as NonNullable<typeof large>).bytes}
@@ -233,18 +217,14 @@ export function MediaGrid({
                         slug={slug}
                       />
                     ) : null}
-                  </div>
+                  </>
                 )}
-
-                {selected.downloads.original && selected.downloads.originalBytes !== null ? (
-                  <Alert className="mt-auto">
-                    <AlertTitle>原图可能包含相机元数据</AlertTitle>
-                    <AlertDescription>
-                      原始文件可能仍含拍摄时间、相机信息或 GPS；请勿再次公开传播。
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-              </aside>
+              </div>
+              {selected.downloads.original && selected.downloads.originalBytes !== null ? (
+                <p className="text-xs text-muted-foreground">
+                  原图可能包含拍摄时间、相机信息或 GPS 元数据。
+                </p>
+              ) : null}
             </div>
           )}
         </DialogContent>
