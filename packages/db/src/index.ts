@@ -2,7 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
-import * as schema from "./schema.js";
+import * as likesSchema from "./likes-schema.js";
+import * as coreSchema from "./schema.js";
+
+export const schema = { ...coreSchema, ...likesSchema };
 
 export type Database = ReturnType<typeof createDatabase>;
 
@@ -23,5 +26,3 @@ export function createDatabase(pool: Pool) {
 export async function migrateDatabase(pool: Pool, migrationsFolder: string): Promise<void> {
   await migrate(createDatabase(pool), { migrationsFolder });
 }
-
-export { schema };
