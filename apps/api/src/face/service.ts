@@ -1306,10 +1306,7 @@ export class FaceService {
             .where(eq(schema.faceAlbumJobs.id, job.id));
           continue;
         } else {
-          const taskStatus = await this.#provider.taskStatus(
-            job.providerTaskId,
-            "FaceClustering",
-          );
+          const taskStatus = await this.#provider.taskStatus(job.providerTaskId, "FaceClustering");
           if (taskStatus === "running") {
             if (job.attempts + 1 >= 40) throw new Error("clustering_confirmation_timeout");
             await this.#database

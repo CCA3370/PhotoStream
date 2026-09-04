@@ -2,11 +2,10 @@ import { apiErrorSchema } from "@photostream/contracts";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-
+import type { DashboardService } from "../analytics/dashboard-service.js";
 import { requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
-import type { DashboardService } from "../analytics/dashboard-service.js";
 
 const dashboardQuerySchema = z
   .object({

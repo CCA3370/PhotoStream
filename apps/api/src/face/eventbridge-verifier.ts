@@ -30,9 +30,7 @@ export type EventBridgeVerificationStage =
   | "signature"
   | "certificate_fetch"
   | "rsa_signature";
-export type EventBridgeVerificationContext = Readonly<
-  Record<string, string | number | boolean>
->;
+export type EventBridgeVerificationContext = Readonly<Record<string, string | number | boolean>>;
 type CertificateLoader = (url: URL) => Promise<string>;
 
 export class EventBridgeVerificationError extends AppError {
@@ -150,14 +148,10 @@ export class EventBridgeVerifier {
     if (oneHeader(headers, "x-eventbridge-hash-method", "hash_method") !== "SHA256") {
       throw invalidSignature("hash_method");
     }
-    if (
-      oneHeader(headers, "x-eventbridge-signature-version", "signature_version") !== "1.0"
-    ) {
+    if (oneHeader(headers, "x-eventbridge-signature-version", "signature_version") !== "1.0") {
       throw invalidSignature("signature_version");
     }
-    const timestamp = Number(
-      oneHeader(headers, "x-eventbridge-signature-timestamp", "timestamp"),
-    );
+    const timestamp = Number(oneHeader(headers, "x-eventbridge-signature-timestamp", "timestamp"));
     if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() - timestamp) > 60_000) {
       throw invalidSignature("timestamp");
     }

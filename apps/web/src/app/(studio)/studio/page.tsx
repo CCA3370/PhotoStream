@@ -1,9 +1,6 @@
 import type { AlbumSummaryView } from "@photostream/contracts";
 
-import {
-  DashboardView,
-  type DashboardStatistics,
-} from "@/components/dashboard/dashboard-view";
+import { type DashboardStatistics, DashboardView } from "@/components/dashboard/dashboard-view";
 import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
 
