@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -541,12 +542,6 @@ export function ReviewWorkspace({
         </CardContent>
       </Card>
 
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>操作失败</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       {result === null ? null : (
         <Alert>
           <AlertTitle>
@@ -854,6 +849,7 @@ export function ReviewWorkspace({
           </Button>
         </div>
       )}
+      <ErrorDialog message={error} onClose={() => setError(null)} title="审核操作失败" />
     </div>
   );
 }
