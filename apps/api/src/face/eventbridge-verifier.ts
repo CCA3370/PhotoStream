@@ -35,7 +35,7 @@ type CertificateLoader = (url: URL) => Promise<string>;
 
 export class EventBridgeVerificationError extends AppError {
   readonly stage: EventBridgeVerificationStage;
-  readonly context?: EventBridgeVerificationContext;
+  readonly context: EventBridgeVerificationContext | undefined;
 
   constructor(stage: EventBridgeVerificationStage, context?: EventBridgeVerificationContext) {
     super({
