@@ -1,5 +1,6 @@
 import { createDatabase, createPool } from "@photostream/db";
 
+import { DashboardService } from "./analytics/dashboard-service.js";
 import { buildApp } from "./app.js";
 import { argon2PasswordHasher } from "./auth/password.js";
 import { PostgresAuthStore } from "./auth/postgres-store.js";
@@ -62,6 +63,7 @@ const userAdminService = new UserAdminService({
   config,
 });
 const operationsService = new OperationsService({ database, storage, config, cdnInvalidator });
+const dashboardService = new DashboardService({ database, storage });
 const bibService = new BibService({ database, config, photoService });
 const faceProvider = config.FACE_SEARCH_GLOBAL_ENABLED
   ? new AliyunFaceProvider(config)
@@ -85,6 +87,7 @@ const app = await buildApp({
   broker,
   userAdminService,
   operationsService,
+  dashboardService,
   bibService,
   faceService,
   eventBridgeVerifier,
