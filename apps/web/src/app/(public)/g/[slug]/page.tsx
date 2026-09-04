@@ -32,8 +32,6 @@ export default async function GalleryPage({
       <PublicGalleryShell
         albumDescription={album.description}
         albumTitle={album.title}
-        complaintContact={album.complaintContact}
-        privacyNotice={album.privacyNotice}
         status={album.state === "live" ? "直播中" : "已结束"}
       >
         <div className="mx-auto max-w-xl py-8 md:py-14">
@@ -64,8 +62,6 @@ export default async function GalleryPage({
     <PublicGalleryShell
       albumDescription={album.description}
       albumTitle={album.title}
-      complaintContact={album.complaintContact}
-      privacyNotice={album.privacyNotice}
       status={album.state === "live" ? "直播中" : "已结束"}
     >
       <AlbumOpenTracker slug={slug} />
