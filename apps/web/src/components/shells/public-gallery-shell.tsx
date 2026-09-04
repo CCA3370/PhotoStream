@@ -32,7 +32,9 @@ export function PublicGalleryShell({
       <header className="border-b">
         <div className="mx-auto flex max-w-[1560px] items-start justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">PhotoStream · 北航实验学校中学部</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              PhotoStream · 北航实验学校中学部
+            </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
               {albumTitle}
             </h1>
@@ -59,9 +61,7 @@ export function PublicGalleryShell({
       <footer className="mt-8 border-t">
         <div className="mx-auto flex max-w-[1560px] flex-col gap-2 px-4 py-5 text-xs leading-5 text-muted-foreground sm:px-6 md:flex-row md:items-start md:justify-between lg:px-8">
           <p>{privacyNotice || "影像仅用于校内活动记录。"}</p>
-          <p className="md:text-right">
-            删除与投诉：{complaintContact || "请联系活动组织方。"}
-          </p>
+          <p className="md:text-right">删除与投诉：{complaintContact || "请联系活动组织方。"}</p>
         </div>
       </footer>
     </div>
