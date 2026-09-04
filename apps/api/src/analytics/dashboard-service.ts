@@ -87,7 +87,15 @@ export class DashboardService {
 
     const bucket = options.bucket ?? automaticBucket(durationMs);
     const seconds = bucketSeconds[bucket];
-    const bucketExpression = sql<Date>`to_timestamp(floor(extract(epoch from ${schema.analyticsEvents.createdAt}) / ${seconds}) * ${seconds})`;
+    // The bucket width only comes from the fixed DashboardBucket whitelist above. Keep it as a SQL
+    // literal so SELECT/GROUP BY/ORDER BY contain the exact same PostgreSQL expression instead of
+    // distinct bind parameters ($1, $2, ...), which PostgreSQL does not consider equivalent for
+    // grouping purposes.
+    const secondsSql = sql.raw(String(seconds));
+    const bucketExpression =
+      sql<Date>`to_timestamp(floor(extract(epoch from ${schema.analyticsEvents.createdAt}) / ${secondsSql}) * ${secondsSql})`.mapWith(
+        schema.analyticsEvents.createdAt,
+      );
 
     const [trend, mediaAggregate, storageAggregate, topPhotos] = await Promise.all([
       this.#database
