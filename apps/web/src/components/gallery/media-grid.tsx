@@ -7,10 +7,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PhotoLightbox } from "@/components/gallery/photo-lightbox";
-import {
-  PhotoLikeButton,
-  type PhotoLikeState,
-} from "@/components/gallery/photo-like-button";
+import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
@@ -322,7 +319,11 @@ export function MediaGrid({
         selectedId={selectedId}
         {...(slug === undefined ? {} : { slug })}
       />
-      <ErrorDialog message={likeError} onClose={() => setLikeError(null)} title="点赞信息加载失败" />
+      <ErrorDialog
+        message={likeError}
+        onClose={() => setLikeError(null)}
+        title="点赞信息加载失败"
+      />
     </>
   );
 }
