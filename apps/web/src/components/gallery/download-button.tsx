@@ -34,6 +34,7 @@ export function DownloadButton({
   kind,
   label,
   mediaId,
+  onSuccess,
   showBytes = true,
   showIcon = true,
   slug,
@@ -43,6 +44,7 @@ export function DownloadButton({
   kind: DownloadKind;
   label: string;
   mediaId: string;
+  onSuccess?: () => void;
   showBytes?: boolean;
   showIcon?: boolean;
   slug: string;
@@ -83,6 +85,7 @@ export function DownloadButton({
         type: "success",
         timeout: 3_000,
       });
+      onSuccess?.();
     } catch (caught) {
       setError(downloadErrorMessage(caught));
     } finally {
