@@ -92,7 +92,7 @@ describe("EventBridgeVerifier", () => {
 
   it("accepts official EventBridge certificate hosts even when the certificate region differs", async () => {
     const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-    const certificateLoader = vi.fn(async () =>
+    const certificateLoader = vi.fn(async (_url: URL) =>
       publicKey.export({ type: "spki", format: "pem" }).toString(),
     );
     const verifier = new EventBridgeVerifier(config, { certificateLoader });
