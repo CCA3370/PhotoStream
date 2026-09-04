@@ -4,8 +4,8 @@ import type { PublicMediaView } from "@photostream/contracts";
 import { useEffect, useRef, useState } from "react";
 
 import { MediaGrid } from "@/components/gallery/media-grid";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
 
 interface MediaPage {
@@ -91,12 +91,6 @@ export function PaginatedMediaGrid({
   return (
     <div className="flex flex-col gap-5">
       <MediaGrid items={items} slug={slug} />
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>无法继续加载</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       {cursor === null ? null : (
         <Button
           className="self-center"
@@ -109,6 +103,7 @@ export function PaginatedMediaGrid({
           {loading ? "正在加载…" : "加载更多影像"}
         </Button>
       )}
+      <ErrorDialog message={error} onClose={() => setError(null)} title="无法继续加载" />
     </div>
   );
 }
