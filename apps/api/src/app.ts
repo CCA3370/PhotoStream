@@ -22,6 +22,7 @@ import { AppError } from "./errors.js";
 import type { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import type { FaceService } from "./face/service.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
+import type { MediaLikeService } from "./media/like-service.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
 import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
@@ -29,6 +30,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBibRoutes } from "./routes/bib.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerFaceRoutes } from "./routes/face.js";
+import { registerLikeRoutes } from "./routes/likes.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
 import { registerUserRoutes } from "./routes/users.js";
@@ -38,6 +40,7 @@ export interface BuildAppOptions {
   readonly authStore: AuthStore;
   readonly passwordHasher?: PasswordHasher;
   readonly photoService?: PhotoService;
+  readonly likeService?: MediaLikeService;
   readonly broker?: LiveEventBroker;
   readonly userAdminService?: UserAdminService;
   readonly operationsService?: OperationsService;
@@ -251,6 +254,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         ? {}
         : { operationsService: options.operationsService }),
       ...(options.bibService === undefined ? {} : { bibService: options.bibService }),
+    });
+  }
+  if (options.photoService !== undefined && options.likeService !== undefined) {
+    await registerLikeRoutes(app, {
+      photoService: options.photoService,
+      likeService: options.likeService,
+      config: options.config,
     });
   }
   if (options.photoService !== undefined && options.operationsService !== undefined) {
