@@ -14,6 +14,15 @@ interface MediaPage {
   readonly eventCursor: number;
 }
 
+function mergeMedia(
+  current: readonly PublicMediaView[],
+  incoming: readonly PublicMediaView[],
+): readonly PublicMediaView[] {
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of incoming) byId.set(item.id, item);
+  return [...byId.values()].sort((left, right) => right.publishSequence - left.publishSequence);
+}
+
 export function PaginatedMediaGrid({
   categoryId,
   initialPage,
@@ -26,16 +35,13 @@ export function PaginatedMediaGrid({
   const [items, setItems] = useState<readonly PublicMediaView[]>(initialPage.items);
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
 
   useEffect(() => {
-    setItems((current) => {
-      const byId = new Map(current.map((item) => [item.id, item]));
-      for (const item of initialPage.items) byId.set(item.id, item);
-      return [...byId.values()].sort((left, right) => right.publishSequence - left.publishSequence);
-    });
+    setItems((current) => mergeMedia(current, initialPage.items));
   }, [initialPage.items]);
 
   useEffect(() => {
@@ -48,27 +54,66 @@ export function PaginatedMediaGrid({
     return () => window.removeEventListener("photostream:media-removed", remove);
   }, []);
 
+  useEffect(() => {
+    let disposed = false;
+    let refreshInFlight = false;
+    let refreshQueued = false;
+
+    const refreshPublishedMedia = async (): Promise<void> => {
+      if (refreshInFlight) {
+        refreshQueued = true;
+        return;
+      }
+      refreshInFlight = true;
+      do {
+        refreshQueued = false;
+        try {
+          const query = new URLSearchParams({ limit: "60" });
+          if (categoryId !== undefined) query.set("categoryId", categoryId);
+          const page = await clientGet<MediaPage>(
+            `/api/v1/public/albums/${slug}/media?${query.toString()}`,
+          );
+          if (!disposed) {
+            setItems((current) => mergeMedia(current, page.items));
+            setLiveError(null);
+          }
+        } catch (caught) {
+          if (!disposed) {
+            setLiveError(caught instanceof Error ? caught.message : "无法同步新影像");
+          }
+        }
+      } while (refreshQueued && !disposed);
+      refreshInFlight = false;
+    };
+
+    const published = (event: Event) => {
+      const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
+      if (typeof detail?.mediaId !== "string") return;
+      void refreshPublishedMedia();
+    };
+
+    window.addEventListener("photostream:media-published", published);
+    return () => {
+      disposed = true;
+      window.removeEventListener("photostream:media-published", published);
+    };
+  }, [categoryId, slug]);
+
   async function loadMore(): Promise<void> {
     if (cursor === null || requestInFlight.current) return;
     requestInFlight.current = true;
     setLoading(true);
-    setError(null);
+    setLoadMoreError(null);
     try {
       const query = new URLSearchParams({ cursor, limit: "60" });
       if (categoryId !== undefined) query.set("categoryId", categoryId);
       const page = await clientGet<MediaPage>(
         `/api/v1/public/albums/${slug}/media?${query.toString()}`,
       );
-      setItems((current) => {
-        const byId = new Map(current.map((item) => [item.id, item]));
-        for (const item of page.items) byId.set(item.id, item);
-        return [...byId.values()].sort(
-          (left, right) => right.publishSequence - left.publishSequence,
-        );
-      });
+      setItems((current) => mergeMedia(current, page.items));
       setCursor(page.nextCursor);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "加载更多影像失败");
+      setLoadMoreError(caught instanceof Error ? caught.message : "加载更多影像失败");
     } finally {
       requestInFlight.current = false;
       setLoading(false);
@@ -77,7 +122,7 @@ export function PaginatedMediaGrid({
 
   useEffect(() => {
     const button = loadMoreRef.current;
-    if (button === null || cursor === null || error !== null) return;
+    if (button === null || cursor === null || loadMoreError !== null) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void loadMore();
@@ -103,7 +148,16 @@ export function PaginatedMediaGrid({
           {loading ? "正在加载…" : "加载更多影像"}
         </Button>
       )}
-      <ErrorDialog message={error} onClose={() => setError(null)} title="无法继续加载" />
+      <ErrorDialog
+        message={loadMoreError}
+        onClose={() => setLoadMoreError(null)}
+        title="无法继续加载"
+      />
+      <ErrorDialog
+        message={liveError}
+        onClose={() => setLiveError(null)}
+        title="无法实时更新影像"
+      />
     </div>
   );
 }
