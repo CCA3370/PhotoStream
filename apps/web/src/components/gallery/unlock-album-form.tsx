@@ -42,7 +42,10 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
 
   return (
     <>
-      <form action={submit} className="mx-auto flex min-h-64 max-w-md flex-col justify-center gap-5">
+      <form
+        action={submit}
+        className="mx-auto flex min-h-64 max-w-md flex-col justify-center gap-5"
+      >
         <Field data-invalid={error === null ? undefined : true}>
           <FieldLabel htmlFor="album-password">相册口令</FieldLabel>
           <InputGroup className="min-h-11">
