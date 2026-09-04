@@ -11,6 +11,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import type { DashboardService } from "./analytics/dashboard-service.js";
 import { argon2PasswordHasher } from "./auth/password.js";
 import { AuthService } from "./auth/service.js";
 import type { AuthStore, PasswordHasher } from "./auth/types.js";
@@ -26,6 +27,7 @@ import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBibRoutes } from "./routes/bib.js";
+import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerFaceRoutes } from "./routes/face.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
@@ -39,6 +41,7 @@ export interface BuildAppOptions {
   readonly broker?: LiveEventBroker;
   readonly userAdminService?: UserAdminService;
   readonly operationsService?: OperationsService;
+  readonly dashboardService?: DashboardService;
   readonly bibService?: BibService;
   readonly faceService?: FaceService;
   readonly eventBridgeVerifier?: EventBridgeVerifier;
@@ -73,8 +76,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       disableRequestLogging: true,
       requestIdLogLabel: "requestId",
     }),
-    // The production API is not published; Caddy reaches it over a private Docker network.
-    // Trust only loopback/link-local/private proxy hops so a direct public peer cannot forge XFF.
     trustProxy: ["loopback", "linklocal", "uniquelocal"],
   };
   const app: FastifyInstance = Fastify(serverOptions);
@@ -230,6 +231,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     await registerUserRoutes(app, {
       authService,
       userAdminService: options.userAdminService,
+      config: options.config,
+    });
+  }
+  if (options.dashboardService !== undefined) {
+    await registerDashboardRoutes(app, {
+      authService,
+      dashboardService: options.dashboardService,
       config: options.config,
     });
   }
