@@ -49,9 +49,16 @@ export default async function GalleryPage({
   const media = await serverApi<MediaList>(
     `/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`,
   );
-  const faceSearchAvailable =
-    album.faceSearchAvailable && album.faceSearchNoticeVersion !== null;
-  const searchAvailable = album.bibSearchEnabled || faceSearchAvailable;
+  const faceSearch =
+    album.faceSearchAvailable && album.faceSearchNoticeVersion !== null
+      ? {
+          complaintContact: album.complaintContact,
+          noticeVersion: album.faceSearchNoticeVersion,
+          privacyNotice: album.privacyNotice,
+          slug,
+        }
+      : null;
+  const searchAvailable = album.bibSearchEnabled || faceSearch !== null;
 
   return (
     <PublicGalleryShell
@@ -99,18 +106,9 @@ export default async function GalleryPage({
             attributeOptions={album.bibAttributeOptions}
             attributePairs={album.bibAttributePairs}
             bibSearchEnabled={album.bibSearchEnabled}
-            faceSearch={
-              faceSearchAvailable
-                ? {
-                    complaintContact: album.complaintContact,
-                    noticeVersion: album.faceSearchNoticeVersion as string,
-                    privacyNotice: album.privacyNotice,
-                    slug,
-                  }
-                : undefined
-            }
             numberLengths={album.bibNumberLengths}
             {...(category === undefined ? {} : { categoryId: category.id })}
+            {...(faceSearch === null ? {} : { faceSearch })}
             slug={slug}
           >
             <PaginatedMediaGrid
