@@ -61,7 +61,10 @@ export default async function AlbumsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {albums.map((album) => (
-            <Card className="group overflow-hidden transition-shadow hover:shadow-md" key={album.id}>
+            <Card
+              className="group overflow-hidden transition-shadow hover:shadow-md"
+              key={album.id}
+            >
               <CardHeader className="gap-3 border-b bg-muted/15">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
@@ -89,7 +92,9 @@ export default async function AlbumsPage() {
                   </div>
                   <div className="rounded-xl bg-muted/50 p-3">
                     <RadioIcon aria-hidden="true" className="mb-2 size-4 text-muted-foreground" />
-                    <p className="truncate text-sm font-semibold">{formatBytes(album.logicalBytes)}</p>
+                    <p className="truncate text-sm font-semibold">
+                      {formatBytes(album.logicalBytes)}
+                    </p>
                     <p className="text-xs text-muted-foreground">存储</p>
                   </div>
                 </div>
@@ -108,7 +113,10 @@ export default async function AlbumsPage() {
                     }
                   >
                     {session.user.role === "uploader" ? "进入上传" : "管理"}
-                    <ArrowRightIcon aria-hidden="true" className="size-4 transition-transform group-hover:translate-x-0.5" />
+                    <ArrowRightIcon
+                      aria-hidden="true"
+                      className="size-4 transition-transform group-hover:translate-x-0.5"
+                    />
                   </Link>
                 </div>
               </CardContent>

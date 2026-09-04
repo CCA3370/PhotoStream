@@ -169,7 +169,10 @@ export function StudioShell({
             <SidebarRail />
           </Sidebar>
 
-          <SidebarInset className="overflow-hidden border border-sidebar-border/70 bg-background shadow-sm" id="studio-main">
+          <SidebarInset
+            className="overflow-hidden border border-sidebar-border/70 bg-background shadow-sm"
+            id="studio-main"
+          >
             <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b bg-background/92 px-4 backdrop-blur md:px-6">
               <SidebarTrigger aria-label="切换工作台导航" />
               <div className="h-5 w-px bg-border" />

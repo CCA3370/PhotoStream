@@ -57,10 +57,18 @@ export class DashboardService {
     const durationMs = to.getTime() - from.getTime();
 
     if (durationMs <= 0) {
-      throw new AppError({ code: "BAD_REQUEST", message: "统计结束时间必须晚于开始时间", statusCode: 400 });
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "统计结束时间必须晚于开始时间",
+        statusCode: 400,
+      });
     }
     if (durationMs > maxRangeMs) {
-      throw new AppError({ code: "BAD_REQUEST", message: "单次统计区间最长为 30 天", statusCode: 400 });
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "单次统计区间最长为 30 天",
+        statusCode: 400,
+      });
     }
     if (from.getTime() < now.getTime() - maxRangeMs - 5 * 60 * 1_000) {
       throw new AppError({
@@ -70,7 +78,11 @@ export class DashboardService {
       });
     }
     if (to.getTime() > now.getTime() + 5 * 60 * 1_000) {
-      throw new AppError({ code: "BAD_REQUEST", message: "统计结束时间不能位于未来", statusCode: 400 });
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "统计结束时间不能位于未来",
+        statusCode: 400,
+      });
     }
 
     const bucket = options.bucket ?? automaticBucket(durationMs);
@@ -100,7 +112,9 @@ export class DashboardService {
         .from(schema.media)
         .where(sql`${schema.media.publicationStatus} <> 'deleted'`),
       this.#database
-        .select({ logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint` })
+        .select({
+          logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint`,
+        })
         .from(schema.mediaVariants)
         .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
         .where(
@@ -163,10 +177,7 @@ export class DashboardService {
       .select({ count: sql<number>`count(distinct ${schema.analyticsEvents.visitorDigest})::int` })
       .from(schema.analyticsEvents)
       .where(
-        and(
-          gte(schema.analyticsEvents.createdAt, from),
-          lt(schema.analyticsEvents.createdAt, to),
-        ),
+        and(gte(schema.analyticsEvents.createdAt, from), lt(schema.analyticsEvents.createdAt, to)),
       );
 
     const thumbnailExpiresAt = new Date(now.getTime() + thumbnailValidityMs);
@@ -197,7 +208,10 @@ export class DashboardService {
           thumbnailUrl:
             row.thumbnailObjectKey === null
               ? null
-              : this.#storage.signRead({ key: row.thumbnailObjectKey, expiresAt: thumbnailExpiresAt }),
+              : this.#storage.signRead({
+                  key: row.thumbnailObjectKey,
+                  expiresAt: thumbnailExpiresAt,
+                }),
           capturedAt: row.capturedAt?.toISOString() ?? null,
         })),
     };

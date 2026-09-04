@@ -64,7 +64,11 @@ export interface DashboardStatistics {
 
 type PresetKey = "30d" | "7d" | "1d" | "5h" | "1h" | "30m" | "custom";
 
-const presets: readonly { readonly key: Exclude<PresetKey, "custom">; readonly label: string; readonly ms: number }[] = [
+const presets: readonly {
+  readonly key: Exclude<PresetKey, "custom">;
+  readonly label: string;
+  readonly ms: number;
+}[] = [
   { key: "30d", label: "30 天", ms: 30 * 24 * 60 * 60 * 1_000 },
   { key: "7d", label: "7 天", ms: 7 * 24 * 60 * 60 * 1_000 },
   { key: "1d", label: "1 天", ms: 24 * 60 * 60 * 1_000 },
@@ -110,10 +114,14 @@ function formatBytes(bytes: number): string {
 }
 
 function stateCounts(albums: readonly AlbumSummaryView[]) {
-  return albums.reduce<Record<AlbumSummaryView["state"], number>>(
-    (counts, album) => ({ ...counts, [album.state]: counts[album.state] + 1 }),
-    { draft: 0, live: 0, ended: 0, archived: 0 },
-  );
+  const counts: Record<AlbumSummaryView["state"], number> = {
+    draft: 0,
+    live: 0,
+    ended: 0,
+    archived: 0,
+  };
+  for (const album of albums) counts[album.state] += 1;
+  return counts;
 }
 
 function localInputValue(date: Date): string {
@@ -183,7 +191,10 @@ export function DashboardView({
   const [customTo, setCustomTo] = useState(() => localInputValue(new Date(initialData.to)));
   const points = useMemo(() => fillPoints(data), [data]);
   const counts = useMemo(() => stateCounts(albums), [albums]);
-  const liveAlbums = useMemo(() => albums.filter((album) => album.state === "live").slice(0, 5), [albums]);
+  const liveAlbums = useMemo(
+    () => albums.filter((album) => album.state === "live").slice(0, 5),
+    [albums],
+  );
 
   async function loadRange(from: Date, to: Date, preset: PresetKey): Promise<void> {
     setPending(true);
@@ -199,7 +210,7 @@ export function DashboardView({
     }
   }
 
-  async function usePreset(key: Exclude<PresetKey, "custom">): Promise<void> {
+  async function selectPreset(key: Exclude<PresetKey, "custom">): Promise<void> {
     const preset = presets.find((candidate) => candidate.key === key);
     if (preset === undefined) return;
     const to = new Date();
@@ -271,13 +282,17 @@ export function DashboardView({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-sm font-medium text-primary">运营概览</p>
-          <h2 className="text-2xl font-semibold tracking-tight" id="dashboard-heading">首页</h2>
+          <h2 className="text-2xl font-semibold tracking-tight" id="dashboard-heading">
+            首页
+          </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
             查看所选时间范围内的访问、下载和单张照片下载排行。
           </p>
         </div>
         <div className="flex gap-2">
-          <Link className={buttonVariants({ variant: "outline" })} href="/studio/albums">管理活动</Link>
+          <Link className={buttonVariants({ variant: "outline" })} href="/studio/albums">
+            管理活动
+          </Link>
           {canCreateAlbum ? <CreateAlbumForm /> : null}
         </div>
       </div>
@@ -285,10 +300,15 @@ export function DashboardView({
       <Card>
         <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-2">
-            <CalendarRangeIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            <CalendarRangeIcon
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground"
+            />
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{rangeText(data)}</p>
-              <p className="text-xs text-muted-foreground">自动聚合粒度：{bucketLabels[data.bucket]}</p>
+              <p className="text-xs text-muted-foreground">
+                自动聚合粒度：{bucketLabels[data.bucket]}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
@@ -297,7 +317,7 @@ export function DashboardView({
                 aria-pressed={activePreset === preset.key}
                 disabled={pending}
                 key={preset.key}
-                onClick={() => void usePreset(preset.key)}
+                onClick={() => void selectPreset(preset.key)}
                 size="sm"
                 variant={activePreset === preset.key ? "default" : "outline"}
               >
@@ -317,8 +337,17 @@ export function DashboardView({
             >
               自定义
             </Button>
-            <Button disabled={pending} onClick={() => void refresh()} size="icon-sm" title="刷新当前范围" variant="ghost">
-              <RefreshCwIcon aria-hidden="true" className={cn("size-4", pending && "animate-spin")} />
+            <Button
+              disabled={pending}
+              onClick={() => void refresh()}
+              size="icon-sm"
+              title="刷新当前范围"
+              variant="ghost"
+            >
+              <RefreshCwIcon
+                aria-hidden="true"
+                className={cn("size-4", pending && "animate-spin")}
+              />
               <span className="sr-only">刷新当前范围</span>
             </Button>
           </div>
@@ -326,7 +355,10 @@ export function DashboardView({
       </Card>
 
       {error === null ? null : (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">
+        <div
+          className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </div>
       )}
@@ -400,16 +432,35 @@ export function DashboardView({
                           <ImagesIcon aria-hidden="true" className="size-5" />
                         </div>
                       ) : (
-                        <Image alt="下载排行照片缩略图" fill sizes="96px" src={photo.thumbnailUrl} style={{ objectFit: "cover" }} unoptimized />
+                        <Image
+                          alt="下载排行照片缩略图"
+                          fill
+                          sizes="96px"
+                          src={photo.thumbnailUrl}
+                          style={{ objectFit: "cover" }}
+                          unoptimized
+                        />
                       )}
-                      <Badge className="absolute top-1 left-1 h-6 min-w-6 justify-center px-1.5" variant="secondary">{index + 1}</Badge>
+                      <Badge
+                        className="absolute top-1 left-1 h-6 min-w-6 justify-center px-1.5"
+                        variant="secondary"
+                      >
+                        {index + 1}
+                      </Badge>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{photo.albumTitle}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">照片 #{photo.publishSequence}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        照片 #{photo.publishSequence}
+                      </p>
                       <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold tabular-nums">{numberFormatter.format(photo.downloads)} 次下载</span>
-                        <ArrowUpRightIcon aria-hidden="true" className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                        <span className="text-sm font-semibold tabular-nums">
+                          {numberFormatter.format(photo.downloads)} 次下载
+                        </span>
+                        <ArrowUpRightIcon
+                          aria-hidden="true"
+                          className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                        />
                       </div>
                     </div>
                   </Link>
@@ -430,10 +481,16 @@ export function DashboardView({
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
               {liveAlbums.length === 0 ? (
-                <p className="py-5 text-center text-sm text-muted-foreground">当前没有直播中的活动。</p>
+                <p className="py-5 text-center text-sm text-muted-foreground">
+                  当前没有直播中的活动。
+                </p>
               ) : (
                 liveAlbums.map((album) => (
-                  <Link className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 hover:bg-muted/50" href={`/studio/albums/${album.id}`} key={album.id}>
+                  <Link
+                    className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 hover:bg-muted/50"
+                    href={`/studio/albums/${album.id}`}
+                    key={album.id}
+                  >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{album.title}</p>
                       <p className="text-xs text-muted-foreground">{album.mediaCount} 张照片</p>
@@ -455,7 +512,11 @@ export function DashboardView({
                 <p className="mt-2 text-2xl font-semibold">{formatBytes(data.logicalBytes)}</p>
                 <p className="text-xs text-muted-foreground">已验证派生图与原图的逻辑总量</p>
               </div>
-              <Link className={cn(buttonVariants({ size: "icon", variant: "outline" }), "shrink-0")} href="/studio/albums" title="查看全部活动">
+              <Link
+                className={cn(buttonVariants({ size: "icon", variant: "outline" }), "shrink-0")}
+                href="/studio/albums"
+                title="查看全部活动"
+              >
                 <ArrowUpRightIcon aria-hidden="true" />
                 <span className="sr-only">查看全部活动</span>
               </Link>
@@ -475,16 +536,30 @@ export function DashboardView({
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="dashboard-from">开始时间</Label>
-              <Input id="dashboard-from" onChange={(event) => setCustomFrom(event.target.value)} type="datetime-local" value={customFrom} />
+              <Input
+                id="dashboard-from"
+                onChange={(event) => setCustomFrom(event.target.value)}
+                type="datetime-local"
+                value={customFrom}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="dashboard-to">结束时间</Label>
-              <Input id="dashboard-to" onChange={(event) => setCustomTo(event.target.value)} type="datetime-local" value={customTo} />
+              <Input
+                id="dashboard-to"
+                onChange={(event) => setCustomTo(event.target.value)}
+                type="datetime-local"
+                value={customTo}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setCustomOpen(false)} variant="outline">取消</Button>
-            <Button disabled={pending} onClick={() => void applyCustomRange()}>应用范围</Button>
+            <Button onClick={() => setCustomOpen(false)} variant="outline">
+              取消
+            </Button>
+            <Button disabled={pending} onClick={() => void applyCustomRange()}>
+              应用范围
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

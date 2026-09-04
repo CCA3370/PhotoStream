@@ -108,12 +108,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
             stroke="none"
           />
           <path d={linePath(opens, max)} fill="none" stroke="var(--chart-1)" strokeWidth="3" />
-          <path
-            d={linePath(visitors, max)}
-            fill="none"
-            stroke="var(--chart-2)"
-            strokeWidth="2.5"
-          />
+          <path d={linePath(visitors, max)} fill="none" stroke="var(--chart-2)" strokeWidth="2.5" />
           <path
             d={linePath(downloads, max)}
             fill="none"
@@ -127,9 +122,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
                 fill="var(--muted-foreground)"
                 fontSize="10"
                 key={index}
-                textAnchor={
-                  index === 0 ? "start" : index === data.length - 1 ? "end" : "middle"
-                }
+                textAnchor={index === 0 ? "start" : index === data.length - 1 ? "end" : "middle"}
                 x={x}
                 y="246"
               >
@@ -157,9 +150,7 @@ export function AlbumStateChart({
 
   if (total === 0) {
     return (
-      <p className="py-10 text-center text-sm text-muted-foreground">
-        创建活动后会显示状态分布。
-      </p>
+      <p className="py-10 text-center text-sm text-muted-foreground">创建活动后会显示状态分布。</p>
     );
   }
 
