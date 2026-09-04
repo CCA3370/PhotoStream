@@ -9,6 +9,7 @@ import type { FaceSearchPanelProps } from "@/components/gallery/face-search-laun
 import { FaceSearchLauncher } from "@/components/gallery/face-search-launcher";
 import { MediaGrid } from "@/components/gallery/media-grid";
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -328,12 +329,6 @@ export function BibSearchPanel({
         </div>
       ) : null}
 
-      {error === null ? null : (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-
       {result === null ? (
         children
       ) : (
@@ -364,6 +359,8 @@ export function BibSearchPanel({
           )}
         </section>
       )}
+
+      <ErrorDialog message={error} onClose={() => setError(null)} title="查找失败" />
     </div>
   );
 }
