@@ -382,50 +382,52 @@ export function PhotoLightbox({
                 <span>{Math.round(zoom * 100)}%</span>
               </div>
 
-              <div className="ml-auto flex max-w-full items-center overflow-hidden rounded-xl border border-white/10 bg-black/35 p-1 backdrop-blur-md">
+              <div className="flex w-full max-w-full items-center overflow-hidden rounded-xl border border-white/15 bg-black/35 p-1 backdrop-blur-md sm:ml-auto sm:w-auto">
                 <div
                   aria-hidden={downloadMenuOpen}
                   className={cn(
-                    "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                    "flex min-w-0 flex-1 items-center gap-1 overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                     downloadMenuOpen
                       ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
-                      : "max-w-48 translate-x-0 opacity-100",
+                      : canDownload
+                        ? "max-w-[70%] translate-x-0 opacity-100 sm:max-w-48"
+                        : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
                   )}
                 >
                   <Button
                     aria-label="缩小"
-                    className="text-white hover:bg-white/15 hover:text-white"
+                    className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
                     disabled={zoom <= minZoom}
                     onClick={() => changeZoom(zoom - 0.5)}
                     size="icon-sm"
                     title="缩小 (-)"
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                   >
                     <MinusIcon />
                   </Button>
                   <Button
                     aria-label="恢复适应屏幕"
-                    className="min-w-14 text-white hover:bg-white/15 hover:text-white"
+                    className="min-w-14 flex-1 border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:flex-none"
                     disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
                     onClick={resetView}
                     size="sm"
                     title="适应屏幕 (0)"
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                   >
                     <RotateCcwIcon />
                     适应
                   </Button>
                   <Button
                     aria-label="放大"
-                    className="text-white hover:bg-white/15 hover:text-white"
+                    className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
                     disabled={zoom >= maxZoom}
                     onClick={() => changeZoom(zoom + 0.5)}
                     size="icon-sm"
                     title="放大 (+)"
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                   >
                     <PlusIcon />
                   </Button>
@@ -436,14 +438,14 @@ export function PhotoLightbox({
                     <div
                       aria-hidden={downloadMenuOpen}
                       className={cn(
-                        "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                        "flex min-w-0 flex-1 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                         downloadMenuOpen
                           ? "pointer-events-none max-w-0 translate-x-2 opacity-0"
-                          : "max-w-36 translate-x-0 opacity-100",
+                          : "max-w-[30%] translate-x-0 opacity-100 sm:max-w-36",
                       )}
                     >
                       <Button
-                        className="h-8 border-0 bg-transparent px-3 text-white shadow-none hover:bg-white/15 hover:text-white"
+                        className="h-8 w-full border-white/15 bg-black/35 px-2 text-xs text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:w-auto sm:px-3 sm:text-[0.8rem]"
                         onClick={() => setDownloadMenuOpen(true)}
                         size="sm"
                         type="button"
@@ -457,17 +459,17 @@ export function PhotoLightbox({
                     <div
                       aria-hidden={!downloadMenuOpen}
                       className={cn(
-                        "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                        "flex min-w-0 flex-1 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                         downloadMenuOpen
-                          ? "max-w-[24rem] translate-x-0 opacity-100"
+                          ? "max-w-full translate-x-0 opacity-100 sm:max-w-[24rem]"
                           : "pointer-events-none max-w-0 translate-x-4 opacity-0",
                       )}
                     >
-                      <div className="flex items-center gap-1">
+                      <div className="flex w-full min-w-0 items-center gap-1">
                         {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
                           <DownloadButton
                             bytes={preview1920.bytes}
-                            className="h-8 border-0 bg-transparent px-3 text-white shadow-none hover:bg-white/15 hover:text-white"
+                            className="h-8 min-w-0 flex-1 shrink border-white/15 bg-black/35 px-1.5 text-[11px] text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]"
                             kind="preview"
                             label="普通图"
                             mediaId={selected.id}
@@ -480,7 +482,7 @@ export function PhotoLightbox({
                         selected.downloads.originalBytes !== null ? (
                           <DownloadButton
                             bytes={selected.downloads.originalBytes}
-                            className="h-8 border-0 bg-transparent px-3 text-white shadow-none hover:bg-white/15 hover:text-white"
+                            className="h-8 min-w-0 flex-1 shrink border-white/15 bg-black/35 px-1.5 text-[11px] text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]"
                             kind="original"
                             label="原图"
                             mediaId={selected.id}
@@ -490,12 +492,12 @@ export function PhotoLightbox({
                         ) : null}
                         <Button
                           aria-label="收起下载选项"
-                          className="size-8 shrink-0 rounded-lg text-white hover:bg-white/15 hover:text-white"
+                          className="size-8 shrink-0 rounded-lg border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
                           onClick={() => setDownloadMenuOpen(false)}
                           size="icon-sm"
                           title="收起下载选项"
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                         >
                           <XIcon />
                         </Button>
