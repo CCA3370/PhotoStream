@@ -20,6 +20,35 @@ function anonymousCookieName(config: AppConfig): string {
   return config.NODE_ENV === "production" ? "__Host-photostream_visitor" : "photostream_visitor";
 }
 
+function likeSessionCookieName(config: AppConfig): string {
+  return config.NODE_ENV === "production"
+    ? "__Host-photostream_like_session"
+    : "photostream_like_session";
+}
+
+function validVisitorId(value: string | undefined): value is string {
+  return value !== undefined && /^[A-Za-z0-9_-]{32,128}$/u.test(value);
+}
+
+export function likeVisitorId(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  config: AppConfig,
+): string {
+  const name = likeSessionCookieName(config);
+  const existing = request.cookies[name];
+  if (validVisitorId(existing)) return existing;
+
+  const created = createSessionToken();
+  reply.setCookie(name, created, {
+    httpOnly: true,
+    secure: config.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
+  return created;
+}
+
 export function anonymousVisitorId(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -28,7 +57,7 @@ export function anonymousVisitorId(
 ): string {
   const name = anonymousCookieName(config);
   const existing = request.cookies[name];
-  if (existing !== undefined && /^[A-Za-z0-9_-]{32,128}$/u.test(existing)) return existing;
+  if (validVisitorId(existing)) return existing;
   const created = createSessionToken();
   const expires = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
   reply.setCookie(name, created, {
