@@ -30,15 +30,21 @@ function downloadErrorMessage(caught: unknown): string {
 
 export function DownloadButton({
   bytes,
+  className,
   kind,
   label,
   mediaId,
+  showBytes = true,
+  showIcon = true,
   slug,
 }: Readonly<{
   bytes: number;
+  className?: string;
   kind: DownloadKind;
   label: string;
   mediaId: string;
+  showBytes?: boolean;
+  showIcon?: boolean;
   slug: string;
 }>) {
   const [pending, setPending] = useState(false);
@@ -86,9 +92,19 @@ export function DownloadButton({
 
   return (
     <>
-      <Button disabled={pending} onClick={() => void download()} type="button" variant="outline">
-        <DownloadIcon data-icon="inline-start" />
-        {pending ? "正在下载…" : `${label}（约 ${formatBytes(bytes)}）`}
+      <Button
+        className={className}
+        disabled={pending}
+        onClick={() => void download()}
+        type="button"
+        variant="outline"
+      >
+        {showIcon ? <DownloadIcon data-icon="inline-start" /> : null}
+        {pending
+          ? "正在下载…"
+          : showBytes
+            ? `${label}（约 ${formatBytes(bytes)}）`
+            : label}
       </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="下载失败" />
     </>
