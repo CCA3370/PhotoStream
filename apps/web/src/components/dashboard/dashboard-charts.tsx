@@ -1,90 +1,158 @@
 "use client";
 
 import type { AlbumSummaryView } from "@photostream/contracts";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { useMemo, useState } from "react";
 
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
-
-interface DailyPoint {
-  readonly day: string;
+interface TrendPoint {
+  readonly at: string;
   readonly opens: number;
   readonly uniqueVisitors: number;
   readonly downloads: number;
 }
 
-const shortDateFormatter = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" });
+const numberFormatter = new Intl.NumberFormat("zh-CN");
+const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
-const trendConfig = {
-  opens: { label: "浏览量", color: "var(--chart-1)" },
-  uniqueVisitors: { label: "独立访客", color: "var(--chart-2)" },
-  downloads: { label: "下载量", color: "var(--chart-3)" },
-} satisfies ChartConfig;
-
-function dateLabel(day: string): string {
-  return shortDateFormatter.format(new Date(`${day}T00:00:00Z`));
+function chartPoint(value: number, max: number, index: number, count: number): [number, number] {
+  const x = count <= 1 ? 360 : 42 + (index / (count - 1)) * 642;
+  const y = 218 - (value / Math.max(max, 1)) * 178;
+  return [x, y];
 }
 
-export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly DailyPoint[] }>) {
+function linePath(values: readonly number[], max: number): string {
+  return values
+    .map((value, index) => {
+      const [x, y] = chartPoint(value, max, index, values.length);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function timeLabel(value: string): string {
+  return dateFormatter.format(new Date(value));
+}
+
+export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoint[] }>) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const opens = useMemo(() => data.map((point) => point.opens), [data]);
+  const visitors = useMemo(() => data.map((point) => point.uniqueVisitors), [data]);
+  const downloads = useMemo(() => data.map((point) => point.downloads), [data]);
+
   if (data.length === 0) {
     return (
       <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed bg-muted/25 px-6 text-center text-sm text-muted-foreground">
-        有访问或下载后，这里会显示最近 30 天趋势。
+        当前时间范围内还没有访问或下载事件。
       </div>
     );
   }
 
+  const max = Math.max(1, ...opens, ...visitors, ...downloads);
+  const labelIndexes = Array.from(
+    new Set([0, Math.floor((data.length - 1) / 2), Math.max(0, data.length - 1)]),
+  );
+  const hoverPoint = hovered === null ? null : data[hovered] ?? null;
+
   return (
-    <ChartContainer className="min-h-[300px] w-full" config={trendConfig}>
-      <AreaChart accessibilityLayer data={data} margin={{ left: 2, right: 12, top: 8 }}>
-        <defs>
-          <linearGradient id="opens-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="5%" stopColor="var(--color-opens)" stopOpacity={0.24} />
-            <stop offset="95%" stopColor="var(--color-opens)" stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid vertical={false} />
-        <XAxis
-          axisLine={false}
-          dataKey="day"
-          minTickGap={32}
-          tickFormatter={dateLabel}
-          tickLine={false}
-          tickMargin={10}
-        />
-        <YAxis axisLine={false} tickLine={false} width={32} />
-        <ChartTooltip
-          content={<ChartTooltipContent labelFormatter={(value) => dateLabel(String(value))} />}
-          cursor={false}
-        />
-        <Area
-          dataKey="opens"
-          fill="url(#opens-fill)"
-          fillOpacity={1}
-          stroke="var(--color-opens)"
-          strokeWidth={2.5}
-          type="monotone"
-        />
-        <Area
-          dataKey="uniqueVisitors"
-          fill="transparent"
-          stroke="var(--color-uniqueVisitors)"
-          strokeWidth={2}
-          type="monotone"
-        />
-        <Area
-          dataKey="downloads"
-          fill="transparent"
-          stroke="var(--color-downloads)"
-          strokeWidth={2}
-          type="monotone"
-        />
-      </AreaChart>
-    </ChartContainer>
+    <div className="relative flex flex-col gap-4">
+      <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <span className="size-2.5 rounded-full bg-chart-1" />浏览量
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="size-2.5 rounded-full bg-chart-2" />独立访客
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="size-2.5 rounded-full bg-chart-3" />下载量
+        </span>
+      </div>
+      <div className="relative overflow-hidden rounded-xl bg-muted/20 px-2 pt-3">
+        {hoverPoint === null ? null : (
+          <div className="pointer-events-none absolute top-3 right-3 z-10 min-w-40 rounded-xl border bg-popover/95 p-3 text-xs shadow-md backdrop-blur">
+            <p className="mb-2 font-medium text-popover-foreground">{timeLabel(hoverPoint.at)}</p>
+            <div className="space-y-1 text-muted-foreground">
+              <p className="flex justify-between gap-4"><span>浏览</span><strong className="text-foreground">{numberFormatter.format(hoverPoint.opens)}</strong></p>
+              <p className="flex justify-between gap-4"><span>访客</span><strong className="text-foreground">{numberFormatter.format(hoverPoint.uniqueVisitors)}</strong></p>
+              <p className="flex justify-between gap-4"><span>下载</span><strong className="text-foreground">{numberFormatter.format(hoverPoint.downloads)}</strong></p>
+            </div>
+          </div>
+        )}
+        <svg
+          aria-label="所选时间范围内的浏览量、独立访客和下载量趋势"
+          className="h-[280px] w-full touch-pan-y"
+          onMouseLeave={() => setHovered(null)}
+          role="img"
+          viewBox="0 0 720 260"
+        >
+          <title>访问与下载趋势</title>
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = 218 - ratio * 178;
+            return (
+              <g key={ratio}>
+                <line
+                  stroke="var(--border)"
+                  strokeDasharray="3 5"
+                  strokeWidth="1"
+                  x1="42"
+                  x2="684"
+                  y1={y}
+                  y2={y}
+                />
+                <text fill="var(--muted-foreground)" fontSize="10" textAnchor="end" x="36" y={y + 3}>
+                  {numberFormatter.format(Math.round(max * ratio))}
+                </text>
+              </g>
+            );
+          })}
+          <path
+            d={`${linePath(opens, max)} L684,218 L42,218 Z`}
+            fill="color-mix(in oklab, var(--chart-1) 12%, transparent)"
+            stroke="none"
+          />
+          <path d={linePath(opens, max)} fill="none" stroke="var(--chart-1)" strokeWidth="3" />
+          <path d={linePath(visitors, max)} fill="none" stroke="var(--chart-2)" strokeWidth="2.5" />
+          <path d={linePath(downloads, max)} fill="none" stroke="var(--chart-3)" strokeWidth="2.5" />
+          {data.map((point, index) => {
+            const [x] = chartPoint(0, max, index, data.length);
+            return (
+              <rect
+                fill="transparent"
+                height="218"
+                key={point.at}
+                onMouseEnter={() => setHovered(index)}
+                onTouchStart={() => setHovered(index)}
+                width={Math.max(4, 642 / Math.max(data.length - 1, 1))}
+                x={x - Math.max(2, 321 / Math.max(data.length - 1, 1))}
+                y="0"
+              />
+            );
+          })}
+          {hovered === null ? null : (() => {
+            const [x] = chartPoint(0, max, hovered, data.length);
+            return <line stroke="var(--ring)" strokeDasharray="4 4" strokeWidth="1" x1={x} x2={x} y1="40" y2="218" />;
+          })()}
+          {labelIndexes.map((index) => {
+            const [x] = chartPoint(0, max, index, data.length);
+            return (
+              <text
+                fill="var(--muted-foreground)"
+                fontSize="10"
+                key={index}
+                textAnchor={index === 0 ? "start" : index === data.length - 1 ? "end" : "middle"}
+                x={x}
+                y="246"
+              >
+                {timeLabel(data[index]?.at ?? "")}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
   );
 }
 
