@@ -2,11 +2,13 @@
 
 import type { PublicMediaView } from "@photostream/contracts";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { DownloadIcon, Maximize2Icon } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { DownloadButton } from "@/components/gallery/download-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 
@@ -23,15 +25,15 @@ function MediaTile({
     return (
       <div
         aria-hidden="true"
-        className="aspect-square rounded-lg bg-muted"
+        className="aspect-[4/3] rounded-2xl bg-muted"
         data-media-id={media.id}
       />
     );
   }
   return (
     <button
-      aria-label="打开活动照片"
-      className="relative aspect-square min-h-11 overflow-hidden rounded-lg bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`打开活动照片 ${media.publishSequence}`}
+      className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-2xl bg-muted shadow-sm ring-1 ring-border/60 transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring"
       data-media-id={media.id}
       onClick={() => onOpen(media)}
       type="button"
@@ -39,20 +41,25 @@ function MediaTile({
       <Image
         alt="活动照片"
         fill
-        sizes="(max-width: 479px) 50vw, (max-width: 767px) 33vw, (max-width: 1023px) 25vw, 176px"
+        sizes="(max-width: 479px) 50vw, (max-width: 767px) 33vw, (max-width: 1279px) 25vw, 20vw"
         src={preview.url}
         style={{ objectFit: "cover" }}
         unoptimized
       />
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/65 via-black/15 to-transparent p-3 pt-10 text-white opacity-95 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100">
+        <span className="text-xs font-medium tracking-wide">#{media.publishSequence}</span>
+        <Maximize2Icon aria-hidden="true" className="size-4" />
+      </div>
     </button>
   );
 }
 
 function gridLayout(width: number): { columns: number; gap: number } {
   if (width < 480) return { columns: 2, gap: 8 };
-  if (width < 768) return { columns: 3, gap: 8 };
+  if (width < 768) return { columns: 3, gap: 10 };
   if (width < 1_024) return { columns: 4, gap: 12 };
-  return { columns: Math.max(4, Math.floor((width + 12) / 188)), gap: 12 };
+  if (width < 1_440) return { columns: 5, gap: 14 };
+  return { columns: 6, gap: 16 };
 }
 
 function VirtualMediaGrid({
@@ -62,14 +69,14 @@ function VirtualMediaGrid({
   const containerRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState({ columns: 2, gap: 8, width: 0, scrollMargin: 0 });
   const rowCount = Math.ceil(items.length / layout.columns);
-  const tileSize =
-    layout.width === 0 ? 176 : (layout.width - layout.gap * (layout.columns - 1)) / layout.columns;
-  const rowStep = tileSize + layout.gap;
+  const tileWidth =
+    layout.width === 0 ? 240 : (layout.width - layout.gap * (layout.columns - 1)) / layout.columns;
+  const rowStep = tileWidth * 0.75 + layout.gap;
   const virtualizer = useWindowVirtualizer<HTMLDivElement>({
     count: rowCount,
     estimateSize: () => rowStep,
     getItemKey: (index) => items[index * layout.columns]?.id ?? index,
-    overscan: 3,
+    overscan: 4,
     scrollMargin: layout.scrollMargin,
   });
 
@@ -102,8 +109,8 @@ function VirtualMediaGrid({
   if (layout.width === 0) {
     return (
       <section aria-label="活动影像网格" className="w-full" ref={containerRef}>
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 md:gap-3 lg:grid-cols-[repeat(auto-fit,minmax(176px,1fr))]">
-          {items.slice(0, 12).map((media) => (
+        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 md:gap-3 xl:grid-cols-5 2xl:grid-cols-6">
+          {items.slice(0, 18).map((media) => (
             <MediaTile key={media.id} media={media} onOpen={onOpen} />
           ))}
         </div>
@@ -156,10 +163,10 @@ export function MediaGrid({
 
   if (items.length === 0) {
     return (
-      <Empty className="min-h-64 border">
+      <Empty className="min-h-72 rounded-2xl border border-dashed bg-muted/20">
         <EmptyHeader>
           <EmptyTitle>还没有已发布影像</EmptyTitle>
-          <EmptyDescription>新照片发布后会出现在这里。</EmptyDescription>
+          <EmptyDescription>新照片发布后会自动出现在这里。</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -172,19 +179,19 @@ export function MediaGrid({
       {items.length > 200 ? (
         <VirtualMediaGrid items={items} onOpen={setSelected} />
       ) : (
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 md:gap-3 lg:grid-cols-[repeat(auto-fit,minmax(176px,1fr))]">
+        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 md:gap-3 xl:grid-cols-5 xl:gap-4 2xl:grid-cols-6">
           {items.map((media) => (
             <MediaTile key={media.id} media={media} onOpen={setSelected} />
           ))}
         </div>
       )}
       <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="public-theme max-w-[calc(100%-1rem)] bg-background sm:max-w-5xl">
+        <DialogContent className="public-theme max-h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] overflow-y-auto bg-background p-3 sm:max-w-6xl sm:p-4">
           <DialogTitle className="sr-only">活动照片预览</DialogTitle>
           <DialogDescription className="sr-only">完整比例查看当前活动照片</DialogDescription>
           {large === null || selected === null ? null : (
-            <div className="flex flex-col gap-4">
-              <div className="relative h-[min(70dvh,800px)] w-full">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="relative h-[min(72dvh,820px)] min-h-72 overflow-hidden rounded-xl bg-black/95">
                 <Image
                   alt="活动照片"
                   fill
@@ -194,36 +201,50 @@ export function MediaGrid({
                   unoptimized
                 />
               </div>
-              {slug === undefined ? null : (
-                <div className="flex flex-wrap gap-2">
-                  {selected.downloads.preview && variant(selected, "photo_1920") !== null ? (
-                    <DownloadButton
-                      bytes={(variant(selected, "photo_1920") as NonNullable<typeof large>).bytes}
-                      kind="preview"
-                      label="下载普通图"
-                      mediaId={selected.id}
-                      slug={slug}
-                    />
-                  ) : null}
-                  {selected.downloads.original && selected.downloads.originalBytes !== null ? (
-                    <DownloadButton
-                      bytes={selected.downloads.originalBytes}
-                      kind="original"
-                      label="下载原图"
-                      mediaId={selected.id}
-                      slug={slug}
-                    />
-                  ) : null}
+              <aside className="flex flex-col gap-4 rounded-xl border bg-card p-4">
+                <div>
+                  <Badge variant="secondary">照片 #{selected.publishSequence}</Badge>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    选择已开放的下载规格。下载次数会计入活动统计。
+                  </p>
                 </div>
-              )}
-              {selected.downloads.original && selected.downloads.originalBytes !== null ? (
-                <Alert>
-                  <AlertTitle>原图可能包含相机元数据</AlertTitle>
-                  <AlertDescription>
-                    原始文件可能仍含拍摄时间、相机信息或 GPS；请勿再次公开传播。
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+
+                {slug === undefined ? null : (
+                  <div className="flex flex-col gap-2">
+                    <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+                      <DownloadIcon aria-hidden="true" className="size-4" />
+                      下载
+                    </div>
+                    {selected.downloads.preview && variant(selected, "photo_1920") !== null ? (
+                      <DownloadButton
+                        bytes={(variant(selected, "photo_1920") as NonNullable<typeof large>).bytes}
+                        kind="preview"
+                        label="普通图"
+                        mediaId={selected.id}
+                        slug={slug}
+                      />
+                    ) : null}
+                    {selected.downloads.original && selected.downloads.originalBytes !== null ? (
+                      <DownloadButton
+                        bytes={selected.downloads.originalBytes}
+                        kind="original"
+                        label="原图"
+                        mediaId={selected.id}
+                        slug={slug}
+                      />
+                    ) : null}
+                  </div>
+                )}
+
+                {selected.downloads.original && selected.downloads.originalBytes !== null ? (
+                  <Alert className="mt-auto">
+                    <AlertTitle>原图可能包含相机元数据</AlertTitle>
+                    <AlertDescription>
+                      原始文件可能仍含拍摄时间、相机信息或 GPS；请勿再次公开传播。
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+              </aside>
             </div>
           )}
         </DialogContent>
