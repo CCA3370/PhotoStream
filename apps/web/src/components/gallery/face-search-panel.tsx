@@ -339,8 +339,8 @@ export function FaceSearchPanel({
                 type="file"
               />
               <FieldDescription>
-                浏览器会纠正方向、移除 EXIF/GPS，并转为最长边 1920、最大 3 MiB 的 JPEG；若设备无法解码
-                HEIC/HEIF，请改选 JPEG、PNG 或 WebP。
+                浏览器会纠正方向、移除 EXIF/GPS，并转为最长边 1920、最大 3 MiB 的
+                JPEG；若设备无法解码 HEIC/HEIF，请改选 JPEG、PNG 或 WebP。
               </FieldDescription>
             </Field>
           ) : null}
