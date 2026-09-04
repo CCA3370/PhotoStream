@@ -245,7 +245,12 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
           </p>
           {config.lastErrorCode === null ? null : (
             <div className="sm:col-span-2 lg:col-span-4">
-              <Button onClick={() => setStatusErrorOpen(true)} size="sm" type="button" variant="destructive">
+              <Button
+                onClick={() => setStatusErrorOpen(true)}
+                size="sm"
+                type="button"
+                variant="destructive"
+              >
                 查看失败详情
               </Button>
             </div>
