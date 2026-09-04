@@ -259,9 +259,7 @@ export function PhotoLightbox({
   const canDownloadPreview =
     slug !== undefined && selected.downloads.preview && preview1920 !== null;
   const canDownloadOriginal =
-    slug !== undefined &&
-    selected.downloads.original &&
-    selected.downloads.originalBytes !== null;
+    slug !== undefined && selected.downloads.original && selected.downloads.originalBytes !== null;
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
