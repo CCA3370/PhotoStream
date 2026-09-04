@@ -63,7 +63,8 @@ export function PhotoLightbox({
   onClose: () => void;
   onSelect: (mediaId: string) => void;
 }>) {
-  const selectedIndex = selectedId === null ? -1 : items.findIndex((item) => item.id === selectedId);
+  const selectedIndex =
+    selectedId === null ? -1 : items.findIndex((item) => item.id === selectedId);
   const selected = selectedIndex < 0 ? null : (items[selectedIndex] ?? null);
   const large =
     selected === null ? null : (variant(selected, "photo_1920") ?? variant(selected, "photo_960"));
@@ -129,6 +130,7 @@ export function PhotoLightbox({
   }, []);
 
   useEffect(() => {
+    if (selectedId === null) return;
     setLoaded(false);
     resetView();
     pointersRef.current.clear();
@@ -266,6 +268,7 @@ export function PhotoLightbox({
 
         <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
           <div
+            aria-label="照片画布"
             className={cn(
               "absolute inset-0 touch-none select-none",
               zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
@@ -277,6 +280,7 @@ export function PhotoLightbox({
             onPointerUp={finishPointer}
             onWheel={onWheel}
             ref={stageRef}
+            role="application"
           >
             {!loaded ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
