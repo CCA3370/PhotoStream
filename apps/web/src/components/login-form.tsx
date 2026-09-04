@@ -13,6 +13,7 @@ import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 
@@ -49,55 +50,50 @@ export function LoginForm() {
   }
 
   return (
-    <form className="flex flex-col gap-5" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      {pageError === null ? null : (
-        <p
-          className="rounded-lg border border-destructive p-3 text-sm text-destructive"
-          role="alert"
+    <>
+      <form className="flex flex-col gap-5" noValidate onSubmit={form.handleSubmit(onSubmit)}>
+        <FieldGroup>
+          <Field data-invalid={form.formState.errors.username ? true : undefined}>
+            <FieldLabel htmlFor="username">用户名</FieldLabel>
+            <InputGroup className="min-h-11">
+              <InputGroupAddon aria-hidden="true">
+                <UserRoundIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-invalid={form.formState.errors.username ? true : undefined}
+                autoComplete="username"
+                id="username"
+                {...form.register("username")}
+              />
+            </InputGroup>
+            <FieldError errors={[form.formState.errors.username]} />
+          </Field>
+          <Field data-invalid={form.formState.errors.password ? true : undefined}>
+            <FieldLabel htmlFor="password">密码</FieldLabel>
+            <InputGroup className="min-h-11">
+              <InputGroupAddon aria-hidden="true">
+                <KeyRoundIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-invalid={form.formState.errors.password ? true : undefined}
+                autoComplete="current-password"
+                id="password"
+                type="password"
+                {...form.register("password")}
+              />
+            </InputGroup>
+            <FieldError errors={[form.formState.errors.password]} />
+          </Field>
+        </FieldGroup>
+        <Button
+          className="min-h-11"
+          disabled={form.formState.isSubmitting || isPending}
+          type="submit"
         >
-          {pageError}
-        </p>
-      )}
-      <FieldGroup>
-        <Field data-invalid={form.formState.errors.username ? true : undefined}>
-          <FieldLabel htmlFor="username">用户名</FieldLabel>
-          <InputGroup className="min-h-11">
-            <InputGroupAddon aria-hidden="true">
-              <UserRoundIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-invalid={form.formState.errors.username ? true : undefined}
-              autoComplete="username"
-              id="username"
-              {...form.register("username")}
-            />
-          </InputGroup>
-          <FieldError errors={[form.formState.errors.username]} />
-        </Field>
-        <Field data-invalid={form.formState.errors.password ? true : undefined}>
-          <FieldLabel htmlFor="password">密码</FieldLabel>
-          <InputGroup className="min-h-11">
-            <InputGroupAddon aria-hidden="true">
-              <KeyRoundIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-invalid={form.formState.errors.password ? true : undefined}
-              autoComplete="current-password"
-              id="password"
-              type="password"
-              {...form.register("password")}
-            />
-          </InputGroup>
-          <FieldError errors={[form.formState.errors.password]} />
-        </Field>
-      </FieldGroup>
-      <Button
-        className="min-h-11"
-        disabled={form.formState.isSubmitting || isPending}
-        type="submit"
-      >
-        {form.formState.isSubmitting || isPending ? "正在登录…" : "登录"}
-      </Button>
-    </form>
+          {form.formState.isSubmitting || isPending ? "正在登录…" : "登录"}
+        </Button>
+      </form>
+      <ErrorDialog message={pageError} onClose={() => setPageError(null)} title="登录失败" />
+    </>
   );
 }
