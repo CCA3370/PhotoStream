@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
   Field,
   FieldDescription,
@@ -110,6 +111,9 @@ export function FaceSearchPanel({
                 next.items,
               ),
       }));
+      if (next.search.failureCode === "async_search_failed") {
+        setError("补查暂时失败。当前仅显示初步候选，结果可能不完整。");
+      }
       setStage("results");
       return next;
     },
@@ -263,167 +267,157 @@ export function FaceSearchPanel({
   const status = view?.search.status;
   const progress = progressFor(stage, status);
   return (
-    <Dialog open onOpenChange={(open) => !open && void clearAndClose()}>
-      <DialogContent className="public-theme max-h-[calc(100dvh-1rem)] overflow-y-auto bg-background sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>用人脸找照片</DialogTitle>
-          <DialogDescription>
-            这是候选检索，不是身份核验；相册口令和你的声明都不能证明照片中的身份。
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open onOpenChange={(open) => !open && void clearAndClose()}>
+        <DialogContent className="public-theme max-h-[calc(100dvh-1rem)] overflow-y-auto bg-background sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>用人脸找照片</DialogTitle>
+            <DialogDescription>
+              这是候选检索，不是身份核验；相册口令和你的声明都不能证明照片中的身份。
+            </DialogDescription>
+          </DialogHeader>
 
-        {stage === "consent" ? (
-          <FieldGroup>
-            <Alert>
-              <ShieldCheckIcon aria-hidden="true" />
-              <AlertTitle>单独同意与处理说明</AlertTitle>
-              <AlertDescription className="flex flex-col gap-2">
-                <p>
-                  学校作为处理者，将参考照直传至北京临时私有 OSS，并由阿里云 IMM
-                  检测一张人脸、匹配本相册候选；香港 API 只接收随机任务和短期媒体结果。
-                </p>
-                <p>
-                  参考照任务完成后立即删除、异常最迟 1 小时删除；结果最长保留 2
-                  小时。误匹配可能造成错误照片展示，请勿据此确认身份或处分任何人。
-                </p>
-                <p>{privacyNotice}</p>
-                <p>删除、撤回或投诉：{complaintContact}</p>
-              </AlertDescription>
-            </Alert>
-            <FieldSet>
-              <FieldLegend variant="label">你有权提交谁的参考照？</FieldLegend>
-              <FieldDescription>
-                只可提交本人，或你作为监护人/已经获得明确授权的人。
-              </FieldDescription>
-              <ToggleGroup
-                aria-label="参考照授权声明"
-                onValueChange={(values) => {
-                  const value = values[0];
-                  if (value === "self" || value === "guardian_or_authorized") setDeclaration(value);
-                }}
-                spacing={2}
-                value={[declaration]}
-                variant="outline"
-              >
-                <ToggleGroupItem value="self">本人</ToggleGroupItem>
-                <ToggleGroupItem value="guardian_or_authorized">监护人/已获授权</ToggleGroupItem>
-              </ToggleGroup>
-            </FieldSet>
-            <Field orientation="horizontal">
-              <Checkbox
-                checked={acknowledged}
-                id="face-search-consent"
-                onCheckedChange={setAcknowledged}
-              />
-              <FieldLabel htmlFor="face-search-consent">
-                我已阅读上述说明，理解这不是身份核验，并单独同意本次处理。
-              </FieldLabel>
-            </Field>
-          </FieldGroup>
-        ) : null}
-
-        {stage === "choose" ? (
-          <Field>
-            <FieldLabel htmlFor="face-reference-file">选择一张只有一张清晰人脸的照片</FieldLabel>
-            <Input
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
-              id="face-reference-file"
-              onChange={(event) => void choose(event.currentTarget.files?.[0])}
-              type="file"
-            />
-            <FieldDescription>
-              浏览器会纠正方向、移除 EXIF/GPS，并转为最长边 1920、最大 3 MiB 的 JPEG；若设备无法解码
-              HEIC/HEIF，请改选 JPEG、PNG 或 WebP。
-            </FieldDescription>
-          </Field>
-        ) : null}
-
-        {stage === "preparing" || stage === "uploading" || stage === "searching" ? (
-          <Progress value={progress}>
-            <ProgressLabel>
-              {stage === "preparing"
-                ? "正在设备上安全处理参考照"
-                : stage === "uploading"
-                  ? "正在直传临时私有存储"
-                  : "正在查找候选"}
-            </ProgressLabel>
-            <ProgressValue />
-          </Progress>
-        ) : null}
-
-        {error === null ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>本次检索未完整完成</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {stage === "results" && view !== null ? (
-          <section aria-labelledby="face-results-title" className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <h3 className="font-heading text-base font-medium" id="face-results-title">
-                可能包含此人的照片
-              </h3>
-              <p aria-live="polite" className="text-sm text-muted-foreground">
-                {statusLabels[view.search.status]} · 已加载 {view.items.length} 张候选
-              </p>
-            </div>
-            {view.search.failureCode === "async_search_failed" ? (
+          {stage === "consent" ? (
+            <FieldGroup>
               <Alert>
-                <AlertTitle>补查暂时失败</AlertTitle>
-                <AlertDescription>
-                  以下仅为初步候选；不能把它们视为完整或确定结果。
+                <ShieldCheckIcon aria-hidden="true" />
+                <AlertTitle>单独同意与处理说明</AlertTitle>
+                <AlertDescription className="flex flex-col gap-2">
+                  <p>
+                    学校作为处理者，将参考照直传至北京临时私有 OSS，并由阿里云 IMM
+                    检测一张人脸、匹配本相册候选；香港 API 只接收随机任务和短期媒体结果。
+                  </p>
+                  <p>
+                    参考照任务完成后立即删除、异常最迟 1 小时删除；结果最长保留 2
+                    小时。误匹配可能造成错误照片展示，请勿据此确认身份或处分任何人。
+                  </p>
+                  <p>{privacyNotice}</p>
+                  <p>删除、撤回或投诉：{complaintContact}</p>
                 </AlertDescription>
               </Alert>
+              <FieldSet>
+                <FieldLegend variant="label">你有权提交谁的参考照？</FieldLegend>
+                <FieldDescription>
+                  只可提交本人，或你作为监护人/已经获得明确授权的人。
+                </FieldDescription>
+                <ToggleGroup
+                  aria-label="参考照授权声明"
+                  onValueChange={(values) => {
+                    const value = values[0];
+                    if (value === "self" || value === "guardian_or_authorized") {
+                      setDeclaration(value);
+                    }
+                  }}
+                  spacing={2}
+                  value={[declaration]}
+                  variant="outline"
+                >
+                  <ToggleGroupItem value="self">本人</ToggleGroupItem>
+                  <ToggleGroupItem value="guardian_or_authorized">监护人/已获授权</ToggleGroupItem>
+                </ToggleGroup>
+              </FieldSet>
+              <Field orientation="horizontal">
+                <Checkbox
+                  checked={acknowledged}
+                  id="face-search-consent"
+                  onCheckedChange={setAcknowledged}
+                />
+                <FieldLabel htmlFor="face-search-consent">
+                  我已阅读上述说明，理解这不是身份核验，并单独同意本次处理。
+                </FieldLabel>
+              </Field>
+            </FieldGroup>
+          ) : null}
+
+          {stage === "choose" ? (
+            <Field>
+              <FieldLabel htmlFor="face-reference-file">选择一张只有一张清晰人脸的照片</FieldLabel>
+              <Input
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+                id="face-reference-file"
+                onChange={(event) => void choose(event.currentTarget.files?.[0])}
+                type="file"
+              />
+              <FieldDescription>
+                浏览器会纠正方向、移除 EXIF/GPS，并转为最长边 1920、最大 3 MiB 的 JPEG；若设备无法解码
+                HEIC/HEIF，请改选 JPEG、PNG 或 WebP。
+              </FieldDescription>
+            </Field>
+          ) : null}
+
+          {stage === "preparing" || stage === "uploading" || stage === "searching" ? (
+            <Progress value={progress}>
+              <ProgressLabel>
+                {stage === "preparing"
+                  ? "正在设备上安全处理参考照"
+                  : stage === "uploading"
+                    ? "正在直传临时私有存储"
+                    : "正在查找候选"}
+              </ProgressLabel>
+              <ProgressValue />
+            </Progress>
+          ) : null}
+
+          {stage === "results" && view !== null ? (
+            <section aria-labelledby="face-results-title" className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="font-heading text-base font-medium" id="face-results-title">
+                  可能包含此人的照片
+                </h3>
+                <p aria-live="polite" className="text-sm text-muted-foreground">
+                  {statusLabels[view.search.status]} · 已加载 {view.items.length} 张候选
+                </p>
+              </div>
+              {view.items.length === 0 &&
+              (view.search.status === "completed" || view.search.status === "failed") ? (
+                <Empty className="min-h-48 border">
+                  <EmptyHeader>
+                    <EmptyTitle>没有可安全展示的候选</EmptyTitle>
+                    <EmptyDescription>无匹配和被发布/排除状态过滤使用相同空结果。</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <MediaGrid items={view.items} slug={slug} />
+              )}
+              {view.nextCursor === null ? null : (
+                <Button
+                  disabled={pending}
+                  onClick={() => void loadMore()}
+                  type="button"
+                  variant="outline"
+                >
+                  加载更多候选
+                </Button>
+              )}
+            </section>
+          ) : null}
+
+          <DialogFooter>
+            <Button onClick={() => void clearAndClose()} type="button" variant="ghost">
+              <Trash2Icon data-icon="inline-start" />
+              清除并关闭
+            </Button>
+            {stage === "consent" ? (
+              <Button disabled={!acknowledged} onClick={() => setStage("choose")} type="button">
+                <ImagePlusIcon data-icon="inline-start" />
+                同意并选择照片
+              </Button>
             ) : null}
-            {view.items.length === 0 &&
-            (view.search.status === "completed" || view.search.status === "failed") ? (
-              <Empty className="min-h-48 border">
-                <EmptyHeader>
-                  <EmptyTitle>没有可安全展示的候选</EmptyTitle>
-                  <EmptyDescription>无匹配和被发布/排除状态过滤使用相同空结果。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <MediaGrid items={view.items} slug={slug} />
-            )}
-            {view.nextCursor === null ? null : (
+            {stage === "results" ? (
               <Button
                 disabled={pending}
-                onClick={() => void loadMore()}
+                onClick={() => void restart()}
                 type="button"
                 variant="outline"
               >
-                加载更多候选
+                <ScanFaceIcon data-icon="inline-start" />
+                换一张照片
               </Button>
-            )}
-          </section>
-        ) : null}
-
-        <DialogFooter>
-          <Button onClick={() => void clearAndClose()} type="button" variant="ghost">
-            <Trash2Icon data-icon="inline-start" />
-            清除并关闭
-          </Button>
-          {stage === "consent" ? (
-            <Button disabled={!acknowledged} onClick={() => setStage("choose")} type="button">
-              <ImagePlusIcon data-icon="inline-start" />
-              同意并选择照片
-            </Button>
-          ) : null}
-          {stage === "results" ? (
-            <Button
-              disabled={pending}
-              onClick={() => void restart()}
-              type="button"
-              variant="outline"
-            >
-              <ScanFaceIcon data-icon="inline-start" />
-              换一张照片
-            </Button>
-          ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="人脸找图失败" />
+    </>
   );
 }
