@@ -1,4 +1,5 @@
 import type { PublicAlbumView, PublicMediaView } from "@photostream/contracts";
+import { ScanFaceIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
@@ -31,12 +32,15 @@ export default async function GalleryPage({
   if (album.accessRequired) {
     return (
       <PublicGalleryShell
+        albumDescription={album.description}
         albumTitle={album.title}
         complaintContact={album.complaintContact}
         privacyNotice={album.privacyNotice}
         status={album.state === "live" ? "直播中" : "已结束"}
       >
-        <UnlockAlbumForm slug={slug} />
+        <div className="mx-auto max-w-xl py-8 md:py-14">
+          <UnlockAlbumForm slug={slug} />
+        </div>
       </PublicGalleryShell>
     );
   }
@@ -49,6 +53,7 @@ export default async function GalleryPage({
   );
   return (
     <PublicGalleryShell
+      albumDescription={album.description}
       albumTitle={album.title}
       complaintContact={album.complaintContact}
       privacyNotice={album.privacyNotice}
@@ -57,24 +62,25 @@ export default async function GalleryPage({
       <AlbumOpenTracker slug={slug} />
       <nav
         aria-label="相册分类"
-        className="sticky top-0 flex gap-2 overflow-x-auto border-b bg-background py-3"
+        className="sticky top-0 z-20 -mx-4 mb-6 flex gap-2 overflow-x-auto border-y bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
       >
         <Link
           className={cn(
-            buttonVariants({ variant: category === undefined ? "default" : "ghost" }),
-            "min-h-11",
+            buttonVariants({ variant: category === undefined ? "default" : "outline", size: "sm" }),
+            "shrink-0 rounded-full px-4",
           )}
           href={`/g/${slug}`}
         >
-          全部
+          全部照片
         </Link>
         {album.categories.map((category) => (
           <Link
             className={cn(
               buttonVariants({
-                variant: requestedCategory === category.id ? "default" : "ghost",
+                variant: requestedCategory === category.id ? "default" : "outline",
+                size: "sm",
               }),
-              "min-h-11",
+              "shrink-0 rounded-full px-4",
             )}
             href={`/g/${slug}?category=${category.id}`}
             key={category.id}
@@ -83,23 +89,42 @@ export default async function GalleryPage({
           </Link>
         ))}
       </nav>
-      <section aria-labelledby="gallery-heading" className="flex flex-col gap-4 py-4">
-        <h2 className="sr-only" id="gallery-heading">
-          活动影像
-        </h2>
+
+      <section aria-labelledby="gallery-heading" className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-primary">照片流</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight" id="gallery-heading">
+              {category?.name ?? "全部照片"}
+            </h2>
+          </div>
+          <p className="text-sm text-muted-foreground">按发布时间由新到旧持续更新</p>
+        </div>
+
         {album.faceSearchAvailable && album.faceSearchNoticeVersion !== null ? (
-          <div className="flex flex-col items-start gap-1 rounded-xl border bg-card p-4">
-            <FaceSearchLauncher
-              complaintContact={album.complaintContact}
-              noticeVersion={album.faceSearchNoticeVersion}
-              privacyNotice={album.privacyNotice}
-              slug={slug}
-            />
-            <p className="text-sm text-muted-foreground">
-              最近发布的照片可能仍在建立找图索引；候选结果不用于身份核验。
-            </p>
+          <div className="flex flex-col gap-4 rounded-2xl border bg-[linear-gradient(135deg,color-mix(in_oklab,var(--primary)_7%,var(--card)),var(--card))] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ScanFaceIcon aria-hidden="true" className="size-5" />
+              </div>
+              <div>
+                <p className="font-medium">用人像快速找照片</p>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  上传参考照后查找可能包含同一人物的候选照片。最近发布的照片可能仍在建立索引，结果不用于身份核验。
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <FaceSearchLauncher
+                complaintContact={album.complaintContact}
+                noticeVersion={album.faceSearchNoticeVersion}
+                privacyNotice={album.privacyNotice}
+                slug={slug}
+              />
+            </div>
           </div>
         ) : null}
+
         {album.bibSearchEnabled ? (
           <BibSearchPanel
             attributeFilterEnabled={album.bibAttributeFilterEnabled}
