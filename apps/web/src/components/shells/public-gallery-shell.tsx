@@ -56,7 +56,9 @@ export function PublicGalleryShell({
 
       <footer className="fixed inset-x-0 bottom-0 z-40 h-8 border-t bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-full max-w-[1560px] items-center justify-center px-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          <p className="truncate">© 2026 CCA3370. All rights reserved. · Images © 学生会电视台.</p>
+          <p className="truncate">
+            © 2026 CCA3370. All rights reserved. · Image copyright © 2026 学生会电视台.
+          </p>
         </div>
       </footer>
     </div>
