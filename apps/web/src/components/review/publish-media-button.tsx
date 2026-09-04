@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientMutation } from "@/lib/client-api";
 
 export function PublishMediaButton({ mediaId }: Readonly<{ mediaId: string }>) {
@@ -30,11 +31,11 @@ export function PublishMediaButton({ mediaId }: Readonly<{ mediaId: string }>) {
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <>
       <Button disabled={pending} onClick={() => void publish()} type="button">
         {pending ? "正在发布…" : "发布"}
       </Button>
-      {error === null ? null : <p className="text-sm text-destructive">{error}</p>}
-    </div>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="发布失败" />
+    </>
   );
 }
