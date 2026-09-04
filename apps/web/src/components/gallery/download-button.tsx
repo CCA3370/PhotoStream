@@ -44,15 +44,25 @@ export function DownloadButton({
         `/api/v1/public/albums/${slug}/downloads/${mediaId}/${kind}`,
         { idempotencyKey: crypto.randomUUID() },
       );
+      const response = await fetch(signed.url, {
+        cache: "no-store",
+        credentials: "omit",
+      });
+      if (!response.ok) throw new Error("图片下载失败，请稍后重试");
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = signed.url;
+      anchor.href = objectUrl;
       anchor.download = signed.filename;
       anchor.rel = "noopener";
+      anchor.style.display = "none";
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "下载地址签发失败");
+      setError(caught instanceof Error ? caught.message : "下载失败，请稍后重试");
     } finally {
       setPending(false);
     }
@@ -62,7 +72,7 @@ export function DownloadButton({
     <div className="flex flex-col gap-1">
       <Button disabled={pending} onClick={() => void download()} type="button" variant="outline">
         <DownloadIcon data-icon="inline-start" />
-        {pending ? "正在准备…" : `${label}（约 ${formatBytes(bytes)}）`}
+        {pending ? "正在下载…" : `${label}（约 ${formatBytes(bytes)}）`}
       </Button>
       {error === null ? null : <p className="text-sm text-destructive">{error}</p>}
     </div>
