@@ -65,7 +65,8 @@ export function DeleteMediaButton({
           <AlertDialogHeader>
             <AlertDialogTitle>永久删除该媒体？</AlertDialogTitle>
             <AlertDialogDescription>
-              系统将先隐藏媒体，再逐对象删除并刷新 CDN。全部成功前只显示“删除处理中”；完成后不可恢复。
+              系统将先隐藏媒体，再逐对象删除并刷新
+              CDN。全部成功前只显示“删除处理中”；完成后不可恢复。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Field data-invalid={error === null ? undefined : true}>
