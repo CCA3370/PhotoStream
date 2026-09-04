@@ -25,7 +25,7 @@ export class MediaLikeService {
     readonly albumId: string;
     readonly mediaIds: readonly string[];
     readonly viewerId: string;
-  }): Promise<readonly MediaLikeState[]> {
+  }): Promise<MediaLikeState[]> {
     const mediaIds = [...new Set(options.mediaIds)];
     if (mediaIds.length === 0) return [];
 
