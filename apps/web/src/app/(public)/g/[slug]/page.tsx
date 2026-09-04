@@ -1,10 +1,8 @@
 import type { PublicAlbumView, PublicMediaView } from "@photostream/contracts";
-import { ScanFaceIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
-import { FaceSearchLauncher } from "@/components/gallery/face-search-launcher";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
@@ -51,6 +49,10 @@ export default async function GalleryPage({
   const media = await serverApi<MediaList>(
     `/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`,
   );
+  const faceSearchAvailable =
+    album.faceSearchAvailable && album.faceSearchNoticeVersion !== null;
+  const searchAvailable = album.bibSearchEnabled || faceSearchAvailable;
+
   return (
     <PublicGalleryShell
       albumDescription={album.description}
@@ -62,7 +64,7 @@ export default async function GalleryPage({
       <AlbumOpenTracker slug={slug} />
       <nav
         aria-label="相册分类"
-        className="sticky top-0 z-20 -mx-4 mb-6 flex gap-2 overflow-x-auto border-y bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+        className="sticky top-0 z-20 -mx-4 mb-4 flex gap-2 overflow-x-auto border-y bg-background/95 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
       >
         <Link
           className={cn(
@@ -71,7 +73,7 @@ export default async function GalleryPage({
           )}
           href={`/g/${slug}`}
         >
-          全部照片
+          全部
         </Link>
         {album.categories.map((category) => (
           <Link
@@ -90,46 +92,23 @@ export default async function GalleryPage({
         ))}
       </nav>
 
-      <section aria-labelledby="gallery-heading" className="flex flex-col gap-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-primary">照片流</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight" id="gallery-heading">
-              {category?.name ?? "全部照片"}
-            </h2>
-          </div>
-          <p className="text-sm text-muted-foreground">按发布时间由新到旧持续更新</p>
-        </div>
-
-        {album.faceSearchAvailable && album.faceSearchNoticeVersion !== null ? (
-          <div className="flex flex-col gap-4 rounded-2xl border bg-[linear-gradient(135deg,color-mix(in_oklab,var(--primary)_7%,var(--card)),var(--card))] p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <ScanFaceIcon aria-hidden="true" className="size-5" />
-              </div>
-              <div>
-                <p className="font-medium">用人像快速找照片</p>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  上传参考照后查找可能包含同一人物的候选照片。最近发布的照片可能仍在建立索引，结果不用于身份核验。
-                </p>
-              </div>
-            </div>
-            <div className="shrink-0">
-              <FaceSearchLauncher
-                complaintContact={album.complaintContact}
-                noticeVersion={album.faceSearchNoticeVersion}
-                privacyNotice={album.privacyNotice}
-                slug={slug}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {album.bibSearchEnabled ? (
+      <section aria-label={category?.name ?? "全部照片"} className="flex flex-col gap-4">
+        {searchAvailable ? (
           <BibSearchPanel
             attributeFilterEnabled={album.bibAttributeFilterEnabled}
             attributeOptions={album.bibAttributeOptions}
             attributePairs={album.bibAttributePairs}
+            bibSearchEnabled={album.bibSearchEnabled}
+            faceSearch={
+              faceSearchAvailable
+                ? {
+                    complaintContact: album.complaintContact,
+                    noticeVersion: album.faceSearchNoticeVersion as string,
+                    privacyNotice: album.privacyNotice,
+                    slug,
+                  }
+                : undefined
+            }
             numberLengths={album.bibNumberLengths}
             {...(category === undefined ? {} : { categoryId: category.id })}
             slug={slug}
