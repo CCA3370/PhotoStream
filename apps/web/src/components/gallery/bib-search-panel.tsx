@@ -182,7 +182,13 @@ export function BibSearchPanel({
           找照片
         </Button>
         {result === null ? null : (
-          <Button className="rounded-full" onClick={clearAll} size="sm" type="button" variant="ghost">
+          <Button
+            className="rounded-full"
+            onClick={clearAll}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
             <XIcon data-icon="inline-start" />
             清除
           </Button>
@@ -206,9 +212,7 @@ export function BibSearchPanel({
             {bibSearchEnabled && attributeFilterEnabled ? (
               <ToggleGroupItem value="attributes">年级班级</ToggleGroupItem>
             ) : null}
-            {faceSearch === undefined ? null : (
-              <ToggleGroupItem value="face">人脸</ToggleGroupItem>
-            )}
+            {faceSearch === undefined ? null : <ToggleGroupItem value="face">人脸</ToggleGroupItem>}
           </ToggleGroup>
 
           {mode === "number" && bibSearchEnabled ? (
