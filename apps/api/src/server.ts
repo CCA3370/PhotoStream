@@ -15,6 +15,7 @@ import {
 } from "./face/reference-storage.js";
 import { FaceService } from "./face/service.js";
 import { AliyunCdnInvalidator, LocalCdnInvalidator } from "./media/cdn-invalidator.js";
+import { MediaLikeService } from "./media/like-service.js";
 import { LiveEventBroker } from "./media/live-event-broker.js";
 import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
@@ -57,6 +58,10 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
+const likeService = new MediaLikeService({
+  database,
+  secret: config.VISITOR_SESSION_SECRET,
+});
 const userAdminService = new UserAdminService({
   database,
   passwordHasher: argon2PasswordHasher,
@@ -84,6 +89,7 @@ const app = await buildApp({
   config,
   authStore,
   photoService,
+  likeService,
   broker,
   userAdminService,
   operationsService,
