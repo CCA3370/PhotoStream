@@ -459,7 +459,7 @@ export function PhotoLightbox({
                       className={cn(
                         "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
                         downloadMenuOpen
-                          ? "max-w-[20rem] translate-x-0 opacity-100"
+                          ? "max-w-[24rem] translate-x-0 opacity-100"
                           : "pointer-events-none max-w-0 translate-x-4 opacity-0",
                       )}
                     >
@@ -471,8 +471,7 @@ export function PhotoLightbox({
                             kind="preview"
                             label="普通图"
                             mediaId={selected.id}
-                            showBytes={false}
-                            showIcon={false}
+                            onSuccess={() => setDownloadMenuOpen(false)}
                             slug={slug}
                           />
                         ) : null}
@@ -485,8 +484,7 @@ export function PhotoLightbox({
                             kind="original"
                             label="原图"
                             mediaId={selected.id}
-                            showBytes={false}
-                            showIcon={false}
+                            onSuccess={() => setDownloadMenuOpen(false)}
                             slug={slug}
                           />
                         ) : null}
