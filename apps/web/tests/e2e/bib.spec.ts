@@ -225,14 +225,20 @@ test("local OCR remains optional while confirmed bib search completes the passwo
       const unlock = viewerPage.getByRole("button", { name: "进入相册" });
       await expectReactHydrated(unlock);
       await unlock.click();
+      const findPhotos = viewerPage.getByRole("button", { name: "找照片", exact: true });
+      await expectReactHydrated(findPhotos);
+      await findPhotos.click();
       const searchInput = viewerPage.getByLabel("输入号码找照片");
       await expect(searchInput).toBeVisible();
       await searchInput.fill("101999");
-      await viewerPage.getByRole("button", { name: "查找照片" }).click();
+      await viewerPage.getByRole("button", { name: "查找", exact: true }).click();
       await expect(viewerPage.getByRole("button", { name: "打开活动照片" })).toBeVisible();
       expect(new URL(viewerPage.url()).search).not.toContain("101999");
       await expectNoAxeViolations(viewerPage);
       await viewerPage.reload();
+      const reloadedFindPhotos = viewerPage.getByRole("button", { name: "找照片", exact: true });
+      await expectReactHydrated(reloadedFindPhotos);
+      await reloadedFindPhotos.click();
       await expect(viewerPage.getByLabel("输入号码找照片")).toHaveValue("");
     } finally {
       await viewer.close();
