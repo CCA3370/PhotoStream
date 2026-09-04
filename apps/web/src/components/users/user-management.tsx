@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -117,12 +118,6 @@ export function UserManagement({
 
   return (
     <div className="flex flex-col gap-4">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>成员操作失败</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       {temporaryPassword === null ? null : (
         <Alert>
           <KeyRoundIcon aria-hidden="true" />
@@ -158,8 +153,9 @@ export function UserManagement({
                     { label: "管理员", value: "admin" },
                   ]}
                   onValueChange={(value) => {
-                    if (value === "admin" || value === "reviewer" || value === "uploader")
+                    if (value === "admin" || value === "reviewer" || value === "uploader") {
                       setRole(value);
+                    }
                   }}
                   value={role}
                 >
@@ -268,6 +264,7 @@ export function UserManagement({
           </Table>
         </CardContent>
       </Card>
+      <ErrorDialog message={error} onClose={() => setError(null)} title="成员操作失败" />
     </div>
   );
 }
