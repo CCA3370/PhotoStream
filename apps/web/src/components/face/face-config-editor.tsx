@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -87,6 +88,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
   const [saved, setSaved] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [statusErrorOpen, setStatusErrorOpen] = useState(false);
 
   const allDeclarations = confirmationFields.every(([key]) => readiness[key]);
   const systemGateReady =
@@ -100,6 +102,11 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
   const parsedRetentionDays = Number(retentionDays);
   const retentionValid =
     Number.isInteger(parsedRetentionDays) && parsedRetentionDays >= 1 && parsedRetentionDays <= 30;
+  const dialogError =
+    error ??
+    (statusErrorOpen && config.lastErrorCode !== null
+      ? `通用失败码：${config.lastErrorCode}`
+      : null);
 
   function accept(next: FaceConfigView, message: string): void {
     setConfig(next);
@@ -177,12 +184,6 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
 
   return (
     <div className="flex flex-col gap-4">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>操作未完成</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       {saved === null ? null : (
         <Alert>
           <AlertTitle>操作已接受</AlertTitle>
@@ -243,10 +244,11 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
             {dateTime(config.deletionDueAt)}
           </p>
           {config.lastErrorCode === null ? null : (
-            <p className="text-sm text-destructive">
-              <span className="block">通用失败码</span>
-              {config.lastErrorCode}
-            </p>
+            <div className="sm:col-span-2 lg:col-span-4">
+              <Button onClick={() => setStatusErrorOpen(true)} size="sm" type="button" variant="destructive">
+                查看失败详情
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -379,6 +381,14 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
           </AlertDialog>
         </CardContent>
       </Card>
+      <ErrorDialog
+        message={dialogError}
+        onClose={() => {
+          setError(null);
+          setStatusErrorOpen(false);
+        }}
+        title="人脸功能操作失败"
+      />
     </div>
   );
 }
