@@ -8,8 +8,6 @@ export interface PublicGalleryShellProps {
   readonly albumDescription?: string;
   readonly children: ReactNode;
   readonly status?: "直播中" | "已结束";
-  readonly privacyNotice?: string;
-  readonly complaintContact?: string;
 }
 
 export function PublicGalleryShell({
@@ -17,11 +15,9 @@ export function PublicGalleryShell({
   albumDescription = "",
   children,
   status = "直播中",
-  privacyNotice = "影像仅用于校内活动记录。",
-  complaintContact = "删除或投诉联系方式将在试运行前由学校确认。",
 }: PublicGalleryShellProps) {
   return (
-    <div className="public-theme min-h-screen bg-background text-foreground">
+    <div className="public-theme min-h-screen bg-background pb-8 text-foreground">
       <a
         className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
         href="#gallery-main"
@@ -58,10 +54,9 @@ export function PublicGalleryShell({
         {children}
       </main>
 
-      <footer className="mt-8 border-t">
-        <div className="mx-auto flex max-w-[1560px] flex-col gap-2 px-4 py-5 text-xs leading-5 text-muted-foreground sm:px-6 md:flex-row md:items-start md:justify-between lg:px-8">
-          <p>{privacyNotice || "影像仅用于校内活动记录。"}</p>
-          <p className="md:text-right">删除与投诉：{complaintContact || "请联系活动组织方。"}</p>
+      <footer className="fixed inset-x-0 bottom-0 z-40 h-8 border-t bg-background/95 backdrop-blur">
+        <div className="mx-auto flex h-full max-w-[1560px] items-center justify-center px-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
+          <p className="truncate">网站 © CCA3370 · 图像 © 学生会电视台</p>
         </div>
       </footer>
     </div>
