@@ -13,6 +13,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 
@@ -89,77 +90,72 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <form className="flex flex-col gap-5" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      {pageError === null ? null : (
-        <p
-          className="rounded-lg border border-destructive p-3 text-sm text-destructive"
-          role="alert"
+    <>
+      <form className="flex flex-col gap-5" noValidate onSubmit={form.handleSubmit(onSubmit)}>
+        <FieldGroup>
+          <Field data-invalid={form.formState.errors.currentPassword ? true : undefined}>
+            <FieldLabel htmlFor="current-password">当前临时密码</FieldLabel>
+            <InputGroup className="min-h-11">
+              <InputGroupAddon aria-hidden="true">
+                <KeyRoundIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-invalid={form.formState.errors.currentPassword ? true : undefined}
+                autoComplete="current-password"
+                id="current-password"
+                type="password"
+                {...form.register("currentPassword")}
+              />
+            </InputGroup>
+            <FieldError errors={[form.formState.errors.currentPassword]} />
+          </Field>
+          <Field data-invalid={form.formState.errors.newPassword ? true : undefined}>
+            <FieldLabel htmlFor="new-password">新密码</FieldLabel>
+            <InputGroup className="min-h-11">
+              <InputGroupAddon aria-hidden="true">
+                <LockKeyholeIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-invalid={form.formState.errors.newPassword ? true : undefined}
+                autoComplete="new-password"
+                id="new-password"
+                type="password"
+                {...form.register("newPassword")}
+              />
+            </InputGroup>
+            <FieldDescription>至少 12 位，不能与用户名相同或使用常见弱密码。</FieldDescription>
+            <FieldError errors={[form.formState.errors.newPassword]} />
+          </Field>
+          <Field data-invalid={form.formState.errors.confirmPassword ? true : undefined}>
+            <FieldLabel htmlFor="confirm-password">再次输入新密码</FieldLabel>
+            <InputGroup className="min-h-11">
+              <InputGroupAddon aria-hidden="true">
+                <LockKeyholeIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-invalid={form.formState.errors.confirmPassword ? true : undefined}
+                autoComplete="new-password"
+                id="confirm-password"
+                type="password"
+                {...form.register("confirmPassword")}
+              />
+            </InputGroup>
+            <FieldError errors={[form.formState.errors.confirmPassword]} />
+          </Field>
+        </FieldGroup>
+        <Button
+          className="min-h-11"
+          disabled={csrfToken === null || form.formState.isSubmitting || isPending}
+          type="submit"
         >
-          {pageError}
-        </p>
-      )}
-      <FieldGroup>
-        <Field data-invalid={form.formState.errors.currentPassword ? true : undefined}>
-          <FieldLabel htmlFor="current-password">当前临时密码</FieldLabel>
-          <InputGroup className="min-h-11">
-            <InputGroupAddon aria-hidden="true">
-              <KeyRoundIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-invalid={form.formState.errors.currentPassword ? true : undefined}
-              autoComplete="current-password"
-              id="current-password"
-              type="password"
-              {...form.register("currentPassword")}
-            />
-          </InputGroup>
-          <FieldError errors={[form.formState.errors.currentPassword]} />
-        </Field>
-        <Field data-invalid={form.formState.errors.newPassword ? true : undefined}>
-          <FieldLabel htmlFor="new-password">新密码</FieldLabel>
-          <InputGroup className="min-h-11">
-            <InputGroupAddon aria-hidden="true">
-              <LockKeyholeIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-invalid={form.formState.errors.newPassword ? true : undefined}
-              autoComplete="new-password"
-              id="new-password"
-              type="password"
-              {...form.register("newPassword")}
-            />
-          </InputGroup>
-          <FieldDescription>至少 12 位，不能与用户名相同或使用常见弱密码。</FieldDescription>
-          <FieldError errors={[form.formState.errors.newPassword]} />
-        </Field>
-        <Field data-invalid={form.formState.errors.confirmPassword ? true : undefined}>
-          <FieldLabel htmlFor="confirm-password">再次输入新密码</FieldLabel>
-          <InputGroup className="min-h-11">
-            <InputGroupAddon aria-hidden="true">
-              <LockKeyholeIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-invalid={form.formState.errors.confirmPassword ? true : undefined}
-              autoComplete="new-password"
-              id="confirm-password"
-              type="password"
-              {...form.register("confirmPassword")}
-            />
-          </InputGroup>
-          <FieldError errors={[form.formState.errors.confirmPassword]} />
-        </Field>
-      </FieldGroup>
-      <Button
-        className="min-h-11"
-        disabled={csrfToken === null || form.formState.isSubmitting || isPending}
-        type="submit"
-      >
-        {csrfToken === null
-          ? "正在验证会话…"
-          : form.formState.isSubmitting || isPending
-            ? "正在保存…"
-            : "保存新密码"}
-      </Button>
-    </form>
+          {csrfToken === null
+            ? "正在验证会话…"
+            : form.formState.isSubmitting || isPending
+              ? "正在保存…"
+              : "保存新密码"}
+        </Button>
+      </form>
+      <ErrorDialog message={pageError} onClose={() => setPageError(null)} title="修改密码失败" />
+    </>
   );
 }
