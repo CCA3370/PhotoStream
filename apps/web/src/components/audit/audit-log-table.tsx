@@ -3,10 +3,10 @@
 import type { AuditLogList, AuditLogView } from "@photostream/contracts";
 import { useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
   Table,
   TableBody,
@@ -48,12 +48,6 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
 
   return (
     <div className="flex flex-col gap-4">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>无法加载更多审计记录</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       <Card>
         <CardHeader>
           <CardTitle>操作记录</CardTitle>
@@ -103,6 +97,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
           {pending ? "正在加载…" : "加载更早记录"}
         </Button>
       )}
+      <ErrorDialog message={error} onClose={() => setError(null)} title="无法加载审计记录" />
     </div>
   );
 }
