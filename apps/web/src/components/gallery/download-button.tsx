@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
+import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 
 interface SignedDownload {
@@ -70,6 +71,12 @@ export function DownloadButton({
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      toast.add({
+        title: "下载成功",
+        description: signed.filename,
+        type: "success",
+        timeout: 3_000,
+      });
     } catch (caught) {
       setError(downloadErrorMessage(caught));
     } finally {
