@@ -76,7 +76,7 @@ export function PhotoLikeButton({
       aria-hidden="true"
       className={cn(
         mode === "thumbnail" ? "size-3.5" : "size-4",
-        "transition-colors",
+        "transition-[color,fill] duration-150",
         liked && "fill-rose-500 text-rose-500",
       )}
     />
@@ -89,7 +89,7 @@ export function PhotoLikeButton({
           aria-label={liked ? "取消点赞" : "点赞"}
           aria-pressed={liked}
           className={cn(
-            "h-6 gap-1 border-0 bg-transparent px-0.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white active:not-aria-[haspopup]:translate-y-0",
+            "relative top-0.5 h-6 gap-0.5 border-0 bg-transparent px-0.5 text-white shadow-none drop-shadow-sm transition-opacity hover:bg-transparent hover:text-white hover:opacity-90 active:not-aria-[haspopup]:translate-y-0",
             className,
           )}
           disabled={pending || state === null}
@@ -98,7 +98,7 @@ export function PhotoLikeButton({
           variant="ghost"
         >
           {heart}
-          <span className="min-w-2.5 text-[10px] leading-none font-semibold tabular-nums">
+          <span className="min-w-2 text-[10px] leading-none font-semibold tracking-tight tabular-nums">
             {state === null ? "…" : state.count}
           </span>
         </Button>
@@ -115,7 +115,7 @@ export function PhotoLikeButton({
         aria-label={liked ? "取消点赞" : "点赞"}
         aria-pressed={liked}
         className={cn(
-          "fixed bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+3.75rem)] left-3 z-[70] h-9 gap-1.5 rounded-full border-white/15 bg-black/35 px-3 text-white shadow-sm backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:bottom-14 sm:left-4",
+          "fixed right-3 bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4rem)] z-[70] h-9 gap-1.5 rounded-full border-white/10 bg-black/30 px-3 text-white shadow-lg shadow-black/20 backdrop-blur-xl transition-[background-color,border-color,opacity] hover:border-white/20 hover:bg-white/[0.12] hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:right-4 sm:bottom-16",
           className,
         )}
         disabled={pending || state === null}
@@ -125,7 +125,7 @@ export function PhotoLikeButton({
         variant="outline"
       >
         {heart}
-        <span className="min-w-3 text-xs font-medium tabular-nums">
+        <span className="min-w-3 text-[11px] font-medium tracking-tight tabular-nums text-white/90">
           {state === null ? "…" : state.count}
         </span>
       </Button>
