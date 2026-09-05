@@ -353,10 +353,7 @@ export function DashboardView({
   return (
     <section aria-label="首页统计" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Link
-          className={buttonVariants({ size: "sm", variant: "outline" })}
-          href="/studio/albums"
-        >
+        <Link className={buttonVariants({ size: "sm", variant: "outline" })} href="/studio/albums">
           管理活动
         </Link>
         {canCreateAlbum ? <CreateAlbumForm /> : null}
