@@ -179,7 +179,7 @@ export function StudioShell({
                   </Badge>
                 </div>
                 <Button
-                  className="size-8 shrink-0 group-data-[collapsible=icon]:hidden"
+                  className="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25 group-data-[collapsible=icon]:hidden"
                   disabled={loggingOut}
                   onClick={() => void logout()}
                   size="icon-sm"
