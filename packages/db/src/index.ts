@@ -2,10 +2,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
+import * as featuredSchema from "./featured-schema.js";
 import * as likesSchema from "./likes-schema.js";
 import * as coreSchema from "./schema.js";
 
-export const schema = { ...coreSchema, ...likesSchema };
+export const schema = { ...coreSchema, ...likesSchema, ...featuredSchema };
 
 export type Database = ReturnType<typeof createDatabase>;
 
