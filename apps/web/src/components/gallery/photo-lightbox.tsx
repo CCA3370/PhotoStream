@@ -30,6 +30,8 @@ import { cn } from "@/lib/utils";
 
 const minZoom = 1;
 const maxZoom = 5;
+const toolbarButtonClass =
+  "rounded-lg border-white/10 bg-white/[0.06] text-white shadow-none backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12] hover:text-white active:not-aria-[haspopup]:translate-y-0 disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35";
 
 type Point = { x: number; y: number };
 type Gesture =
@@ -378,9 +380,19 @@ export function PhotoLightbox({
             </>
           ) : null}
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
-            <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-2 text-xs text-white/70">
+          {slug === undefined ? null : (
+            <PhotoLikeButton
+              mediaId={selected.id}
+              mode="toolbar"
+              onChange={onLikeChange}
+              slug={slug}
+              state={selectedLikeState}
+            />
+          )}
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
+            <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex items-center gap-2 text-[11px] text-white/60 sm:text-xs">
                 <span>
                   {selected.width} × {selected.height}
                 </span>
@@ -388,25 +400,21 @@ export function PhotoLightbox({
                 <span>{Math.round(zoom * 100)}%</span>
               </div>
 
-              <div className="flex w-full max-w-full items-center overflow-hidden rounded-xl border border-white/15 bg-black/35 p-1 backdrop-blur-md sm:ml-auto sm:w-auto">
+              <div className="flex w-full max-w-full items-center gap-1.5 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl sm:ml-auto sm:w-auto">
                 <div
                   aria-hidden={downloadMenuOpen}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-1 overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
+                    "flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                     downloadMenuOpen
                       ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
-                      : canDownload && slug !== undefined
-                        ? "max-w-[45%] translate-x-0 opacity-100 sm:max-w-48"
-                        : slug !== undefined
-                          ? "max-w-[80%] translate-x-0 opacity-100 sm:max-w-48"
-                          : canDownload
-                            ? "max-w-[65%] translate-x-0 opacity-100 sm:max-w-48"
-                            : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
+                      : canDownload
+                        ? "max-w-[65%] translate-x-0 border-r border-white/10 pr-1.5 opacity-100 sm:max-w-48"
+                        : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
                   )}
                 >
                   <Button
                     aria-label="缩小"
-                    className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
+                    className={cn(toolbarButtonClass, "size-8 shrink-0")}
                     disabled={zoom <= minZoom}
                     onClick={() => changeZoom(zoom - 0.5)}
                     size="icon-sm"
@@ -418,7 +426,7 @@ export function PhotoLightbox({
                   </Button>
                   <Button
                     aria-label="恢复适应屏幕"
-                    className="min-w-14 flex-1 border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:flex-none"
+                    className={cn(toolbarButtonClass, "min-w-16 flex-1 px-2.5 sm:flex-none")}
                     disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
                     onClick={resetView}
                     size="sm"
@@ -431,7 +439,7 @@ export function PhotoLightbox({
                   </Button>
                   <Button
                     aria-label="放大"
-                    className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
+                    className={cn(toolbarButtonClass, "size-8 shrink-0")}
                     disabled={zoom >= maxZoom}
                     onClick={() => changeZoom(zoom + 0.5)}
                     size="icon-sm"
@@ -442,26 +450,6 @@ export function PhotoLightbox({
                     <PlusIcon />
                   </Button>
                 </div>
-
-                {slug === undefined ? null : (
-                  <div
-                    aria-hidden={downloadMenuOpen}
-                    className={cn(
-                      "flex min-w-0 items-center justify-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
-                      downloadMenuOpen
-                        ? "pointer-events-none max-w-0 opacity-0"
-                        : "max-w-[20%] opacity-100 sm:max-w-20",
-                    )}
-                  >
-                    <PhotoLikeButton
-                      mediaId={selected.id}
-                      mode="toolbar"
-                      onChange={onLikeChange}
-                      slug={slug}
-                      state={selectedLikeState}
-                    />
-                  </div>
-                )}
 
                 {canDownload ? (
                   <>
@@ -475,7 +463,10 @@ export function PhotoLightbox({
                       )}
                     >
                       <Button
-                        className="h-8 w-full border-white/15 bg-black/35 px-2 text-xs text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:w-auto sm:px-3 sm:text-[0.8rem]"
+                        className={cn(
+                          toolbarButtonClass,
+                          "h-8 w-full px-2 text-xs sm:w-auto sm:px-3 sm:text-[0.8rem]",
+                        )}
                         onClick={() => setDownloadMenuOpen(true)}
                         size="sm"
                         type="button"
@@ -495,11 +486,14 @@ export function PhotoLightbox({
                           : "pointer-events-none max-w-0 translate-x-4 opacity-0",
                       )}
                     >
-                      <div className="flex w-full min-w-0 items-center gap-1">
+                      <div className="flex w-full min-w-0 items-center gap-1.5">
                         {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
                           <DownloadButton
                             bytes={preview1920.bytes}
-                            className="h-8 min-w-0 flex-1 shrink border-white/15 bg-black/35 px-1.5 text-[11px] text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]"
+                            className={cn(
+                              toolbarButtonClass,
+                              "h-8 min-w-0 flex-1 shrink px-1.5 text-[11px] sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]",
+                            )}
                             kind="preview"
                             label="普通图"
                             mediaId={selected.id}
@@ -512,7 +506,10 @@ export function PhotoLightbox({
                         selected.downloads.originalBytes !== null ? (
                           <DownloadButton
                             bytes={selected.downloads.originalBytes}
-                            className="h-8 min-w-0 flex-1 shrink border-white/15 bg-black/35 px-1.5 text-[11px] text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]"
+                            className={cn(
+                              toolbarButtonClass,
+                              "h-8 min-w-0 flex-1 shrink px-1.5 text-[11px] sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]",
+                            )}
                             kind="original"
                             label="原图"
                             mediaId={selected.id}
@@ -522,7 +519,7 @@ export function PhotoLightbox({
                         ) : null}
                         <Button
                           aria-label="收起下载选项"
-                          className="size-8 shrink-0 rounded-lg border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
+                          className={cn(toolbarButtonClass, "size-8 shrink-0")}
                           onClick={() => setDownloadMenuOpen(false)}
                           size="icon-sm"
                           title="收起下载选项"
