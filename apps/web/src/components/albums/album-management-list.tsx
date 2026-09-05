@@ -1,13 +1,7 @@
 "use client";
 
 import type { AlbumSummaryView, UserRole } from "@photostream/contracts";
-import {
-  ArrowRightIcon,
-  HardDriveIcon,
-  ImageIcon,
-  InboxIcon,
-  SearchIcon,
-} from "lucide-react";
+import { ArrowRightIcon, HardDriveIcon, ImageIcon, InboxIcon, SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -71,7 +65,9 @@ export function AlbumManagementList({
     return albums.filter((album) => {
       if (filter !== "all" && album.state !== filter) return false;
       if (normalizedQuery.length === 0) return true;
-      return `${album.title}\n${album.description}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
+      return `${album.title}\n${album.description}`
+        .toLocaleLowerCase("zh-CN")
+        .includes(normalizedQuery);
     });
   }, [albums, filter, query]);
 
@@ -120,7 +116,9 @@ export function AlbumManagementList({
           <div className="divide-y">
             {visibleAlbums.map((album) => {
               const href =
-                role === "uploader" ? `/studio/albums/${album.id}/upload` : `/studio/albums/${album.id}`;
+                role === "uploader"
+                  ? `/studio/albums/${album.id}/upload`
+                  : `/studio/albums/${album.id}`;
               return (
                 <div
                   className="grid gap-3 px-4 py-3 transition-colors hover:bg-muted/25 lg:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)_auto] lg:items-center"
@@ -134,7 +132,9 @@ export function AlbumManagementList({
                       </Badge>
                     </div>
                     {album.description.length === 0 ? null : (
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{album.description}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {album.description}
+                      </p>
                     )}
                     <p className="mt-1.5 text-xs text-muted-foreground">
                       {album.access === "password" ? "口令访问" : "公开访问"}
@@ -147,14 +147,20 @@ export function AlbumManagementList({
 
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="flex min-w-0 items-center gap-2">
-                      <ImageIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                      <ImageIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
                       <span className="truncate">
                         <span className="font-medium tabular-nums">{album.mediaCount}</span>{" "}
                         <span className="text-muted-foreground">照片</span>
                       </span>
                     </div>
                     <div className="flex min-w-0 items-center gap-2">
-                      <InboxIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                      <InboxIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
                       <span className="truncate">
                         <span className="font-medium tabular-nums">{album.pendingReviewCount}</span>{" "}
                         <span className="text-muted-foreground">待审核</span>
