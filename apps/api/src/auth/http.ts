@@ -55,3 +55,15 @@ export async function requireInternalCsrf(
   authService.verifyCsrf(session.rawToken, typeof csrfHeader === "string" ? csrfHeader : undefined);
   return session;
 }
+
+export async function verifyPasswordConfirmation(
+  request: FastifyRequest,
+  authService: AuthService,
+  session: AuthenticatedSession,
+): Promise<void> {
+  const passwordHeader = request.headers["x-confirm-password"];
+  await authService.verifyCurrentPassword(
+    session,
+    typeof passwordHeader === "string" ? passwordHeader : undefined,
+  );
+}
