@@ -57,6 +57,7 @@ export default async function GalleryPage({
         }
       : null;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== null;
+  const sectionTitle = category?.name ?? "全部照片";
 
   return (
     <PublicGalleryShell
@@ -65,37 +66,54 @@ export default async function GalleryPage({
       status={album.state === "live" ? "直播中" : "已结束"}
     >
       <AlbumOpenTracker slug={slug} />
-      <nav
-        aria-label="相册分类"
-        className="sticky top-0 z-20 -mx-4 mb-4 flex gap-2 overflow-x-auto border-y bg-background/95 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
-      >
-        <Link
-          className={cn(
-            buttonVariants({ variant: category === undefined ? "default" : "outline", size: "sm" }),
-            "shrink-0 rounded-full px-4",
-          )}
-          href={`/g/${slug}`}
-        >
-          全部
-        </Link>
-        {album.categories.map((category) => (
-          <Link
-            className={cn(
-              buttonVariants({
-                variant: requestedCategory === category.id ? "default" : "outline",
-                size: "sm",
-              }),
-              "shrink-0 rounded-full px-4",
-            )}
-            href={`/g/${slug}?category=${category.id}`}
-            key={category.id}
-          >
-            {category.name}
-          </Link>
-        ))}
-      </nav>
 
-      <section aria-label={category?.name ?? "全部照片"} className="flex flex-col gap-4">
+      {album.categories.length === 0 ? null : (
+        <nav
+          aria-label="相册分类"
+          className="sticky top-2 z-20 mb-5 flex gap-1.5 overflow-x-auto rounded-2xl border bg-background/90 p-1.5 shadow-sm backdrop-blur-xl"
+        >
+          <Link
+            aria-current={category === undefined ? "page" : undefined}
+            className={cn(
+              buttonVariants({ variant: category === undefined ? "default" : "ghost", size: "sm" }),
+              "h-8 shrink-0 rounded-xl px-3.5",
+            )}
+            href={`/g/${slug}`}
+          >
+            全部
+          </Link>
+          {album.categories.map((albumCategory) => {
+            const selected = requestedCategory === albumCategory.id;
+            return (
+              <Link
+                aria-current={selected ? "page" : undefined}
+                className={cn(
+                  buttonVariants({ variant: selected ? "default" : "ghost", size: "sm" }),
+                  "h-8 shrink-0 rounded-xl px-3.5",
+                )}
+                href={`/g/${slug}?category=${albumCategory.id}`}
+                key={albumCategory.id}
+              >
+                {albumCategory.name}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
+
+      <section aria-label={sectionTitle} className="flex flex-col gap-5">
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium tracking-wide text-muted-foreground">PHOTO GALLERY</p>
+            <h2 className="mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-xl">
+              {sectionTitle}
+            </h2>
+          </div>
+          {album.state === "live" ? (
+            <p className="shrink-0 text-[11px] text-muted-foreground sm:text-xs">新照片自动更新</p>
+          ) : null}
+        </div>
+
         {searchAvailable ? (
           <BibSearchPanel
             attributeFilterEnabled={album.bibAttributeFilterEnabled}
