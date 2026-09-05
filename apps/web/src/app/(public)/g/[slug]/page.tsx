@@ -22,10 +22,12 @@ export default async function GalleryPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; featured?: string }>;
 }) {
   const { slug } = await params;
-  const requestedCategory = (await searchParams).category;
+  const query = await searchParams;
+  const requestedCategory = query.category;
+  const featuredOnly = query.featured === "1";
   const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
   if (album.accessRequired) {
     return (
@@ -41,7 +43,9 @@ export default async function GalleryPage({
     );
   }
 
-  const category = album.categories.find((candidate) => candidate.id === requestedCategory);
+  const category = featuredOnly
+    ? undefined
+    : album.categories.find((candidate) => candidate.id === requestedCategory);
   const mediaPath = new URLSearchParams({ limit: "30" });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
   const media = await serverApi<MediaList>(
@@ -57,7 +61,7 @@ export default async function GalleryPage({
         }
       : null;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== null;
-  const sectionTitle = category?.name ?? "全部照片";
+  const sectionTitle = featuredOnly ? "精选照片" : category?.name ?? "全部照片";
 
   return (
     <PublicGalleryShell
@@ -67,44 +71,55 @@ export default async function GalleryPage({
     >
       <AlbumOpenTracker slug={slug} />
 
-      {album.categories.length === 0 ? null : (
-        <nav
-          aria-label="相册分类"
-          className="sticky top-2 z-20 mb-5 flex gap-1.5 overflow-x-auto rounded-2xl border bg-background/90 p-1.5 shadow-sm backdrop-blur-xl"
+      <nav
+        aria-label="相册筛选"
+        className="sticky top-2 z-20 mb-5 flex gap-1.5 overflow-x-auto rounded-2xl border bg-background/90 p-1.5 shadow-sm backdrop-blur-xl"
+      >
+        <Link
+          aria-current={!featuredOnly && category === undefined ? "page" : undefined}
+          className={cn(
+            buttonVariants({
+              variant: !featuredOnly && category === undefined ? "default" : "ghost",
+              size: "sm",
+            }),
+            "h-8 shrink-0 rounded-xl px-3.5",
+          )}
+          href={`/g/${slug}`}
         >
-          <Link
-            aria-current={category === undefined ? "page" : undefined}
-            className={cn(
-              buttonVariants({ variant: category === undefined ? "default" : "ghost", size: "sm" }),
-              "h-8 shrink-0 rounded-xl px-3.5",
-            )}
-            href={`/g/${slug}`}
-          >
-            全部
-          </Link>
-          {album.categories.map((albumCategory) => {
-            const selected = requestedCategory === albumCategory.id;
-            return (
-              <Link
-                aria-current={selected ? "page" : undefined}
-                className={cn(
-                  buttonVariants({ variant: selected ? "default" : "ghost", size: "sm" }),
-                  "h-8 shrink-0 rounded-xl px-3.5",
-                )}
-                href={`/g/${slug}?category=${albumCategory.id}`}
-                key={albumCategory.id}
-              >
-                {albumCategory.name}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+          全部
+        </Link>
+        <Link
+          aria-current={featuredOnly ? "page" : undefined}
+          className={cn(
+            buttonVariants({ variant: featuredOnly ? "default" : "ghost", size: "sm" }),
+            "h-8 shrink-0 rounded-xl px-3.5",
+          )}
+          href={`/g/${slug}?featured=1`}
+        >
+          精选
+        </Link>
+        {album.categories.map((albumCategory) => {
+          const selected = !featuredOnly && requestedCategory === albumCategory.id;
+          return (
+            <Link
+              aria-current={selected ? "page" : undefined}
+              className={cn(
+                buttonVariants({ variant: selected ? "default" : "ghost", size: "sm" }),
+                "h-8 shrink-0 rounded-xl px-3.5",
+              )}
+              href={`/g/${slug}?category=${albumCategory.id}`}
+              key={albumCategory.id}
+            >
+              {albumCategory.name}
+            </Link>
+          );
+        })}
+      </nav>
 
       <section aria-label={sectionTitle} className="flex flex-col gap-5">
         <h2 className="truncate text-lg font-semibold tracking-tight sm:text-xl">{sectionTitle}</h2>
 
-        {searchAvailable ? (
+        {searchAvailable && !featuredOnly ? (
           <BibSearchPanel
             attributeFilterEnabled={album.bibAttributeFilterEnabled}
             attributeOptions={album.bibAttributeOptions}
@@ -125,8 +140,9 @@ export default async function GalleryPage({
         ) : (
           <PaginatedMediaGrid
             {...(category === undefined ? {} : { categoryId: category.id })}
+            featuredOnly={featuredOnly}
             initialPage={media}
-            key={category?.id ?? "all"}
+            key={featuredOnly ? "featured" : category?.id ?? "all"}
             slug={slug}
           />
         )}
