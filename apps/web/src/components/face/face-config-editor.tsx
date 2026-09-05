@@ -176,10 +176,13 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
 
   async function deleteIndex(password: string): Promise<void> {
     if (deleteConfirmation !== "删除人脸索引") return;
-    const next = await clientMutation<FaceConfigView>(`/api/v1/albums/${config.albumId}/face-index`, {
-      method: "DELETE",
-      confirmPassword: password,
-    });
+    const next = await clientMutation<FaceConfigView>(
+      `/api/v1/albums/${config.albumId}/face-index`,
+      {
+        method: "DELETE",
+        confirmPassword: password,
+      },
+    );
     accept(next, "整册人脸索引删除任务已建立");
     setDeleteOpen(false);
     setDeleteConfirmation("");
@@ -348,9 +351,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
                 <AlertDialogTitle>删除整册人脸索引？</AlertDialogTitle>
               </AlertDialogHeader>
               <Field>
-                <FieldLabel htmlFor="face-delete-confirmation">
-                  输入“删除人脸索引”确认
-                </FieldLabel>
+                <FieldLabel htmlFor="face-delete-confirmation">输入“删除人脸索引”确认</FieldLabel>
                 <Input
                   id="face-delete-confirmation"
                   onChange={(event) => setDeleteConfirmation(event.currentTarget.value)}
