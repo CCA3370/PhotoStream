@@ -97,7 +97,7 @@ export async function registerFeaturedRoutes(
       const token = visitorSessionToken(request, options.config, request.params.slug);
       const album = await options.photoService.getPublicAlbum(request.params.slug, token);
       void reply.header("cache-control", "no-store");
-      if (album.accessRequired) return { mediaIds: [] };
+      if (album.view.accessRequired) return { mediaIds: [] };
       return { mediaIds: await options.featuredService.listPublishedBySlug(request.params.slug) };
     },
   );
