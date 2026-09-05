@@ -131,6 +131,27 @@ export class AuthService {
     }
   }
 
+  async verifyCurrentPassword(
+    session: AuthenticatedSession,
+    candidate: string | undefined,
+  ): Promise<void> {
+    if (candidate === undefined || candidate.length === 0) {
+      throw new AppError({
+        code: "AUTH_INVALID_CREDENTIALS",
+        message: "请输入当前密码确认操作",
+        statusCode: 401,
+      });
+    }
+    const valid = await this.#hasher.verify(session.record.user.passwordHash, candidate);
+    if (!valid) {
+      throw new AppError({
+        code: "AUTH_INVALID_CREDENTIALS",
+        message: "当前密码错误",
+        statusCode: 401,
+      });
+    }
+  }
+
   async changePassword(options: {
     session: AuthenticatedSession;
     currentPassword: string;
