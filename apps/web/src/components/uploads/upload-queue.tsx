@@ -14,15 +14,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { processPhotoInWorker } from "@/lib/photo-processing";
 import {
   createLocalReviewPhoto,
   deleteLocalReviewPhoto,
+  type LocalReviewPhoto,
   listLocalReviewPhotos,
   localQueueSupported,
   putLocalReviewPhoto,
-  type LocalReviewPhoto,
 } from "@/lib/local-review-queue";
+import { processPhotoInWorker } from "@/lib/photo-processing";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
@@ -57,7 +57,8 @@ export function UploadQueue({
     const rows = await listLocalReviewPhotos(albumId);
     for (const url of previewUrls.current) URL.revokeObjectURL(url);
     const next = rows.map((photo) => {
-      const preview = photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
+      const preview =
+        photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
       return { photo, url: URL.createObjectURL(preview) };
     });
     previewUrls.current = next.map((item) => item.url);
@@ -105,9 +106,7 @@ export function UploadQueue({
           );
           completed += 1;
         } catch (error) {
-          setMessage(
-            `${file.name}：${error instanceof Error ? error.message : "本地处理失败"}`,
-          );
+          setMessage(`${file.name}：${error instanceof Error ? error.message : "本地处理失败"}`);
         }
       }
       if (completed > 0) setMessage(`已加入本地审核队列 ${completed} 张`);
@@ -143,7 +142,12 @@ export function UploadQueue({
             </SelectGroup>
           </SelectContent>
         </Select>
-        <Button disabled={processing} onClick={() => inputRef.current?.click()} size="sm" type="button">
+        <Button
+          disabled={processing}
+          onClick={() => inputRef.current?.click()}
+          size="sm"
+          type="button"
+        >
           <ImagePlusIcon data-icon="inline-start" />
           {processing ? "正在本地处理…" : "选择图片"}
         </Button>
@@ -201,7 +205,10 @@ export function UploadQueue({
       {items.length === 0 ? null : (
         <div className="grid grid-cols-3 gap-1 sm:grid-cols-5 lg:grid-cols-7 2xl:grid-cols-9">
           {items.map(({ photo, url }) => (
-            <div className="group relative aspect-square overflow-hidden rounded-md bg-muted" key={photo.id}>
+            <div
+              className="group relative aspect-square overflow-hidden rounded-md bg-muted"
+              key={photo.id}
+            >
               <Image
                 alt="本地待审核图片"
                 className="object-cover"
