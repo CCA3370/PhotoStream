@@ -69,7 +69,7 @@ function MediaTile({
         <Maximize2Icon aria-hidden="true" className="size-4" />
       </div>
       {slug === undefined ? null : (
-        <div className="absolute bottom-2 left-2 z-20">
+        <div className="absolute bottom-1 left-1 z-20">
           <PhotoLikeButton
             mediaId={media.id}
             mode="thumbnail"
