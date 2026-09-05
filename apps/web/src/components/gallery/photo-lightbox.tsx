@@ -378,6 +378,18 @@ export function PhotoLightbox({
             </>
           ) : null}
 
+          {slug === undefined ? null : (
+            <div className="pointer-events-auto absolute bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+5.25rem)] left-3 z-20 sm:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+3.75rem)] sm:left-4">
+              <PhotoLikeButton
+                mediaId={selected.id}
+                mode="toolbar"
+                onChange={onLikeChange}
+                slug={slug}
+                state={selectedLikeState}
+              />
+            </div>
+          )}
+
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
             <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-center gap-2 text-xs text-white/70">
@@ -395,13 +407,9 @@ export function PhotoLightbox({
                     "flex min-w-0 flex-1 items-center gap-1 overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                     downloadMenuOpen
                       ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
-                      : canDownload && slug !== undefined
-                        ? "max-w-[45%] translate-x-0 opacity-100 sm:max-w-48"
-                        : slug !== undefined
-                          ? "max-w-[80%] translate-x-0 opacity-100 sm:max-w-48"
-                          : canDownload
-                            ? "max-w-[65%] translate-x-0 opacity-100 sm:max-w-48"
-                            : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
+                      : canDownload
+                        ? "max-w-[60%] translate-x-0 opacity-100 sm:max-w-48"
+                        : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
                   )}
                 >
                   <Button
@@ -443,26 +451,6 @@ export function PhotoLightbox({
                   </Button>
                 </div>
 
-                {slug === undefined ? null : (
-                  <div
-                    aria-hidden={downloadMenuOpen}
-                    className={cn(
-                      "flex min-w-0 items-center justify-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
-                      downloadMenuOpen
-                        ? "pointer-events-none max-w-0 opacity-0"
-                        : "max-w-[20%] opacity-100 sm:max-w-20",
-                    )}
-                  >
-                    <PhotoLikeButton
-                      mediaId={selected.id}
-                      mode="toolbar"
-                      onChange={onLikeChange}
-                      slug={slug}
-                      state={selectedLikeState}
-                    />
-                  </div>
-                )}
-
                 {canDownload ? (
                   <>
                     <div
@@ -471,7 +459,7 @@ export function PhotoLightbox({
                         "flex min-w-0 flex-1 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
                         downloadMenuOpen
                           ? "pointer-events-none max-w-0 translate-x-2 opacity-0"
-                          : "max-w-[35%] translate-x-0 opacity-100 sm:max-w-36",
+                          : "max-w-[40%] translate-x-0 opacity-100 sm:max-w-36",
                       )}
                     >
                       <Button
