@@ -97,7 +97,7 @@ export class DashboardService {
         schema.analyticsEvents.createdAt,
       );
 
-    const [trend, mediaAggregate, storageAggregate, topPhotos] = await Promise.all([
+    const [trend, mediaAggregate, storageAggregate, topPhotos, topLikedPhotos] = await Promise.all([
       this.#database
         .select({
           bucket: bucketExpression,
@@ -171,6 +171,38 @@ export class DashboardService {
         )
         .orderBy(desc(sql`count(${schema.analyticsEvents.id})`), desc(schema.media.publishSequence))
         .limit(options.limit),
+      this.#database
+        .select({
+          mediaId: schema.media.id,
+          albumId: schema.albums.id,
+          albumTitle: schema.albums.title,
+          publishSequence: schema.media.publishSequence,
+          capturedAt: schema.media.capturedAt,
+          likes: sql<number>`count(${schema.mediaLikes.id})::int`,
+          thumbnailObjectKey: schema.mediaVariants.objectKey,
+        })
+        .from(schema.mediaLikes)
+        .innerJoin(schema.media, eq(schema.mediaLikes.mediaId, schema.media.id))
+        .innerJoin(schema.albums, eq(schema.media.albumId, schema.albums.id))
+        .leftJoin(
+          schema.mediaVariants,
+          and(
+            eq(schema.mediaVariants.mediaId, schema.media.id),
+            eq(schema.mediaVariants.kind, "photo_480"),
+            eq(schema.mediaVariants.verified, true),
+          ),
+        )
+        .where(sql`${schema.media.publicationStatus} <> 'deleted'`)
+        .groupBy(
+          schema.media.id,
+          schema.albums.id,
+          schema.albums.title,
+          schema.media.publishSequence,
+          schema.media.capturedAt,
+          schema.mediaVariants.objectKey,
+        )
+        .orderBy(desc(sql`count(${schema.mediaLikes.id})`), desc(schema.media.publishSequence))
+        .limit(options.limit),
     ]);
 
     const totals = trend.reduce(
@@ -189,6 +221,14 @@ export class DashboardService {
       );
 
     const thumbnailExpiresAt = new Date(now.getTime() + thumbnailValidityMs);
+    const thumbnailUrl = (objectKey: string | null) =>
+      objectKey === null
+        ? null
+        : this.#storage.signRead({
+            key: objectKey,
+            expiresAt: thumbnailExpiresAt,
+          });
+
     return {
       from: from.toISOString(),
       to: to.toISOString(),
@@ -213,13 +253,18 @@ export class DashboardService {
           albumTitle: row.albumTitle,
           publishSequence: row.publishSequence as number,
           downloads: row.downloads,
-          thumbnailUrl:
-            row.thumbnailObjectKey === null
-              ? null
-              : this.#storage.signRead({
-                  key: row.thumbnailObjectKey,
-                  expiresAt: thumbnailExpiresAt,
-                }),
+          thumbnailUrl: thumbnailUrl(row.thumbnailObjectKey),
+          capturedAt: row.capturedAt?.toISOString() ?? null,
+        })),
+      topLikedPhotos: topLikedPhotos
+        .filter((row) => row.publishSequence !== null)
+        .map((row) => ({
+          mediaId: row.mediaId,
+          albumId: row.albumId,
+          albumTitle: row.albumTitle,
+          publishSequence: row.publishSequence as number,
+          likes: row.likes,
+          thumbnailUrl: thumbnailUrl(row.thumbnailObjectKey),
           capturedAt: row.capturedAt?.toISOString() ?? null,
         })),
     };
