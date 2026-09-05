@@ -61,7 +61,7 @@ export default async function GalleryPage({
         }
       : null;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== null;
-  const sectionTitle = featuredOnly ? "精选照片" : category?.name ?? "全部照片";
+  const sectionTitle = featuredOnly ? "精选照片" : (category?.name ?? "全部照片");
 
   return (
     <PublicGalleryShell
@@ -142,7 +142,7 @@ export default async function GalleryPage({
             {...(category === undefined ? {} : { categoryId: category.id })}
             featuredOnly={featuredOnly}
             initialPage={media}
-            key={featuredOnly ? "featured" : category?.id ?? "all"}
+            key={featuredOnly ? "featured" : (category?.id ?? "all")}
             slug={slug}
           />
         )}
