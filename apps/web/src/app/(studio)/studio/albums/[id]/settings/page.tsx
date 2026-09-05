@@ -19,15 +19,16 @@ export default async function AlbumSettingsPage({ params }: { params: Promise<{ 
     serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
     serverApi<FaceConfigView>(`/api/v1/albums/${id}/face-config`),
   ]);
+
   return (
     <section aria-labelledby="settings-heading" className="flex flex-col gap-4">
-      <AlbumContextNav albumId={id} current="settings" role={session.user.role} />
-      <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-semibold" id="settings-heading">
-          设置与统计
+      <div className="min-w-0">
+        <h2 className="text-xl font-semibold tracking-tight" id="settings-heading">
+          设置
         </h2>
-        <p className="text-muted-foreground">高风险更改会明确说明影响并由 API 重新校验权限。</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{album.title}</p>
       </div>
+      <AlbumContextNav albumId={id} current="settings" role={session.user.role} />
       <AlbumSettings
         bibConfig={bibConfig}
         faceConfig={faceConfig}
