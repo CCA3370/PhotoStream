@@ -77,6 +77,12 @@ type ReviewItem =
       readonly createdAt: string;
     };
 
+interface ReviewActions {
+  readonly toggleFeatured: (item: ReviewItem) => Promise<void>;
+  readonly toggleVisibility: (item: ReviewItem) => Promise<void>;
+  readonly deleteItem: (item: ReviewItem) => Promise<void>;
+}
+
 function preview(media: InternalMediaView): string | null {
   return (
     media.variants.find((variant) => variant.kind === "photo_480")?.url ??
@@ -121,6 +127,7 @@ export function ReviewWorkspace({
   const deleteTap = useRef<{ readonly key: string; readonly at: number } | null>(null);
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<ReviewActions | null>(null);
   const [remoteMedia, setRemoteMedia] = useState<readonly InternalMediaView[]>(initialPage.items);
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [localMedia, setLocalMedia] = useState<readonly LocalView[]>([]);
@@ -365,6 +372,8 @@ export function ReviewWorkspace({
     }
   }
 
+  actionsRef.current = { deleteItem, toggleFeatured, toggleVisibility };
+
   async function stateAction(item: ReviewItem): Promise<void> {
     if (item.source === "local") {
       await publish(item);
@@ -425,13 +434,13 @@ export function ReviewWorkspace({
           (activeItem.publicationStatus === "published" ||
             activeItem.publicationStatus === "hidden")
         ) {
-          void toggleVisibility(activeItem);
+          void actionsRef.current?.toggleVisibility(activeItem);
         }
         return;
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        void toggleFeatured(activeItem);
+        void actionsRef.current?.toggleFeatured(activeItem);
         return;
       }
       if (event.key === "Delete") {
@@ -439,7 +448,7 @@ export function ReviewWorkspace({
         const now = Date.now();
         if (deleteTap.current?.key === activeItem.key && now - deleteTap.current.at <= 900) {
           deleteTap.current = null;
-          void deleteItem(activeItem);
+          void actionsRef.current?.deleteItem(activeItem);
         } else {
           deleteTap.current = { key: activeItem.key, at: now };
         }
@@ -449,7 +458,7 @@ export function ReviewWorkspace({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [activeIndex, activeItem, visibleItems, deleteItem, toggleFeatured, toggleVisibility]);
+  }, [activeIndex, activeItem, visibleItems]);
 
   const filters: readonly { readonly id: FilterMode; readonly label: string }[] = [
     { id: "all", label: "全部" },
@@ -641,7 +650,12 @@ export function ReviewWorkspace({
       </div>
 
       {activeItem === null ? null : (
-        <div aria-label="原图预览" aria-modal="true" className="fixed inset-0 z-50 bg-black/95" role="dialog">
+        <div
+          aria-label="原图预览"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/95"
+          role="dialog"
+        >
           <Button
             aria-label="关闭原图"
             className="absolute right-3 top-3 z-10 size-9 bg-black/50 text-white hover:bg-black/70"
