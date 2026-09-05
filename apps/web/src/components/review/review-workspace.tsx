@@ -13,11 +13,14 @@ import {
   SendIcon,
   StarIcon,
   Trash2Icon,
-  XIcon,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  ReviewLightbox,
+  type ReviewLightboxItem,
+} from "@/components/review/review-lightbox";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
@@ -77,12 +80,6 @@ type ReviewItem =
       readonly createdAt: string;
     };
 
-interface ReviewActions {
-  readonly toggleFeatured: (item: ReviewItem) => Promise<void>;
-  readonly toggleVisibility: (item: ReviewItem) => Promise<void>;
-  readonly deleteItem: (item: ReviewItem) => Promise<void>;
-}
-
 function preview(media: InternalMediaView): string | null {
   return (
     media.variants.find((variant) => variant.kind === "photo_480")?.url ??
@@ -126,10 +123,8 @@ export function ReviewWorkspace({
 }>) {
   const localUrls = useRef<string[]>([]);
   const noticeTimer = useRef<number | null>(null);
-  const deleteTap = useRef<{ readonly key: string; readonly at: number } | null>(null);
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const actionsRef = useRef<ReviewActions | null>(null);
   const [remoteMedia, setRemoteMedia] = useState<readonly InternalMediaView[]>(initialPage.items);
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [localMedia, setLocalMedia] = useState<readonly LocalView[]>([]);
@@ -254,9 +249,24 @@ export function ReviewWorkspace({
     [category, filter, items, uploader],
   );
 
-  const activeIndex =
-    activeKey === null ? -1 : visibleItems.findIndex((item) => item.key === activeKey);
-  const activeItem = activeIndex < 0 ? null : (visibleItems[activeIndex] ?? null);
+  const lightboxItems = useMemo<readonly ReviewLightboxItem[]>(
+    () =>
+      visibleItems.map((item) => ({
+        key: item.key,
+        src: item.originalUrl,
+        width: item.source === "local" ? item.local.photo.width : item.remote.width,
+        height: item.source === "local" ? item.local.photo.height : item.remote.height,
+        featured: item.featured,
+        publicationStatus: item.publicationStatus,
+        canDelete: item.source === "local" || userRole === "admin",
+        pending: pendingKeys.has(item.key),
+      })),
+    [pendingKeys, userRole, visibleItems],
+  );
+
+  function itemByKey(key: string): ReviewItem | null {
+    return items.find((item) => item.key === key) ?? null;
+  }
 
   function setPending(key: string, value: boolean): void {
     setPendingKeys((current) => {
@@ -374,8 +384,6 @@ export function ReviewWorkspace({
     }
   }
 
-  actionsRef.current = { deleteItem, toggleFeatured, toggleVisibility };
-
   async function stateAction(item: ReviewItem): Promise<void> {
     if (item.source === "local") {
       await publish(item);
@@ -417,51 +425,6 @@ export function ReviewWorkspace({
     return () => observer.disconnect();
   }, [cursor, loadMore]);
 
-  useEffect(() => {
-    if (activeItem === null) return;
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
-        const direction = event.key === "ArrowLeft" ? -1 : 1;
-        const nextIndex = activeIndex + direction;
-        if (nextIndex >= 0 && nextIndex < visibleItems.length) {
-          setActiveKey(visibleItems[nextIndex]?.key ?? null);
-        }
-        return;
-      }
-      if (event.key === " ") {
-        event.preventDefault();
-        if (
-          activeItem.source === "remote" &&
-          (activeItem.publicationStatus === "published" ||
-            activeItem.publicationStatus === "hidden")
-        ) {
-          void actionsRef.current?.toggleVisibility(activeItem);
-        }
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void actionsRef.current?.toggleFeatured(activeItem);
-        return;
-      }
-      if (event.key === "Delete") {
-        event.preventDefault();
-        const now = Date.now();
-        if (deleteTap.current?.key === activeItem.key && now - deleteTap.current.at <= 900) {
-          deleteTap.current = null;
-          void actionsRef.current?.deleteItem(activeItem);
-        } else {
-          deleteTap.current = { key: activeItem.key, at: now };
-        }
-        return;
-      }
-      if (event.key === "Escape") setActiveKey(null);
-    };
-    window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
-  }, [activeIndex, activeItem, visibleItems]);
-
   const filters: readonly { readonly id: FilterMode; readonly label: string }[] = [
     { id: "all", label: "全部" },
     { id: "local", label: "待发布" },
@@ -497,7 +460,7 @@ export function ReviewWorkspace({
               onValueChange={(value) => setCategory(value ?? "all")}
               value={category}
             >
-              <SelectTrigger className="h-7 w-28 text-xs" aria-label="分类筛选">
+              <SelectTrigger aria-label="分类筛选" className="h-7 w-28 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -521,7 +484,7 @@ export function ReviewWorkspace({
               onValueChange={(value) => setUploader(value ?? "all")}
               value={uploader}
             >
-              <SelectTrigger className="h-7 w-28 text-xs" aria-label="上传者筛选">
+              <SelectTrigger aria-label="上传者筛选" className="h-7 w-28 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -651,38 +614,28 @@ export function ReviewWorkspace({
         ) : null}
       </div>
 
-      {activeItem === null ? null : (
-        <div
-          aria-label="原图预览"
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/95"
-          role="dialog"
-        >
-          <Button
-            aria-label="关闭原图"
-            className="absolute right-3 top-3 z-10 size-9 bg-black/50 text-white hover:bg-black/70"
-            onClick={() => setActiveKey(null)}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <XIcon className="size-5" />
-          </Button>
-          {activeItem.originalUrl === null ? null : (
-            <div className="absolute inset-4 sm:inset-8">
-              <Image
-                alt="完整原图"
-                className="object-contain"
-                fill
-                priority
-                sizes="100vw"
-                src={activeItem.originalUrl}
-                unoptimized
-              />
-            </div>
-          )}
-        </div>
-      )}
+      <ReviewLightbox
+        items={lightboxItems}
+        onClose={() => setActiveKey(null)}
+        onDelete={(key) => {
+          const item = itemByKey(key);
+          if (item !== null) void deleteItem(item);
+        }}
+        onSelect={setActiveKey}
+        onStateAction={(key) => {
+          const item = itemByKey(key);
+          if (item !== null) void stateAction(item);
+        }}
+        onToggleFeatured={(key) => {
+          const item = itemByKey(key);
+          if (item !== null) void toggleFeatured(item);
+        }}
+        onToggleVisibility={(key) => {
+          const item = itemByKey(key);
+          if (item !== null) void toggleVisibility(item);
+        }}
+        selectedKey={activeKey}
+      />
 
       {notice === null ? null : (
         <div className="pointer-events-none fixed inset-x-0 top-1/2 z-[70] flex -translate-y-1/2 justify-center px-4">
