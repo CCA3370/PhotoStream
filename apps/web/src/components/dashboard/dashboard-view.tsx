@@ -6,7 +6,7 @@ import {
   CalendarRangeIcon,
   DownloadIcon,
   EyeIcon,
-  HardDriveIcon,
+  HeartIcon,
   ImagesIcon,
   RadioIcon,
   RefreshCwIcon,
@@ -17,10 +17,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { CreateAlbumForm } from "@/components/albums/create-album-form";
-import { AlbumStateChart, AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
+import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import {
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 export interface DashboardStatistics {
@@ -61,9 +62,27 @@ export interface DashboardStatistics {
     readonly thumbnailUrl: string | null;
     readonly capturedAt: string | null;
   }[];
+  readonly topLikedPhotos: readonly {
+    readonly mediaId: string;
+    readonly albumId: string;
+    readonly albumTitle: string;
+    readonly publishSequence: number;
+    readonly likes: number;
+    readonly thumbnailUrl: string | null;
+    readonly capturedAt: string | null;
+  }[];
 }
 
 type PresetKey = "30d" | "7d" | "1d" | "5h" | "1h" | "30m" | "custom";
+
+interface RankingItem {
+  readonly mediaId: string;
+  readonly albumId: string;
+  readonly albumTitle: string;
+  readonly publishSequence: number;
+  readonly thumbnailUrl: string | null;
+  readonly count: number;
+}
 
 const presets: readonly {
   readonly key: Exclude<PresetKey, "custom">;
@@ -87,11 +106,11 @@ const bucketMs: Record<DashboardStatistics["bucket"], number> = {
 };
 
 const bucketLabels: Record<DashboardStatistics["bucket"], string> = {
-  "5m": "5 分钟",
-  "30m": "30 分钟",
-  "1h": "1 小时",
-  "6h": "6 小时",
-  "1d": "1 天",
+  "5m": "5 分钟粒度",
+  "30m": "30 分钟粒度",
+  "1h": "1 小时粒度",
+  "6h": "6 小时粒度",
+  "1d": "1 天粒度",
 };
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
@@ -112,17 +131,6 @@ function formatBytes(bytes: number): string {
     index += 1;
   }
   return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
-}
-
-function stateCounts(albums: readonly AlbumSummaryView[]) {
-  const counts: Record<AlbumSummaryView["state"], number> = {
-    draft: 0,
-    live: 0,
-    ended: 0,
-    archived: 0,
-  };
-  for (const album of albums) counts[album.state] += 1;
-  return counts;
 }
 
 function localInputValue(date: Date): string {
@@ -152,6 +160,63 @@ function fillPoints(data: DashboardStatistics) {
 
 function rangeText(data: DashboardStatistics): string {
   return `${rangeFormatter.format(new Date(data.from))} – ${rangeFormatter.format(new Date(data.to))}`;
+}
+
+function RankingList({
+  items,
+  unit,
+}: Readonly<{
+  items: readonly RankingItem[];
+  unit: string;
+}>) {
+  if (items.length === 0) {
+    return <div className="py-12 text-center text-sm text-muted-foreground">暂无排行数据</div>;
+  }
+
+  return (
+    <div className="divide-y">
+      {items.map((photo, index) => (
+        <Link
+          className="group grid grid-cols-[1.75rem_4rem_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50"
+          href={`/studio/albums/${photo.albumId}`}
+          key={photo.mediaId}
+        >
+          <span className="text-center text-xs font-semibold tabular-nums text-muted-foreground">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <div className="relative aspect-[4/3] w-16 overflow-hidden rounded-md bg-muted">
+            {photo.thumbnailUrl === null ? (
+              <div className="flex size-full items-center justify-center text-muted-foreground">
+                <ImagesIcon aria-hidden="true" className="size-4" />
+              </div>
+            ) : (
+              <Image
+                alt="排行照片缩略图"
+                fill
+                sizes="64px"
+                src={photo.thumbnailUrl}
+                style={{ objectFit: "cover" }}
+                unoptimized
+              />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{photo.albumTitle}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">照片 #{photo.publishSequence}</p>
+          </div>
+          <div className="flex items-center gap-2 pl-2">
+            <span className="text-sm font-semibold tabular-nums">
+              {numberFormatter.format(photo.count)} {unit}
+            </span>
+            <ArrowUpRightIcon
+              aria-hidden="true"
+              className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+            />
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
 }
 
 async function fetchDashboard(from: Date, to: Date): Promise<DashboardStatistics> {
@@ -191,10 +256,17 @@ export function DashboardView({
   const [customFrom, setCustomFrom] = useState(() => localInputValue(new Date(initialData.from)));
   const [customTo, setCustomTo] = useState(() => localInputValue(new Date(initialData.to)));
   const points = useMemo(() => fillPoints(data), [data]);
-  const counts = useMemo(() => stateCounts(albums), [albums]);
   const liveAlbums = useMemo(
     () => albums.filter((album) => album.state === "live").slice(0, 5),
     [albums],
+  );
+  const downloadRanking = useMemo<RankingItem[]>(
+    () => data.topPhotos.map((photo) => ({ ...photo, count: photo.downloads })),
+    [data.topPhotos],
+  );
+  const likeRanking = useMemo<RankingItem[]>(
+    () => data.topLikedPhotos.map((photo) => ({ ...photo, count: photo.likes })),
+    [data.topLikedPhotos],
   );
 
   async function loadRange(from: Date, to: Date, preset: PresetKey): Promise<void> {
@@ -255,263 +327,178 @@ export function DashboardView({
     {
       label: "浏览量",
       value: numberFormatter.format(data.opens),
-      detail: `${numberFormatter.format(data.sessions)} 次有效会话`,
+      meta: `${numberFormatter.format(data.sessions)} 会话`,
       icon: EyeIcon,
     },
     {
       label: "独立访客",
       value: numberFormatter.format(data.uniqueVisitors),
-      detail: "当前所选时间范围",
+      meta: null,
       icon: UsersIcon,
     },
     {
       label: "下载量",
       value: numberFormatter.format(data.downloads),
-      detail: "普通图与原图实际签发次数",
+      meta: null,
       icon: DownloadIcon,
     },
     {
       label: "照片总数",
       value: numberFormatter.format(data.mediaCount),
-      detail: `逻辑存储 ${formatBytes(data.logicalBytes)}`,
+      meta: formatBytes(data.logicalBytes),
       icon: ImagesIcon,
     },
   ] as const;
 
   return (
-    <section aria-labelledby="dashboard-heading" className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-primary">运营概览</p>
-          <h2 className="text-2xl font-semibold tracking-tight" id="dashboard-heading">
-            首页
-          </h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            查看所选时间范围内的访问、下载和单张照片下载排行。
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link className={buttonVariants({ variant: "outline" })} href="/studio/albums">
-            管理活动
-          </Link>
-          {canCreateAlbum ? <CreateAlbumForm /> : null}
-        </div>
+    <section aria-label="首页统计" className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Link
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+          href="/studio/albums"
+        >
+          管理活动
+        </Link>
+        {canCreateAlbum ? <CreateAlbumForm /> : null}
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <CalendarRangeIcon
-              aria-hidden="true"
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{rangeText(data)}</p>
-              <p className="text-xs text-muted-foreground">
-                自动聚合粒度：{bucketLabels[data.bucket]}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
-            {presets.map((preset) => (
-              <Button
-                aria-pressed={activePreset === preset.key}
-                disabled={pending}
-                key={preset.key}
-                onClick={() => void selectPreset(preset.key)}
-                size="sm"
-                variant={activePreset === preset.key ? "default" : "outline"}
-              >
-                {preset.label}
-              </Button>
-            ))}
-            <Button
-              aria-pressed={activePreset === "custom"}
-              disabled={pending}
-              onClick={() => {
-                setCustomFrom(localInputValue(new Date(data.from)));
-                setCustomTo(localInputValue(new Date(data.to)));
-                setCustomOpen(true);
-              }}
-              size="sm"
-              variant={activePreset === "custom" ? "default" : "outline"}
-            >
-              自定义
-            </Button>
-            <Button
-              disabled={pending}
-              onClick={() => void refresh()}
-              size="icon-sm"
-              title="刷新当前范围"
-              variant="ghost"
-            >
-              <RefreshCwIcon
-                aria-hidden="true"
-                className={cn("size-4", pending && "animate-spin")}
-              />
-              <span className="sr-only">刷新当前范围</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className={cn("grid gap-4 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
-        {kpis.map(({ label, value, detail, icon: Icon }) => (
-          <Card className="overflow-hidden" key={label}>
-            <CardContent className="flex items-start justify-between gap-4 p-5">
-              <div className="min-w-0">
-                <p className="text-sm text-muted-foreground">{label}</p>
-                <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
-                <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
+      <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
+        {kpis.map(({ label, value, meta, icon: Icon }) => (
+          <Card className="shadow-none" key={label}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">{label}</p>
+                <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
               </div>
-              <div className="rounded-xl border bg-muted/50 p-2.5 text-muted-foreground">
-                <Icon aria-hidden="true" className="size-5" />
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+                {meta === null ? null : (
+                  <p className="pb-0.5 text-xs tabular-nums text-muted-foreground">{meta}</p>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.8fr)]">
-        <Card className={cn(pending && "opacity-60")}>
-          <CardHeader>
-            <CardTitle>访问与下载趋势</CardTitle>
-            <CardDescription>缩放时间范围后，数据桶会自动切换分钟、小时或天粒度</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AnalyticsTrendChart data={points} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>活动状态</CardTitle>
-            <CardDescription>{albums.length} 个活动的当前状态分布</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AlbumStateChart counts={counts} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.8fr)]">
-        <Card className={cn(pending && "opacity-60")}>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <CardTitle>照片下载排行</CardTitle>
-                <CardDescription>精确按单张照片统计，并跟随当前时间范围</CardDescription>
-              </div>
-              <DownloadIcon aria-hidden="true" className="size-5 text-muted-foreground" />
+      <Card className={cn("overflow-hidden", pending && "opacity-60")}>
+        <CardHeader className="gap-3 border-b py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <CardTitle>访问趋势</CardTitle>
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarRangeIcon aria-hidden="true" className="size-3.5" />
+                {rangeText(data)}
+              </span>
+              <Badge className="font-normal" variant="outline">
+                {bucketLabels[data.bucket]}
+              </Badge>
             </div>
+            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-0.5">
+              {presets.map((preset) => (
+                <Button
+                  aria-pressed={activePreset === preset.key}
+                  disabled={pending}
+                  key={preset.key}
+                  onClick={() => void selectPreset(preset.key)}
+                  size="sm"
+                  variant={activePreset === preset.key ? "secondary" : "ghost"}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+              <Button
+                aria-pressed={activePreset === "custom"}
+                disabled={pending}
+                onClick={() => {
+                  setCustomFrom(localInputValue(new Date(data.from)));
+                  setCustomTo(localInputValue(new Date(data.to)));
+                  setCustomOpen(true);
+                }}
+                size="sm"
+                variant={activePreset === "custom" ? "secondary" : "ghost"}
+              >
+                自定义
+              </Button>
+              <Button
+                disabled={pending}
+                onClick={() => void refresh()}
+                size="icon-sm"
+                title="刷新"
+                variant="ghost"
+              >
+                <RefreshCwIcon
+                  aria-hidden="true"
+                  className={cn("size-4", pending && "animate-spin")}
+                />
+                <span className="sr-only">刷新</span>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-3 pt-4 pb-3 sm:px-5">
+          <AnalyticsTrendChart data={points} />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.7fr)]">
+        <Card className={cn("overflow-hidden", pending && "opacity-60")}>
+          <Tabs className="gap-0" defaultValue="downloads">
+            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-4">
+              <CardTitle>照片排行</CardTitle>
+              <TabsList>
+                <TabsTrigger value="downloads">
+                  <DownloadIcon aria-hidden="true" />
+                  下载
+                </TabsTrigger>
+                <TabsTrigger value="likes">
+                  <HeartIcon aria-hidden="true" />
+                  点赞
+                </TabsTrigger>
+              </TabsList>
+            </CardHeader>
+            <CardContent className="px-2 py-1">
+              <TabsContent value="downloads">
+                <RankingList items={downloadRanking} unit="次" />
+              </TabsContent>
+              <TabsContent value="likes">
+                <RankingList items={likeRanking} unit="赞" />
+              </TabsContent>
+            </CardContent>
+          </Tabs>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b py-4">
+            <CardTitle className="flex items-center gap-2">
+              <RadioIcon aria-hidden="true" className="size-4 text-success" />
+              正在直播
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            {data.topPhotos.length === 0 ? (
-              <div className="flex min-h-52 items-center justify-center rounded-xl border border-dashed bg-muted/20 px-6 text-center text-sm text-muted-foreground">
-                当前时间范围内暂无照片下载记录。
-              </div>
+          <CardContent className="p-2">
+            {liveAlbums.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">暂无直播活动</p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {data.topPhotos.map((photo, index) => (
+              <div className="divide-y">
+                {liveAlbums.map((album) => (
                   <Link
-                    className="group flex items-center gap-3 rounded-xl border p-2.5 transition-colors hover:bg-muted/50"
-                    href={`/studio/albums/${photo.albumId}`}
-                    key={photo.mediaId}
+                    className="flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-muted/50"
+                    href={`/studio/albums/${album.id}`}
+                    key={album.id}
                   >
-                    <div className="relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
-                      {photo.thumbnailUrl === null ? (
-                        <div className="flex size-full items-center justify-center text-muted-foreground">
-                          <ImagesIcon aria-hidden="true" className="size-5" />
-                        </div>
-                      ) : (
-                        <Image
-                          alt="下载排行照片缩略图"
-                          fill
-                          sizes="96px"
-                          src={photo.thumbnailUrl}
-                          style={{ objectFit: "cover" }}
-                          unoptimized
-                        />
-                      )}
-                      <Badge
-                        className="absolute top-1 left-1 h-6 px-1.5 text-[11px] shadow-sm"
-                        variant="secondary"
-                      >
-                        第 {index + 1} 名
-                      </Badge>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{album.title}</p>
+                      <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                        {album.mediaCount} 张
+                      </p>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{photo.albumTitle}</p>
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold tabular-nums">
-                          {numberFormatter.format(photo.downloads)} 次下载
-                        </span>
-                        <ArrowUpRightIcon
-                          aria-hidden="true"
-                          className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                        />
-                      </div>
-                    </div>
+                    <ArrowUpRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
                   </Link>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
-
-        <div className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <RadioIcon aria-hidden="true" className="size-4 text-success" />
-                <CardTitle>正在直播</CardTitle>
-              </div>
-              <CardDescription>当前仍在对外发布新照片的活动</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2">
-              {liveAlbums.length === 0 ? (
-                <p className="py-5 text-center text-sm text-muted-foreground">
-                  当前没有直播中的活动。
-                </p>
-              ) : (
-                liveAlbums.map((album) => (
-                  <Link
-                    className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 hover:bg-muted/50"
-                    href={`/studio/albums/${album.id}`}
-                    key={album.id}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{album.title}</p>
-                      <p className="text-xs text-muted-foreground">{album.mediaCount} 张照片</p>
-                    </div>
-                    <Badge>直播中</Badge>
-                  </Link>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-muted/25">
-            <CardContent className="flex items-center justify-between gap-4 p-5">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <HardDriveIcon aria-hidden="true" className="size-4" />
-                  存储占用
-                </div>
-                <p className="mt-2 text-2xl font-semibold">{formatBytes(data.logicalBytes)}</p>
-                <p className="text-xs text-muted-foreground">已验证派生图与原图的逻辑总量</p>
-              </div>
-              <Link
-                className={cn(buttonVariants({ size: "icon", variant: "outline" }), "shrink-0")}
-                href="/studio/albums"
-                title="查看全部活动"
-              >
-                <ArrowUpRightIcon aria-hidden="true" />
-                <span className="sr-only">查看全部活动</span>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
@@ -519,7 +506,7 @@ export function DashboardView({
           <DialogHeader>
             <DialogTitle>自定义统计时间范围</DialogTitle>
             <DialogDescription>
-              可选择最近 {data.maxRangeDays} 天内的任意起止时间。短区间会自动使用更细的数据粒度。
+              可选择最近 {data.maxRangeDays} 天内的任意起止时间。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
