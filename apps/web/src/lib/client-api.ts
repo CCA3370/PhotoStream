@@ -41,6 +41,7 @@ export async function clientMutation<T>(
   path: string,
   options: {
     readonly body?: unknown;
+    readonly confirmPassword?: string;
     readonly idempotencyKey?: string;
     readonly method?: "POST" | "PUT" | "PATCH" | "DELETE";
     readonly signal?: AbortSignal;
@@ -52,6 +53,9 @@ export async function clientMutation<T>(
   };
   if (options.body !== undefined) {
     headers["content-type"] = "application/json";
+  }
+  if (options.confirmPassword !== undefined) {
+    headers["x-confirm-password"] = options.confirmPassword;
   }
   if (options.idempotencyKey !== undefined) {
     headers["idempotency-key"] = options.idempotencyKey;
