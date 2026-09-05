@@ -25,17 +25,16 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
     serverApi<AlbumUploaderView[]>(`/api/v1/albums/${id}/uploaders`),
     serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
   ]);
+
   return (
     <section className="flex flex-col gap-4" aria-labelledby="review-title">
-      <AlbumContextNav albumId={id} current="review" role={session.user.role} />
-      <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-semibold" id="review-title">
-          照片审核
+      <div className="min-w-0">
+        <h2 className="text-xl font-semibold tracking-tight" id="review-title">
+          审核
         </h2>
-        <p className="text-muted-foreground">
-          预览 480/960 校验完成后才能发布；原图可以继续后台上传。
-        </p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{album.title}</p>
       </div>
+      <AlbumContextNav albumId={id} current="review" role={session.user.role} />
       <ReviewWorkspace
         albumId={id}
         albumTitle={album.title}
