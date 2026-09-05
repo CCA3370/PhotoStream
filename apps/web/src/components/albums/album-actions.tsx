@@ -40,12 +40,7 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
           </Button>
         ) : null}
         {album.state === "live" ? (
-          <Button
-            disabled={pending}
-            onClick={() => void mutate("end")}
-            size="sm"
-            variant="outline"
-          >
+          <Button disabled={pending} onClick={() => void mutate("end")} size="sm" variant="outline">
             <StopCircleIcon data-icon="inline-start" />
             {pending ? "正在结束…" : "结束直播"}
           </Button>
