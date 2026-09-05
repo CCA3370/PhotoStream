@@ -169,20 +169,22 @@ export function BibSearchPanel({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           aria-expanded={expanded}
-          className="rounded-full"
+          className="rounded-full px-4 shadow-sm"
           onClick={() => setExpanded((current) => !current)}
           size="sm"
           type="button"
-          variant="outline"
+          variant={expanded ? "secondary" : "default"}
         >
           <SearchIcon data-icon="inline-start" />
           找照片
         </Button>
-        {result === null ? null : (
+        {result === null ? (
+          <span className="text-xs text-muted-foreground">快速筛选你需要的照片</span>
+        ) : (
           <Button
             className="rounded-full"
             onClick={clearAll}
@@ -197,9 +199,10 @@ export function BibSearchPanel({
       </div>
 
       {expanded ? (
-        <div className="flex flex-col gap-3 rounded-xl border bg-card/50 p-3 sm:max-w-xl sm:p-4">
+        <div className="flex flex-col gap-3.5 rounded-2xl border bg-card/70 p-3.5 shadow-sm sm:max-w-2xl sm:p-4">
           <ToggleGroup
             aria-label="找照片方式"
+            className="w-fit rounded-xl bg-muted/50 p-1"
             onValueChange={(values) => {
               const value = values[0];
               if (value === "number" || value === "attributes" || value === "face") {
@@ -223,6 +226,7 @@ export function BibSearchPanel({
               </FieldLabel>
               <Input
                 autoComplete="off"
+                className="min-h-10"
                 id="public-bib-number"
                 inputMode="numeric"
                 maxLength={12}
@@ -314,7 +318,7 @@ export function BibSearchPanel({
 
           {mode === "face" ? null : (
             <Button
-              className="w-fit"
+              className="min-w-24 self-start rounded-xl"
               disabled={
                 pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)
               }
@@ -334,12 +338,12 @@ export function BibSearchPanel({
       ) : (
         <section aria-label="照片查找结果" className="flex flex-col gap-4">
           {result.items.length === 0 ? (
-            <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+            <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed bg-muted/20 text-sm text-muted-foreground">
               没有匹配照片
             </div>
           ) : (
             <>
-              <p aria-live="polite" className="text-sm text-muted-foreground">
+              <p aria-live="polite" className="text-sm font-medium text-muted-foreground">
                 找到 {result.items.length} 张照片
               </p>
               <MediaGrid items={result.items} slug={slug} />
@@ -347,7 +351,7 @@ export function BibSearchPanel({
           )}
           {result.nextCursor === null ? null : (
             <Button
-              className="self-center"
+              className="self-center rounded-full"
               disabled={pending}
               onClick={() => void search(result.nextCursor ?? undefined)}
               size="sm"
