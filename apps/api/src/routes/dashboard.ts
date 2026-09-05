@@ -16,6 +16,17 @@ const dashboardQuerySchema = z
   })
   .strict();
 
+const rankedPhotoSchema = z
+  .object({
+    mediaId: z.string().uuid(),
+    albumId: z.string().uuid(),
+    albumTitle: z.string(),
+    publishSequence: z.number().int().positive(),
+    thumbnailUrl: z.string().url().nullable(),
+    capturedAt: z.iso.datetime().nullable(),
+  })
+  .strict();
+
 const dashboardResponseSchema = z
   .object({
     from: z.iso.datetime(),
@@ -40,17 +51,10 @@ const dashboardResponseSchema = z
         .strict(),
     ),
     topPhotos: z.array(
-      z
-        .object({
-          mediaId: z.string().uuid(),
-          albumId: z.string().uuid(),
-          albumTitle: z.string(),
-          publishSequence: z.number().int().positive(),
-          downloads: z.number().int().positive(),
-          thumbnailUrl: z.string().url().nullable(),
-          capturedAt: z.iso.datetime().nullable(),
-        })
-        .strict(),
+      rankedPhotoSchema.extend({ downloads: z.number().int().positive() }).strict(),
+    ),
+    topLikedPhotos: z.array(
+      rankedPhotoSchema.extend({ likes: z.number().int().positive() }).strict(),
     ),
   })
   .strict();
