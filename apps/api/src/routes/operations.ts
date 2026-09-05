@@ -19,7 +19,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
+import {
+  requireInternalCsrf,
+  requireInternalSession,
+  verifyPasswordConfirmation,
+} from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import type { OperationsService } from "../media/operations-service.js";
@@ -228,10 +232,11 @@ export async function registerOperationsRoutes(
     },
     async (request, reply) => {
       const session = await requireInternalCsrf(request, options.authService, options.config);
+      await verifyPasswordConfirmation(request, options.authService, session);
       const task = await options.operationsService.requestDeletion({
         actor: {
           ...actorFrom(session),
-          authenticatedAt: session.record.createdAt,
+          authenticatedAt: new Date(),
         },
         mediaId: request.params.id,
         confirmation: request.body.confirmation,
@@ -270,7 +275,7 @@ export async function registerOperationsRoutes(
     async (request) => {
       const session = await requireInternalCsrf(request, options.authService, options.config);
       return options.operationsService.retryDeletion({
-        actor: { ...actorFrom(session), authenticatedAt: session.record.createdAt },
+        actor: { ...actorFrom(session), authenticatedAt: new Date() },
         taskId: request.params.id,
       });
     },
