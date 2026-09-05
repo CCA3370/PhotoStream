@@ -46,7 +46,9 @@ function openDatabase(): Promise<IDBDatabase> {
       store.createIndex("albumId", "albumId", { unique: false });
     });
     request.addEventListener("success", () => resolve(request.result));
-    request.addEventListener("error", () => reject(request.error ?? new Error("无法打开本地审核队列")));
+    request.addEventListener("error", () =>
+      reject(request.error ?? new Error("无法打开本地审核队列")),
+    );
   });
 }
 
@@ -60,8 +62,12 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 function complete(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.addEventListener("complete", () => resolve());
-    transaction.addEventListener("abort", () => reject(transaction.error ?? new Error("本地队列事务已取消")));
-    transaction.addEventListener("error", () => reject(transaction.error ?? new Error("本地队列事务失败")));
+    transaction.addEventListener("abort", () =>
+      reject(transaction.error ?? new Error("本地队列事务已取消")),
+    );
+    transaction.addEventListener("error", () =>
+      reject(transaction.error ?? new Error("本地队列事务失败")),
+    );
   });
 }
 
@@ -109,7 +115,9 @@ export async function listLocalReviewPhotos(albumId: string): Promise<LocalRevie
   try {
     const transaction = database.transaction(storeName, "readonly");
     const store = transaction.objectStore(storeName).index("albumId");
-    const rows = await requestResult(store.getAll(IDBKeyRange.only(albumId)) as IDBRequest<LocalReviewPhoto[]>);
+    const rows = await requestResult(
+      store.getAll(IDBKeyRange.only(albumId)) as IDBRequest<LocalReviewPhoto[]>,
+    );
     await complete(transaction);
     return rows.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   } finally {
