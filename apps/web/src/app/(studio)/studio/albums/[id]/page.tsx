@@ -1,5 +1,5 @@
 import type { AlbumView, InternalMediaList } from "@photostream/contracts";
-import { ClipboardCheckIcon, ExternalLinkIcon, Settings2Icon, UploadIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AlbumActions } from "@/components/albums/album-actions";
@@ -55,22 +55,6 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {session.user.role === "admin" ? (
-            <Link
-              className={buttonVariants({ size: "sm", variant: "outline" })}
-              href={`/studio/albums/${id}/upload`}
-            >
-              <UploadIcon data-icon="inline-start" />
-              上传
-            </Link>
-          ) : null}
-          <Link
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={`/studio/albums/${id}/review`}
-          >
-            <ClipboardCheckIcon data-icon="inline-start" />
-            审核
-          </Link>
           <Link
             className={buttonVariants({ size: "sm", variant: "ghost" })}
             href={`/g/${album.slug}`}
@@ -78,15 +62,6 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
             <ExternalLinkIcon data-icon="inline-start" />
             观众页
           </Link>
-          {session.user.role === "admin" ? (
-            <Link
-              className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href={`/studio/albums/${id}/settings`}
-            >
-              <Settings2Icon data-icon="inline-start" />
-              设置
-            </Link>
-          ) : null}
           {session.user.role === "admin" ? <AlbumActions album={album} /> : null}
         </div>
       </div>
