@@ -4,16 +4,18 @@ import type { UserRole } from "@photostream/contracts";
 import {
   ImagesIcon,
   LayoutDashboardIcon,
+  LogOutIcon,
   ScrollTextIcon,
-  Settings2Icon,
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
+import { useState } from "react";
 
 import { InternalProviders } from "@/components/internal-providers";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +32,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { clientMutation } from "@/lib/client-api";
 
 const navigation = [
   {
@@ -86,11 +89,25 @@ export function StudioShell({
   userRole = "admin",
 }: StudioShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
   const visibleNavigation = navigation.filter((item) =>
     item.roles.some((allowedRole) => allowedRole === userRole),
   );
   const resolvedTitle = sectionTitle(pathname, pageTitle);
   const initials = userDisplayName.trim().slice(0, 1).toUpperCase() || "内";
+
+  async function logout(): Promise<void> {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await clientMutation<{ ok: true }>("/api/v1/auth/logout");
+    } finally {
+      router.replace("/login");
+      router.refresh();
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <InternalProviders>
@@ -120,7 +137,6 @@ export function StudioShell({
                 </div>
                 <div className="min-w-0 group-data-[collapsible=icon]:hidden">
                   <p className="truncate text-sm font-semibold">PhotoStream</p>
-                  <p className="truncate text-xs text-sidebar-foreground/60">中学部影像直播</p>
                 </div>
               </Link>
             </SidebarHeader>
@@ -129,7 +145,7 @@ export function StudioShell({
               <SidebarGroup>
                 <SidebarGroupLabel>管理</SidebarGroupLabel>
                 <SidebarGroupContent>
-                  <SidebarMenu>
+                  <SidebarMenu className="gap-1.5">
                     {visibleNavigation.map((item) => {
                       const Icon = item.icon;
                       return (
@@ -152,18 +168,27 @@ export function StudioShell({
             </SidebarContent>
 
             <SidebarFooter className="p-3">
-              <div className="flex items-center gap-3 rounded-xl border border-sidebar-border bg-sidebar-accent/45 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+              <div className="flex items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/45 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
                   {initials}
                 </div>
                 <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
                   <p className="truncate text-sm font-medium">{userDisplayName}</p>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <Badge className="h-5 px-1.5 text-[10px]" variant="secondary">
-                      {roleLabels[userRole]}
-                    </Badge>
-                  </div>
+                  <Badge className="mt-0.5 h-5 px-1.5 text-[10px]" variant="secondary">
+                    {roleLabels[userRole]}
+                  </Badge>
                 </div>
+                <Button
+                  className="size-8 shrink-0 group-data-[collapsible=icon]:hidden"
+                  disabled={loggingOut}
+                  onClick={() => void logout()}
+                  size="icon-sm"
+                  title="登出"
+                  variant="ghost"
+                >
+                  <LogOutIcon aria-hidden="true" className="size-4" />
+                  <span className="sr-only">登出</span>
+                </Button>
               </div>
             </SidebarFooter>
             <SidebarRail />
@@ -173,19 +198,12 @@ export function StudioShell({
             className="overflow-hidden border border-sidebar-border/70 bg-background shadow-sm"
             id="studio-main"
           >
-            <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b bg-background/92 px-4 backdrop-blur md:px-6">
+            <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b bg-background/92 px-4 backdrop-blur md:px-5">
               <SidebarTrigger aria-label="切换工作台导航" />
               <div className="h-5 w-px bg-border" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">PhotoStream 管理后台</p>
-                <h1 className="truncate text-base font-semibold">{resolvedTitle}</h1>
-              </div>
-              <div className="hidden items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground sm:flex">
-                <Settings2Icon aria-hidden="true" className="size-3.5" />
-                {roleLabels[userRole]}
-              </div>
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{resolvedTitle}</h1>
             </header>
-            <div className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-6 p-4 md:p-6 xl:p-8">
+            <div className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-4 p-4 md:p-5 xl:p-6">
               {children}
             </div>
           </SidebarInset>
