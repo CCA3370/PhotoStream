@@ -55,7 +55,9 @@ export async function registerFeaturedRoutes(
     },
     async (request) => {
       const session = await requireInternalSession(request, options.authService, options.config);
-      return { mediaIds: await options.featuredService.listInternal(actorFrom(session), request.params.id) };
+      return {
+        mediaIds: await options.featuredService.listInternal(actorFrom(session), request.params.id),
+      };
     },
   );
 
