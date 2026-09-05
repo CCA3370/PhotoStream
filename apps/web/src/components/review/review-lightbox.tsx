@@ -112,8 +112,16 @@ export function ReviewLightbox({
       const renderedWidth = selected.width * fit * nextZoom;
       const renderedHeight = selected.height * fit * nextZoom;
       return {
-        x: clamp(next.x, -Math.max(0, (renderedWidth - rect.width) / 2), Math.max(0, (renderedWidth - rect.width) / 2)),
-        y: clamp(next.y, -Math.max(0, (renderedHeight - rect.height) / 2), Math.max(0, (renderedHeight - rect.height) / 2)),
+        x: clamp(
+          next.x,
+          -Math.max(0, (renderedWidth - rect.width) / 2),
+          Math.max(0, (renderedWidth - rect.width) / 2),
+        ),
+        y: clamp(
+          next.y,
+          -Math.max(0, (renderedHeight - rect.height) / 2),
+          Math.max(0, (renderedHeight - rect.height) / 2),
+        ),
       };
     },
     [selected],
@@ -209,10 +217,7 @@ export function ReviewLightbox({
       } else if (event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
         const now = Date.now();
-        if (
-          deleteTapRef.current?.key === selected.key &&
-          now - deleteTapRef.current.at <= 900
-        ) {
+        if (deleteTapRef.current?.key === selected.key && now - deleteTapRef.current.at <= 900) {
           deleteTapRef.current = null;
           onDelete(selected.key);
         } else {
@@ -320,7 +325,8 @@ export function ReviewLightbox({
       >
         <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
         <DialogDescription className="sr-only">
-          左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次 Delete 删除。
+          左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次
+          Delete 删除。
         </DialogDescription>
 
         <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
@@ -435,7 +441,9 @@ export function ReviewLightbox({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
             <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-center gap-2 text-[11px] text-white/60 sm:text-xs">
-                <span>{selected.width} × {selected.height}</span>
+                <span>
+                  {selected.width} × {selected.height}
+                </span>
                 <span aria-hidden="true">·</span>
                 <span>{Math.round(zoom * 100)}%</span>
               </div>
@@ -502,18 +510,13 @@ export function ReviewLightbox({
                   className={cn(
                     toolbarButtonClass,
                     "size-8",
-                    published && "border-blue-400/30 bg-blue-500/30 text-blue-100 hover:bg-blue-500/45",
+                    published &&
+                      "border-blue-400/30 bg-blue-500/30 text-blue-100 hover:bg-blue-500/45",
                   )}
                   disabled={selected.pending}
                   onClick={() => onStateAction(selected.key)}
                   size="icon-sm"
-                  title={
-                    published
-                      ? "隐藏 (Space)"
-                      : hidden
-                        ? "显示 (Space)"
-                        : "发布"
-                  }
+                  title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布"}
                   type="button"
                   variant="outline"
                 >
