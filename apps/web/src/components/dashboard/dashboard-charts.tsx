@@ -9,6 +9,11 @@ interface TrendPoint {
   readonly downloads: number;
 }
 
+interface HoverState {
+  readonly index: number;
+  readonly x: number;
+}
+
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 const axisFormatter = new Intl.DateTimeFormat("zh-CN", {
   month: "numeric",
@@ -34,24 +39,72 @@ function point(value: number, max: number, index: number, count: number): [numbe
   return [x, y];
 }
 
-function linePath(values: readonly number[], max: number): string {
-  return values
-    .map((value, index) => {
-      const [x, y] = point(value, max, index, values.length);
-      return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
+function smoothPath(values: readonly number[], max: number): string {
+  const points = values.map((value, index) => point(value, max, index, values.length));
+  const first = points[0];
+  if (first === undefined) return "";
+  if (points.length === 1) return `M${first[0].toFixed(2)},${first[1].toFixed(2)}`;
+
+  const slopes: number[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    if (current === undefined || next === undefined) continue;
+    slopes.push((next[1] - current[1]) / Math.max(next[0] - current[0], 1));
+  }
+
+  const tangents = points.map((_, index) => {
+    if (index === 0) return slopes[0] ?? 0;
+    if (index === points.length - 1) return slopes.at(-1) ?? 0;
+    const previous = slopes[index - 1] ?? 0;
+    const next = slopes[index] ?? 0;
+    return previous * next <= 0 ? 0 : (previous + next) / 2;
+  });
+
+  for (let index = 0; index < slopes.length; index += 1) {
+    const slope = slopes[index] ?? 0;
+    if (slope === 0) {
+      tangents[index] = 0;
+      tangents[index + 1] = 0;
+      continue;
+    }
+    const left = (tangents[index] ?? 0) / slope;
+    const right = (tangents[index + 1] ?? 0) / slope;
+    const magnitude = Math.hypot(left, right);
+    if (magnitude <= 3) continue;
+    const scale = 3 / magnitude;
+    tangents[index] = scale * left * slope;
+    tangents[index + 1] = scale * right * slope;
+  }
+
+  let path = `M${first[0].toFixed(2)},${first[1].toFixed(2)}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    if (current === undefined || next === undefined) continue;
+    const width = next[0] - current[0];
+    const leftTangent = tangents[index] ?? 0;
+    const rightTangent = tangents[index + 1] ?? 0;
+    const c1x = current[0] + width / 3;
+    const c1y = current[1] + (leftTangent * width) / 3;
+    const c2x = next[0] - width / 3;
+    const c2y = next[1] - (rightTangent * width) / 3;
+    path += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${next[0].toFixed(2)},${next[1].toFixed(2)}`;
+  }
+  return path;
 }
 
 function areaPath(values: readonly number[], max: number): string {
+  const curve = smoothPath(values, max);
+  if (curve.length === 0) return "";
   const bottom = chartHeight - plot.bottom;
   const [firstX] = point(values[0] ?? 0, max, 0, values.length);
   const [lastX] = point(values.at(-1) ?? 0, max, Math.max(values.length - 1, 0), values.length);
-  return `${linePath(values, max)} L${lastX},${bottom} L${firstX},${bottom} Z`;
+  return `${curve} L${lastX.toFixed(2)},${bottom} L${firstX.toFixed(2)},${bottom} Z`;
 }
 
 export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoint[] }>) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
 
   if (data.length === 0) {
     return (
@@ -65,8 +118,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
   const visitors = data.map((item) => item.uniqueVisitors);
   const downloads = data.map((item) => item.downloads);
   const max = Math.max(1, ...opens, ...visitors, ...downloads);
-  const active = activeIndex === null ? null : (data[activeIndex] ?? null);
-  const activeX = activeIndex === null ? null : point(0, max, activeIndex, data.length)[0];
+  const active = hover === null ? null : (data[hover.index] ?? null);
   const bottom = chartHeight - plot.bottom;
 
   const xLabels = Array.from(
@@ -74,20 +126,24 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
   );
 
   function pointerMove(event: ReactPointerEvent<SVGSVGElement>): void {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const left = (plot.left / chartWidth) * rect.width;
-    const right = ((chartWidth - plot.right) / chartWidth) * rect.width;
-    const x = Math.min(right, Math.max(left, event.clientX - rect.left));
-    const ratio = (x - left) / Math.max(right - left, 1);
-    setActiveIndex(Math.round(ratio * Math.max(data.length - 1, 0)));
+    const matrix = event.currentTarget.getScreenCTM();
+    if (matrix === null) return;
+    const cursor = event.currentTarget.createSVGPoint();
+    cursor.x = event.clientX;
+    cursor.y = event.clientY;
+    const svgPoint = cursor.matrixTransform(matrix.inverse());
+    const x = Math.min(chartWidth - plot.right, Math.max(plot.left, svgPoint.x));
+    const ratio = (x - plot.left) / Math.max(chartWidth - plot.left - plot.right, 1);
+    const index = Math.round(ratio * Math.max(data.length - 1, 0));
+    setHover({ index, x });
   }
 
   return (
     <div className="relative w-full">
       <svg
         aria-label="浏览量、独立访客和下载量趋势"
-        className="h-[270px] w-full touch-none select-none"
-        onPointerLeave={() => setActiveIndex(null)}
+        className="h-[252px] w-full touch-none select-none"
+        onPointerLeave={() => setHover(null)}
         onPointerMove={pointerMove}
         role="img"
         viewBox={`0 0 ${chartWidth} ${chartHeight}`}
@@ -111,7 +167,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
               <line
                 stroke="var(--border)"
                 strokeDasharray="3 4"
-                strokeOpacity="0.65"
+                strokeOpacity="0.58"
                 x1={plot.left}
                 x2={chartWidth - plot.right}
                 y1={y}
@@ -133,7 +189,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
         <path d={areaPath(opens, max)} fill="url(#dashboard-opens)" />
         <path d={areaPath(visitors, max)} fill="url(#dashboard-visitors)" />
         <path
-          d={linePath(opens, max)}
+          d={smoothPath(opens, max)}
           fill="none"
           stroke="var(--chart-1)"
           strokeLinecap="round"
@@ -141,7 +197,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
           strokeWidth="2.5"
         />
         <path
-          d={linePath(visitors, max)}
+          d={smoothPath(visitors, max)}
           fill="none"
           stroke="var(--chart-2)"
           strokeLinecap="round"
@@ -149,7 +205,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
           strokeWidth="2"
         />
         <path
-          d={linePath(downloads, max)}
+          d={smoothPath(downloads, max)}
           fill="none"
           stroke="var(--chart-3)"
           strokeLinecap="round"
@@ -157,36 +213,17 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
           strokeWidth="2"
         />
 
-        {active !== null && activeIndex !== null && activeX !== null ? (
-          <g>
-            <line
-              stroke="var(--border)"
-              strokeDasharray="3 3"
-              x1={activeX}
-              x2={activeX}
-              y1={plot.top}
-              y2={bottom}
-            />
-            {[
-              [active.opens, "var(--chart-1)"],
-              [active.uniqueVisitors, "var(--chart-2)"],
-              [active.downloads, "var(--chart-3)"],
-            ].map(([value, color]) => {
-              const [, y] = point(Number(value), max, activeIndex, data.length);
-              return (
-                <circle
-                  cx={activeX}
-                  cy={y}
-                  fill={String(color)}
-                  key={String(color)}
-                  r="4"
-                  stroke="var(--background)"
-                  strokeWidth="2"
-                />
-              );
-            })}
-          </g>
-        ) : null}
+        {hover === null ? null : (
+          <line
+            stroke="var(--foreground)"
+            strokeOpacity="0.34"
+            strokeWidth="1"
+            x1={hover.x}
+            x2={hover.x}
+            y1={plot.top}
+            y2={bottom}
+          />
+        )}
 
         {xLabels.map((index) => {
           const [x] = point(0, max, index, data.length);
@@ -206,7 +243,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
         })}
       </svg>
 
-      <div className="mt-1 flex items-center justify-center gap-5 text-xs text-muted-foreground">
+      <div className="mt-0.5 flex items-center justify-center gap-5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-[2px] bg-chart-1" />
           浏览量
@@ -221,15 +258,15 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
         </span>
       </div>
 
-      {active !== null && activeX !== null ? (
+      {active !== null && hover !== null ? (
         <div
           className="pointer-events-none absolute top-3 z-10 min-w-40 rounded-lg border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md"
           style={{
-            left: `${(activeX / chartWidth) * 100}%`,
+            left: `${(hover.x / chartWidth) * 100}%`,
             transform:
-              activeX < 150
+              hover.x < 150
                 ? "translateX(0)"
-                : activeX > chartWidth - 150
+                : hover.x > chartWidth - 150
                   ? "translateX(-100%)"
                   : "translateX(-50%)",
           }}

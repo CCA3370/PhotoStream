@@ -9,11 +9,12 @@ import type {
 } from "@photostream/contracts";
 import { KeyRoundIcon } from "lucide-react";
 import { useState } from "react";
+
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -35,8 +36,15 @@ interface PasswordRotation {
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
 }
 
 export function AlbumSettings({
@@ -102,7 +110,7 @@ export function AlbumSettings({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {error === null ? null : (
         <Alert variant="destructive">
           <AlertTitle>设置未保存</AlertTitle>
@@ -111,277 +119,288 @@ export function AlbumSettings({
       )}
       {saved === null ? null : (
         <Alert>
-          <AlertTitle>设置已保存</AlertTitle>
-          <AlertDescription>{saved}</AlertDescription>
+          <AlertTitle>{saved}</AlertTitle>
         </Alert>
       )}
       {newPassword === null ? null : (
         <Alert>
           <KeyRoundIcon aria-hidden="true" />
-          <AlertTitle>请立即安全保存新口令</AlertTitle>
+          <AlertTitle>新活动口令</AlertTitle>
           <AlertDescription>
             <p className="font-mono text-base text-foreground">{newPassword}</p>
-            <p>旧访客会话已失效；该值关闭页面后不再展示。</p>
+            <p>旧访客会话已失效，请立即保存。</p>
           </AlertDescription>
         </Alert>
       )}
-      <Tabs defaultValue="basic">
-        <TabsList className="max-w-full overflow-x-auto" variant="line">
-          <TabsTrigger value="basic">基本信息</TabsTrigger>
-          <TabsTrigger value="access">访问与发布</TabsTrigger>
-          <TabsTrigger value="downloads">下载</TabsTrigger>
-          <TabsTrigger value="privacy">隐私与投诉</TabsTrigger>
-          <TabsTrigger value="bib">号码规则</TabsTrigger>
-          <TabsTrigger value="face">人脸找图</TabsTrigger>
-          <TabsTrigger value="statistics">统计</TabsTrigger>
+
+      <Tabs className="gap-3" defaultValue="general">
+        <TabsList className="max-w-full gap-1.5 overflow-x-auto p-1">
+          <TabsTrigger className="px-3" value="general">
+            常规设置
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="features">
+            智能功能
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="statistics">
+            统计
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="basic">
-          <Card>
-            <CardHeader>
-              <CardTitle>基本信息</CardTitle>
-              <CardDescription>修改活动标题和观众可见说明。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                action={(formData) =>
-                  void update(
-                    {
-                      title: String(formData.get("title") ?? title),
-                      description: String(formData.get("description") ?? description),
-                    },
-                    "基本信息已更新",
-                  )
-                }
-              >
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="settings-title">活动标题</FieldLabel>
-                    <Input
-                      id="settings-title"
-                      name="title"
-                      onChange={(event) => setTitle(event.currentTarget.value)}
-                      required
-                      value={title}
+        <TabsContent value="general">
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <section className="p-4" aria-labelledby="settings-basic-heading">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold" id="settings-basic-heading">
+                    基本信息
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">活动名称与观众可见说明</p>
+                </div>
+                <form
+                  action={(formData) =>
+                    void update(
+                      {
+                        title: String(formData.get("title") ?? title),
+                        description: String(formData.get("description") ?? description),
+                      },
+                      "基本信息已更新",
+                    )
+                  }
+                >
+                  <FieldGroup className="gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="settings-title">活动标题</FieldLabel>
+                      <Input
+                        id="settings-title"
+                        name="title"
+                        onChange={(event) => setTitle(event.currentTarget.value)}
+                        required
+                        value={title}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
+                      <Textarea
+                        id="settings-description"
+                        name="description"
+                        onChange={(event) => setDescription(event.currentTarget.value)}
+                        value={description}
+                      />
+                    </Field>
+                    <Button className="w-fit" disabled={pending} size="sm" type="submit">
+                      {pending ? "正在保存…" : "保存基本信息"}
+                    </Button>
+                  </FieldGroup>
+                </form>
+              </section>
+
+              <section className="border-t p-4" aria-labelledby="settings-access-heading">
+                <div className="mb-2">
+                  <h3 className="text-sm font-semibold" id="settings-access-heading">
+                    访问与发布
+                  </h3>
+                </div>
+                <div className="divide-y">
+                  <Field className="py-3" orientation="horizontal">
+                    <div className="flex-1">
+                      <FieldLabel htmlFor="album-public">公开访问</FieldLabel>
+                      <FieldDescription>关闭时使用活动口令访问</FieldDescription>
+                    </div>
+                    <Switch
+                      checked={album.access === "public"}
+                      disabled={pending}
+                      id="album-public"
+                      onCheckedChange={(checked) =>
+                        void update({ access: checked ? "public" : "password" }, "访问方式已更新")
+                      }
                     />
                   </Field>
-                  <Field>
-                    <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
-                    <Textarea
-                      id="settings-description"
-                      name="description"
-                      onChange={(event) => setDescription(event.currentTarget.value)}
-                      value={description}
+                  <Field className="py-3" orientation="horizontal">
+                    <div className="flex-1">
+                      <FieldLabel htmlFor="album-auto-publish">自动发布</FieldLabel>
+                      <FieldDescription>关闭时由审核员确认后发布</FieldDescription>
+                    </div>
+                    <Switch
+                      checked={album.publishMode === "auto"}
+                      disabled={pending}
+                      id="album-auto-publish"
+                      onCheckedChange={(checked) =>
+                        void update({ publishMode: checked ? "auto" : "review" }, "发布方式已更新")
+                      }
                     />
                   </Field>
-                  <Button disabled={pending} type="submit">
-                    {pending ? "正在保存…" : "保存基本信息"}
-                  </Button>
-                </FieldGroup>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="access">
-          <Card>
-            <CardHeader>
-              <CardTitle>访问与发布</CardTitle>
-              <CardDescription>
-                公开访问会让任何获得链接者进入；更换口令会退出旧访客。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <Field orientation="horizontal">
-                <div className="flex-1">
-                  <FieldLabel htmlFor="album-public">无需口令公开访问</FieldLabel>
-                  <FieldDescription>
-                    媒体仍使用短期签名 URL，不会把对象改为公共读。
-                  </FieldDescription>
-                </div>
-                <Switch
-                  checked={album.access === "public"}
-                  disabled={pending}
-                  id="album-public"
-                  onCheckedChange={(checked) =>
-                    void update({ access: checked ? "public" : "password" }, "访问方式已更新")
-                  }
-                />
-              </Field>
-              <Field orientation="horizontal">
-                <div className="flex-1">
-                  <FieldLabel htmlFor="album-auto-publish">预览就绪后自动发布</FieldLabel>
-                  <FieldDescription>学校活动默认关闭，先由审核员确认。</FieldDescription>
-                </div>
-                <Switch
-                  checked={album.publishMode === "auto"}
-                  disabled={pending}
-                  id="album-auto-publish"
-                  onCheckedChange={(checked) =>
-                    void update({ publishMode: checked ? "auto" : "review" }, "发布方式已更新")
-                  }
-                />
-              </Field>
-              <Button
-                disabled={pending}
-                onClick={() => void rotatePassword()}
-                type="button"
-                variant="outline"
-              >
-                <KeyRoundIcon data-icon="inline-start" />
-                更换随机口令并退出旧访客
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="downloads">
-          <Card>
-            <CardHeader>
-              <CardTitle>下载开关</CardTitle>
-              <CardDescription>
-                每项独立校验；地址有效 5 分钟，获得者在过期前仍可能转发。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <Alert>
-                <AlertTitle>开启下载会增加二次传播与 CDN 流量</AlertTitle>
-                <AlertDescription>
-                  仅在学校流程明确允许时开启；原图可能保留 EXIF/GPS。
-                </AlertDescription>
-              </Alert>
-              {(
-                [
-                  ["previewDownloadEnabled", "普通图下载", "下载 1920 派生图"],
-                  ["originalDownloadEnabled", "照片原图下载", "下载原始文件，可能含相机元数据"],
-                ] as const
-              ).map(([field, label, description]) => (
-                <Field key={field} orientation="horizontal">
-                  <div className="flex-1">
-                    <FieldLabel htmlFor={field}>{label}</FieldLabel>
-                    <FieldDescription>{description}</FieldDescription>
+                  <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div>
+                      <p className="text-sm font-medium">活动口令</p>
+                      <p className="text-xs text-muted-foreground">更换后旧访客会话立即失效</p>
+                    </div>
+                    <Button
+                      disabled={pending}
+                      onClick={() => void rotatePassword()}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <KeyRoundIcon data-icon="inline-start" />
+                      更换口令
+                    </Button>
                   </div>
-                  <Switch
-                    checked={album[field]}
-                    disabled={pending}
-                    id={field}
-                    onCheckedChange={(checked) =>
-                      void update({ [field]: checked }, `${label}已更新`)
-                    }
-                  />
-                </Field>
-              ))}
+                </div>
+              </section>
+
+              <section className="border-t p-4" aria-labelledby="settings-download-heading">
+                <div className="mb-2">
+                  <h3 className="text-sm font-semibold" id="settings-download-heading">
+                    下载权限
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    原图可能保留相机元数据，请按活动需要开启
+                  </p>
+                </div>
+                <div className="divide-y">
+                  {(
+                    [
+                      ["previewDownloadEnabled", "普通图下载", "1920 派生图"],
+                      ["originalDownloadEnabled", "照片原图下载", "原始文件"],
+                    ] as const
+                  ).map(([field, label, fieldDescription]) => (
+                    <Field className="py-3" key={field} orientation="horizontal">
+                      <div className="flex-1">
+                        <FieldLabel htmlFor={field}>{label}</FieldLabel>
+                        <FieldDescription>{fieldDescription}</FieldDescription>
+                      </div>
+                      <Switch
+                        checked={album[field]}
+                        disabled={pending}
+                        id={field}
+                        onCheckedChange={(checked) =>
+                          void update({ [field]: checked }, `${label}已更新`)
+                        }
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </section>
+
+              <section className="border-t p-4" aria-labelledby="settings-public-heading">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold" id="settings-public-heading">
+                    公开说明
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">隐私说明与删除投诉联系方式</p>
+                </div>
+                <form
+                  action={(formData) =>
+                    void update(
+                      {
+                        privacyNotice: String(formData.get("privacyNotice") ?? privacyNotice),
+                        complaintContact: String(
+                          formData.get("complaintContact") ?? complaintContact,
+                        ),
+                      },
+                      "公开说明已更新",
+                    )
+                  }
+                >
+                  <FieldGroup className="gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="privacy-notice">隐私说明</FieldLabel>
+                      <Textarea
+                        id="privacy-notice"
+                        name="privacyNotice"
+                        onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
+                        value={privacyNotice}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="complaint-contact">删除/投诉联系方式</FieldLabel>
+                      <Input
+                        id="complaint-contact"
+                        name="complaintContact"
+                        onChange={(event) => setComplaintContact(event.currentTarget.value)}
+                        value={complaintContact}
+                      />
+                    </Field>
+                    <Button className="w-fit" disabled={pending} size="sm" type="submit">
+                      {pending ? "正在保存…" : "保存公开说明"}
+                    </Button>
+                  </FieldGroup>
+                </form>
+              </section>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="privacy">
-          <Card>
-            <CardHeader>
-              <CardTitle>隐私说明与删除投诉</CardTitle>
-              <CardDescription>观众页底部公开展示；不得填写学生个人信息。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                action={(formData) =>
-                  void update(
-                    {
-                      privacyNotice: String(formData.get("privacyNotice") ?? privacyNotice),
-                      complaintContact: String(
-                        formData.get("complaintContact") ?? complaintContact,
-                      ),
-                    },
-                    "隐私与投诉信息已更新",
-                  )
-                }
-              >
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="privacy-notice">隐私说明</FieldLabel>
-                    <Textarea
-                      id="privacy-notice"
-                      name="privacyNotice"
-                      onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
-                      value={privacyNotice}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="complaint-contact">删除/投诉联系方式</FieldLabel>
-                    <Input
-                      id="complaint-contact"
-                      name="complaintContact"
-                      onChange={(event) => setComplaintContact(event.currentTarget.value)}
-                      value={complaintContact}
-                    />
-                  </Field>
-                  <Button disabled={pending} type="submit">
-                    {pending ? "正在保存…" : "保存公开说明"}
-                  </Button>
-                </FieldGroup>
-              </form>
-            </CardContent>
-          </Card>
+        <TabsContent value="features">
+          <Tabs className="gap-3" defaultValue="bib">
+            <TabsList className="gap-1.5 p-1">
+              <TabsTrigger className="px-3" value="bib">
+                号码识别
+              </TabsTrigger>
+              <TabsTrigger className="px-3" value="face">
+                人脸找图
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="bib">
+              <BibConfigEditor initial={bibConfig} />
+            </TabsContent>
+            <TabsContent value="face">
+              <FaceConfigEditor initial={faceConfig} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="statistics">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle>{statistics.mediaCount}</CardTitle>
-                <CardDescription>媒体项</CardDescription>
+          <div className="flex flex-col gap-3">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">媒体项</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">{statistics.mediaCount}</p>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">逻辑存储</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {formatBytes(statistics.logicalBytes)}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">独立访客</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {statistics.uniqueVisitors}
+                </p>
+              </div>
+            </div>
+
+            <Card className="overflow-hidden">
+              <CardHeader className="border-b py-3.5">
+                <CardTitle>日统计</CardTitle>
               </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>{formatBytes(statistics.logicalBytes)}</CardTitle>
-                <CardDescription>已验证对象逻辑体积</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>{statistics.uniqueVisitors}</CardTitle>
-                <CardDescription>按日不可跨日关联访客</CardDescription>
-              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>日期</TableHead>
+                      <TableHead>打开</TableHead>
+                      <TableHead>会话</TableHead>
+                      <TableHead>下载</TableHead>
+                      <TableHead>访客</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {statistics.daily.map((day) => (
+                      <TableRow key={day.day}>
+                        <TableCell>{day.day}</TableCell>
+                        <TableCell>{day.opens}</TableCell>
+                        <TableCell>{day.sessions}</TableCell>
+                        <TableCell>{day.downloads}</TableCell>
+                        <TableCell>{day.uniqueVisitors}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
             </Card>
           </div>
-          <Card>
-            <CardHeader>
-              <CardTitle>匿名日统计</CardTitle>
-              <CardDescription>
-                明细最多保留 30 天，聚合不含原始 IP、UA 或访客令牌。
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>日期</TableHead>
-                    <TableHead>打开</TableHead>
-                    <TableHead>会话</TableHead>
-                    <TableHead>下载签发</TableHead>
-                    <TableHead>访客</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {statistics.daily.map((day) => (
-                    <TableRow key={day.day}>
-                      <TableCell>{day.day}</TableCell>
-                      <TableCell>{day.opens}</TableCell>
-                      <TableCell>{day.sessions}</TableCell>
-                      <TableCell>{day.downloads}</TableCell>
-                      <TableCell>{day.uniqueVisitors}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="bib">
-          <BibConfigEditor initial={bibConfig} />
-        </TabsContent>
-        <TabsContent value="face">
-          <FaceConfigEditor initial={faceConfig} />
         </TabsContent>
       </Tabs>
     </div>

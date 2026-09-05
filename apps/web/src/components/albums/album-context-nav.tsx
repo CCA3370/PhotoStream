@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function AlbumContextNav({
@@ -16,7 +15,7 @@ export function AlbumContextNav({
     {
       id: "overview",
       href: `/studio/albums/${albumId}`,
-      label: "概览/媒体",
+      label: "概览",
       roles: ["admin", "reviewer"],
     },
     {
@@ -34,19 +33,22 @@ export function AlbumContextNav({
     {
       id: "settings",
       href: `/studio/albums/${albumId}/settings`,
-      label: "设置/统计",
+      label: "设置",
       roles: ["admin"],
     },
   ] as const;
+
   return (
-    <nav aria-label="相册工作区" className="flex gap-1 overflow-x-auto border-b pb-2">
+    <nav aria-label="相册工作区" className="flex gap-1 overflow-x-auto border-b">
       {links
         .filter((link) => link.roles.some((allowed) => allowed === role))
         .map((link) => (
           <Link
             className={cn(
-              buttonVariants({ variant: link.id === current ? "secondary" : "ghost" }),
-              "min-h-11 shrink-0",
+              "relative shrink-0 px-3 py-2 text-sm font-medium transition-colors",
+              link.id === current
+                ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
             href={link.href}
             key={link.id}
