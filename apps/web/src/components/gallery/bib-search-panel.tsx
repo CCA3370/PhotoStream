@@ -182,9 +182,7 @@ export function BibSearchPanel({
           <SearchIcon data-icon="inline-start" />
           找照片
         </Button>
-        {result === null ? (
-          <span className="text-xs text-muted-foreground">快速筛选你需要的照片</span>
-        ) : (
+        {result === null ? null : (
           <Button
             className="rounded-full"
             onClick={clearAll}
