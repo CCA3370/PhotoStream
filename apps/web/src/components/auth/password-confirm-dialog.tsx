@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -81,7 +81,12 @@ export function PasswordConfirmDialog({
             {error === null ? null : <FieldError>{error}</FieldError>}
           </Field>
           <DialogFooter>
-            <Button disabled={pending} onClick={() => onOpenChange(false)} type="button" variant="outline">
+            <Button
+              disabled={pending}
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="outline"
+            >
               取消
             </Button>
             <Button disabled={pending || password.length === 0} type="submit" variant={variant}>
