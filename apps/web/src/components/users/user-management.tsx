@@ -3,21 +3,12 @@
 import type { AdminUserView, UserRole } from "@photostream/contracts";
 import { KeyRoundIcon, UserPlusIcon } from "lucide-react";
 import { useState } from "react";
+
+import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -59,6 +50,7 @@ export function UserManagement({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<AdminUserView | null>(null);
 
   async function create(formData: FormData): Promise<void> {
     if (pending) return;
@@ -99,21 +91,13 @@ export function UserManagement({
     }
   }
 
-  async function resetPassword(userId: string): Promise<void> {
-    if (pending) return;
-    setPending(true);
-    setError(null);
-    try {
-      const result = await clientMutation<{ generatedTemporaryPassword: string }>(
-        `/api/v1/users/${userId}/reset-password`,
-        { idempotencyKey: crypto.randomUUID() },
-      );
-      setTemporaryPassword(result.generatedTemporaryPassword);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "密码重置失败");
-    } finally {
-      setPending(false);
-    }
+  async function resetPassword(userId: string, password: string): Promise<void> {
+    const result = await clientMutation<{ generatedTemporaryPassword: string }>(
+      `/api/v1/users/${userId}/reset-password`,
+      { confirmPassword: password, idempotencyKey: crypto.randomUUID() },
+    );
+    setTemporaryPassword(result.generatedTemporaryPassword);
+    setResetTarget(null);
   }
 
   return (
@@ -121,17 +105,16 @@ export function UserManagement({
       {temporaryPassword === null ? null : (
         <Alert>
           <KeyRoundIcon aria-hidden="true" />
-          <AlertTitle>请把一次性临时密码安全交给本人</AlertTitle>
+          <AlertTitle>一次性临时密码</AlertTitle>
           <AlertDescription>
             <p className="font-mono text-base text-foreground">{temporaryPassword}</p>
-            <p>用户首次登录必须改密；该值不会再次从数据库读取。</p>
           </AlertDescription>
         </Alert>
       )}
+
       <Card>
         <CardHeader>
           <CardTitle>新增成员</CardTitle>
-          <CardDescription>不开放公众注册；管理员创建内部账号并生成一次性密码。</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={create}>
@@ -183,7 +166,6 @@ export function UserManagement({
       <Card>
         <CardHeader>
           <CardTitle>成员与角色</CardTitle>
-          <CardDescription>停用或改角色会立即吊销该成员的全部后台会话。</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -238,25 +220,15 @@ export function UserManagement({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <AlertDialog>
-                      <AlertDialogTrigger render={<Button size="sm" variant="outline" />}>
-                        重置密码
-                      </AlertDialogTrigger>
-                      <AlertDialogContent size="sm">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>重置 {user.displayName} 的密码？</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            将吊销全部旧会话并生成一次性临时密码。该操作要求最近 15 分钟内登录。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel autoFocus>取消</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => void resetPassword(user.id)}>
-                            确认重置
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button
+                      disabled={pending}
+                      onClick={() => setResetTarget(user)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      重置密码
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -264,6 +236,23 @@ export function UserManagement({
           </Table>
         </CardContent>
       </Card>
+
+      <PasswordConfirmDialog
+        confirmLabel="确认重置"
+        description={
+          resetTarget === null ? undefined : `将重置 ${resetTarget.displayName} 的密码并吊销其旧会话。`
+        }
+        onConfirm={(password) =>
+          resetTarget === null ? Promise.resolve() : resetPassword(resetTarget.id, password)
+        }
+        onOpenChange={(open) => {
+          if (!open) setResetTarget(null);
+        }}
+        open={resetTarget !== null}
+        title="重置成员密码"
+        variant="destructive"
+      />
+
       <ErrorDialog message={error} onClose={() => setError(null)} title="成员操作失败" />
     </div>
   );
