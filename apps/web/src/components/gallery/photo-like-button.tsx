@@ -61,7 +61,11 @@ export function PhotoLikeButton({
   const heart = (
     <HeartIcon
       aria-hidden="true"
-      className={cn("size-4 transition-colors", liked && "fill-rose-500 text-rose-500")}
+      className={cn(
+        mode === "thumbnail" ? "size-3.5" : "size-4",
+        "transition-colors",
+        liked && "fill-rose-500 text-rose-500",
+      )}
     />
   );
 
@@ -72,16 +76,16 @@ export function PhotoLikeButton({
           aria-label={liked ? "取消点赞" : "点赞"}
           aria-pressed={liked}
           className={cn(
-            "h-8 gap-1.5 rounded-full border-white/20 bg-black/45 px-2.5 text-white shadow-sm backdrop-blur-md hover:bg-black/60 hover:text-white active:not-aria-[haspopup]:translate-y-0",
+            "h-6 gap-1 border-0 bg-transparent px-0.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white active:not-aria-[haspopup]:translate-y-0",
             className,
           )}
           disabled={pending || state === null}
           onClick={() => void toggle()}
           type="button"
-          variant="outline"
+          variant="ghost"
         >
           {heart}
-          <span className="min-w-3 text-xs font-medium tabular-nums">
+          <span className="min-w-2.5 text-[10px] leading-none font-semibold tabular-nums">
             {state === null ? "…" : state.count}
           </span>
         </Button>
