@@ -22,6 +22,7 @@ import { AppError } from "./errors.js";
 import type { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import type { FaceService } from "./face/service.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
+import type { FeaturedService } from "./media/featured-service.js";
 import type { MediaLikeService } from "./media/like-service.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
 import type { OperationsService } from "./media/operations-service.js";
@@ -30,6 +31,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBibRoutes } from "./routes/bib.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerFaceRoutes } from "./routes/face.js";
+import { registerFeaturedRoutes } from "./routes/featured.js";
 import { registerLikeRoutes } from "./routes/likes.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
@@ -41,6 +43,7 @@ export interface BuildAppOptions {
   readonly passwordHasher?: PasswordHasher;
   readonly photoService?: PhotoService;
   readonly likeService?: MediaLikeService;
+  readonly featuredService?: FeaturedService;
   readonly broker?: LiveEventBroker;
   readonly userAdminService?: UserAdminService;
   readonly operationsService?: OperationsService;
@@ -268,6 +271,19 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     await registerOperationsRoutes(app, {
       authService,
       photoService: options.photoService,
+      operationsService: options.operationsService,
+      config: options.config,
+    });
+  }
+  if (
+    options.photoService !== undefined &&
+    options.featuredService !== undefined &&
+    options.operationsService !== undefined
+  ) {
+    await registerFeaturedRoutes(app, {
+      authService,
+      photoService: options.photoService,
+      featuredService: options.featuredService,
       operationsService: options.operationsService,
       config: options.config,
     });
