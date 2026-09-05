@@ -126,9 +126,13 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
   );
 
   function pointerMove(event: ReactPointerEvent<SVGSVGElement>): void {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const rawX = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * chartWidth;
-    const x = Math.min(chartWidth - plot.right, Math.max(plot.left, rawX));
+    const matrix = event.currentTarget.getScreenCTM();
+    if (matrix === null) return;
+    const cursor = event.currentTarget.createSVGPoint();
+    cursor.x = event.clientX;
+    cursor.y = event.clientY;
+    const svgPoint = cursor.matrixTransform(matrix.inverse());
+    const x = Math.min(chartWidth - plot.right, Math.max(plot.left, svgPoint.x));
     const ratio = (x - plot.left) / Math.max(chartWidth - plot.left - plot.right, 1);
     const index = Math.round(ratio * Math.max(data.length - 1, 0));
     setHover({ index, x });
