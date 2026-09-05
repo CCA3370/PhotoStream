@@ -6,10 +6,7 @@ import type {
 } from "@photostream/contracts";
 
 import { ClientApiError, clientGet, clientMutation } from "@/lib/client-api";
-import {
-  type LocalReviewPhoto,
-  patchLocalReviewPhoto,
-} from "@/lib/local-review-queue";
+import { type LocalReviewPhoto, patchLocalReviewPhoto } from "@/lib/local-review-queue";
 
 function uploadRequest(photo: LocalReviewPhoto): CreatePhotoUploadRequest {
   return {
@@ -59,7 +56,12 @@ async function putSigned(path: string, blob: Blob, signal?: AbortSignal): Promis
         ...(signal === undefined ? {} : { signal }),
       });
       if (response.ok || response.status === 409) return response;
-      if (response.status < 500 && response.status !== 408 && response.status !== 425 && response.status !== 429) {
+      if (
+        response.status < 500 &&
+        response.status !== 408 &&
+        response.status !== 425 &&
+        response.status !== 429
+      ) {
         throw new Error(`对象上传失败（${response.status}）`);
       }
       lastError = new Error(`对象上传暂时失败（${response.status}）`);
@@ -75,7 +77,10 @@ async function putSigned(path: string, blob: Blob, signal?: AbortSignal): Promis
   throw lastError instanceof Error ? lastError : new Error("对象上传失败");
 }
 
-async function createIntent(photo: LocalReviewPhoto, signal?: AbortSignal): Promise<UploadIntentView> {
+async function createIntent(
+  photo: LocalReviewPhoto,
+  signal?: AbortSignal,
+): Promise<UploadIntentView> {
   return clientMutation<UploadIntentView>("/api/v1/uploads", {
     body: uploadRequest(photo),
     idempotencyKey: `local-${photo.id}`,
@@ -83,10 +88,16 @@ async function createIntent(photo: LocalReviewPhoto, signal?: AbortSignal): Prom
   });
 }
 
-async function resolveIntent(photo: LocalReviewPhoto, signal?: AbortSignal): Promise<UploadIntentView> {
+async function resolveIntent(
+  photo: LocalReviewPhoto,
+  signal?: AbortSignal,
+): Promise<UploadIntentView> {
   if (photo.intentId !== null) {
     try {
-      const existing = await clientGet<UploadIntentView>(`/api/v1/uploads/${photo.intentId}`, signal);
+      const existing = await clientGet<UploadIntentView>(
+        `/api/v1/uploads/${photo.intentId}`,
+        signal,
+      );
       if (existing.status === "active") return existing;
     } catch (error) {
       if (
@@ -146,13 +157,10 @@ async function transferObject(
     await putSigned(`/api/v1/uploads/${intent.id}/objects/${kind}/sign`, blob, signal);
   }
 
-  return clientMutation<UploadIntentView>(
-    `/api/v1/uploads/${intent.id}/objects/${kind}/complete`,
-    {
-      idempotencyKey: `local-object-${intent.id}-${kind}`,
-      signal,
-    },
-  );
+  return clientMutation<UploadIntentView>(`/api/v1/uploads/${intent.id}/objects/${kind}/complete`, {
+    idempotencyKey: `local-object-${intent.id}-${kind}`,
+    signal,
+  });
 }
 
 export async function publishLocalReviewPhoto(
