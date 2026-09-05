@@ -16,7 +16,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
+import {
+  requireInternalCsrf,
+  requireInternalSession,
+  verifyPasswordConfirmation,
+} from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import {
@@ -92,8 +96,13 @@ export async function registerFaceRoutes(
     async (request, reply) => {
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
+      const actor = actorFrom(session);
+      const current = await options.faceService.getConfig(actor, request.params.id);
+      if (current.enabled !== request.body.enabled) {
+        await verifyPasswordConfirmation(request, options.authService, session);
+      }
       return options.faceService.updateConfig({
-        actor: { ...actorFrom(session), authenticatedAt: session.record.createdAt },
+        actor: { ...actor, authenticatedAt: new Date() },
         albumId: request.params.id,
         input: request.body,
         requestId: request.id,
@@ -116,7 +125,7 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
       return options.faceService.excludeMedia({
-        actor: { ...actorFrom(session), authenticatedAt: session.record.createdAt },
+        actor: { ...actorFrom(session), authenticatedAt: new Date() },
         albumId: request.params.id,
         mediaIds: request.body.mediaIds,
         requestId: request.id,
@@ -154,8 +163,9 @@ export async function registerFaceRoutes(
     async (request, reply) => {
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
+      await verifyPasswordConfirmation(request, options.authService, session);
       return options.faceService.deleteIndex(
-        { ...actorFrom(session), authenticatedAt: session.record.createdAt },
+        { ...actorFrom(session), authenticatedAt: new Date() },
         request.params.id,
         request.id,
       );
