@@ -24,7 +24,7 @@ export function PasswordConfirmDialog({
   variant = "default",
 }: Readonly<{
   confirmLabel?: string;
-  description?: string;
+  description?: string | undefined;
   onConfirm: (password: string) => Promise<void>;
   onOpenChange: (open: boolean) => void;
   open: boolean;
