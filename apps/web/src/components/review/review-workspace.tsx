@@ -17,10 +17,7 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  ReviewLightbox,
-  type ReviewLightboxItem,
-} from "@/components/review/review-lightbox";
+import { ReviewLightbox, type ReviewLightboxItem } from "@/components/review/review-lightbox";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
