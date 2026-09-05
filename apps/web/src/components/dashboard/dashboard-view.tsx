@@ -16,10 +16,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { CreateAlbumForm } from "@/components/albums/create-album-form";
 import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -238,7 +237,6 @@ async function fetchDashboard(from: Date, to: Date): Promise<DashboardStatistics
 
 export function DashboardView({
   albums,
-  canCreateAlbum,
   initialData,
 }: Readonly<{
   albums: readonly AlbumSummaryView[];
@@ -349,13 +347,6 @@ export function DashboardView({
 
   return (
     <section aria-label="首页统计" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Link className={buttonVariants({ size: "sm", variant: "outline" })} href="/studio/albums">
-          管理活动
-        </Link>
-        {canCreateAlbum ? <CreateAlbumForm /> : null}
-      </div>
-
       <div className={cn("grid gap-2 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
         {kpis.map(({ label, value, meta, icon: Icon }) => (
           <Card className="shadow-none" key={label}>
