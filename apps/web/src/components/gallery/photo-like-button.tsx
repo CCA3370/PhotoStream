@@ -1,7 +1,8 @@
 "use client";
 
 import { HeartIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
@@ -31,7 +32,19 @@ export function PhotoLikeButton({
 }>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const liked = state?.likedByViewer ?? false;
+
+  useEffect(() => {
+    if (mode !== "toolbar") return;
+    const updatePortalTarget = () => {
+      const fullscreenElement = document.fullscreenElement;
+      setPortalTarget(fullscreenElement instanceof HTMLElement ? fullscreenElement : document.body);
+    };
+    updatePortalTarget();
+    document.addEventListener("fullscreenchange", updatePortalTarget);
+    return () => document.removeEventListener("fullscreenchange", updatePortalTarget);
+  }, [mode]);
 
   async function toggle(): Promise<void> {
     if (pending || state === null) return;
@@ -94,27 +107,30 @@ export function PhotoLikeButton({
     );
   }
 
-  return (
+  if (portalTarget === null) return null;
+
+  return createPortal(
     <>
-      <div className={cn("flex items-center gap-1.5", className)}>
-        <Button
-          aria-label={liked ? "取消点赞" : "点赞"}
-          aria-pressed={liked}
-          className="size-8 shrink-0 border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
-          disabled={pending || state === null}
-          onClick={() => void toggle()}
-          size="icon-sm"
-          title={liked ? "取消点赞" : "点赞"}
-          type="button"
-          variant="outline"
-        >
-          {heart}
-        </Button>
-        <span className="min-w-4 text-center text-xs font-medium tabular-nums text-white/80">
+      <Button
+        aria-label={liked ? "取消点赞" : "点赞"}
+        aria-pressed={liked}
+        className={cn(
+          "fixed bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+3.75rem)] left-3 z-[70] h-9 gap-1.5 rounded-full border-white/15 bg-black/35 px-3 text-white shadow-sm backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0 sm:bottom-14 sm:left-4",
+          className,
+        )}
+        disabled={pending || state === null}
+        onClick={() => void toggle()}
+        title={liked ? "取消点赞" : "点赞"}
+        type="button"
+        variant="outline"
+      >
+        {heart}
+        <span className="min-w-3 text-xs font-medium tabular-nums">
           {state === null ? "…" : state.count}
         </span>
-      </div>
+      </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="点赞失败" />
-    </>
+    </>,
+    portalTarget,
   );
 }
