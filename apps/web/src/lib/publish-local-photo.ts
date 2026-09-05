@@ -8,6 +8,10 @@ import type {
 import { ClientApiError, clientGet, clientMutation } from "@/lib/client-api";
 import { type LocalReviewPhoto, patchLocalReviewPhoto } from "@/lib/local-review-queue";
 
+function signalOptions(signal?: AbortSignal): { readonly signal?: AbortSignal } {
+  return signal === undefined ? {} : { signal };
+}
+
 function uploadRequest(photo: LocalReviewPhoto): CreatePhotoUploadRequest {
   return {
     albumId: photo.albumId,
@@ -48,7 +52,7 @@ async function putSigned(path: string, blob: Blob, signal?: AbortSignal): Promis
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const signed = await clientMutation<SignedUpload>(path, { signal });
+      const signed = await clientMutation<SignedUpload>(path, signalOptions(signal));
       const response = await fetch(signed.url, {
         method: "PUT",
         headers: signed.headers,
@@ -84,7 +88,7 @@ async function createIntent(
   return clientMutation<UploadIntentView>("/api/v1/uploads", {
     body: uploadRequest(photo),
     idempotencyKey: `local-${photo.id}`,
-    signal,
+    ...signalOptions(signal),
   });
 }
 
@@ -148,7 +152,7 @@ async function transferObject(
         {
           body: { etag },
           idempotencyKey: `local-part-${intent.id}-${kind}-${part.partNumber}`,
-          signal,
+          ...signalOptions(signal),
         },
       );
     }
@@ -159,7 +163,7 @@ async function transferObject(
 
   return clientMutation<UploadIntentView>(`/api/v1/uploads/${intent.id}/objects/${kind}/complete`, {
     idempotencyKey: `local-object-${intent.id}-${kind}`,
-    signal,
+    ...signalOptions(signal),
   });
 }
 
@@ -179,12 +183,12 @@ export async function publishLocalReviewPhoto(
 
     await clientMutation<{ readonly ok: true }>(`/api/v1/media/${intent.mediaId}/publish`, {
       idempotencyKey: `local-publish-${photo.id}`,
-      signal,
+      ...signalOptions(signal),
     });
     if (photo.featured) {
       await clientMutation<{ readonly mediaId: string; readonly featured: boolean }>(
         `/api/v1/media/${intent.mediaId}/featured`,
-        { body: { featured: true }, signal },
+        { body: { featured: true }, ...signalOptions(signal) },
       );
     }
     return { mediaId: intent.mediaId };
