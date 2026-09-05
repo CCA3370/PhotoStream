@@ -59,6 +59,7 @@ function loggerOptions(config: AppConfig): NonNullable<FastifyServerOptions["log
         "req.headers.authorization",
         "req.headers.cookie",
         "req.headers.x-csrf-token",
+        "req.headers.x-confirm-password",
         "req.headers.x-eventbridge-signature-v2",
         "req.headers.x-eventbridge-signature-token",
         "res.headers.set-cookie",
