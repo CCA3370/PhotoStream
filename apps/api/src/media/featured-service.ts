@@ -36,9 +36,7 @@ export class FeaturedService {
       .from(schema.featuredMedia)
       .innerJoin(schema.media, eq(schema.featuredMedia.mediaId, schema.media.id))
       .innerJoin(schema.albums, eq(schema.media.albumId, schema.albums.id))
-      .where(
-        and(eq(schema.albums.slug, slug), eq(schema.media.publicationStatus, "published")),
-      );
+      .where(and(eq(schema.albums.slug, slug), eq(schema.media.publicationStatus, "published")));
     return rows.map((row) => row.mediaId);
   }
 
@@ -51,7 +49,11 @@ export class FeaturedService {
     requirePermission(options.actor.role, "media:manage");
     return this.#database.transaction(async (transaction) => {
       const [media] = await transaction
-        .select({ id: schema.media.id, albumId: schema.media.albumId, status: schema.media.publicationStatus })
+        .select({
+          id: schema.media.id,
+          albumId: schema.media.albumId,
+          status: schema.media.publicationStatus,
+        })
         .from(schema.media)
         .where(eq(schema.media.id, options.mediaId))
         .limit(1);
@@ -112,6 +114,8 @@ export class FeaturedService {
 
   async prune(mediaIds: readonly string[]): Promise<void> {
     if (mediaIds.length === 0) return;
-    await this.#database.delete(schema.featuredMedia).where(inArray(schema.featuredMedia.mediaId, mediaIds));
+    await this.#database
+      .delete(schema.featuredMedia)
+      .where(inArray(schema.featuredMedia.mediaId, mediaIds));
   }
 }
