@@ -104,7 +104,9 @@ export default async function GalleryPage({
       <section aria-label={sectionTitle} className="flex flex-col gap-5">
         <div className="flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium tracking-wide text-muted-foreground">PHOTO GALLERY</p>
+            <p className="text-[11px] font-medium tracking-wide text-muted-foreground">
+              PHOTO GALLERY
+            </p>
             <h2 className="mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-xl">
               {sectionTitle}
             </h2>
