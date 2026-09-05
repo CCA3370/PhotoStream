@@ -177,7 +177,7 @@ function RankingList({
     <div className="divide-y">
       {items.map((photo, index) => (
         <Link
-          className="group grid grid-cols-[1.75rem_4rem_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50"
+          className="grid grid-cols-[1.75rem_4rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/30"
           href={`/studio/albums/${photo.albumId}`}
           key={photo.mediaId}
         >
@@ -208,10 +208,7 @@ function RankingList({
             <span className="text-sm font-semibold tabular-nums">
               {numberFormatter.format(photo.count)} {unit}
             </span>
-            <ArrowUpRightIcon
-              aria-hidden="true"
-              className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-            />
+            <ArrowUpRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           </div>
         </Link>
       ))}
@@ -351,7 +348,7 @@ export function DashboardView({
   ] as const;
 
   return (
-    <section aria-label="首页统计" className="flex flex-col gap-4">
+    <section aria-label="首页统计" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Link className={buttonVariants({ size: "sm", variant: "outline" })} href="/studio/albums">
           管理活动
@@ -359,18 +356,18 @@ export function DashboardView({
         {canCreateAlbum ? <CreateAlbumForm /> : null}
       </div>
 
-      <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
+      <div className={cn("grid gap-2 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
         {kpis.map(({ label, value, meta, icon: Icon }) => (
           <Card className="shadow-none" key={label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">{label}</p>
-                <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                <Icon aria-hidden="true" className="size-3.5 text-muted-foreground" />
               </div>
-              <div className="mt-2 flex items-end justify-between gap-3">
-                <p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+              <div className="mt-1 flex items-baseline justify-between gap-2">
+                <p className="text-xl font-semibold tracking-tight tabular-nums">{value}</p>
                 {meta === null ? null : (
-                  <p className="pb-0.5 text-xs tabular-nums text-muted-foreground">{meta}</p>
+                  <p className="text-[11px] tabular-nums text-muted-foreground">{meta}</p>
                 )}
               </div>
             </CardContent>
@@ -379,7 +376,7 @@ export function DashboardView({
       </div>
 
       <Card className={cn("overflow-hidden", pending && "opacity-60")}>
-        <CardHeader className="gap-3 border-b py-4">
+        <CardHeader className="gap-3 border-b py-3.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <CardTitle>访问趋势</CardTitle>
@@ -433,7 +430,7 @@ export function DashboardView({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-3 pt-4 pb-3 sm:px-5">
+        <CardContent className="px-3 pt-3 pb-2 sm:px-5">
           <AnalyticsTrendChart data={points} />
         </CardContent>
       </Card>
@@ -441,20 +438,20 @@ export function DashboardView({
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.7fr)]">
         <Card className={cn("overflow-hidden", pending && "opacity-60")}>
           <Tabs className="gap-0" defaultValue="downloads">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-4">
+            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
               <CardTitle>照片排行</CardTitle>
-              <TabsList>
-                <TabsTrigger value="downloads">
+              <TabsList className="gap-1.5 p-1">
+                <TabsTrigger className="px-2.5" value="downloads">
                   <DownloadIcon aria-hidden="true" />
                   下载
                 </TabsTrigger>
-                <TabsTrigger value="likes">
+                <TabsTrigger className="px-2.5" value="likes">
                   <HeartIcon aria-hidden="true" />
                   点赞
                 </TabsTrigger>
               </TabsList>
             </CardHeader>
-            <CardContent className="px-2 py-1">
+            <CardContent className="p-0">
               <TabsContent value="downloads">
                 <RankingList items={downloadRanking} unit="次" />
               </TabsContent>
@@ -466,20 +463,20 @@ export function DashboardView({
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader className="border-b py-4">
+          <CardHeader className="border-b py-3.5">
             <CardTitle className="flex items-center gap-2">
               <RadioIcon aria-hidden="true" className="size-4 text-success" />
               正在直播
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-2">
+          <CardContent className="p-0">
             {liveAlbums.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">暂无直播活动</p>
             ) : (
               <div className="divide-y">
                 {liveAlbums.map((album) => (
                   <Link
-                    className="flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-muted/50"
+                    className="flex items-center justify-between gap-3 px-3 py-3 transition-colors hover:bg-muted/30"
                     href={`/studio/albums/${album.id}`}
                     key={album.id}
                   >
