@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { type PointerEvent as ReactPointerEvent, useState } from "react";
 
 interface TrendPoint {
   readonly at: string;
@@ -65,7 +65,7 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
   const visitors = data.map((item) => item.uniqueVisitors);
   const downloads = data.map((item) => item.downloads);
   const max = Math.max(1, ...opens, ...visitors, ...downloads);
-  const active = activeIndex === null ? null : data[activeIndex] ?? null;
+  const active = activeIndex === null ? null : (data[activeIndex] ?? null);
   const activeX = activeIndex === null ? null : point(0, max, activeIndex, data.length)[0];
   const bottom = chartHeight - plot.bottom;
 
@@ -208,13 +208,16 @@ export function AnalyticsTrendChart({ data }: Readonly<{ data: readonly TrendPoi
 
       <div className="mt-1 flex items-center justify-center gap-5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] bg-chart-1" />浏览量
+          <span className="size-2 rounded-[2px] bg-chart-1" />
+          浏览量
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] bg-chart-2" />独立访客
+          <span className="size-2 rounded-[2px] bg-chart-2" />
+          独立访客
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] bg-chart-3" />下载量
+          <span className="size-2 rounded-[2px] bg-chart-3" />
+          下载量
         </span>
       </div>
 
