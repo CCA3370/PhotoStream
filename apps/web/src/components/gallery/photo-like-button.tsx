@@ -96,24 +96,25 @@ export function PhotoLikeButton({
 
   return (
     <>
-      <div className={cn("flex items-center gap-1.5", className)}>
-        <Button
-          aria-label={liked ? "取消点赞" : "点赞"}
-          aria-pressed={liked}
-          className="size-8 shrink-0 border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0"
-          disabled={pending || state === null}
-          onClick={() => void toggle()}
-          size="icon-sm"
-          title={liked ? "取消点赞" : "点赞"}
-          type="button"
-          variant="outline"
-        >
-          {heart}
-        </Button>
-        <span className="min-w-4 text-center text-xs font-medium tabular-nums text-white/80">
+      <Button
+        aria-label={liked ? "取消点赞" : "点赞"}
+        aria-pressed={liked}
+        className={cn(
+          "h-9 gap-1.5 rounded-xl border-white/15 bg-black/35 px-2.5 text-white backdrop-blur-md hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:translate-y-0",
+          className,
+        )}
+        disabled={pending || state === null}
+        onClick={() => void toggle()}
+        size="sm"
+        title={liked ? "取消点赞" : "点赞"}
+        type="button"
+        variant="outline"
+      >
+        {heart}
+        <span className="min-w-3 text-center text-xs font-medium tabular-nums text-white/80">
           {state === null ? "…" : state.count}
         </span>
-      </div>
+      </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="点赞失败" />
     </>
   );
