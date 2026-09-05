@@ -1,10 +1,5 @@
 import type { AlbumView, InternalMediaList } from "@photostream/contracts";
-import {
-  ClipboardCheckIcon,
-  ExternalLinkIcon,
-  Settings2Icon,
-  UploadIcon,
-} from "lucide-react";
+import { ClipboardCheckIcon, ExternalLinkIcon, Settings2Icon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AlbumActions } from "@/components/albums/album-actions";
