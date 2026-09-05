@@ -1,6 +1,10 @@
 "use client";
 
-import type { AlbumUploaderView, InternalMediaList, InternalMediaView } from "@photostream/contracts";
+import type {
+  AlbumUploaderView,
+  InternalMediaList,
+  InternalMediaView,
+} from "@photostream/contracts";
 import {
   EyeIcon,
   EyeOffIcon,
@@ -27,9 +31,9 @@ import {
 import { clientGet, clientMutation } from "@/lib/client-api";
 import {
   deleteLocalReviewPhoto,
+  type LocalReviewPhoto,
   listLocalReviewPhotos,
   patchLocalReviewPhoto,
-  type LocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { publishLocalReviewPhoto } from "@/lib/publish-local-photo";
 import { cn } from "@/lib/utils";
@@ -241,8 +245,9 @@ export function ReviewWorkspace({
     [category, filter, items, uploader],
   );
 
-  const activeIndex = activeKey === null ? -1 : visibleItems.findIndex((item) => item.key === activeKey);
-  const activeItem = activeIndex < 0 ? null : visibleItems[activeIndex] ?? null;
+  const activeIndex =
+    activeKey === null ? -1 : visibleItems.findIndex((item) => item.key === activeKey);
+  const activeItem = activeIndex < 0 ? null : (visibleItems[activeIndex] ?? null);
 
   function setPending(key: string, value: boolean): void {
     setPendingKeys((current) => {
@@ -417,7 +422,8 @@ export function ReviewWorkspace({
         event.preventDefault();
         if (
           activeItem.source === "remote" &&
-          (activeItem.publicationStatus === "published" || activeItem.publicationStatus === "hidden")
+          (activeItem.publicationStatus === "published" ||
+            activeItem.publicationStatus === "hidden")
         ) {
           void toggleVisibility(activeItem);
         }
@@ -443,7 +449,7 @@ export function ReviewWorkspace({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [activeIndex, activeItem, visibleItems]);
+  }, [activeIndex, activeItem, visibleItems, deleteItem, toggleFeatured, toggleVisibility]);
 
   const filters: readonly { readonly id: FilterMode; readonly label: string }[] = [
     { id: "all", label: "全部" },
@@ -523,8 +529,8 @@ export function ReviewWorkspace({
             aria-label="刷新审核列表"
             className="size-7"
             onClick={() =>
-              void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch((cause) =>
-                setError(cause instanceof Error ? cause.message : "刷新失败"),
+              void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch(
+                (cause) => setError(cause instanceof Error ? cause.message : "刷新失败"),
               )
             }
             size="icon"
@@ -547,23 +553,28 @@ export function ReviewWorkspace({
             const published = item.source === "remote" && item.publicationStatus === "published";
             const hidden = item.source === "remote" && item.publicationStatus === "hidden";
             return (
-              <button
-                className="group relative aspect-square overflow-hidden rounded-md bg-muted text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <div
+                className="group relative aspect-square overflow-hidden rounded-md bg-muted outline-none focus-within:ring-2 focus-within:ring-ring"
                 key={item.key}
-                onClick={() => setActiveKey(item.key)}
-                type="button"
               >
-                {item.previewUrl === null ? null : (
-                  <Image
-                    alt="审核图片"
-                    className="object-cover"
-                    fill
-                    sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
-                    src={item.previewUrl}
-                    unoptimized
-                  />
-                )}
-                <div className="absolute inset-x-0 top-0 flex justify-end gap-1 p-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <button
+                  aria-label="查看原图"
+                  className="absolute inset-0"
+                  onClick={() => setActiveKey(item.key)}
+                  type="button"
+                >
+                  {item.previewUrl === null ? null : (
+                    <Image
+                      alt="审核图片"
+                      className="object-cover"
+                      fill
+                      sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
+                      src={item.previewUrl}
+                      unoptimized
+                    />
+                  )}
+                </button>
+                <div className="absolute inset-x-0 top-0 z-10 flex justify-end gap-1 p-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   <Button
                     aria-label={item.featured ? "取消精选" : "设为精选"}
                     className={cn(
@@ -571,10 +582,7 @@ export function ReviewWorkspace({
                       item.featured && "text-amber-400",
                     )}
                     disabled={pending}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void toggleFeatured(item);
-                    }}
+                    onClick={() => void toggleFeatured(item)}
                     size="icon"
                     title={item.featured ? "取消精选" : "精选"}
                     type="button"
@@ -589,10 +597,7 @@ export function ReviewWorkspace({
                       published && "bg-blue-600/90 hover:bg-blue-600",
                     )}
                     disabled={pending}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void stateAction(item);
-                    }}
+                    onClick={() => void stateAction(item)}
                     size="icon"
                     title={published ? "隐藏" : hidden ? "显示" : "发布"}
                     type="button"
@@ -612,36 +617,31 @@ export function ReviewWorkspace({
                     aria-label="删除"
                     className="size-8 bg-red-600/90 text-white hover:bg-red-600"
                     disabled={pending || (item.source === "remote" && userRole !== "admin")}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void deleteItem(item);
-                    }}
+                    onClick={() => void deleteItem(item)}
                     size="icon"
-                    title={item.source === "remote" && userRole !== "admin" ? "仅管理员可删除" : "删除"}
+                    title={
+                      item.source === "remote" && userRole !== "admin" ? "仅管理员可删除" : "删除"
+                    }
                     type="button"
                     variant="ghost"
                   >
                     <Trash2Icon className="size-4" />
                   </Button>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
 
       <div className="flex h-8 items-center justify-center" ref={sentinelRef}>
-        {loadingMore ? <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" /> : null}
+        {loadingMore ? (
+          <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+        ) : null}
       </div>
 
       {activeItem === null ? null : (
-        <div
-          aria-label="原图预览"
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/95"
-          onClick={() => setActiveKey(null)}
-          role="dialog"
-        >
+        <div aria-label="原图预览" aria-modal="true" className="fixed inset-0 z-50 bg-black/95" role="dialog">
           <Button
             aria-label="关闭原图"
             className="absolute right-3 top-3 z-10 size-9 bg-black/50 text-white hover:bg-black/70"
@@ -653,7 +653,7 @@ export function ReviewWorkspace({
             <XIcon className="size-5" />
           </Button>
           {activeItem.originalUrl === null ? null : (
-            <div className="absolute inset-4 sm:inset-8" onClick={(event) => event.stopPropagation()}>
+            <div className="absolute inset-4 sm:inset-8">
               <Image
                 alt="完整原图"
                 className="object-contain"
