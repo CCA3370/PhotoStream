@@ -10,7 +10,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
+import {
+  requireInternalCsrf,
+  requireInternalSession,
+  verifyPasswordConfirmation,
+} from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { UserAdminService } from "../auth/user-admin-service.js";
 import type { AppConfig } from "../config.js";
@@ -111,11 +115,12 @@ export async function registerUserRoutes(
     },
     async (request) => {
       const session = await requireInternalCsrf(request, options.authService, options.config);
+      await verifyPasswordConfirmation(request, options.authService, session);
       const generatedTemporaryPassword = await options.userAdminService.resetPassword({
         actor: {
           id: session.record.user.id,
           role: session.record.user.role,
-          authenticatedAt: session.record.createdAt,
+          authenticatedAt: new Date(),
         },
         userId: request.params.id,
         idempotencyKey: idempotencyKey(request),
