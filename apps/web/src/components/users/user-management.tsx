@@ -240,7 +240,9 @@ export function UserManagement({
       <PasswordConfirmDialog
         confirmLabel="确认重置"
         description={
-          resetTarget === null ? undefined : `将重置 ${resetTarget.displayName} 的密码并吊销其旧会话。`
+          resetTarget === null
+            ? undefined
+            : `将重置 ${resetTarget.displayName} 的密码并吊销其旧会话。`
         }
         onConfirm={(password) =>
           resetTarget === null ? Promise.resolve() : resetPassword(resetTarget.id, password)
