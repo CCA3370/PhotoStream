@@ -117,13 +117,15 @@ export function ReviewWorkspace({
   uploaders,
 }: Readonly<{
   albumId: string;
+  albumTitle?: string;
+  bibConfig?: unknown;
   categories: readonly CategoryOption[];
   initialPage: InternalMediaList;
   userRole: "admin" | "reviewer";
   uploaders: readonly AlbumUploaderView[];
 }>) {
   const localUrls = useRef<string[]>([]);
-  const noticeTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const noticeTimer = useRef<number | null>(null);
   const deleteTap = useRef<{ readonly key: string; readonly at: number } | null>(null);
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
