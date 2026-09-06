@@ -1,15 +1,15 @@
 import type { BibConfigView, BibMediaState, BibTagView } from "@photostream/contracts";
 import { normalizeBibCandidates } from "@photostream/contracts";
 
-import { BIB_OCR_ASSET_VERSION, bibOcrSupported, recognizeBibCandidates } from "@/lib/bib-ocr";
-import { clientGet, clientMutation } from "@/lib/client-api";
+import { BIB_OCR_ASSET_VERSION, bibOcrSupported, recognizeBibCandidates } from "./bib-ocr";
+import { clientGet, clientMutation } from "./client-api";
 import {
   getLocalReviewPhoto,
   type LocalBibState,
   type LocalReviewPhoto,
   listLocalReviewPhotos,
   updateLocalReviewPhoto,
-} from "@/lib/local-review-queue";
+} from "./local-review-queue";
 
 export const LOCAL_BIB_SERVER_STATE_EVENT = "photostream:local-bib-server-state";
 
