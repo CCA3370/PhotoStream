@@ -1,7 +1,14 @@
 "use client";
 
 import type { CreateAlbumRequest } from "@photostream/contracts";
-import { ArrowRightIcon, CheckIcon, CopyIcon, KeyRoundIcon, LoaderCircleIcon, PlusIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  CopyIcon,
+  KeyRoundIcon,
+  LoaderCircleIcon,
+  PlusIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -147,8 +154,17 @@ export function CreateAlbumForm() {
                   <code className="min-w-0 flex-1 select-all truncate rounded-lg border bg-background px-3 py-2 font-mono text-base">
                     {result.generatedPassword}
                   </code>
-                  <Button onClick={() => void copyPassword()} size="sm" type="button" variant="outline">
-                    {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
+                  <Button
+                    onClick={() => void copyPassword()}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {copied ? (
+                      <CheckIcon data-icon="inline-start" />
+                    ) : (
+                      <CopyIcon data-icon="inline-start" />
+                    )}
                     {copied ? "已复制" : "复制"}
                   </Button>
                 </div>
