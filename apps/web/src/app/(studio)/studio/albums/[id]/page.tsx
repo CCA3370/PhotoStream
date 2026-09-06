@@ -101,7 +101,9 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
         <Card className="overflow-hidden shadow-none">
           <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
             <CardTitle>分类</CardTitle>
-            <span className="text-xs tabular-nums text-muted-foreground">{categories.length} 个</span>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {categories.length} 个
+            </span>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 p-4">
             <div className="flex min-h-7 flex-wrap items-center gap-1.5">
