@@ -116,6 +116,50 @@ assert_file_contains "$CADDY_STATE_DIR/active-api.caddy" 'header_up Host photos.
 assert_file_excludes "$CADDY_STATE_DIR/active-api.caddy" 'reverse_proxy api-blue:3001'
 write_routes blue
 
+prune_trace="$TEST_ROOT/prune.trace"
+if ! (
+  BLUE_API_IMAGE=photostream-api:current
+  BLUE_WEB_IMAGE=photostream-web:current
+  GREEN_API_IMAGE=photostream-api:previous
+  GREEN_WEB_IMAGE=photostream-web:previous
+  docker() {
+    if [[ "$1" == image && "$2" == ls ]]; then
+      printf '%s\n' \
+        $'photostream-api\tcurrent' \
+        $'photostream-web\tcurrent' \
+        $'photostream-api\tprevious' \
+        $'photostream-web\tprevious' \
+        $'photostream-api\told-release' \
+        $'photostream-web\told-release' \
+        $'photostream-api\theld-release' \
+        $'nss_scenery_core-admin-api\tlatest'
+      return 0
+    fi
+    if [[ "$1" == ps && "$2" == -a ]]; then
+      printf '%s\n' 'photostream-api:held-release'
+      return 0
+    fi
+    if [[ "$1" == image && "$2" == rm ]]; then
+      printf '%s\n' "$4" >>"$prune_trace"
+      return 0
+    fi
+    return 1
+  }
+  log() { :; }
+  warn() { :; }
+  prune_stale_release_images
+); then
+  fail 'release image pruning must be best-effort and succeed'
+fi
+assert_file_contains "$prune_trace" 'photostream-api:old-release'
+assert_file_contains "$prune_trace" 'photostream-web:old-release'
+assert_file_excludes "$prune_trace" 'photostream-api:current'
+assert_file_excludes "$prune_trace" 'photostream-web:current'
+assert_file_excludes "$prune_trace" 'photostream-api:previous'
+assert_file_excludes "$prune_trace" 'photostream-web:previous'
+assert_file_excludes "$prune_trace" 'photostream-api:held-release'
+assert_file_excludes "$prune_trace" 'nss_scenery_core-admin-api:latest'
+
 rollback_trace="$TEST_ROOT/rollback.trace"
 if (
   ACTIVE_SLOT=blue
