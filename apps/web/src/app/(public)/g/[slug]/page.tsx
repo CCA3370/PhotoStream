@@ -17,6 +17,10 @@ interface MediaList {
   readonly eventCursor: number;
 }
 
+interface FeaturedList {
+  readonly mediaIds: readonly string[];
+}
+
 export default async function GalleryPage({
   params,
   searchParams,
@@ -48,9 +52,10 @@ export default async function GalleryPage({
     : album.categories.find((candidate) => candidate.id === requestedCategory);
   const mediaPath = new URLSearchParams({ limit: "30" });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
-  const media = await serverApi<MediaList>(
-    `/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`,
-  );
+  const [media, featured] = await Promise.all([
+    serverApi<MediaList>(`/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`),
+    serverApi<FeaturedList>(`/api/v1/public/albums/${slug}/featured`),
+  ]);
   const faceSearch =
     album.faceSearchAvailable && album.faceSearchNoticeVersion !== null
       ? {
@@ -132,6 +137,7 @@ export default async function GalleryPage({
           >
             <PaginatedMediaGrid
               {...(category === undefined ? {} : { categoryId: category.id })}
+              initialFeaturedIds={featured.mediaIds}
               initialPage={media}
               key={category?.id ?? "all"}
               slug={slug}
@@ -141,6 +147,7 @@ export default async function GalleryPage({
           <PaginatedMediaGrid
             {...(category === undefined ? {} : { categoryId: category.id })}
             featuredOnly={featuredOnly}
+            initialFeaturedIds={featured.mediaIds}
             initialPage={media}
             key={featuredOnly ? "featured" : (category?.id ?? "all")}
             slug={slug}
