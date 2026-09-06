@@ -687,6 +687,36 @@ set_slot_release() {
   fi
 }
 
+prune_stale_release_images() {
+  local image_rows referenced_images repository tag image
+  if ! image_rows=$(docker image ls --format '{{.Repository}}\t{{.Tag}}'); then
+    warn "无法枚举 Docker 镜像；跳过旧 PhotoStream 镜像清理。"
+    return 0
+  fi
+  if ! referenced_images=$(docker ps -a --format '{{.Image}}'); then
+    warn "无法枚举 Docker 容器；为安全起见跳过旧 PhotoStream 镜像清理。"
+    return 0
+  fi
+
+  while IFS=$'\t' read -r repository tag; do
+    [[ "$repository" == photostream-api || "$repository" == photostream-web ]] || continue
+    [[ -n "$tag" && "$tag" != '<none>' ]] || continue
+    image="$repository:$tag"
+    case "$image" in
+      "$BLUE_API_IMAGE"|"$BLUE_WEB_IMAGE"|"$GREEN_API_IMAGE"|"$GREEN_WEB_IMAGE") continue ;;
+    esac
+    if grep -Fxq -- "$image" <<<"$referenced_images"; then
+      warn "保留仍被容器引用的旧镜像：$image"
+      continue
+    fi
+    if docker image rm -- "$image" >/dev/null; then
+      log "已删除超出回滚窗口的旧镜像：$image"
+    else
+      warn "旧镜像清理失败，部署已成功，可稍后手动删除：$image"
+    fi
+  done <<<"$image_rows"
+}
+
 write_routes() {
   local slot=$1 public_temp api_temp
   [[ "$slot" == blue || "$slot" == green ]] || die "无效部署槽：$slot"
@@ -834,6 +864,7 @@ deploy_release() {
     sleep 30
     compose --profile "$previous" stop -t 30 "api-$previous" "web-$previous"
   fi
+  prune_stale_release_images
   log "部署完成：$revision，活动槽：$ACTIVE_SLOT，https://$APP_HOST"
 }
 
