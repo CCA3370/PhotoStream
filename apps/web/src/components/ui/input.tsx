@@ -1,9 +1,46 @@
 import { Input as InputPrimitive } from "@base-ui/react/input";
-import type * as React from "react";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({
+  className,
+  type,
+  value,
+  onBlur,
+  onChange,
+  onFocus,
+  ...props
+}: React.ComponentProps<"input">) {
+  const controlledNumber = type === "number" && value !== undefined;
+  const [numberDraft, setNumberDraft] = React.useState<string | null>(null);
+
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>): void {
+    if (!controlledNumber) {
+      onChange?.(event);
+      return;
+    }
+
+    const next = event.currentTarget.value;
+    setNumberDraft(next);
+
+    // A controlled number input temporarily becomes an empty/invalid string while users
+    // replace its contents. Do not push that transient state into numeric configuration
+    // models (where Number("") becomes 0); commit only parseable numbers instead.
+    if (next.length === 0 || !Number.isFinite(event.currentTarget.valueAsNumber)) return;
+    onChange?.(event);
+  }
+
+  function handleFocus(event: React.FocusEvent<HTMLInputElement>): void {
+    if (controlledNumber) setNumberDraft(String(value));
+    onFocus?.(event);
+  }
+
+  function handleBlur(event: React.FocusEvent<HTMLInputElement>): void {
+    if (controlledNumber) setNumberDraft(null);
+    onBlur?.(event);
+  }
+
   return (
     <InputPrimitive
       type={type}
@@ -13,6 +50,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         className,
       )}
       {...props}
+      onBlur={handleBlur}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      value={controlledNumber && numberDraft !== null ? numberDraft : value}
     />
   );
 }
