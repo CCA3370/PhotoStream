@@ -3,6 +3,7 @@
 import type { AlbumView } from "@photostream/contracts";
 import { ArchiveIcon, LoaderCircleIcon, RadioTowerIcon, StopCircleIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
     }
   }
 
-  function icon(action: AlbumAction, fallback: React.ReactNode): React.ReactNode {
+  function icon(action: AlbumAction, fallback: ReactNode): ReactNode {
     return pendingAction === action ? (
       <LoaderCircleIcon aria-hidden="true" className="animate-spin" data-icon="inline-start" />
     ) : (
