@@ -1,6 +1,6 @@
 import type { ProcessedPhoto } from "@/lib/photo-processing";
 
-export type LocalUploadState = "local" | "uploading" | "failed";
+export type LocalUploadState = "local" | "uploading" | "failed" | "published";
 
 export interface LocalReviewVariant {
   readonly kind: "photo_480" | "photo_960" | "photo_1920";
