@@ -192,7 +192,7 @@ export function ReviewLightbox({
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
     spaceTapRef.current = null;
-  }, [resetView, selected?.key, selected?.src]);
+  }, [resetView, selected?.src]);
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
