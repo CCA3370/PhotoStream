@@ -186,7 +186,10 @@ export function AlbumManagementList({
 
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="flex min-w-0 items-center gap-2">
-                      <ImageIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                      <ImageIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
                       <span className="truncate">
                         <span className="font-medium tabular-nums">{album.mediaCount}</span>{" "}
                         <span className="text-muted-foreground">照片</span>
@@ -207,13 +210,20 @@ export function AlbumManagementList({
                       />
                       <span className="truncate">
                         <span className="font-medium tabular-nums">{album.pendingReviewCount}</span>{" "}
-                        <span className={album.pendingReviewCount === 0 ? "text-muted-foreground" : undefined}>
+                        <span
+                          className={
+                            album.pendingReviewCount === 0 ? "text-muted-foreground" : undefined
+                          }
+                        >
                           待审核
                         </span>
                       </span>
                     </div>
                     <div className="flex min-w-0 items-center gap-2">
-                      <HardDriveIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                      <HardDriveIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
                       <span className="truncate font-medium tabular-nums">
                         {formatBytes(album.logicalBytes)}
                       </span>
