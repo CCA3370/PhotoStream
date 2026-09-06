@@ -27,6 +27,24 @@ function clamped(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function abortError(): DOMException {
+  return new DOMException("OCR 已取消", "AbortError");
+}
+
+async function waitForTurn(previous: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (signal === undefined) {
+    await previous;
+    return;
+  }
+  if (signal.aborted) throw abortError();
+  await Promise.race([
+    previous,
+    new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(abortError()), { once: true });
+    }),
+  ]);
+}
+
 export function normalizeOcrItems(result: OcrResult): BibCandidateInput[] {
   if (result.image.width <= 0 || result.image.height <= 0) return [];
   return result.items.flatMap((item) => {
@@ -128,11 +146,11 @@ export async function recognizeBibCandidates(
   });
   const previous = queueTail;
   queueTail = previous.then(() => turn);
-  await previous;
   try {
-    if (signal?.aborted) throw new DOMException("OCR 已取消", "AbortError");
+    await waitForTurn(previous, signal);
+    if (signal?.aborted) throw abortError();
     const [result] = await (await runner()).predict(image);
-    if (signal?.aborted) throw new DOMException("OCR 已取消", "AbortError");
+    if (signal?.aborted) throw abortError();
     return result === undefined ? [] : normalizeOcrItems(result);
   } finally {
     release();
