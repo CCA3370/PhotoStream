@@ -245,28 +245,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
   return (
     <div className="flex flex-col gap-4">
-      <Alert>
-        <AlertTitle>
-          规则版本 {saved.ruleVersion} · 映射版本 {saved.mappingVersion}
-        </AlertTitle>
-        <AlertDescription>
-          自动识别只产生候选；只有人工确认号码才进入口令相册精确搜索。当前重算状态：
-          {saved.recalculationStatus}。
-        </AlertDescription>
-      </Alert>
-      {saved.automationStatus === "qualified" ? null : (
-        <Alert variant={saved.automationStatus === "disabled" ? "destructive" : "default"}>
-          <AlertTitle>
-            自动候选状态：{saved.automationStatus === "disabled" ? "已禁用" : "实验性"}
-          </AlertTitle>
-          <AlertDescription>
-            {saved.automationStatus === "disabled"
-              ? "当前环境禁止启动本地 OCR；手工补录与已启用的精确搜索仍可使用。"
-              : "尚未完成 200 张授权样本、移动端与 Safari/WASM 门禁；候选必须人工确认，不能视为正式识别能力。"}
-          </AlertDescription>
-        </Alert>
-      )}
-
       <Card>
         <CardHeader>
           <CardTitle>功能开关与模型</CardTitle>
