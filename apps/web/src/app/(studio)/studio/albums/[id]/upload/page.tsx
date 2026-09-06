@@ -1,4 +1,5 @@
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
+import { AlbumWorkspaceHeader } from "@/components/albums/album-workspace-header";
 import { UploadQueue } from "@/components/uploads/upload-queue";
 import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
@@ -24,12 +25,7 @@ export default async function UploadPage({ params }: { params: Promise<{ id: str
 
   return (
     <section aria-labelledby="upload-title" className="flex flex-col gap-4">
-      <div className="min-w-0">
-        <h2 className="text-xl font-semibold tracking-tight" id="upload-title">
-          上传
-        </h2>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{album.title}</p>
-      </div>
+      <AlbumWorkspaceHeader headingId="upload-title" section="上传工作区" title={album.title} />
       <AlbumContextNav albumId={id} current="upload" role={session.user.role} />
       <UploadQueue
         albumId={album.id}
