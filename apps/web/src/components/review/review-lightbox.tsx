@@ -1,6 +1,8 @@
 "use client";
 
+import type { BibMediaState } from "@photostream/contracts";
 import {
+  BadgeCheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   EyeIcon,
@@ -27,6 +29,11 @@ import {
   useState,
 } from "react";
 
+import {
+  BibReviewDialog,
+  BibReviewEditor,
+  isBibReviewConfirmed,
+} from "@/components/bib/bib-review-editor";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -55,6 +62,8 @@ export interface ReviewLightboxItem {
   readonly height: number;
   readonly featured: boolean;
   readonly publicationStatus: string;
+  readonly mediaId: string | null;
+  readonly bib: BibMediaState | null;
   readonly canDelete: boolean;
   readonly pendingAction: ReviewPendingAction | null;
 }
@@ -75,6 +84,17 @@ function stateLabel(status: string): string {
   return "发布";
 }
 
+function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLButtonElement ||
+    target.isContentEditable
+  );
+}
+
 export function ReviewLightbox({
   items,
   selectedKey,
@@ -84,6 +104,8 @@ export function ReviewLightbox({
   onStateAction,
   onToggleFeatured,
   onToggleVisibility,
+  onBibStateChange,
+  onBibError,
 }: Readonly<{
   items: readonly ReviewLightboxItem[];
   selectedKey: string | null;
@@ -93,6 +115,8 @@ export function ReviewLightbox({
   onStateAction: (key: string) => void;
   onToggleFeatured: (key: string) => void;
   onToggleVisibility: (key: string) => void;
+  onBibStateChange: (mediaId: string, state: BibMediaState) => void;
+  onBibError: (message: string) => void;
 }>) {
   const selectedIndex =
     selectedKey === null ? -1 : items.findIndex((item) => item.key === selectedKey);
@@ -114,6 +138,7 @@ export function ReviewLightbox({
   const [originalFailed, setOriginalFailed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const [bibDialogOpen, setBibDialogOpen] = useState(false);
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -187,12 +212,13 @@ export function ReviewLightbox({
     setSourceFailed(false);
     setShowingOriginal(false);
     setOriginalFailed(false);
+    setBibDialogOpen(false);
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
     spaceTapRef.current = null;
-  }, [resetView, selected?.src]);
+  }, [resetView, selected?.key, selected?.src]);
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
@@ -215,6 +241,7 @@ export function ReviewLightbox({
   useEffect(() => {
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isInteractiveKeyboardTarget(event.target)) return;
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         event.stopPropagation();
@@ -382,6 +409,7 @@ export function ReviewLightbox({
   const hidden = selected.publicationStatus === "hidden";
   const busy = selected.pendingAction !== null;
   const canNavigate = items.length > 1;
+  const bibConfirmed = isBibReviewConfirmed(selected.bib);
   const canLoadOriginal =
     selected.originalSrc !== null &&
     displaySrc !== selected.originalSrc &&
@@ -390,279 +418,323 @@ export function ReviewLightbox({
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="dark inset-0 left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
-        showCloseButton={false}
-      >
-        <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
-        <DialogDescription className="sr-only">
-          左右键切换，滚轮、双击或加减键缩放，拖动查看；已发布照片空格切换显示状态，未发布照片连续两次空格发布，回车切换精选，连续两次
-          Delete 删除。
-        </DialogDescription>
+    <>
+      <Dialog open onOpenChange={(open) => !open && onClose()}>
+        <DialogContent
+          className="dark inset-0 left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
+          showCloseButton={false}
+        >
+          <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
+          <DialogDescription className="sr-only">
+            左右键切换，滚轮、双击或加减键缩放，拖动查看；已发布照片空格切换显示状态，未发布照片连续两次空格发布，回车切换精选，连续两次
+            Delete 删除。
+          </DialogDescription>
 
-        <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
-          <div
-            aria-label="审核图片画布"
-            className={cn(
-              "absolute inset-0 touch-none select-none",
-              zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
-            )}
-            onDoubleClick={() => (zoom === 1 ? changeZoom(2.5) : resetView())}
-            onPointerCancel={finishPointer}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={finishPointer}
-            onWheel={onWheel}
-            ref={stageRef}
-            role="application"
-          >
-            {displaySrc === null ? (
-              <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                暂无可预览图片
-              </div>
-            ) : (
-              <>
-                {!loaded && !loadFailed ? (
-                  <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                    {showingOriginal ? "正在加载原图…" : "正在加载图片…"}
-                  </div>
-                ) : null}
-                {loadFailed ? (
-                  <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                    图片加载失败
-                  </div>
-                ) : null}
-                <div
-                  className="absolute inset-0 origin-center will-change-transform"
-                  style={{ transform: imageTransform }}
-                >
-                  <Image
-                    alt="审核图片"
-                    className={cn(
-                      "object-contain transition-opacity duration-150",
-                      loaded ? "opacity-100" : "opacity-0",
-                    )}
-                    draggable={false}
-                    fill
-                    key={displaySrc}
-                    onError={onImageError}
-                    onLoad={() => {
-                      setLoaded(true);
-                      setLoadFailed(false);
-                    }}
-                    priority
-                    sizes="100vw"
-                    src={displaySrc}
-                    unoptimized
-                  />
+          <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
+            <div
+              aria-label="审核图片画布"
+              className={cn(
+                "absolute inset-0 touch-none select-none",
+                zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
+              )}
+              onDoubleClick={() => (zoom === 1 ? changeZoom(2.5) : resetView())}
+              onPointerCancel={finishPointer}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={finishPointer}
+              onWheel={onWheel}
+              ref={stageRef}
+              role="application"
+            >
+              {displaySrc === null ? (
+                <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+                  暂无可预览图片
                 </div>
-              </>
-            )}
-          </div>
-
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between bg-gradient-to-b from-black/70 via-black/20 to-transparent p-3 pb-14 sm:p-4 sm:pb-16">
-            <div className="text-xs text-white/65">
-              {selectedIndex + 1} / {items.length}
+              ) : (
+                <>
+                  {!loaded && !loadFailed ? (
+                    <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+                      {showingOriginal ? "正在加载原图…" : "正在加载图片…"}
+                    </div>
+                  ) : null}
+                  {loadFailed ? (
+                    <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+                      图片加载失败
+                    </div>
+                  ) : null}
+                  <div
+                    className="absolute inset-0 origin-center will-change-transform"
+                    style={{ transform: imageTransform }}
+                  >
+                    <Image
+                      alt="审核图片"
+                      className={cn(
+                        "object-contain transition-opacity duration-150",
+                        loaded ? "opacity-100" : "opacity-0",
+                      )}
+                      draggable={false}
+                      fill
+                      key={displaySrc}
+                      onError={onImageError}
+                      onLoad={() => {
+                        setLoaded(true);
+                        setLoadFailed(false);
+                      }}
+                      priority
+                      sizes="100vw"
+                      src={displaySrc}
+                      unoptimized
+                    />
+                  </div>
+                </>
+              )}
             </div>
-            <div className="pointer-events-auto flex items-center gap-1.5">
-              {fullscreenSupported ? (
-                <Button
-                  aria-label={fullscreen ? "退出全屏" : "进入全屏"}
-                  className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
-                  onClick={() => void toggleFullscreen()}
-                  size="icon-lg"
-                  title={fullscreen ? "退出全屏 (F)" : "全屏 (F)"}
-                  type="button"
-                  variant="outline"
-                >
-                  {fullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
-                </Button>
-              ) : null}
-              <Button
-                aria-label="关闭审核图片查看器"
-                className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
-                onClick={onClose}
-                size="icon-lg"
-                title="关闭 (Esc)"
-                type="button"
-                variant="outline"
-              >
-                <XIcon />
-              </Button>
-            </div>
-          </div>
 
-          {canNavigate ? (
-            <>
-              <Button
-                aria-label="上一张照片"
-                className="absolute left-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:left-4 sm:size-11"
-                onClick={() => selectOffset(-1)}
-                size="icon-lg"
-                title="上一张 (←)"
-                type="button"
-                variant="outline"
-              >
-                <ChevronLeftIcon className="size-5 sm:size-6" />
-              </Button>
-              <Button
-                aria-label="下一张照片"
-                className="absolute right-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:right-4 sm:size-11"
-                onClick={() => selectOffset(1)}
-                size="icon-lg"
-                title="下一张 (→)"
-                type="button"
-                variant="outline"
-              >
-                <ChevronRightIcon className="size-5 sm:size-6" />
-              </Button>
-            </>
-          ) : null}
-
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
-            <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-2 text-[11px] text-white/60 sm:text-xs">
-                <span>
-                  {selected.width} × {selected.height}
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>{Math.round(zoom * 100)}%</span>
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between bg-gradient-to-b from-black/70 via-black/20 to-transparent p-3 pb-14 sm:p-4 sm:pb-16">
+              <div className="text-xs text-white/65">
+                {selectedIndex + 1} / {items.length}
               </div>
-
-              <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl">
-                <Button
-                  aria-label="缩小"
-                  className={cn(toolbarButtonClass, "size-8")}
-                  disabled={zoom <= minZoom}
-                  onClick={() => changeZoom(zoom - 0.5)}
-                  size="icon-sm"
-                  title="缩小 (-)"
-                  type="button"
-                  variant="outline"
-                >
-                  <MinusIcon />
-                </Button>
-                <Button
-                  aria-label="恢复适应屏幕"
-                  className={cn(toolbarButtonClass, "h-8 px-2.5")}
-                  disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
-                  onClick={resetView}
-                  size="sm"
-                  title="适应屏幕 (0)"
-                  type="button"
-                  variant="outline"
-                >
-                  <RotateCcwIcon />
-                  适应
-                </Button>
-                <Button
-                  aria-label="放大"
-                  className={cn(toolbarButtonClass, "size-8")}
-                  disabled={zoom >= maxZoom}
-                  onClick={() => changeZoom(zoom + 0.5)}
-                  size="icon-sm"
-                  title="放大 (+)"
-                  type="button"
-                  variant="outline"
-                >
-                  <PlusIcon />
-                </Button>
-
-                {canLoadOriginal ? (
+              <div className="pointer-events-auto flex items-center gap-1.5">
+                {fullscreenSupported ? (
                   <Button
-                    aria-label="查看原图"
-                    className={cn(toolbarButtonClass, "h-8 px-2.5")}
-                    onClick={loadRemoteOriginal}
-                    size="sm"
-                    title="从 CDN 加载原图"
+                    aria-label={fullscreen ? "退出全屏" : "进入全屏"}
+                    className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
+                    onClick={() => void toggleFullscreen()}
+                    size="icon-lg"
+                    title={fullscreen ? "退出全屏 (F)" : "全屏 (F)"}
                     type="button"
                     variant="outline"
                   >
-                    <ImageIcon />
-                    查看原图
+                    {fullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
                   </Button>
                 ) : null}
-
-                <div className="mx-0.5 h-5 w-px bg-white/10" />
-
                 <Button
-                  aria-label={selected.featured ? "取消精选" : "设为精选"}
-                  className={cn(
-                    toolbarButtonClass,
-                    "size-8",
-                    selected.featured && "text-amber-400 hover:text-amber-300",
-                  )}
-                  disabled={busy}
-                  onClick={() => onToggleFeatured(selected.key)}
-                  size="icon-sm"
-                  title={selected.featured ? "取消精选 (Enter)" : "精选 (Enter)"}
+                  aria-label="关闭审核图片查看器"
+                  className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
+                  onClick={onClose}
+                  size="icon-lg"
+                  title="关闭 (Esc)"
                   type="button"
                   variant="outline"
                 >
-                  {selected.pendingAction === "featured" ? (
-                    <LoaderCircleIcon className="animate-spin" />
-                  ) : (
-                    <StarIcon className={cn(selected.featured && "fill-current")} />
-                  )}
-                </Button>
-                <Button
-                  aria-label={stateLabel(selected.publicationStatus)}
-                  className={cn(
-                    toolbarButtonClass,
-                    "size-8",
-                    published &&
-                      "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
-                  )}
-                  disabled={busy}
-                  onClick={() => onStateAction(selected.key)}
-                  size="icon-sm"
-                  style={
-                    hidden
-                      ? {
-                          backgroundColor: "rgba(255, 255, 255, 0.06)",
-                          borderColor: "rgba(255, 255, 255, 0.1)",
-                          color: "white",
-                        }
-                      : undefined
-                  }
-                  title={
-                    published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布（双击 Space）"
-                  }
-                  type="button"
-                  variant="outline"
-                >
-                  {selected.pendingAction === "state" ? (
-                    <LoaderCircleIcon className="animate-spin" />
-                  ) : published ? (
-                    <EyeIcon />
-                  ) : hidden ? (
-                    <EyeOffIcon />
-                  ) : (
-                    <SendIcon />
-                  )}
-                </Button>
-                <Button
-                  aria-label="删除"
-                  className="size-8 rounded-lg border-red-400/20 bg-red-500/25 text-red-100 shadow-none backdrop-blur-md hover:border-red-400/35 hover:bg-red-500/40 hover:text-white disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35"
-                  disabled={busy || !selected.canDelete}
-                  onClick={() => onDelete(selected.key)}
-                  size="icon-sm"
-                  title={selected.canDelete ? "删除（键盘连续按两次 Delete）" : "仅管理员可删除"}
-                  type="button"
-                  variant="outline"
-                >
-                  {selected.pendingAction === "delete" ? (
-                    <LoaderCircleIcon className="animate-spin" />
-                  ) : (
-                    <Trash2Icon />
-                  )}
+                  <XIcon />
                 </Button>
               </div>
             </div>
+
+            {!bibConfirmed ? (
+              <div className="pointer-events-none absolute inset-x-3 top-16 z-30 sm:left-auto sm:right-4 sm:w-[22rem]">
+                <div className="pointer-events-auto rounded-2xl border border-white/10 bg-black/60 p-3 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-4">
+                  <BibReviewEditor
+                    compact
+                    mediaId={selected.mediaId}
+                    onChange={(state) => {
+                      if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
+                    }}
+                    onError={onBibError}
+                    state={selected.bib}
+                    tone="dark"
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {canNavigate ? (
+              <>
+                <Button
+                  aria-label="上一张照片"
+                  className="absolute left-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:left-4 sm:size-11"
+                  onClick={() => selectOffset(-1)}
+                  size="icon-lg"
+                  title="上一张 (←)"
+                  type="button"
+                  variant="outline"
+                >
+                  <ChevronLeftIcon className="size-5 sm:size-6" />
+                </Button>
+                <Button
+                  aria-label="下一张照片"
+                  className="absolute right-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:right-4 sm:size-11"
+                  onClick={() => selectOffset(1)}
+                  size="icon-lg"
+                  title="下一张 (→)"
+                  type="button"
+                  variant="outline"
+                >
+                  <ChevronRightIcon className="size-5 sm:size-6" />
+                </Button>
+              </>
+            ) : null}
+
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
+              <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex items-center gap-2 text-[11px] text-white/60 sm:text-xs">
+                  <span>
+                    {selected.width} × {selected.height}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>{Math.round(zoom * 100)}%</span>
+                </div>
+
+                <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl">
+                  <Button
+                    aria-label="缩小"
+                    className={cn(toolbarButtonClass, "size-8")}
+                    disabled={zoom <= minZoom}
+                    onClick={() => changeZoom(zoom - 0.5)}
+                    size="icon-sm"
+                    title="缩小 (-)"
+                    type="button"
+                    variant="outline"
+                  >
+                    <MinusIcon />
+                  </Button>
+                  <Button
+                    aria-label="恢复适应屏幕"
+                    className={cn(toolbarButtonClass, "h-8 px-2.5")}
+                    disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
+                    onClick={resetView}
+                    size="sm"
+                    title="适应屏幕 (0)"
+                    type="button"
+                    variant="outline"
+                  >
+                    <RotateCcwIcon />
+                    适应
+                  </Button>
+                  <Button
+                    aria-label="放大"
+                    className={cn(toolbarButtonClass, "size-8")}
+                    disabled={zoom >= maxZoom}
+                    onClick={() => changeZoom(zoom + 0.5)}
+                    size="icon-sm"
+                    title="放大 (+)"
+                    type="button"
+                    variant="outline"
+                  >
+                    <PlusIcon />
+                  </Button>
+
+                  {canLoadOriginal ? (
+                    <Button
+                      aria-label="查看原图"
+                      className={cn(toolbarButtonClass, "h-8 px-2.5")}
+                      onClick={loadRemoteOriginal}
+                      size="sm"
+                      title="从 CDN 加载原图"
+                      type="button"
+                      variant="outline"
+                    >
+                      <ImageIcon />
+                      查看原图
+                    </Button>
+                  ) : null}
+
+                  <div className="mx-0.5 h-5 w-px bg-white/10" />
+
+                  {bibConfirmed ? (
+                    <Button
+                      aria-label="修改号码确认"
+                      className="size-8 rounded-lg border-emerald-400/30 bg-emerald-500/80 text-white shadow-none hover:border-emerald-300/40 hover:bg-emerald-500 hover:text-white"
+                      onClick={() => setBibDialogOpen(true)}
+                      size="icon-sm"
+                      title="号码已确认，点击修改"
+                      type="button"
+                      variant="outline"
+                    >
+                      <BadgeCheckIcon />
+                    </Button>
+                  ) : null}
+
+                  <Button
+                    aria-label={selected.featured ? "取消精选" : "设为精选"}
+                    className={cn(
+                      toolbarButtonClass,
+                      "size-8",
+                      selected.featured && "text-amber-400 hover:text-amber-300",
+                    )}
+                    disabled={busy}
+                    onClick={() => onToggleFeatured(selected.key)}
+                    size="icon-sm"
+                    title={selected.featured ? "取消精选 (Enter)" : "精选 (Enter)"}
+                    type="button"
+                    variant="outline"
+                  >
+                    {selected.pendingAction === "featured" ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : (
+                      <StarIcon className={cn(selected.featured && "fill-current")} />
+                    )}
+                  </Button>
+                  <Button
+                    aria-label={stateLabel(selected.publicationStatus)}
+                    className={cn(
+                      toolbarButtonClass,
+                      "size-8",
+                      published &&
+                        "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
+                    )}
+                    disabled={busy}
+                    onClick={() => onStateAction(selected.key)}
+                    size="icon-sm"
+                    style={
+                      hidden
+                        ? {
+                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                            borderColor: "rgba(255, 255, 255, 0.1)",
+                            color: "white",
+                          }
+                        : undefined
+                    }
+                    title={
+                      published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布（双击 Space）"
+                    }
+                    type="button"
+                    variant="outline"
+                  >
+                    {selected.pendingAction === "state" ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : published ? (
+                      <EyeIcon />
+                    ) : hidden ? (
+                      <EyeOffIcon />
+                    ) : (
+                      <SendIcon />
+                    )}
+                  </Button>
+                  <Button
+                    aria-label="删除"
+                    className="size-8 rounded-lg border-red-400/20 bg-red-500/25 text-red-100 shadow-none backdrop-blur-md hover:border-red-400/35 hover:bg-red-500/40 hover:text-white disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35"
+                    disabled={busy || !selected.canDelete}
+                    onClick={() => onDelete(selected.key)}
+                    size="icon-sm"
+                    title={selected.canDelete ? "删除（键盘连续按两次 Delete）" : "仅管理员可删除"}
+                    type="button"
+                    variant="outline"
+                  >
+                    {selected.pendingAction === "delete" ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : (
+                      <Trash2Icon />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <BibReviewDialog
+        mediaId={selected.mediaId}
+        onChange={(state) => {
+          if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
+        }}
+        onError={onBibError}
+        onOpenChange={setBibDialogOpen}
+        open={bibDialogOpen && bibConfirmed}
+        state={selected.bib}
+      />
+    </>
   );
 }
