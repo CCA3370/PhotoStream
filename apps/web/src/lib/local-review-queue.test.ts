@@ -1,6 +1,7 @@
-import type { BibMediaState } from "@photostream/contracts";
+import type { BibConfigView, BibMediaState } from "@photostream/contracts";
 import { describe, expect, it } from "vitest";
 
+import { shouldResumeLocalBibOcr } from "./local-bib-ocr";
 import {
   effectiveBibMediaState,
   type LocalReviewPhoto,
@@ -50,6 +51,26 @@ function photo(bib: Partial<LocalReviewPhoto["bib"]>): LocalReviewPhoto {
       manualSyncedRevision: 0,
       ...bib,
     },
+  };
+}
+
+function config(recognitionEnabled: boolean, ruleVersion = 3): BibConfigView {
+  return {
+    albumId: "019d0000-0000-7000-8000-000000000002",
+    recognitionEnabled,
+    searchEnabled: true,
+    modelVersion: "test-model",
+    patterns: [],
+    attributeOptions: [],
+    mappings: [],
+    automationStatus: "experimental",
+    ruleVersion,
+    mappingVersion: 0,
+    ruleUsable: true,
+    mappingUsable: true,
+    recalculationStatus: "idle",
+    issues: [],
+    updatedAt: "2026-09-06T00:00:00.000Z",
   };
 }
 
@@ -121,6 +142,15 @@ describe("local bib review state", () => {
     );
   });
 
+  it("projects queued local OCR as processing and leaves disabled OCR idle", () => {
+    expect(localBibMediaState(photo({ ocrStatus: "not_started" })).review.ocrStatus).toBe(
+      "processing",
+    );
+    expect(localBibMediaState(photo({ ocrStatus: "disabled" })).review.ocrStatus).toBe(
+      "not_started",
+    );
+  });
+
   it("only blocks list confirmation while OCR is queued or processing", () => {
     expect(localBibOcrPending(photo({ ocrStatus: "not_started" }))).toBe(true);
     expect(localBibOcrPending(photo({ ocrStatus: "processing" }))).toBe(true);
@@ -128,5 +158,24 @@ describe("local bib review state", () => {
     expect(localBibOcrPending(photo({ ocrStatus: "failed" }))).toBe(false);
     expect(localBibOcrPending(photo({ ocrStatus: "unsupported" }))).toBe(false);
     expect(localBibOcrPending(photo({ ocrStatus: "disabled" }))).toBe(false);
+  });
+
+  it("reconciles OCR when recognition is toggled or the rule version changes", () => {
+    expect(shouldResumeLocalBibOcr(photo({ ocrStatus: "not_started" }), config(true))).toBe(true);
+    expect(shouldResumeLocalBibOcr(photo({ ocrStatus: "disabled" }), config(true))).toBe(true);
+    expect(
+      shouldResumeLocalBibOcr(
+        photo({ ocrStatus: "completed", modelVersion: "test-model", ruleVersion: 3 }),
+        config(true),
+      ),
+    ).toBe(false);
+    expect(
+      shouldResumeLocalBibOcr(
+        photo({ ocrStatus: "completed", modelVersion: "test-model", ruleVersion: 2 }),
+        config(true),
+      ),
+    ).toBe(true);
+    expect(shouldResumeLocalBibOcr(photo({ ocrStatus: "processing" }), config(false))).toBe(true);
+    expect(shouldResumeLocalBibOcr(photo({ ocrStatus: "disabled" }), config(false))).toBe(false);
   });
 });
