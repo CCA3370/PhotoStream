@@ -105,6 +105,8 @@ export function ReviewLightbox({
   onToggleFeatured,
   onToggleVisibility,
   onBibStateChange,
+  onLocalBibConfirmNumbers,
+  onLocalBibConfirmNoNumber,
   onBibError,
 }: Readonly<{
   items: readonly ReviewLightboxItem[];
@@ -116,6 +118,8 @@ export function ReviewLightbox({
   onToggleFeatured: (key: string) => void;
   onToggleVisibility: (key: string) => void;
   onBibStateChange: (mediaId: string, state: BibMediaState) => void;
+  onLocalBibConfirmNumbers: (key: string, numbers: readonly string[]) => Promise<BibMediaState>;
+  onLocalBibConfirmNoNumber: (key: string) => Promise<BibMediaState>;
   onBibError: (message: string) => void;
 }>) {
   const selectedIndex =
@@ -410,6 +414,14 @@ export function ReviewLightbox({
   const busy = selected.pendingAction !== null;
   const canNavigate = items.length > 1;
   const bibConfirmed = isBibReviewConfirmed(selected.bib);
+  const localActions =
+    selected.mediaId === null
+      ? {
+          confirmNumbers: (numbers: readonly string[]) =>
+            onLocalBibConfirmNumbers(selected.key, numbers),
+          confirmNoNumber: () => onLocalBibConfirmNoNumber(selected.key),
+        }
+      : undefined;
   const canLoadOriginal =
     selected.originalSrc !== null &&
     displaySrc !== selected.originalSrc &&
@@ -527,6 +539,7 @@ export function ReviewLightbox({
                 <div className="pointer-events-auto rounded-2xl border border-white/10 bg-black/60 p-3 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-4">
                   <BibReviewEditor
                     compact
+                    localActions={localActions}
                     mediaId={selected.mediaId}
                     onChange={(state) => {
                       if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
@@ -726,6 +739,7 @@ export function ReviewLightbox({
       </Dialog>
 
       <BibReviewDialog
+        localActions={localActions}
         mediaId={selected.mediaId}
         onChange={(state) => {
           if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
