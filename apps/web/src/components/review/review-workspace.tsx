@@ -44,10 +44,10 @@ import {
   confirmLocalBibNumbers,
   deleteLocalReviewPhoto,
   effectiveBibMediaState,
-  localBibMediaState,
-  localBibOcrPending,
   type LocalReviewPhoto,
   listLocalReviewPhotos,
+  localBibMediaState,
+  localBibOcrPending,
   patchLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { publishLocalReviewPhoto } from "@/lib/publish-local-photo";
@@ -232,18 +232,20 @@ export function ReviewWorkspace({
     return page;
   }, [fetchRemote]);
 
-  function updateBibState(mediaId: string, state: BibMediaState): void {
+  const updateBibState = useCallback((mediaId: string, state: BibMediaState): void => {
     setRemoteMedia((current) =>
       current.map((media) => (media.id === mediaId ? { ...media, bib: state } : media)),
     );
-  }
+  }, []);
 
   useEffect(() => {
-    void Promise.all([refreshLocal(), refreshFeatured(), resumeLocalBibOcr(albumId, bibConfig)]).catch(
-      (cause) => {
-        setError(cause instanceof Error ? cause.message : "审核数据加载失败");
-      },
-    );
+    void Promise.all([
+      refreshLocal(),
+      refreshFeatured(),
+      resumeLocalBibOcr(albumId, bibConfig),
+    ]).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "审核数据加载失败");
+    });
     const localChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly albumId?: string }>).detail;
       if (detail?.albumId !== albumId) return;
@@ -258,7 +260,11 @@ export function ReviewWorkspace({
           readonly state?: BibMediaState;
         }>
       ).detail;
-      if (detail?.albumId !== albumId || typeof detail.mediaId !== "string" || detail.state === undefined) {
+      if (
+        detail?.albumId !== albumId ||
+        typeof detail.mediaId !== "string" ||
+        detail.state === undefined
+      ) {
         return;
       }
       updateBibState(detail.mediaId, detail.state);
@@ -275,7 +281,7 @@ export function ReviewWorkspace({
       }
       localUrlCache.current.clear();
     };
-  }, [albumId, bibConfig, refreshFeatured, refreshLocal]);
+  }, [albumId, bibConfig, refreshFeatured, refreshLocal, updateBibState]);
 
   const items = useMemo<readonly ReviewItem[]>(() => {
     const remoteIds = new Set(remoteMedia.map((item) => item.id));
@@ -403,7 +409,7 @@ export function ReviewWorkspace({
     const item = itemByKey(key);
     const photo = item === null ? null : localPhoto(item);
     if (photo === null || photo.mediaId !== null) throw new Error("本地号码状态不可用");
-    const updated = await confirmLocalBibNumbers(photo.id, numbers);
+    const updated = await confirmLocalBibNumbers(photo.id, numbers, bibConfig.patterns);
     return localBibMediaState(updated);
   }
 
