@@ -18,6 +18,11 @@ import { Input } from "@/components/ui/input";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
+export interface BibReviewLocalActions {
+  readonly confirmNumbers: (numbers: readonly string[]) => Promise<BibMediaState>;
+  readonly confirmNoNumber: () => Promise<BibMediaState>;
+}
+
 export function isBibReviewConfirmed(state: BibMediaState | null | undefined): boolean {
   return (
     state?.review.decision === "numbers_confirmed" ||
@@ -95,6 +100,7 @@ interface BibReviewEditorProps {
   readonly state: BibMediaState | null;
   readonly onChange: (state: BibMediaState) => void;
   readonly onError: (message: string) => void;
+  readonly localActions?: BibReviewLocalActions | undefined;
   readonly tone?: "default" | "dark";
   readonly compact?: boolean;
 }
@@ -104,12 +110,14 @@ export function BibReviewEditor({
   state,
   onChange,
   onError,
+  localActions,
   tone = "default",
   compact = false,
 }: BibReviewEditorProps) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [number, setNumber] = useState("");
+  const [dirty, setDirty] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const activeTags = useMemo(
@@ -136,8 +144,13 @@ export function BibReviewEditor({
   );
 
   useEffect(() => {
+    setDirty(false);
+  }, [mediaId, state?.review.mediaId]);
+
+  useEffect(() => {
     if (state?.review.decision === "no_number_confirmed") {
       setNumber("");
+      setDirty(false);
       return;
     }
     const confirmedNumbers = activeTags
@@ -145,10 +158,11 @@ export function BibReviewEditor({
       .map((tag) => tag.number);
     if (confirmedNumbers.length > 0) {
       setNumber(confirmedNumbers.join(","));
+      setDirty(false);
       return;
     }
-    setNumber(activeTags[0]?.number ?? "");
-  }, [activeTags, state?.review.decision]);
+    if (!dirty) setNumber(activeTags[0]?.number ?? "");
+  }, [activeTags, dirty, state?.review.decision]);
 
   useEffect(() => {
     if (mediaId === null || state !== null) return;
@@ -170,16 +184,24 @@ export function BibReviewEditor({
   }, [mediaId, onChange, onError, state]);
 
   async function confirmNumbers(): Promise<void> {
-    if (mediaId === null || busy) return;
+    if (busy) return;
     const parsed = parseBibNumbers(number);
     if (parsed.error !== null) {
       setValidationError(parsed.error);
       return;
     }
-    const wanted = new Set(parsed.numbers);
     setBusy(true);
     setValidationError(null);
     try {
+      if (mediaId === null) {
+        if (localActions === undefined) return;
+        const result = await localActions.confirmNumbers(parsed.numbers);
+        onChange(result);
+        setNumber(parsed.numbers.join(","));
+        setDirty(false);
+        return;
+      }
+      const wanted = new Set(parsed.numbers);
       let current = state;
       if (current === null) return;
       if (current.review.decision === "no_number_confirmed") {
@@ -227,6 +249,7 @@ export function BibReviewEditor({
         onChange(current);
       }
       setNumber(parsed.numbers.join(","));
+      setDirty(false);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "号码确认失败");
     } finally {
@@ -235,15 +258,24 @@ export function BibReviewEditor({
   }
 
   async function confirmNoNumber(): Promise<void> {
-    if (mediaId === null || busy) return;
+    if (busy) return;
     setBusy(true);
     setValidationError(null);
     try {
+      if (mediaId === null) {
+        if (localActions === undefined) return;
+        const result = await localActions.confirmNoNumber();
+        onChange(result);
+        setNumber("");
+        setDirty(false);
+        return;
+      }
       const result = await clientMutation<BibMediaState>(
         `/api/v1/media/${mediaId}/bib-review/no-number`,
         { idempotencyKey: `bib-no-number-${crypto.randomUUID()}` },
       );
       onChange(result);
+      setDirty(false);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "无号码确认失败");
     } finally {
@@ -255,7 +287,7 @@ export function BibReviewEditor({
   const confirmed = isBibReviewConfirmed(state);
   const noNumber = state?.review.decision === "no_number_confirmed";
 
-  if (mediaId === null) {
+  if (mediaId === null && localActions === undefined) {
     return (
       <div
         className={cn(
@@ -320,7 +352,11 @@ export function BibReviewEditor({
               dark ? "border-white/10 text-white/50" : "text-muted-foreground",
             )}
           >
-            {noNumber ? "已人工确认此照片没有号码" : "暂未识别到可用号码，可直接手动输入。"}
+            {noNumber
+              ? "已人工确认此照片没有号码"
+              : state.review.ocrStatus === "processing"
+                ? "正在识别号码，可直接手动输入并确认。"
+                : "暂未识别到可用号码，可直接手动输入。"}
           </div>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -341,6 +377,7 @@ export function BibReviewEditor({
                   key={tag.id}
                   onClick={() => {
                     setNumber((current) => appendOrRemoveNumber(current, tag.number));
+                    setDirty(true);
                     setValidationError(null);
                   }}
                   type="button"
@@ -388,6 +425,7 @@ export function BibReviewEditor({
             maxLength={255}
             onChange={(event) => {
               setNumber(event.currentTarget.value);
+              setDirty(true);
               setValidationError(null);
             }}
             placeholder={
@@ -451,6 +489,7 @@ export function BibReviewDialog({
   state,
   onChange,
   onError,
+  localActions,
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -458,6 +497,7 @@ export function BibReviewDialog({
   state: BibMediaState | null;
   onChange: (state: BibMediaState) => void;
   onError: (message: string) => void;
+  localActions?: BibReviewLocalActions | undefined;
 }>) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -468,7 +508,13 @@ export function BibReviewDialog({
             核对自动识别结果，也可以直接输入或修改多个号码；多个号码使用英文逗号分隔。
           </DialogDescription>
         </DialogHeader>
-        <BibReviewEditor mediaId={mediaId} onChange={onChange} onError={onError} state={state} />
+        <BibReviewEditor
+          localActions={localActions}
+          mediaId={mediaId}
+          onChange={onChange}
+          onError={onError}
+          state={state}
+        />
       </DialogContent>
     </Dialog>
   );
