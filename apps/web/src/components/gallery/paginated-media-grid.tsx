@@ -24,6 +24,14 @@ function mergeMedia(
   return [...byId.values()].sort((left, right) => right.publishSequence - left.publishSequence);
 }
 
+function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  if (left.size !== right.size) return false;
+  for (const value of right) {
+    if (!left.has(value)) return false;
+  }
+  return true;
+}
+
 function distributeFeatured(
   source: readonly PublicMediaView[],
   featuredIds: ReadonlySet<string>,
@@ -54,16 +62,20 @@ function distributeFeatured(
 export function PaginatedMediaGrid({
   categoryId,
   featuredOnly = false,
+  initialFeaturedIds,
   initialPage,
   slug,
 }: Readonly<{
   categoryId?: string;
   featuredOnly?: boolean;
+  initialFeaturedIds: readonly string[];
   initialPage: MediaPage;
   slug: string;
 }>) {
   const [items, setItems] = useState<readonly PublicMediaView[]>(initialPage.items);
-  const [featuredIds, setFeaturedIds] = useState<ReadonlySet<string>>(new Set());
+  const [featuredIds, setFeaturedIds] = useState<ReadonlySet<string>>(
+    () => new Set(initialFeaturedIds),
+  );
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loading, setLoading] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
@@ -75,12 +87,18 @@ export function PaginatedMediaGrid({
     const result = await clientGet<{ readonly mediaIds: readonly string[] }>(
       `/api/v1/public/albums/${slug}/featured`,
     );
-    setFeaturedIds(new Set(result.mediaIds));
+    const next = new Set(result.mediaIds);
+    setFeaturedIds((current) => (sameStringSet(current, next) ? current : next));
   }, [slug]);
 
   useEffect(() => {
     setItems((current) => mergeMedia(current, initialPage.items));
   }, [initialPage.items]);
+
+  useEffect(() => {
+    const next = new Set(initialFeaturedIds);
+    setFeaturedIds((current) => (sameStringSet(current, next) ? current : next));
+  }, [initialFeaturedIds]);
 
   useEffect(() => {
     void refreshFeatured().catch(() => undefined);
