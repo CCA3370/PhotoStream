@@ -17,7 +17,11 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ReviewLightbox, type ReviewLightboxItem } from "@/components/review/review-lightbox";
+import {
+  ReviewLightbox,
+  type ReviewLightboxItem,
+  type ReviewPendingAction,
+} from "@/components/review/review-lightbox";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
@@ -57,19 +61,26 @@ type ReviewItem =
       readonly source: "local";
       readonly local: LocalView;
       readonly previewUrl: string;
-      readonly originalUrl: string;
+      readonly viewerUrl: string;
+      readonly viewerFallbackUrl: null;
+      readonly remoteOriginalUrl: null;
+      readonly localPreferred: true;
       readonly categoryId: string | null;
       readonly uploaderId: null;
       readonly featured: boolean;
-      readonly publicationStatus: "local";
+      readonly publicationStatus: "local" | "published";
       readonly createdAt: string;
     }
   | {
       readonly key: string;
       readonly source: "remote";
       readonly remote: InternalMediaView;
+      readonly local: LocalView | null;
       readonly previewUrl: string | null;
-      readonly originalUrl: string | null;
+      readonly viewerUrl: string | null;
+      readonly viewerFallbackUrl: string | null;
+      readonly remoteOriginalUrl: string | null;
+      readonly localPreferred: boolean;
       readonly categoryId: string | null;
       readonly uploaderId: string;
       readonly featured: boolean;
@@ -86,12 +97,17 @@ function preview(media: InternalMediaView): string | null {
   );
 }
 
-function original(media: InternalMediaView): string | null {
+function ordinary(media: InternalMediaView): string | null {
   return (
-    media.variants.find((variant) => variant.kind === "photo_original")?.url ??
     media.variants.find((variant) => variant.kind === "photo_1920")?.url ??
-    preview(media)
+    media.variants.find((variant) => variant.kind === "photo_960")?.url ??
+    media.variants.find((variant) => variant.kind === "photo_480")?.url ??
+    null
   );
+}
+
+function remoteOriginal(media: InternalMediaView): string | null {
+  return media.variants.find((variant) => variant.kind === "photo_original")?.url ?? null;
 }
 
 function mergeRemote(
@@ -130,7 +146,9 @@ export function ReviewWorkspace({
   const [category, setCategory] = useState("all");
   const [uploader, setUploader] = useState("all");
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(new Set());
+  const [pendingActions, setPendingActions] = useState<
+    ReadonlyMap<string, ReviewPendingAction>
+  >(new Map());
   const [loadingMore, setLoadingMore] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -173,10 +191,11 @@ export function ReviewWorkspace({
     [albumId],
   );
 
-  const refreshRemote = useCallback(async () => {
+  const refreshRemote = useCallback(async (): Promise<InternalMediaList> => {
     const page = await fetchRemote();
     setRemoteMedia((current) => mergeRemote(current, page.items));
     setCursor(page.nextCursor);
+    return page;
   }, [fetchRemote]);
 
   useEffect(() => {
@@ -197,32 +216,54 @@ export function ReviewWorkspace({
   }, [albumId, refreshFeatured, refreshLocal]);
 
   const items = useMemo<readonly ReviewItem[]>(() => {
-    const localItems: ReviewItem[] = localMedia.map((item) => ({
-      key: `local:${item.photo.id}`,
-      source: "local",
-      local: item,
-      previewUrl: item.previewUrl,
-      originalUrl: item.originalUrl,
-      categoryId: item.photo.categoryId,
-      uploaderId: null,
-      featured: item.photo.featured,
-      publicationStatus: "local",
-      createdAt: item.photo.createdAt,
-    }));
+    const remoteIds = new Set(remoteMedia.map((item) => item.id));
+    const localByMediaId = new Map(
+      localMedia.flatMap((item) =>
+        item.photo.mediaId === null ? [] : ([[item.photo.mediaId, item]] as const),
+      ),
+    );
+    const localItems: ReviewItem[] = localMedia
+      .filter((item) => item.photo.mediaId === null || !remoteIds.has(item.photo.mediaId))
+      .map((item) => ({
+        key: `local:${item.photo.id}`,
+        source: "local",
+        local: item,
+        previewUrl: item.previewUrl,
+        viewerUrl: item.originalUrl,
+        viewerFallbackUrl: null,
+        remoteOriginalUrl: null,
+        localPreferred: true,
+        categoryId: item.photo.categoryId,
+        uploaderId: null,
+        featured: item.photo.featured,
+        publicationStatus:
+          item.photo.uploadState === "published" && item.photo.mediaId !== null
+            ? ("published" as const)
+            : ("local" as const),
+        createdAt: item.photo.createdAt,
+      }));
     const remoteItems: ReviewItem[] = remoteMedia
       .filter((item) => item.publicationStatus !== "deleted")
-      .map((item) => ({
-        key: `remote:${item.id}`,
-        source: "remote",
-        remote: item,
-        previewUrl: preview(item),
-        originalUrl: original(item),
-        categoryId: item.categoryId,
-        uploaderId: item.uploaderId,
-        featured: featuredIds.has(item.id),
-        publicationStatus: item.publicationStatus,
-        createdAt: item.createdAt,
-      }));
+      .map((item) => {
+        const linkedLocal = localByMediaId.get(item.id) ?? null;
+        const ordinaryUrl = ordinary(item);
+        return {
+          key: linkedLocal === null ? `remote:${item.id}` : `local:${linkedLocal.photo.id}`,
+          source: "remote" as const,
+          remote: item,
+          local: linkedLocal,
+          previewUrl: linkedLocal?.previewUrl ?? preview(item),
+          viewerUrl: linkedLocal?.originalUrl ?? ordinaryUrl,
+          viewerFallbackUrl: linkedLocal === null ? null : ordinaryUrl,
+          remoteOriginalUrl: remoteOriginal(item),
+          localPreferred: linkedLocal !== null,
+          categoryId: item.categoryId,
+          uploaderId: item.uploaderId,
+          featured: featuredIds.has(item.id),
+          publicationStatus: item.publicationStatus,
+          createdAt: linkedLocal?.photo.createdAt ?? item.createdAt,
+        };
+      });
     return [...localItems, ...remoteItems].sort((left, right) =>
       right.createdAt.localeCompare(left.createdAt),
     );
@@ -233,62 +274,89 @@ export function ReviewWorkspace({
       items.filter((item) => {
         if (category !== "all" && item.categoryId !== category) return false;
         if (uploader !== "all" && item.uploaderId !== uploader) return false;
-        if (filter === "local") return item.source === "local";
+        if (filter === "local") return item.source === "local" && item.publicationStatus === "local";
         if (filter === "featured") return item.featured;
-        if (filter === "published") {
-          return item.source === "remote" && item.publicationStatus === "published";
-        }
-        if (filter === "hidden") {
-          return item.source === "remote" && item.publicationStatus === "hidden";
-        }
+        if (filter === "published") return item.publicationStatus === "published";
+        if (filter === "hidden") return item.publicationStatus === "hidden";
         return true;
       }),
     [category, filter, items, uploader],
   );
 
+  const lightboxSourceItems = useMemo(() => {
+    if (activeKey === null || visibleItems.some((item) => item.key === activeKey)) return visibleItems;
+    const activeItem = items.find((item) => item.key === activeKey);
+    return activeItem === undefined ? visibleItems : [...visibleItems, activeItem];
+  }, [activeKey, items, visibleItems]);
+
   const lightboxItems = useMemo<readonly ReviewLightboxItem[]>(
     () =>
-      visibleItems.map((item) => ({
+      lightboxSourceItems.map((item) => ({
         key: item.key,
-        src: item.originalUrl,
+        src: item.viewerUrl,
+        fallbackSrc: item.viewerFallbackUrl,
+        originalSrc: item.remoteOriginalUrl,
+        localPreferred: item.localPreferred,
         width: item.source === "local" ? item.local.photo.width : item.remote.width,
         height: item.source === "local" ? item.local.photo.height : item.remote.height,
         featured: item.featured,
         publicationStatus: item.publicationStatus,
-        canDelete: item.source === "local" || userRole === "admin",
-        pending: pendingKeys.has(item.key),
+        canDelete:
+          item.source === "local"
+            ? item.publicationStatus === "local" || userRole === "admin"
+            : userRole === "admin",
+        pendingAction: pendingActions.get(item.key) ?? null,
       })),
-    [pendingKeys, userRole, visibleItems],
+    [lightboxSourceItems, pendingActions, userRole],
   );
 
   function itemByKey(key: string): ReviewItem | null {
     return items.find((item) => item.key === key) ?? null;
   }
 
-  function setPending(key: string, value: boolean): void {
-    setPendingKeys((current) => {
-      const next = new Set(current);
-      if (value) next.add(key);
-      else next.delete(key);
+  function isPending(key: string): boolean {
+    return pendingActions.has(key);
+  }
+
+  function setPending(key: string, action: ReviewPendingAction | null): void {
+    setPendingActions((current) => {
+      const next = new Map(current);
+      if (action === null) next.delete(key);
+      else next.set(key, action);
       return next;
     });
   }
 
+  function remoteId(item: ReviewItem): string | null {
+    if (item.source === "remote") return item.remote.id;
+    return item.local.photo.mediaId;
+  }
+
+  function canDeleteItem(item: ReviewItem): boolean {
+    if (item.source === "remote") return userRole === "admin";
+    if (item.publicationStatus === "published") return userRole === "admin";
+    return true;
+  }
+
   async function toggleFeatured(item: ReviewItem): Promise<void> {
-    if (pendingKeys.has(item.key)) return;
-    setPending(item.key, true);
+    if (isPending(item.key)) return;
+    setPending(item.key, "featured");
     try {
       const next = !item.featured;
-      if (item.source === "local") {
+      const mediaId = remoteId(item);
+      if (item.source === "local" && mediaId === null) {
         await patchLocalReviewPhoto(item.local.photo.id, { featured: next });
-      } else {
-        await clientMutation(`/api/v1/media/${item.remote.id}/featured`, {
+      } else if (mediaId !== null) {
+        await clientMutation(`/api/v1/media/${mediaId}/featured`, {
           body: { featured: next },
         });
+        if (item.local !== undefined && item.local !== null) {
+          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(() => undefined);
+        }
         setFeaturedIds((current) => {
           const updated = new Set(current);
-          if (next) updated.add(item.remote.id);
-          else updated.delete(item.remote.id);
+          if (next) updated.add(mediaId);
+          else updated.delete(mediaId);
           return updated;
         });
       }
@@ -296,18 +364,24 @@ export function ReviewWorkspace({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "精选状态修改失败");
     } finally {
-      setPending(item.key, false);
+      setPending(item.key, null);
     }
   }
 
   async function publish(item: ReviewItem): Promise<void> {
-    if (pendingKeys.has(item.key)) return;
-    setPending(item.key, true);
+    if (isPending(item.key)) return;
+    setPending(item.key, "state");
     try {
       if (item.source === "local") {
-        await publishLocalReviewPhoto(item.local.photo);
-        await deleteLocalReviewPhoto(item.local.photo.id);
-        await Promise.all([refreshRemote(), refreshFeatured()]);
+        if (item.publicationStatus === "published") return;
+        const result = await publishLocalReviewPhoto(item.local.photo);
+        await refreshRemote();
+        await patchLocalReviewPhoto(item.local.photo.id, {
+          mediaId: result.mediaId,
+          uploadState: "published",
+          error: null,
+        });
+        await refreshFeatured();
       } else {
         await clientMutation<{ readonly ok: true }>(`/api/v1/media/${item.remote.id}/publish`, {
           idempotencyKey: `review-publish-${crypto.randomUUID()}`,
@@ -324,68 +398,79 @@ export function ReviewWorkspace({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "发布失败");
     } finally {
-      setPending(item.key, false);
+      setPending(item.key, null);
     }
   }
 
   async function toggleVisibility(item: ReviewItem): Promise<void> {
-    if (item.source === "local" || pendingKeys.has(item.key)) return;
+    if (isPending(item.key)) return;
     if (item.publicationStatus !== "published" && item.publicationStatus !== "hidden") return;
-    setPending(item.key, true);
+    const mediaId = remoteId(item);
+    if (mediaId === null) return;
+    setPending(item.key, "state");
     try {
       const hiding = item.publicationStatus === "published";
       await clientMutation<{ readonly ok: true }>(
-        `/api/v1/media/${item.remote.id}/${hiding ? "hide" : "restore"}`,
+        `/api/v1/media/${mediaId}/${hiding ? "hide" : "restore"}`,
         { idempotencyKey: `review-visibility-${crypto.randomUUID()}` },
       );
-      setRemoteMedia((current) =>
-        current.map((candidate) =>
-          candidate.id === item.remote.id
-            ? {
-                ...candidate,
-                publicationStatus: hiding ? ("hidden" as const) : ("published" as const),
-              }
-            : candidate,
-        ),
-      );
+      if (item.source === "remote") {
+        setRemoteMedia((current) =>
+          current.map((candidate) =>
+            candidate.id === item.remote.id
+              ? {
+                  ...candidate,
+                  publicationStatus: hiding ? ("hidden" as const) : ("published" as const),
+                }
+              : candidate,
+          ),
+        );
+      } else {
+        await refreshRemote();
+      }
       showNotice(hiding ? "已隐藏" : "已显示");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "可见状态修改失败");
     } finally {
-      setPending(item.key, false);
+      setPending(item.key, null);
     }
   }
 
   async function deleteItem(item: ReviewItem): Promise<void> {
-    if (pendingKeys.has(item.key)) return;
-    if (item.source === "remote" && userRole !== "admin") return;
-    setPending(item.key, true);
+    if (isPending(item.key) || !canDeleteItem(item)) return;
+    const currentIndex = lightboxSourceItems.findIndex((candidate) => candidate.key === item.key);
+    const nextKey =
+      activeKey === item.key && lightboxSourceItems.length > 1 && currentIndex >= 0
+        ? lightboxSourceItems[(currentIndex + 1) % lightboxSourceItems.length]?.key ?? null
+        : null;
+    setPending(item.key, "delete");
     try {
-      if (item.source === "local") {
+      const mediaId = remoteId(item);
+      if (item.source === "local" && mediaId === null) {
         await deleteLocalReviewPhoto(item.local.photo.id);
-      } else {
-        await clientMutation(`/api/v1/media/${item.remote.id}/direct`, { method: "DELETE" });
-        setRemoteMedia((current) => current.filter((candidate) => candidate.id !== item.remote.id));
+      } else if (mediaId !== null) {
+        await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
+        setRemoteMedia((current) => current.filter((candidate) => candidate.id !== mediaId));
         setFeaturedIds((current) => {
           const next = new Set(current);
-          next.delete(item.remote.id);
+          next.delete(mediaId);
           return next;
         });
+        const linkedLocal = item.source === "local" ? item.local : item.local;
+        if (linkedLocal !== null) {
+          await deleteLocalReviewPhoto(linkedLocal.photo.id).catch(() => undefined);
+        }
       }
-      if (activeKey === item.key) setActiveKey(null);
+      if (activeKey === item.key) setActiveKey(nextKey);
       showNotice("已删除");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "删除失败");
     } finally {
-      setPending(item.key, false);
+      setPending(item.key, null);
     }
   }
 
   async function stateAction(item: ReviewItem): Promise<void> {
-    if (item.source === "local") {
-      await publish(item);
-      return;
-    }
     if (item.publicationStatus === "published" || item.publicationStatus === "hidden") {
       await toggleVisibility(item);
       return;
@@ -520,9 +605,10 @@ export function ReviewWorkspace({
       ) : (
         <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {visibleItems.map((item) => {
-            const pending = pendingKeys.has(item.key);
-            const published = item.source === "remote" && item.publicationStatus === "published";
-            const hidden = item.source === "remote" && item.publicationStatus === "hidden";
+            const pendingAction = pendingActions.get(item.key) ?? null;
+            const pending = pendingAction !== null;
+            const published = item.publicationStatus === "published";
+            const hidden = item.publicationStatus === "hidden";
             return (
               <div
                 className="group relative aspect-square overflow-hidden rounded-md bg-muted outline-none focus-within:ring-2 focus-within:ring-ring"
@@ -559,7 +645,11 @@ export function ReviewWorkspace({
                     type="button"
                     variant="ghost"
                   >
-                    <StarIcon className={cn("size-4", item.featured && "fill-current")} />
+                    {pendingAction === "featured" ? (
+                      <LoaderCircleIcon className="size-4 animate-spin" />
+                    ) : (
+                      <StarIcon className={cn("size-4", item.featured && "fill-current")} />
+                    )}
                   </Button>
                   <Button
                     aria-label={published ? "隐藏" : hidden ? "显示" : "发布"}
@@ -574,7 +664,7 @@ export function ReviewWorkspace({
                     type="button"
                     variant="ghost"
                   >
-                    {pending ? (
+                    {pendingAction === "state" ? (
                       <LoaderCircleIcon className="size-4 animate-spin" />
                     ) : published ? (
                       <EyeIcon className="size-4" />
@@ -587,16 +677,18 @@ export function ReviewWorkspace({
                   <Button
                     aria-label="删除"
                     className="size-8 bg-red-600/90 text-white hover:bg-red-600"
-                    disabled={pending || (item.source === "remote" && userRole !== "admin")}
+                    disabled={pending || !canDeleteItem(item)}
                     onClick={() => void deleteItem(item)}
                     size="icon"
-                    title={
-                      item.source === "remote" && userRole !== "admin" ? "仅管理员可删除" : "删除"
-                    }
+                    title={canDeleteItem(item) ? "删除" : "仅管理员可删除"}
                     type="button"
                     variant="ghost"
                   >
-                    <Trash2Icon className="size-4" />
+                    {pendingAction === "delete" ? (
+                      <LoaderCircleIcon className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2Icon className="size-4" />
+                    )}
                   </Button>
                 </div>
               </div>
