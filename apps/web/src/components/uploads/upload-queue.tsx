@@ -1,5 +1,6 @@
 "use client";
 
+import type { BibConfigView } from "@photostream/contracts";
 import { ImagePlusIcon, Trash2Icon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { resumeLocalBibOcr, startLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   createLocalReviewPhoto,
   deleteLocalReviewPhoto,
@@ -37,11 +39,13 @@ interface PreviewPhoto {
 
 export function UploadQueue({
   albumId,
+  bibConfig,
   categories,
   role,
 }: Readonly<{
   albumId: string;
   albumTitle: string;
+  bibConfig: BibConfigView;
   categories: readonly CategoryOption[];
   role: "admin" | "uploader";
 }>) {
@@ -69,6 +73,7 @@ export function UploadQueue({
 
   useEffect(() => {
     void refresh();
+    void resumeLocalBibOcr(albumId, bibConfig);
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly albumId?: string }>).detail;
       if (detail?.albumId === albumId) void refresh();
@@ -79,7 +84,7 @@ export function UploadQueue({
       for (const url of previewUrls.current) URL.revokeObjectURL(url);
       previewUrls.current = [];
     };
-  }, [albumId, refresh]);
+  }, [albumId, bibConfig, refresh]);
 
   async function stage(files: readonly File[]): Promise<void> {
     if (files.length === 0 || processing) return;
@@ -98,14 +103,14 @@ export function UploadQueue({
       for (const file of files) {
         try {
           const processed = await processPhotoInWorker(file);
-          await putLocalReviewPhoto(
-            createLocalReviewPhoto({
-              albumId,
-              categoryId: categoryId === "uncategorized" ? null : categoryId,
-              file,
-              processed,
-            }),
-          );
+          const localPhoto = createLocalReviewPhoto({
+            albumId,
+            categoryId: categoryId === "uncategorized" ? null : categoryId,
+            file,
+            processed,
+          });
+          await putLocalReviewPhoto(localPhoto);
+          startLocalBibOcr(localPhoto.id, bibConfig);
           completed += 1;
         } catch (error) {
           setMessage(`${file.name}：${error instanceof Error ? error.message : "本地处理失败"}`);
@@ -167,6 +172,7 @@ export function UploadQueue({
       <input
         accept="image/jpeg,image/png,image/webp"
         className="sr-only"
+        id="photo-files"
         multiple
         onChange={(event) => void stage(Array.from(event.currentTarget.files ?? []))}
         ref={inputRef}
@@ -209,6 +215,8 @@ export function UploadQueue({
           {items.map(({ photo, url }) => (
             <div
               className="group relative aspect-[4/3] overflow-hidden rounded-md bg-muted"
+              data-local-photo-id={photo.id}
+              data-ocr-status={photo.bib.ocrStatus}
               key={photo.id}
             >
               <Image
