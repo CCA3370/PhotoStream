@@ -1,15 +1,11 @@
 "use client";
 
-import type {
-  FaceConfigUpdate,
-  FaceConfigView,
-  FaceReadinessConfirmation,
-} from "@photostream/contracts";
-import { RefreshCcwIcon, ScanFaceIcon, Trash2Icon } from "lucide-react";
+import type { FaceConfigUpdate, FaceConfigView } from "@photostream/contracts";
+import { RefreshCcwIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,31 +19,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
-
-const confirmationFields = [
-  ["participantConsentRecordsConfirmed", "参与者敏感个人信息单独同意记录已核验"],
-  ["guardianConsentRequirementsConfirmed", "未满十四周岁参与者的监护人同意要求已核验"],
-  ["impactAssessmentCompleted", "个人信息保护影响评估已完成并留存"],
-  ["providerResourcesValidated", "获批的 IMM、临时私有 OSS 与 EventBridge 资源已验证"],
-  ["evaluationGatePassed", "Git 外授权评测集与高精度阈值门禁已通过"],
-  ["billingAlertsConfigured", "独立费用提醒和停用预案已配置"],
-  ["indexedFacesAuthorized", "拟索引照片中的可识别人脸均在授权范围"],
-] as const satisfies readonly (readonly [keyof FaceReadinessConfirmation, string])[];
-
-const systemFields = [
-  ["globalFeatureEnabled", "全局人脸功能已获准开启"],
-  ["passwordAccess", "相册保持口令访问"],
-  ["privacyNoticeConfigured", "公开隐私说明已配置"],
-  ["complaintContactConfigured", "删除/投诉联系人已配置"],
-  ["noticeVersionCurrent", "告知版本与服务器当前版本一致"],
-  ["thresholdVersionQualified", "阈值版本已通过评测"],
-] as const satisfies readonly (readonly [keyof FaceConfigView["readiness"], string])[];
 
 const stateLabels: Record<FaceConfigView["indexState"], string> = {
   disabled: "已关闭",
@@ -72,17 +48,7 @@ function dateTime(value: string | null): string {
 export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView }>) {
   const [config, setConfig] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enabled);
-  const [noticeVersion, setNoticeVersion] = useState(initial.noticeVersion ?? "");
   const [retentionDays, setRetentionDays] = useState(String(initial.retentionDays));
-  const [readiness, setReadiness] = useState<FaceReadinessConfirmation>(() => ({
-    participantConsentRecordsConfirmed: initial.readiness.participantConsentRecordsConfirmed,
-    guardianConsentRequirementsConfirmed: initial.readiness.guardianConsentRequirementsConfirmed,
-    impactAssessmentCompleted: initial.readiness.impactAssessmentCompleted,
-    providerResourcesValidated: initial.readiness.providerResourcesValidated,
-    evaluationGatePassed: initial.readiness.evaluationGatePassed,
-    billingAlertsConfigured: initial.readiness.billingAlertsConfigured,
-    indexedFacesAuthorized: initial.readiness.indexedFacesAuthorized,
-  }));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -92,15 +58,6 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
   const [savePasswordOpen, setSavePasswordOpen] = useState(false);
   const [statusErrorOpen, setStatusErrorOpen] = useState(false);
 
-  const allDeclarations = confirmationFields.every(([key]) => readiness[key]);
-  const systemGateReady =
-    config.readiness.globalFeatureEnabled &&
-    config.readiness.passwordAccess &&
-    config.readiness.privacyNoticeConfigured &&
-    config.readiness.complaintContactConfigured &&
-    config.readiness.thresholdVersionQualified &&
-    noticeVersion.trim().length > 0;
-  const canEnable = allDeclarations && systemGateReady;
   const parsedRetentionDays = Number(retentionDays);
   const retentionValid =
     Number.isInteger(parsedRetentionDays) && parsedRetentionDays >= 1 && parsedRetentionDays <= 30;
@@ -113,7 +70,6 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
   function accept(next: FaceConfigView, message: string): void {
     setConfig(next);
     setEnabled(next.enabled);
-    setNoticeVersion(next.noticeVersion ?? "");
     setRetentionDays(String(next.retentionDays));
     setSaved(message);
   }
@@ -121,14 +77,22 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
   function currentBody(): FaceConfigUpdate {
     return {
       enabled,
-      noticeVersion,
+      noticeVersion: config.noticeVersion ?? "managed-by-server",
       retentionDays: parsedRetentionDays,
-      readiness,
+      readiness: {
+        participantConsentRecordsConfirmed: config.readiness.participantConsentRecordsConfirmed,
+        guardianConsentRequirementsConfirmed: config.readiness.guardianConsentRequirementsConfirmed,
+        impactAssessmentCompleted: config.readiness.impactAssessmentCompleted,
+        providerResourcesValidated: config.readiness.providerResourcesValidated,
+        evaluationGatePassed: config.readiness.evaluationGatePassed,
+        billingAlertsConfigured: config.readiness.billingAlertsConfigured,
+        indexedFacesAuthorized: config.readiness.indexedFacesAuthorized,
+      },
     };
   }
 
   async function performSave(password?: string): Promise<void> {
-    if (pending || !retentionValid || (enabled && !canEnable)) return;
+    if (pending || !retentionValid) return;
     setPending(true);
     setError(null);
     setSaved(null);
@@ -195,11 +159,6 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
           <AlertTitle>{saved}</AlertTitle>
         </Alert>
       )}
-      <Alert>
-        <ScanFaceIcon aria-hidden="true" />
-        <AlertTitle>敏感个人信息功能</AlertTitle>
-        <AlertDescription>仅用于已完成授权核验的口令相册。</AlertDescription>
-      </Alert>
 
       <Card>
         <CardHeader>
@@ -259,38 +218,8 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>启用门禁</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <FieldGroup>
-            {systemFields.map(([key, label]) => (
-              <Field key={key} orientation="horizontal">
-                <Checkbox checked={config.readiness[key]} disabled id={`face-system-${key}`} />
-                <FieldLabel htmlFor={`face-system-${key}`}>{label}</FieldLabel>
-              </Field>
-            ))}
-            {confirmationFields.map(([key, label]) => (
-              <Field key={key} orientation="horizontal">
-                <Checkbox
-                  checked={readiness[key]}
-                  id={`face-confirm-${key}`}
-                  onCheckedChange={(checked) =>
-                    setReadiness((current) => ({ ...current, [key]: checked }))
-                  }
-                />
-                <FieldLabel htmlFor={`face-confirm-${key}`}>{label}</FieldLabel>
-              </Field>
-            ))}
-            <Field>
-              <FieldLabel htmlFor="face-notice-version">告知版本</FieldLabel>
-              <Input
-                id="face-notice-version"
-                maxLength={80}
-                onChange={(event) => setNoticeVersion(event.currentTarget.value)}
-                value={noticeVersion}
-              />
-            </Field>
             <Field>
               <FieldLabel htmlFor="face-retention-days">索引保留天数</FieldLabel>
               <Input
@@ -309,17 +238,13 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
               </FieldLabel>
               <Switch
                 checked={enabled}
-                disabled={pending || (!enabled && !canEnable)}
+                disabled={pending}
                 id="face-enabled"
                 onCheckedChange={setEnabled}
               />
             </Field>
             <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={pending || !retentionValid || (enabled && !canEnable)}
-                onClick={save}
-                type="button"
-              >
+              <Button disabled={pending || !retentionValid} onClick={save} type="button">
                 {pending ? "正在处理…" : "保存"}
               </Button>
               <Button
