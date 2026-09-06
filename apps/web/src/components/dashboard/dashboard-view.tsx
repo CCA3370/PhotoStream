@@ -176,21 +176,21 @@ function RankingList({
     <div className="divide-y">
       {items.map((photo, index) => (
         <Link
-          className="grid grid-cols-[1.75rem_4rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/30"
+          className="group grid grid-cols-[1.5rem_3.5rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-2.5 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/40 sm:grid-cols-[1.75rem_4rem_minmax(0,1fr)_auto] sm:gap-3"
           href={`/studio/albums/${photo.albumId}`}
           key={photo.mediaId}
         >
           <span className="text-center text-xs font-semibold tabular-nums text-muted-foreground">
             {String(index + 1).padStart(2, "0")}
           </span>
-          <div className="relative aspect-[4/3] w-16 overflow-hidden rounded-md bg-muted">
+          <div className="relative aspect-[4/3] w-14 overflow-hidden rounded-md bg-muted sm:w-16">
             {photo.thumbnailUrl === null ? (
               <div className="flex size-full items-center justify-center text-muted-foreground">
                 <ImagesIcon aria-hidden="true" className="size-4" />
               </div>
             ) : (
               <Image
-                alt="排行照片缩略图"
+                alt={`${photo.albumTitle} 照片 #${photo.publishSequence}`}
                 fill
                 sizes="64px"
                 src={photo.thumbnailUrl}
@@ -201,13 +201,19 @@ function RankingList({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{photo.albumTitle}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">照片 #{photo.publishSequence}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              照片 #{photo.publishSequence}
+              <span className="sm:hidden"> · {numberFormatter.format(photo.count)} {unit}</span>
+            </p>
           </div>
-          <div className="flex items-center gap-2 pl-2">
+          <div className="hidden items-center gap-2 pl-2 sm:flex">
             <span className="text-sm font-semibold tabular-nums">
               {numberFormatter.format(photo.count)} {unit}
             </span>
-            <ArrowUpRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+            <ArrowUpRightIcon
+              aria-hidden="true"
+              className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+            />
           </div>
         </Link>
       ))}
@@ -240,7 +246,6 @@ export function DashboardView({
   initialData,
 }: Readonly<{
   albums: readonly AlbumSummaryView[];
-  canCreateAlbum: boolean;
   initialData: DashboardStatistics;
 }>) {
   const [data, setData] = useState(initialData);
@@ -264,15 +269,17 @@ export function DashboardView({
     [data.topLikedPhotos],
   );
 
-  async function loadRange(from: Date, to: Date, preset: PresetKey): Promise<void> {
+  async function loadRange(from: Date, to: Date, preset: PresetKey): Promise<boolean> {
     setPending(true);
     setError(null);
     try {
       const next = await fetchDashboard(from, to);
       setData(next);
       setActivePreset(preset);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "无法加载统计数据");
+      return false;
     } finally {
       setPending(false);
     }
@@ -314,8 +321,8 @@ export function DashboardView({
       setError("结束时间不能位于未来");
       return;
     }
-    await loadRange(from, to, "custom");
-    setCustomOpen(false);
+    const loaded = await loadRange(from, to, "custom");
+    if (loaded) setCustomOpen(false);
   }
 
   const kpis = [
@@ -346,8 +353,8 @@ export function DashboardView({
   ] as const;
 
   return (
-    <section aria-label="首页统计" className="flex flex-col gap-3">
-      <div className={cn("grid gap-2 sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
+    <section aria-busy={pending} aria-label="仪表盘统计" className="flex flex-col gap-3">
+      <div className={cn("grid gap-2 transition-opacity sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
         {kpis.map(({ label, value, meta, icon: Icon }) => (
           <Card className="shadow-none" key={label}>
             <CardContent className="p-3">
@@ -366,7 +373,7 @@ export function DashboardView({
         ))}
       </div>
 
-      <Card className={cn("overflow-hidden", pending && "opacity-60")}>
+      <Card className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}>
         <CardHeader className="gap-3 border-b py-3.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -379,7 +386,7 @@ export function DashboardView({
                 {bucketLabels[data.bucket]}
               </Badge>
             </div>
-            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-0.5">
+            <div className="flex max-w-full items-center gap-1 overflow-x-auto pb-0.5">
               {presets.map((preset) => (
                 <Button
                   aria-pressed={activePreset === preset.key}
@@ -409,14 +416,14 @@ export function DashboardView({
                 disabled={pending}
                 onClick={() => void refresh()}
                 size="icon-sm"
-                title="刷新"
+                title="刷新统计"
                 variant="ghost"
               >
                 <RefreshCwIcon
                   aria-hidden="true"
                   className={cn("size-4", pending && "animate-spin")}
                 />
-                <span className="sr-only">刷新</span>
+                <span className="sr-only">刷新统计</span>
               </Button>
             </div>
           </div>
@@ -427,11 +434,11 @@ export function DashboardView({
       </Card>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.7fr)]">
-        <Card className={cn("overflow-hidden", pending && "opacity-60")}>
+        <Card className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}>
           <Tabs className="gap-0" defaultValue="downloads">
             <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
               <CardTitle>照片排行</CardTitle>
-              <TabsList className="gap-1.5 p-1">
+              <TabsList className="gap-1 p-1">
                 <TabsTrigger className="px-2.5" value="downloads">
                   <DownloadIcon aria-hidden="true" />
                   下载
@@ -453,21 +460,27 @@ export function DashboardView({
           </Tabs>
         </Card>
 
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b py-3.5">
+        <Card className="overflow-hidden shadow-none">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
             <CardTitle className="flex items-center gap-2">
               <RadioIcon aria-hidden="true" className="size-4 text-success" />
               正在直播
             </CardTitle>
+            <span className="text-xs tabular-nums text-muted-foreground">{liveAlbums.length}</span>
           </CardHeader>
           <CardContent className="p-0">
             {liveAlbums.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">暂无直播活动</p>
+              <div className="flex flex-col items-center gap-2 py-9 text-center">
+                <p className="text-sm text-muted-foreground">暂无直播活动</p>
+                <Link className="text-xs font-medium text-foreground hover:underline" href="/studio/albums">
+                  查看活动
+                </Link>
+              </div>
             ) : (
               <div className="divide-y">
                 {liveAlbums.map((album) => (
                   <Link
-                    className="flex items-center justify-between gap-3 px-3 py-3 transition-colors hover:bg-muted/30"
+                    className="group flex items-center justify-between gap-3 px-3 py-3 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/40"
                     href={`/studio/albums/${album.id}`}
                     key={album.id}
                   >
@@ -477,7 +490,10 @@ export function DashboardView({
                         {album.mediaCount} 张
                       </p>
                     </div>
-                    <ArrowUpRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+                    <ArrowUpRightIcon
+                      aria-hidden="true"
+                      className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                    />
                   </Link>
                 ))}
               </div>
@@ -490,9 +506,7 @@ export function DashboardView({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>自定义统计时间范围</DialogTitle>
-            <DialogDescription>
-              可选择最近 {data.maxRangeDays} 天内的任意起止时间。
-            </DialogDescription>
+            <DialogDescription>可选择最近 {data.maxRangeDays} 天内的任意起止时间。</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="grid gap-2">
