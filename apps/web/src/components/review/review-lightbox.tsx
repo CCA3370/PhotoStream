@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
+  ImageIcon,
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -42,15 +43,20 @@ type Gesture =
   | { mode: "swipe"; start: Point }
   | { mode: "pinch"; distance: number; zoom: number };
 
+export type ReviewPendingAction = "delete" | "featured" | "state";
+
 export interface ReviewLightboxItem {
   readonly key: string;
   readonly src: string | null;
+  readonly fallbackSrc: string | null;
+  readonly originalSrc: string | null;
+  readonly localPreferred: boolean;
   readonly width: number;
   readonly height: number;
   readonly featured: boolean;
   readonly publicationStatus: string;
   readonly canDelete: boolean;
-  readonly pending: boolean;
+  readonly pendingAction: ReviewPendingAction | null;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -96,10 +102,16 @@ export function ReviewLightbox({
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
   const deleteTapRef = useRef<{ readonly key: string; readonly at: number } | null>(null);
+  const spaceTapRef = useRef<{ readonly key: string; readonly at: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [displaySrc, setDisplaySrc] = useState<string | null>(null);
+  const [sourceFailed, setSourceFailed] = useState(false);
+  const [showingOriginal, setShowingOriginal] = useState(false);
+  const [originalFailed, setOriginalFailed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
 
@@ -158,14 +170,29 @@ export function ReviewLightbox({
     else await document.exitFullscreen();
   }, []);
 
-  useEffect(() => {
-    if (selectedKey === null) return;
+  const loadRemoteOriginal = useCallback(() => {
+    if (selected?.originalSrc === null || selected?.originalSrc === undefined) return;
+    setDisplaySrc(selected.originalSrc);
+    setShowingOriginal(true);
+    setOriginalFailed(false);
     setLoaded(false);
+    setLoadFailed(false);
+    resetView();
+  }, [resetView, selected]);
+
+  useEffect(() => {
+    setDisplaySrc(selected?.src ?? null);
+    setLoaded(false);
+    setLoadFailed(false);
+    setSourceFailed(false);
+    setShowingOriginal(false);
+    setOriginalFailed(false);
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
-  }, [resetView, selectedKey]);
+    spaceTapRef.current = null;
+  }, [resetView, selected?.src, selectedKey]);
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
@@ -190,9 +217,11 @@ export function ReviewLightbox({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
+        event.stopPropagation();
         selectOffset(-1);
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
+        event.stopPropagation();
         selectOffset(1);
       } else if (event.key === "+" || event.key === "=") {
         event.preventDefault();
@@ -206,16 +235,29 @@ export function ReviewLightbox({
       } else if (event.key.toLowerCase() === "f" && fullscreenSupported) {
         event.preventDefault();
         void toggleFullscreen();
-      } else if (event.key === " ") {
+      } else if (event.code === "Space") {
         event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
+          spaceTapRef.current = null;
           onToggleVisibility(selected.key);
+          return;
+        }
+        const now = Date.now();
+        if (spaceTapRef.current?.key === selected.key && now - spaceTapRef.current.at <= 700) {
+          spaceTapRef.current = null;
+          onStateAction(selected.key);
+        } else {
+          spaceTapRef.current = { key: selected.key, at: now };
         }
       } else if (event.key === "Enter") {
         event.preventDefault();
-        onToggleFeatured(selected.key);
+        event.stopPropagation();
+        if (selected.pendingAction === null) onToggleFeatured(selected.key);
       } else if (event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
+        if (selected.pendingAction !== null) return;
         const now = Date.now();
         if (deleteTapRef.current?.key === selected.key && now - deleteTapRef.current.at <= 900) {
           deleteTapRef.current = null;
@@ -228,13 +270,14 @@ export function ReviewLightbox({
         onClose();
       }
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
     changeZoom,
     fullscreenSupported,
     onClose,
     onDelete,
+    onStateAction,
     onToggleFeatured,
     onToggleVisibility,
     resetView,
@@ -310,11 +353,40 @@ export function ReviewLightbox({
     changeZoom(zoom + (event.deltaY < 0 ? 0.35 : -0.35));
   }
 
+  function onImageError(): void {
+    if (selected === null) return;
+    setLoaded(false);
+    if (showingOriginal) {
+      setOriginalFailed(true);
+      setShowingOriginal(false);
+      if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
+        setDisplaySrc(selected.fallbackSrc);
+        setLoadFailed(false);
+        return;
+      }
+      setLoadFailed(true);
+      return;
+    }
+    if (selected.localPreferred) setSourceFailed(true);
+    if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
+      setDisplaySrc(selected.fallbackSrc);
+      setLoadFailed(false);
+      return;
+    }
+    setLoadFailed(true);
+  }
+
   if (selected === null) return null;
 
   const published = selected.publicationStatus === "published";
   const hidden = selected.publicationStatus === "hidden";
+  const busy = selected.pendingAction !== null;
   const canNavigate = items.length > 1;
+  const canLoadOriginal =
+    selected.originalSrc !== null &&
+    displaySrc !== selected.originalSrc &&
+    !originalFailed &&
+    (!selected.localPreferred || sourceFailed);
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
   return (
@@ -325,8 +397,7 @@ export function ReviewLightbox({
       >
         <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
         <DialogDescription className="sr-only">
-          左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次
-          Delete 删除。
+          左右键切换，滚轮、双击或加减键缩放，拖动查看；已发布照片空格切换显示状态，未发布照片连续两次空格发布，回车切换精选，连续两次 Delete 删除。
         </DialogDescription>
 
         <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
@@ -345,15 +416,20 @@ export function ReviewLightbox({
             ref={stageRef}
             role="application"
           >
-            {selected.src === null ? (
+            {displaySrc === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                暂无可预览原图
+                暂无可预览图片
               </div>
             ) : (
               <>
-                {!loaded ? (
+                {!loaded && !loadFailed ? (
                   <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                    正在加载原图…
+                    {showingOriginal ? "正在加载原图…" : "正在加载图片…"}
+                  </div>
+                ) : null}
+                {loadFailed ? (
+                  <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+                    图片加载失败
                   </div>
                 ) : null}
                 <div
@@ -361,17 +437,22 @@ export function ReviewLightbox({
                   style={{ transform: imageTransform }}
                 >
                   <Image
-                    alt="审核原图"
+                    alt="审核图片"
                     className={cn(
                       "object-contain transition-opacity duration-150",
                       loaded ? "opacity-100" : "opacity-0",
                     )}
                     draggable={false}
                     fill
-                    onLoad={() => setLoaded(true)}
+                    key={displaySrc}
+                    onError={onImageError}
+                    onLoad={() => {
+                      setLoaded(true);
+                      setLoadFailed(false);
+                    }}
                     priority
                     sizes="100vw"
-                    src={selected.src}
+                    src={displaySrc}
                     unoptimized
                   />
                 </div>
@@ -487,6 +568,21 @@ export function ReviewLightbox({
                   <PlusIcon />
                 </Button>
 
+                {canLoadOriginal ? (
+                  <Button
+                    aria-label="查看原图"
+                    className={cn(toolbarButtonClass, "h-8 px-2.5")}
+                    onClick={loadRemoteOriginal}
+                    size="sm"
+                    title="从 CDN 加载原图"
+                    type="button"
+                    variant="outline"
+                  >
+                    <ImageIcon />
+                    查看原图
+                  </Button>
+                ) : null}
+
                 <div className="mx-0.5 h-5 w-px bg-white/10" />
 
                 <Button
@@ -496,14 +592,18 @@ export function ReviewLightbox({
                     "size-8",
                     selected.featured && "text-amber-400 hover:text-amber-300",
                   )}
-                  disabled={selected.pending}
+                  disabled={busy}
                   onClick={() => onToggleFeatured(selected.key)}
                   size="icon-sm"
                   title={selected.featured ? "取消精选 (Enter)" : "精选 (Enter)"}
                   type="button"
                   variant="outline"
                 >
-                  <StarIcon className={cn(selected.featured && "fill-current")} />
+                  {selected.pendingAction === "featured" ? (
+                    <LoaderCircleIcon className="animate-spin" />
+                  ) : (
+                    <StarIcon className={cn(selected.featured && "fill-current")} />
+                  )}
                 </Button>
                 <Button
                   aria-label={stateLabel(selected.publicationStatus)}
@@ -513,14 +613,25 @@ export function ReviewLightbox({
                     published &&
                       "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
                   )}
-                  disabled={selected.pending}
+                  disabled={busy}
                   onClick={() => onStateAction(selected.key)}
                   size="icon-sm"
-                  title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布"}
+                  style={
+                    hidden
+                      ? {
+                          backgroundColor: "rgba(255, 255, 255, 0.06)",
+                          borderColor: "rgba(255, 255, 255, 0.1)",
+                          color: "white",
+                        }
+                      : undefined
+                  }
+                  title={
+                    published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布（双击 Space）"
+                  }
                   type="button"
                   variant="outline"
                 >
-                  {selected.pending ? (
+                  {selected.pendingAction === "state" ? (
                     <LoaderCircleIcon className="animate-spin" />
                   ) : published ? (
                     <EyeIcon />
@@ -533,14 +644,18 @@ export function ReviewLightbox({
                 <Button
                   aria-label="删除"
                   className="size-8 rounded-lg border-red-400/20 bg-red-500/25 text-red-100 shadow-none backdrop-blur-md hover:border-red-400/35 hover:bg-red-500/40 hover:text-white disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35"
-                  disabled={selected.pending || !selected.canDelete}
+                  disabled={busy || !selected.canDelete}
                   onClick={() => onDelete(selected.key)}
                   size="icon-sm"
                   title={selected.canDelete ? "删除（键盘连续按两次 Delete）" : "仅管理员可删除"}
                   type="button"
                   variant="outline"
                 >
-                  <Trash2Icon />
+                  {selected.pendingAction === "delete" ? (
+                    <LoaderCircleIcon className="animate-spin" />
+                  ) : (
+                    <Trash2Icon />
+                  )}
                 </Button>
               </div>
             </div>
