@@ -206,7 +206,7 @@ export function UploadQueue({
         <div className="grid grid-cols-3 gap-1 sm:grid-cols-5 lg:grid-cols-7 2xl:grid-cols-9">
           {items.map(({ photo, url }) => (
             <div
-              className="group relative aspect-square overflow-hidden rounded-md bg-muted"
+              className="group relative aspect-[4/3] overflow-hidden rounded-md bg-muted"
               key={photo.id}
             >
               <Image
