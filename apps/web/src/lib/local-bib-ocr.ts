@@ -21,6 +21,11 @@ function configRevision(config: BibConfigView): string {
   return `${config.recognitionEnabled}:${config.modelVersion}:${config.ruleVersion}`;
 }
 
+function configStillDesired(photoId: string, config: BibConfigView): boolean {
+  const desired = desiredOcrConfigs.get(photoId);
+  return desired === undefined || configRevision(desired) === configRevision(config);
+}
+
 function serverStateChanged(photo: LocalReviewPhoto, state: BibMediaState): void {
   window.dispatchEvent(
     new CustomEvent(LOCAL_BIB_SERVER_STATE_EVENT, {
@@ -216,21 +221,26 @@ export async function syncLocalBibToServer(photoId: string, config: BibConfigVie
   });
 }
 
-function shouldResumeOcr(photo: LocalReviewPhoto, config: BibConfigView): boolean {
-  if (!config.recognitionEnabled) return false;
-  if (photo.bib.ocrStatus === "processing") return true;
-  if (photo.bib.ocrStatus === "not_started") {
-    return photo.bib.modelVersion !== null || photo.bib.ruleVersion !== null;
+export function shouldResumeLocalBibOcr(
+  photo: LocalReviewPhoto,
+  config: BibConfigView,
+): boolean {
+  if (!config.recognitionEnabled) return photo.bib.ocrStatus !== "disabled";
+  if (
+    photo.bib.ocrStatus === "not_started" ||
+    photo.bib.ocrStatus === "processing" ||
+    photo.bib.ocrStatus === "disabled"
+  ) {
+    return true;
   }
   return (
-    photo.bib.modelVersion !== null &&
-    (photo.bib.modelVersion !== config.modelVersion || photo.bib.ruleVersion !== config.ruleVersion)
+    photo.bib.modelVersion !== config.modelVersion || photo.bib.ruleVersion !== config.ruleVersion
   );
 }
 
 async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<void> {
   const photo = await getLocalReviewPhoto(photoId);
-  if (photo === null) return;
+  if (photo === null || !configStillDesired(photoId, config)) return;
   if (!config.recognitionEnabled) {
     if (photo.bib.ocrStatus !== "disabled") {
       await updateOcrState(photoId, {
@@ -286,8 +296,10 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
     ocrError: null,
   });
   await syncLocalBibToServer(photoId, config);
+  if (!configStillDesired(photoId, config)) return;
   try {
     const rawCandidates = await recognizeBibCandidates(workingImage);
+    if (!configStillDesired(photoId, config)) return;
     const candidates = normalizeBibCandidates(rawCandidates, config.patterns).map(
       ({ number, ...candidate }) => ({ ...candidate, text: number }),
     );
@@ -299,6 +311,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
       ocrError: null,
     });
   } catch (error) {
+    if (!configStillDesired(photoId, config)) return;
     await updateOcrState(photoId, {
       ocrStatus: "failed",
       modelVersion: BIB_OCR_ASSET_VERSION,
@@ -338,6 +351,6 @@ export async function resumeLocalBibOcr(albumId: string, config: BibConfigView):
   const photos = await listLocalReviewPhotos(albumId);
   for (const photo of photos) {
     if (photo.mediaId !== null) void syncLocalBibToServer(photo.id, config);
-    if (shouldResumeOcr(photo, config)) queueOcr(photo.id, config);
+    if (shouldResumeLocalBibOcr(photo, config)) queueOcr(photo.id, config);
   }
 }
