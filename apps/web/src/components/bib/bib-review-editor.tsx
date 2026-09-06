@@ -144,7 +144,7 @@ export function BibReviewEditor({
   );
 
   useEffect(() => {
-    setDirty(false);
+    if (mediaId !== null || state?.review.mediaId !== undefined) setDirty(false);
   }, [mediaId, state?.review.mediaId]);
 
   useEffect(() => {
