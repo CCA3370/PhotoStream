@@ -203,7 +203,10 @@ function RankingList({
             <p className="truncate text-sm font-medium">{photo.albumTitle}</p>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               照片 #{photo.publishSequence}
-              <span className="sm:hidden"> · {numberFormatter.format(photo.count)} {unit}</span>
+              <span className="sm:hidden">
+                {" "}
+                · {numberFormatter.format(photo.count)} {unit}
+              </span>
             </p>
           </div>
           <div className="hidden items-center gap-2 pl-2 sm:flex">
@@ -354,7 +357,12 @@ export function DashboardView({
 
   return (
     <section aria-busy={pending} aria-label="仪表盘统计" className="flex flex-col gap-3">
-      <div className={cn("grid gap-2 transition-opacity sm:grid-cols-2 xl:grid-cols-4", pending && "opacity-60")}>
+      <div
+        className={cn(
+          "grid gap-2 transition-opacity sm:grid-cols-2 xl:grid-cols-4",
+          pending && "opacity-60",
+        )}
+      >
         {kpis.map(({ label, value, meta, icon: Icon }) => (
           <Card className="shadow-none" key={label}>
             <CardContent className="p-3">
@@ -373,7 +381,9 @@ export function DashboardView({
         ))}
       </div>
 
-      <Card className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}>
+      <Card
+        className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}
+      >
         <CardHeader className="gap-3 border-b py-3.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -434,7 +444,9 @@ export function DashboardView({
       </Card>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.7fr)]">
-        <Card className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}>
+        <Card
+          className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}
+        >
           <Tabs className="gap-0" defaultValue="downloads">
             <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
               <CardTitle>照片排行</CardTitle>
@@ -472,7 +484,10 @@ export function DashboardView({
             {liveAlbums.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-9 text-center">
                 <p className="text-sm text-muted-foreground">暂无直播活动</p>
-                <Link className="text-xs font-medium text-foreground hover:underline" href="/studio/albums">
+                <Link
+                  className="text-xs font-medium text-foreground hover:underline"
+                  href="/studio/albums"
+                >
                   查看活动
                 </Link>
               </div>
@@ -506,7 +521,9 @@ export function DashboardView({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>自定义统计时间范围</DialogTitle>
-            <DialogDescription>可选择最近 {data.maxRangeDays} 天内的任意起止时间。</DialogDescription>
+            <DialogDescription>
+              可选择最近 {data.maxRangeDays} 天内的任意起止时间。
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="grid gap-2">
