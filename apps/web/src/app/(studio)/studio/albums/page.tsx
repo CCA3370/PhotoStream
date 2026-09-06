@@ -11,21 +11,19 @@ export default async function AlbumsPage() {
     requireInternalSession(),
     serverApi<AlbumSummaryView[]>("/api/v1/albums"),
   ]);
+  const liveCount = albums.filter((album) => album.state === "live").length;
 
   return (
-    <section aria-labelledby="albums-heading" className="flex flex-col gap-4">
+    <section aria-label="活动管理" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight" id="albums-heading">
-            活动管理
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">共 {albums.length} 个活动</p>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {albums.length} 个活动{liveCount > 0 ? ` · ${liveCount} 个直播中` : ""}
+        </p>
         {session.user.role === "admin" ? <CreateAlbumForm /> : null}
       </div>
 
       {albums.length === 0 ? (
-        <Empty className="min-h-56 rounded-lg border border-dashed bg-card/60">
+        <Empty className="min-h-56 rounded-xl border border-dashed bg-card/60">
           <EmptyHeader>
             <EmptyTitle>暂无活动</EmptyTitle>
             <EmptyDescription>创建活动后即可开始上传、审核和直播。</EmptyDescription>
