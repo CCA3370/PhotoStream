@@ -52,6 +52,41 @@ function tagStatusVariant(tag: BibTagView): "default" | "outline" | "secondary" 
   return "outline";
 }
 
+function parseBibNumbers(value: string): { readonly numbers: readonly string[]; readonly error: string | null } {
+  const rawParts = value.split(",");
+  if (rawParts.length === 1 && rawParts[0]?.trim().length === 0) {
+    return { numbers: [], error: "请至少输入一个号码" };
+  }
+  if (rawParts.some((part) => part.trim().length === 0)) {
+    return { numbers: [], error: "多个号码请使用英文逗号分隔，逗号之间不能留空" };
+  }
+  const numbers: string[] = [];
+  const seen = new Set<string>();
+  for (const part of rawParts) {
+    const normalized = normalizeBibNumber(part.trim());
+    if (normalized === null) {
+      return {
+        numbers: [],
+        error: `“${part.trim()}”不是有效号码；每个号码需为 1–12 位数字，多个号码使用英文逗号分隔`,
+      };
+    }
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      numbers.push(normalized);
+    }
+  }
+  return { numbers, error: null };
+}
+
+function appendOrRemoveNumber(value: string, number: string): string {
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (parts.includes(number)) return parts.filter((part) => part !== number).join(",");
+  return [...parts, number].join(",");
+}
+
 interface BibReviewEditorProps {
   readonly mediaId: string | null;
   readonly state: BibMediaState | null;
@@ -72,7 +107,6 @@ export function BibReviewEditor({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [number, setNumber] = useState("");
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const activeTags = useMemo(
@@ -87,18 +121,31 @@ export function BibReviewEditor({
         ),
     [state],
   );
+  const selectedNumbers = useMemo(
+    () =>
+      new Set(
+        number
+          .split(",")
+          .map((part) => part.trim())
+          .filter((part) => part.length > 0),
+      ),
+    [number],
+  );
 
   useEffect(() => {
     if (state?.review.decision === "no_number_confirmed") {
-      setSelectedTagId(null);
       setNumber("");
       return;
     }
-    const current = activeTags.find((tag) => tag.id === selectedTagId);
-    const preferred = current ?? activeTags[0];
-    setSelectedTagId(preferred?.id ?? null);
-    setNumber(preferred?.number ?? "");
-  }, [activeTags, selectedTagId, state?.review.decision]);
+    const confirmedNumbers = activeTags
+      .filter((tag) => tag.status === "confirmed")
+      .map((tag) => tag.number);
+    if (confirmedNumbers.length > 0) {
+      setNumber(confirmedNumbers.join(","));
+      return;
+    }
+    setNumber(activeTags[0]?.number ?? "");
+  }, [activeTags, state?.review.decision]);
 
   useEffect(() => {
     if (mediaId === null || state !== null) return;
@@ -119,40 +166,68 @@ export function BibReviewEditor({
     };
   }, [mediaId, onChange, onError, state]);
 
-  async function confirmNumber(): Promise<void> {
+  async function confirmNumbers(): Promise<void> {
     if (mediaId === null || busy) return;
-    const normalized = normalizeBibNumber(number);
-    if (normalized === null) {
-      setValidationError("请输入 1–12 位数字号码");
+    const parsed = parseBibNumbers(number);
+    if (parsed.error !== null) {
+      setValidationError(parsed.error);
       return;
     }
+    const wanted = new Set(parsed.numbers);
     setBusy(true);
     setValidationError(null);
     try {
       let current = state;
-      if (current?.review.decision === "no_number_confirmed") {
+      if (current === null) return;
+      if (current.review.decision === "no_number_confirmed") {
         current = await clientMutation<BibMediaState>(`/api/v1/media/${mediaId}/bib-review/reset`, {
           idempotencyKey: `bib-review-reset-${crypto.randomUUID()}`,
         });
         onChange(current);
       }
-      const selected = current?.tags.find(
-        (tag) => tag.id === selectedTagId && tag.status !== "rejected",
-      );
-      const result =
-        selected === undefined
-          ? await clientMutation<BibMediaState>(`/api/v1/media/${mediaId}/bib-tags`, {
-              body: { number: normalized },
-              idempotencyKey: `bib-manual-${crypto.randomUUID()}`,
-            })
-          : await clientMutation<BibMediaState>(
-              `/api/v1/media/${mediaId}/bib-tags/${selected.id}/confirm`,
-              {
-                body: selected.number === normalized ? {} : { number: normalized },
-                idempotencyKey: `bib-confirm-${crypto.randomUUID()}`,
-              },
-            );
-      onChange(result);
+
+      for (const tag of current.tags.filter(
+        (candidate) => candidate.status === "confirmed" && !wanted.has(candidate.number),
+      )) {
+        current = await clientMutation<BibMediaState>(
+          `/api/v1/media/${mediaId}/bib-tags/${tag.id}`,
+          {
+            method: "DELETE",
+            idempotencyKey: `bib-delete-${crypto.randomUUID()}`,
+          },
+        );
+        onChange(current);
+      }
+
+      for (const wantedNumber of parsed.numbers) {
+        if (
+          current.tags.some(
+            (tag) => tag.status === "confirmed" && tag.number === wantedNumber,
+          )
+        ) {
+          continue;
+        }
+        const candidate = current.tags.find(
+          (tag) =>
+            tag.number === wantedNumber &&
+            (tag.status === "suggested" || tag.status === "needs_review"),
+        );
+        current =
+          candidate === undefined
+            ? await clientMutation<BibMediaState>(`/api/v1/media/${mediaId}/bib-tags`, {
+                body: { number: wantedNumber },
+                idempotencyKey: `bib-manual-${crypto.randomUUID()}`,
+              })
+            : await clientMutation<BibMediaState>(
+                `/api/v1/media/${mediaId}/bib-tags/${candidate.id}/confirm`,
+                {
+                  body: {},
+                  idempotencyKey: `bib-confirm-${crypto.randomUUID()}`,
+                },
+              );
+        onChange(current);
+      }
+      setNumber(parsed.numbers.join(","));
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "号码确认失败");
     } finally {
@@ -251,7 +326,7 @@ export function BibReviewEditor({
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {activeTags.map((tag) => {
-              const selected = tag.id === selectedTagId;
+              const selected = selectedNumbers.has(tag.number);
               return (
                 <button
                   className={cn(
@@ -266,8 +341,7 @@ export function BibReviewEditor({
                   )}
                   key={tag.id}
                   onClick={() => {
-                    setSelectedTagId(tag.id);
-                    setNumber(tag.number);
+                    setNumber((current) => appendOrRemoveNumber(current, tag.number));
                     setValidationError(null);
                   }}
                   type="button"
@@ -298,25 +372,28 @@ export function BibReviewEditor({
         className="flex flex-col gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          void confirmNumber();
+          void confirmNumbers();
         }}
       >
         <div className="flex gap-2">
           <Input
-            aria-label="确认号码"
+            aria-label="确认号码，多个号码用英文逗号分隔"
+            autoComplete="off"
             className={cn(
               "h-9 min-w-0 flex-1 font-mono",
               dark &&
                 "border-white/15 bg-white/[0.07] text-white placeholder:text-white/35 focus-visible:border-violet-400",
             )}
             disabled={busy}
-            inputMode="numeric"
-            maxLength={12}
+            inputMode="text"
+            maxLength={255}
             onChange={(event) => {
               setNumber(event.currentTarget.value);
               setValidationError(null);
             }}
-            placeholder={noNumber ? "输入号码以修改确认结果" : "输入或修正号码"}
+            placeholder={
+              noNumber ? "输入号码以修改，如 101,102" : "多个号码用英文逗号分隔，如 101,102"
+            }
             value={number}
           />
           <Button
@@ -347,7 +424,7 @@ export function BibReviewEditor({
 
       <div className="flex items-center justify-between gap-2">
         <p className={cn("text-[11px]", dark ? "text-white/45" : "text-muted-foreground")}>
-          可直接修改识别结果；确认后号码将用于访客搜索。
+          可设置多个号码，使用英文逗号分隔；确认后的号码均用于访客搜索。
         </p>
         <Button
           className={cn(
@@ -389,7 +466,7 @@ export function BibReviewDialog({
         <DialogHeader>
           <DialogTitle>号码确认</DialogTitle>
           <DialogDescription>
-            核对自动识别结果，也可以直接修正号码或确认此照片没有号码。
+            核对自动识别结果，也可以直接输入或修改多个号码；多个号码使用英文逗号分隔。
           </DialogDescription>
         </DialogHeader>
         <BibReviewEditor mediaId={mediaId} onChange={onChange} onError={onError} state={state} />
