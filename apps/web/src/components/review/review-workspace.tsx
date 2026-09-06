@@ -55,6 +55,11 @@ interface LocalView {
   readonly previewUrl: string;
 }
 
+interface LocalObjectUrls {
+  readonly originalUrl: string;
+  readonly previewUrl: string;
+}
+
 type ReviewItem =
   | {
       readonly key: string;
@@ -134,7 +139,7 @@ export function ReviewWorkspace({
   userRole: "admin" | "reviewer";
   uploaders: readonly AlbumUploaderView[];
 }>) {
-  const localUrls = useRef<string[]>([]);
+  const localUrlCache = useRef(new Map<string, LocalObjectUrls>());
   const noticeTimer = useRef<number | null>(null);
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -161,17 +166,31 @@ export function ReviewWorkspace({
 
   const refreshLocal = useCallback(async () => {
     const rows = await listLocalReviewPhotos(albumId);
-    for (const url of localUrls.current) URL.revokeObjectURL(url);
+    const activeIds = new Set(rows.map((photo) => photo.id));
+    for (const [photoId, urls] of localUrlCache.current) {
+      if (activeIds.has(photoId)) continue;
+      URL.revokeObjectURL(urls.previewUrl);
+      URL.revokeObjectURL(urls.originalUrl);
+      localUrlCache.current.delete(photoId);
+    }
     const next = rows.map((photo) => {
-      const thumb =
-        photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
+      let urls = localUrlCache.current.get(photo.id);
+      if (urls === undefined) {
+        const thumb =
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
+          photo.originalBlob;
+        urls = {
+          previewUrl: URL.createObjectURL(thumb),
+          originalUrl: URL.createObjectURL(photo.originalBlob),
+        };
+        localUrlCache.current.set(photo.id, urls);
+      }
       return {
         photo,
-        previewUrl: URL.createObjectURL(thumb),
-        originalUrl: URL.createObjectURL(photo.originalBlob),
+        previewUrl: urls.previewUrl,
+        originalUrl: urls.originalUrl,
       };
     });
-    localUrls.current = next.flatMap((item) => [item.previewUrl, item.originalUrl]);
     setLocalMedia(next);
   }, [albumId]);
 
@@ -210,8 +229,11 @@ export function ReviewWorkspace({
     return () => {
       window.removeEventListener("photostream:local-review-changed", localChanged);
       if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-      for (const url of localUrls.current) URL.revokeObjectURL(url);
-      localUrls.current = [];
+      for (const urls of localUrlCache.current.values()) {
+        URL.revokeObjectURL(urls.previewUrl);
+        URL.revokeObjectURL(urls.originalUrl);
+      }
+      localUrlCache.current.clear();
     };
   }, [albumId, refreshFeatured, refreshLocal]);
 
