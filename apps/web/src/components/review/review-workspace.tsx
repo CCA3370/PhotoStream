@@ -2,6 +2,7 @@
 
 import type {
   AlbumUploaderView,
+  BibConfigView,
   BibMediaState,
   InternalMediaList,
   InternalMediaView,
@@ -37,8 +38,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { clientGet, clientMutation } from "@/lib/client-api";
+import { LOCAL_BIB_SERVER_STATE_EVENT, resumeLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
+  confirmLocalBibNoNumber,
+  confirmLocalBibNumbers,
   deleteLocalReviewPhoto,
+  effectiveBibMediaState,
+  localBibMediaState,
+  localBibOcrPending,
   type LocalReviewPhoto,
   listLocalReviewPhotos,
   patchLocalReviewPhoto,
@@ -78,7 +85,7 @@ type ReviewItem =
       readonly uploaderId: null;
       readonly featured: boolean;
       readonly publicationStatus: "local" | "published";
-      readonly bib: null;
+      readonly bib: BibMediaState;
       readonly createdAt: string;
     }
   | {
@@ -132,6 +139,7 @@ function mergeRemote(
 
 export function ReviewWorkspace({
   albumId,
+  bibConfig,
   categories,
   initialPage,
   userRole,
@@ -139,7 +147,7 @@ export function ReviewWorkspace({
 }: Readonly<{
   albumId: string;
   albumTitle?: string;
-  bibConfig?: unknown;
+  bibConfig: BibConfigView;
   categories: readonly CategoryOption[];
   initialPage: InternalMediaList;
   userRole: "admin" | "reviewer";
@@ -224,17 +232,42 @@ export function ReviewWorkspace({
     return page;
   }, [fetchRemote]);
 
+  function updateBibState(mediaId: string, state: BibMediaState): void {
+    setRemoteMedia((current) =>
+      current.map((media) => (media.id === mediaId ? { ...media, bib: state } : media)),
+    );
+  }
+
   useEffect(() => {
-    void Promise.all([refreshLocal(), refreshFeatured()]).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : "审核数据加载失败");
-    });
+    void Promise.all([refreshLocal(), refreshFeatured(), resumeLocalBibOcr(albumId, bibConfig)]).catch(
+      (cause) => {
+        setError(cause instanceof Error ? cause.message : "审核数据加载失败");
+      },
+    );
     const localChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly albumId?: string }>).detail;
-      if (detail?.albumId === albumId) void refreshLocal();
+      if (detail?.albumId !== albumId) return;
+      void refreshLocal();
+      void resumeLocalBibOcr(albumId, bibConfig);
+    };
+    const serverBibChanged = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          readonly albumId?: string;
+          readonly mediaId?: string | null;
+          readonly state?: BibMediaState;
+        }>
+      ).detail;
+      if (detail?.albumId !== albumId || typeof detail.mediaId !== "string" || detail.state === undefined) {
+        return;
+      }
+      updateBibState(detail.mediaId, detail.state);
     };
     window.addEventListener("photostream:local-review-changed", localChanged);
+    window.addEventListener(LOCAL_BIB_SERVER_STATE_EVENT, serverBibChanged);
     return () => {
       window.removeEventListener("photostream:local-review-changed", localChanged);
+      window.removeEventListener(LOCAL_BIB_SERVER_STATE_EVENT, serverBibChanged);
       if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
       for (const urls of localUrlCache.current.values()) {
         URL.revokeObjectURL(urls.previewUrl);
@@ -242,7 +275,7 @@ export function ReviewWorkspace({
       }
       localUrlCache.current.clear();
     };
-  }, [albumId, refreshFeatured, refreshLocal]);
+  }, [albumId, bibConfig, refreshFeatured, refreshLocal]);
 
   const items = useMemo<readonly ReviewItem[]>(() => {
     const remoteIds = new Set(remoteMedia.map((item) => item.id));
@@ -268,7 +301,7 @@ export function ReviewWorkspace({
           item.photo.uploadState === "published" && item.photo.mediaId !== null
             ? ("published" as const)
             : ("local" as const),
-        bib: null,
+        bib: localBibMediaState(item.photo),
         createdAt: item.photo.createdAt,
       }));
     const remoteItems: ReviewItem[] = remoteMedia
@@ -290,7 +323,10 @@ export function ReviewWorkspace({
           uploaderId: item.uploaderId,
           featured: featuredIds.has(item.id),
           publicationStatus: item.publicationStatus,
-          bib: item.bib ?? null,
+          bib:
+            linkedLocal === null
+              ? (item.bib ?? null)
+              : effectiveBibMediaState(linkedLocal.photo, item.bib),
           createdAt: linkedLocal?.photo.createdAt ?? item.createdAt,
         };
       });
@@ -349,6 +385,36 @@ export function ReviewWorkspace({
     return items.find((item) => item.key === key) ?? null;
   }
 
+  function localPhoto(item: ReviewItem): LocalReviewPhoto | null {
+    if (item.source === "local") return item.local.photo;
+    return item.local?.photo ?? null;
+  }
+
+  function bibOcrIsPending(item: ReviewItem): boolean {
+    const photo = localPhoto(item);
+    if (photo !== null) return localBibOcrPending(photo);
+    return item.bib?.review.ocrStatus === "processing";
+  }
+
+  async function confirmLocalNumbersByKey(
+    key: string,
+    numbers: readonly string[],
+  ): Promise<BibMediaState> {
+    const item = itemByKey(key);
+    const photo = item === null ? null : localPhoto(item);
+    if (photo === null || photo.mediaId !== null) throw new Error("本地号码状态不可用");
+    const updated = await confirmLocalBibNumbers(photo.id, numbers);
+    return localBibMediaState(updated);
+  }
+
+  async function confirmLocalNoNumberByKey(key: string): Promise<BibMediaState> {
+    const item = itemByKey(key);
+    const photo = item === null ? null : localPhoto(item);
+    if (photo === null || photo.mediaId !== null) throw new Error("本地号码状态不可用");
+    const updated = await confirmLocalBibNoNumber(photo.id);
+    return localBibMediaState(updated);
+  }
+
   function isPending(key: string): boolean {
     return pendingActions.has(key);
   }
@@ -371,12 +437,6 @@ export function ReviewWorkspace({
     if (item.source === "remote") return userRole === "admin";
     if (item.publicationStatus === "published") return userRole === "admin";
     return true;
-  }
-
-  function updateBibState(mediaId: string, state: BibMediaState): void {
-    setRemoteMedia((current) =>
-      current.map((media) => (media.id === mediaId ? { ...media, bib: state } : media)),
-    );
   }
 
   async function toggleFeatured(item: ReviewItem): Promise<void> {
@@ -558,6 +618,15 @@ export function ReviewWorkspace({
     { id: "featured", label: "精选" },
   ];
   const bibDialogItem = bibDialogKey === null ? null : itemByKey(bibDialogKey);
+  const bibDialogMediaId = bibDialogItem === null ? null : remoteId(bibDialogItem);
+  const bibDialogLocalActions =
+    bibDialogItem !== null && bibDialogMediaId === null
+      ? {
+          confirmNumbers: (numbers: readonly string[]) =>
+            confirmLocalNumbersByKey(bibDialogItem.key, numbers),
+          confirmNoNumber: () => confirmLocalNoNumberByKey(bibDialogItem.key),
+        }
+      : undefined;
 
   return (
     <div className="flex flex-col gap-3">
@@ -654,9 +723,12 @@ export function ReviewWorkspace({
             const published = item.publicationStatus === "published";
             const hidden = item.publicationStatus === "hidden";
             const bibConfirmed = isBibReviewConfirmed(item.bib);
+            const ocrPending = bibOcrIsPending(item);
+            const bibBlocked = !bibConfirmed && ocrPending;
             return (
               <div
                 className="group overflow-hidden rounded-lg border bg-card outline-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring"
+                data-bib-ocr-pending={ocrPending ? "true" : "false"}
                 key={item.key}
               >
                 <div className="relative aspect-[4/3] bg-muted">
@@ -719,20 +791,33 @@ export function ReviewWorkspace({
                     )}
                   </Button>
                   <Button
-                    aria-label={bibConfirmed ? "修改号码确认" : "确认号码"}
+                    aria-label={
+                      bibBlocked ? "号码识别中" : bibConfirmed ? "修改号码确认" : "确认号码"
+                    }
                     className={cn(
-                      "size-8 text-white",
-                      bibConfirmed
-                        ? "bg-emerald-600 hover:bg-emerald-700 hover:text-white"
-                        : "bg-violet-600 hover:bg-violet-700 hover:text-white",
+                      "size-8",
+                      bibBlocked
+                        ? "bg-muted text-muted-foreground"
+                        : bibConfirmed
+                          ? "bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white"
+                          : "bg-violet-600 text-white hover:bg-violet-700 hover:text-white",
                     )}
+                    disabled={pending || bibBlocked}
                     onClick={() => setBibDialogKey(item.key)}
                     size="icon"
-                    title={bibConfirmed ? "号码已确认，点击修改" : "号码待确认"}
+                    title={
+                      bibBlocked
+                        ? "号码识别中"
+                        : bibConfirmed
+                          ? "号码已确认，点击修改"
+                          : "号码待确认"
+                    }
                     type="button"
                     variant="ghost"
                   >
-                    {bibConfirmed ? (
+                    {bibBlocked ? (
+                      <LoaderCircleIcon className="size-4 animate-spin" />
+                    ) : bibConfirmed ? (
                       <BadgeCheckIcon className="size-4" />
                     ) : (
                       <HashIcon className="size-4" />
@@ -776,6 +861,8 @@ export function ReviewWorkspace({
           const item = itemByKey(key);
           if (item !== null) void deleteItem(item);
         }}
+        onLocalBibConfirmNoNumber={confirmLocalNoNumberByKey}
+        onLocalBibConfirmNumbers={confirmLocalNumbersByKey}
         onSelect={setActiveKey}
         onStateAction={(key) => {
           const item = itemByKey(key);
@@ -793,11 +880,13 @@ export function ReviewWorkspace({
       />
 
       <BibReviewDialog
-        mediaId={bibDialogItem === null ? null : remoteId(bibDialogItem)}
+        localActions={bibDialogLocalActions}
+        mediaId={bibDialogMediaId}
         onChange={(state) => {
           if (bibDialogItem === null) return;
           const mediaId = remoteId(bibDialogItem);
           if (mediaId !== null) updateBibState(mediaId, state);
+          else void refreshLocal();
         }}
         onError={setError}
         onOpenChange={(open) => {
