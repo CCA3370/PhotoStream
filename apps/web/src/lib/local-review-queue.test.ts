@@ -8,9 +8,7 @@ import {
   localBibOcrPending,
 } from "./local-review-queue";
 
-function photo(
-  bib: Partial<LocalReviewPhoto["bib"]>,
-): LocalReviewPhoto {
+function photo(bib: Partial<LocalReviewPhoto["bib"]>): LocalReviewPhoto {
   return {
     id: "019d0000-0000-7000-8000-000000000001",
     albumId: "019d0000-0000-7000-8000-000000000002",
@@ -118,9 +116,9 @@ describe("local bib review state", () => {
     expect(effectiveBibMediaState(local, remote("pending")).review.decision).toBe(
       "numbers_confirmed",
     );
-    expect(
-      effectiveBibMediaState(local, remote("no_number_confirmed")).review.decision,
-    ).toBe("no_number_confirmed");
+    expect(effectiveBibMediaState(local, remote("no_number_confirmed")).review.decision).toBe(
+      "no_number_confirmed",
+    );
   });
 
   it("only blocks list confirmation while OCR is queued or processing", () => {
