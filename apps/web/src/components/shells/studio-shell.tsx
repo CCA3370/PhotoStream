@@ -4,6 +4,7 @@ import type { UserRole } from "@photostream/contracts";
 import {
   ImagesIcon,
   LayoutDashboardIcon,
+  LoaderCircleIcon,
   LogOutIcon,
   ScrollTextIcon,
   UsersIcon,
@@ -37,7 +38,7 @@ import { clientMutation } from "@/lib/client-api";
 const navigation = [
   {
     href: "/studio",
-    label: "首页",
+    label: "仪表盘",
     icon: LayoutDashboardIcon,
     roles: ["admin", "reviewer", "uploader"],
   },
@@ -75,7 +76,7 @@ function isNavigationActive(pathname: string, href: string): boolean {
 }
 
 function sectionTitle(pathname: string, fallback: string): string {
-  if (pathname === "/studio") return "首页";
+  if (pathname === "/studio") return "仪表盘";
   if (pathname.startsWith("/studio/albums")) return "活动管理";
   if (pathname.startsWith("/studio/users")) return "成员管理";
   if (pathname.startsWith("/studio/audit")) return "审计日志";
@@ -121,37 +122,37 @@ export function StudioShell({
         <SidebarProvider
           style={
             {
-              "--sidebar-width": "16.5rem",
-              "--sidebar-width-icon": "4.25rem",
+              "--sidebar-width": "15.5rem",
+              "--sidebar-width-icon": "3.75rem",
             } as CSSProperties
           }
         >
           <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader className="p-3">
+            <SidebarHeader className="p-2.5">
               <Link
-                className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-accent"
+                className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-sidebar-accent"
                 href="/studio"
               >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                  <ImagesIcon aria-hidden="true" className="size-5" />
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                  <ImagesIcon aria-hidden="true" className="size-4" />
                 </div>
-                <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-                  <p className="truncate text-sm font-semibold">PhotoStream</p>
-                </div>
+                <p className="min-w-0 truncate text-sm font-semibold group-data-[collapsible=icon]:hidden">
+                  PhotoStream
+                </p>
               </Link>
             </SidebarHeader>
 
             <SidebarContent className="px-1">
-              <SidebarGroup>
+              <SidebarGroup className="pt-1">
                 <SidebarGroupLabel>管理</SidebarGroupLabel>
                 <SidebarGroupContent>
-                  <SidebarMenu className="gap-1.5">
+                  <SidebarMenu className="gap-1">
                     {visibleNavigation.map((item) => {
                       const Icon = item.icon;
                       return (
                         <SidebarMenuItem key={item.href}>
                           <SidebarMenuButton
-                            className="h-10 rounded-xl"
+                            className="h-9 rounded-lg"
                             isActive={isNavigationActive(pathname, item.href)}
                             render={<Link href={item.href} />}
                             tooltip={item.label}
@@ -167,9 +168,9 @@ export function StudioShell({
               </SidebarGroup>
             </SidebarContent>
 
-            <SidebarFooter className="p-3">
-              <div className="flex items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/45 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
+            <SidebarFooter className="p-2.5">
+              <div className="flex items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/35 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground group-data-[collapsible=icon]:hidden">
                   {initials}
                 </div>
                 <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
@@ -179,15 +180,19 @@ export function StudioShell({
                   </Badge>
                 </div>
                 <Button
-                  className="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25 group-data-[collapsible=icon]:hidden"
+                  className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
                   disabled={loggingOut}
                   onClick={() => void logout()}
                   size="icon-sm"
-                  title="登出"
+                  title="退出登录"
                   variant="ghost"
                 >
-                  <LogOutIcon aria-hidden="true" className="size-4" />
-                  <span className="sr-only">登出</span>
+                  {loggingOut ? (
+                    <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" />
+                  ) : (
+                    <LogOutIcon aria-hidden="true" className="size-4" />
+                  )}
+                  <span className="sr-only">退出登录</span>
                 </Button>
               </div>
             </SidebarFooter>
@@ -195,15 +200,16 @@ export function StudioShell({
           </Sidebar>
 
           <SidebarInset
-            className="overflow-hidden border border-sidebar-border/70 bg-background shadow-sm"
+            className="min-w-0 overflow-hidden border border-sidebar-border/70 bg-background shadow-sm"
             id="studio-main"
+            tabIndex={-1}
           >
-            <header className="sticky top-0 z-20 flex min-h-14 items-center gap-3 border-b bg-background/92 px-4 backdrop-blur md:px-5">
+            <header className="sticky top-0 z-20 flex min-h-12 items-center gap-2.5 border-b bg-background/94 px-3.5 backdrop-blur md:px-4">
               <SidebarTrigger aria-label="切换工作台导航" />
-              <div className="h-5 w-px bg-border" />
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{resolvedTitle}</h1>
+              <div className="h-4 w-px bg-border" />
+              <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">{resolvedTitle}</h1>
             </header>
-            <div className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-4 p-4 md:p-5 xl:p-6">
+            <div className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-3 p-3.5 md:p-4 xl:p-5">
               {children}
             </div>
           </SidebarInset>
