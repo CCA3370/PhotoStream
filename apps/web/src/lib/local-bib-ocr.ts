@@ -226,10 +226,7 @@ export async function syncLocalBibToServer(photoId: string, config: BibConfigVie
   });
 }
 
-export function shouldResumeLocalBibOcr(
-  photo: LocalReviewPhoto,
-  config: BibConfigView,
-): boolean {
+export function shouldResumeLocalBibOcr(photo: LocalReviewPhoto, config: BibConfigView): boolean {
   if (!config.recognitionEnabled) return photo.bib.ocrStatus !== "disabled";
   if (
     photo.bib.ocrStatus === "not_started" ||
