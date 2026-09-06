@@ -210,7 +210,7 @@ textarea {
   inset: auto;
   display: block;
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) + 2px);
