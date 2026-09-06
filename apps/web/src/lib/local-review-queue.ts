@@ -1,5 +1,10 @@
-import type { BibCandidateInput, BibMediaState, BibTagView } from "@photostream/contracts";
-import { normalizeBibNumber } from "@photostream/contracts";
+import type {
+  BibCandidateInput,
+  BibMediaState,
+  BibPatternInput,
+  BibTagView,
+} from "@photostream/contracts";
+import { evaluateBibNumber, normalizeBibNumber } from "@photostream/contracts";
 
 import type { ProcessedPhoto } from "@/lib/photo-processing";
 
@@ -88,7 +93,14 @@ function normalizeBibState(value: Partial<LocalBibState> | undefined): LocalBibS
 }
 
 function normalizeStoredPhoto(photo: LocalReviewPhoto): LocalReviewPhoto {
-  return { ...photo, bib: normalizeBibState(photo.bib) };
+  const storedBib = (photo as LocalReviewPhoto & { readonly bib?: Partial<LocalBibState> }).bib;
+  return {
+    ...photo,
+    bib:
+      storedBib === undefined
+        ? { ...defaultBibState(), ocrStatus: "disabled" }
+        : normalizeBibState(storedBib),
+  };
 }
 
 function dispatchChanged(albumId: string): void {
@@ -101,9 +113,12 @@ function ensureBroadcastChannel(): BroadcastChannel | null {
   if (typeof window === "undefined" || !("BroadcastChannel" in window)) return null;
   if (broadcastChannel !== null) return broadcastChannel;
   broadcastChannel = new BroadcastChannel(broadcastChannelName);
-  broadcastChannel.addEventListener("message", (event: MessageEvent<{ readonly albumId?: string }>) => {
-    if (typeof event.data?.albumId === "string") dispatchChanged(event.data.albumId);
-  });
+  broadcastChannel.addEventListener(
+    "message",
+    (event: MessageEvent<{ readonly albumId?: string }>) => {
+      if (typeof event.data?.albumId === "string") dispatchChanged(event.data.albumId);
+    },
+  );
   return broadcastChannel;
 }
 
@@ -273,12 +288,16 @@ export async function patchLocalReviewPhoto(
 export async function confirmLocalBibNumbers(
   id: string,
   numbers: readonly string[],
+  patterns?: readonly BibPatternInput[],
 ): Promise<LocalReviewPhoto> {
   const normalized: string[] = [];
   const seen = new Set<string>();
   for (const value of numbers) {
     const number = normalizeBibNumber(value);
     if (number === null) throw new Error("号码格式无效");
+    if (patterns !== undefined && !evaluateBibNumber(number, patterns).valid) {
+      throw new Error(`号码 ${number} 不符合当前号码规则`);
+    }
     if (!seen.has(number)) {
       seen.add(number);
       normalized.push(number);
@@ -396,7 +415,12 @@ export function effectiveBibMediaState(
   ) {
     return remote;
   }
-  if (photo.bib.ocrRevision > photo.bib.ocrSyncedRevision || remote === null || remote === undefined) {
+  if (
+    photo.bib.ocrRevision > photo.bib.ocrSyncedRevision ||
+    photo.bib.manualRevision > photo.bib.manualSyncedRevision ||
+    remote === null ||
+    remote === undefined
+  ) {
     return localBibMediaState(photo);
   }
   return remote;
