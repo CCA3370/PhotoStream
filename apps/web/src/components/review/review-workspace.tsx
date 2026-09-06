@@ -20,10 +20,7 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  BibReviewDialog,
-  isBibReviewConfirmed,
-} from "@/components/bib/bib-review-editor";
+import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import {
   ReviewLightbox,
   type ReviewLightboxItem,
@@ -337,7 +334,7 @@ export function ReviewWorkspace({
         height: item.source === "local" ? item.local.photo.height : item.remote.height,
         featured: item.featured,
         publicationStatus: item.publicationStatus,
-        mediaId: remoteId(item),
+        mediaId: item.source === "remote" ? item.remote.id : item.local.photo.mediaId,
         bib: item.bib,
         canDelete:
           item.source === "local"
