@@ -1,9 +1,10 @@
-import type { AlbumView, InternalMediaList } from "@photostream/contracts";
-import { ExternalLinkIcon } from "lucide-react";
+import type { AlbumView } from "@photostream/contracts";
+import { ExternalLinkIcon, SettingsIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AlbumActions } from "@/components/albums/album-actions";
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
+import { AlbumWorkspaceHeader } from "@/components/albums/album-workspace-header";
 import { CategoryForm } from "@/components/albums/category-form";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -33,120 +34,91 @@ function stateVariant(state: AlbumView["state"]): "default" | "outline" | "secon
 export default async function AlbumOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin", "reviewer"]);
   const { id } = await params;
-  const [album, categories, media] = await Promise.all([
+  const [album, categories] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
     serverApi<CategoryView[]>(`/api/v1/albums/${id}/categories`),
-    serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=12`),
   ]);
 
   return (
     <section aria-labelledby="album-heading" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="truncate text-xl font-semibold tracking-tight" id="album-heading">
-              {album.title}
-            </h2>
-            <Badge variant={stateVariant(album.state)}>{stateLabels[album.state]}</Badge>
-          </div>
-          {album.description.length === 0 ? null : (
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{album.description}</p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            className={buttonVariants({ size: "sm", variant: "ghost" })}
-            href={`/g/${album.slug}`}
-          >
-            <ExternalLinkIcon data-icon="inline-start" />
-            观众页
-          </Link>
-          {session.user.role === "admin" ? <AlbumActions album={album} /> : null}
-        </div>
-      </div>
+      <AlbumWorkspaceHeader
+        actions={
+          <>
+            <Link
+              className={buttonVariants({ size: "sm", variant: "ghost" })}
+              href={`/g/${album.slug}`}
+            >
+              <ExternalLinkIcon data-icon="inline-start" />
+              观众页
+            </Link>
+            {session.user.role === "admin" ? <AlbumActions album={album} /> : null}
+          </>
+        }
+        description={album.description || undefined}
+        headingId="album-heading"
+        section="活动概览"
+        title={album.title}
+      />
 
       <AlbumContextNav albumId={id} current="overview" role={session.user.role} />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.7fr)]">
-        <Card className="overflow-hidden">
+      <div className="grid gap-3 xl:grid-cols-2">
+        <Card className="overflow-hidden shadow-none">
           <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
-            <CardTitle>最近媒体</CardTitle>
-            <Link
-              className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href={`/studio/albums/${id}/review`}
-            >
-              查看全部
-            </Link>
+            <CardTitle>活动配置</CardTitle>
+            {session.user.role === "admin" ? (
+              <Link
+                className={buttonVariants({ size: "sm", variant: "ghost" })}
+                href={`/studio/albums/${id}/settings`}
+              >
+                <SettingsIcon data-icon="inline-start" />
+                设置
+              </Link>
+            ) : null}
           </CardHeader>
-          <CardContent className="p-0">
-            {media.items.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">尚无媒体</p>
-            ) : (
-              <div className="divide-y">
-                {media.items.map((item) => (
-                  <div
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                    key={item.id}
-                  >
-                    <p className="text-sm font-medium">照片 {item.id.slice(-8)}</p>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>处理：{item.ingestStatus}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>发布：{item.publicationStatus}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-3">
+            <div className="bg-card px-4 py-3">
+              <p className="text-xs text-muted-foreground">状态</p>
+              <Badge className="mt-1.5" variant={stateVariant(album.state)}>
+                {stateLabels[album.state]}
+              </Badge>
+            </div>
+            <div className="bg-card px-4 py-3">
+              <p className="text-xs text-muted-foreground">访问</p>
+              <p className="mt-1.5 text-sm font-medium">
+                {album.access === "password" ? "口令访问" : "公开访问"}
+              </p>
+            </div>
+            <div className="bg-card px-4 py-3">
+              <p className="text-xs text-muted-foreground">发布</p>
+              <p className="mt-1.5 text-sm font-medium">
+                {album.publishMode === "review" ? "审核后发布" : "自动发布"}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-3">
-          <Card className="overflow-hidden">
-            <CardHeader className="border-b py-3.5">
-              <CardTitle>活动配置</CardTitle>
-            </CardHeader>
-            <CardContent className="divide-y p-0 text-sm">
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="text-muted-foreground">访问</span>
-                <span className="font-medium">
-                  {album.access === "password" ? "口令访问" : "公开访问"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="text-muted-foreground">发布</span>
-                <span className="font-medium">
-                  {album.publishMode === "review" ? "审核后发布" : "自动发布"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="text-muted-foreground">状态</span>
-                <span className="font-medium">{stateLabels[album.state]}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="overflow-hidden">
-            <CardHeader className="border-b py-3.5">
-              <CardTitle>分类</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 p-4">
-              <div className="flex flex-wrap gap-1.5">
-                {categories.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">尚未创建分类</p>
-                ) : (
-                  categories.map((category) => (
-                    <Badge key={category.id} variant={category.enabled ? "secondary" : "outline"}>
-                      {category.name}
-                    </Badge>
-                  ))
-                )}
-              </div>
-              {session.user.role === "admin" ? <CategoryForm albumId={album.id} /> : null}
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="overflow-hidden shadow-none">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
+            <CardTitle>分类</CardTitle>
+            <span className="text-xs tabular-nums text-muted-foreground">{categories.length} 个</span>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex min-h-7 flex-wrap items-center gap-1.5">
+              {categories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无分类</p>
+              ) : (
+                categories.map((category) => (
+                  <Badge key={category.id} variant={category.enabled ? "secondary" : "outline"}>
+                    {category.name}
+                    {category.enabled ? null : " · 已停用"}
+                  </Badge>
+                ))
+              )}
+            </div>
+            {session.user.role === "admin" ? <CategoryForm albumId={album.id} /> : null}
+          </CardContent>
+        </Card>
       </div>
     </section>
   );
