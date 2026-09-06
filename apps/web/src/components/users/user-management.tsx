@@ -231,7 +231,10 @@ export function UserManagement({
                     </TableCell>
                     <TableCell>
                       <Select
-                        items={Object.entries(roleLabels).map(([value, label]) => ({ value, label }))}
+                        items={Object.entries(roleLabels).map(([value, label]) => ({
+                          value,
+                          label,
+                        }))}
                         onValueChange={(value) => {
                           if (value === "admin" || value === "reviewer" || value === "uploader") {
                             void update(user.id, { role: value });
@@ -323,7 +326,11 @@ export function UserManagement({
               {temporaryCredential?.password}
             </code>
             <Button onClick={() => void copyTemporaryPassword()} type="button" variant="outline">
-              {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
+              {copied ? (
+                <CheckIcon data-icon="inline-start" />
+              ) : (
+                <CopyIcon data-icon="inline-start" />
+              )}
               {copied ? "已复制" : "复制"}
             </Button>
           </div>
