@@ -52,7 +52,10 @@ function tagStatusVariant(tag: BibTagView): "default" | "outline" | "secondary" 
   return "outline";
 }
 
-function parseBibNumbers(value: string): { readonly numbers: readonly string[]; readonly error: string | null } {
+function parseBibNumbers(value: string): {
+  readonly numbers: readonly string[];
+  readonly error: string | null;
+} {
   const rawParts = value.split(",");
   if (rawParts.length === 1 && rawParts[0]?.trim().length === 0) {
     return { numbers: [], error: "请至少输入一个号码" };
@@ -200,11 +203,7 @@ export function BibReviewEditor({
       }
 
       for (const wantedNumber of parsed.numbers) {
-        if (
-          current.tags.some(
-            (tag) => tag.status === "confirmed" && tag.number === wantedNumber,
-          )
-        ) {
+        if (current.tags.some((tag) => tag.status === "confirmed" && tag.number === wantedNumber)) {
           continue;
         }
         const candidate = current.tags.find(
