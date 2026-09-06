@@ -14,6 +14,7 @@ import {
 export const LOCAL_BIB_SERVER_STATE_EVENT = "photostream:local-bib-server-state";
 
 const ocrJobs = new Map<string, Promise<void>>();
+const ocrControllers = new Map<string, AbortController>();
 const desiredOcrConfigs = new Map<string, BibConfigView>();
 const syncTails = new Map<string, Promise<void>>();
 
@@ -24,6 +25,10 @@ function configRevision(config: BibConfigView): string {
 function configStillDesired(photoId: string, config: BibConfigView): boolean {
   const desired = desiredOcrConfigs.get(photoId);
   return desired === undefined || configRevision(desired) === configRevision(config);
+}
+
+function jobObsolete(photoId: string, config: BibConfigView, signal: AbortSignal): boolean {
+  return signal.aborted || !configStillDesired(photoId, config);
 }
 
 function serverStateChanged(photo: LocalReviewPhoto, state: BibMediaState): void {
@@ -238,10 +243,15 @@ export function shouldResumeLocalBibOcr(
   );
 }
 
-async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<void> {
+async function runLocalBibOcr(
+  photoId: string,
+  config: BibConfigView,
+  signal: AbortSignal,
+): Promise<void> {
   const photo = await getLocalReviewPhoto(photoId);
-  if (photo === null || !configStillDesired(photoId, config)) return;
+  if (photo === null || jobObsolete(photoId, config, signal)) return;
   if (!config.recognitionEnabled) {
+    if (jobObsolete(photoId, config, signal)) return;
     if (photo.bib.ocrStatus !== "disabled") {
       await updateOcrState(photoId, {
         ocrStatus: "disabled",
@@ -255,6 +265,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
     return;
   }
   if (config.modelVersion !== BIB_OCR_ASSET_VERSION) {
+    if (jobObsolete(photoId, config, signal)) return;
     await updateOcrState(photoId, {
       ocrStatus: "failed",
       modelVersion: config.modelVersion,
@@ -265,6 +276,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
     return;
   }
   if (!bibOcrSupported()) {
+    if (jobObsolete(photoId, config, signal)) return;
     await updateOcrState(photoId, {
       ocrStatus: "unsupported",
       modelVersion: BIB_OCR_ASSET_VERSION,
@@ -277,6 +289,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
   }
   const workingImage = photo.variants.find((variant) => variant.kind === "photo_1920")?.blob;
   if (workingImage === undefined) {
+    if (jobObsolete(photoId, config, signal)) return;
     await updateOcrState(photoId, {
       ocrStatus: "failed",
       modelVersion: BIB_OCR_ASSET_VERSION,
@@ -288,6 +301,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
     return;
   }
 
+  if (jobObsolete(photoId, config, signal)) return;
   await updateOcrState(photoId, {
     ocrStatus: "processing",
     modelVersion: BIB_OCR_ASSET_VERSION,
@@ -296,10 +310,10 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
     ocrError: null,
   });
   await syncLocalBibToServer(photoId, config);
-  if (!configStillDesired(photoId, config)) return;
+  if (jobObsolete(photoId, config, signal)) return;
   try {
-    const rawCandidates = await recognizeBibCandidates(workingImage);
-    if (!configStillDesired(photoId, config)) return;
+    const rawCandidates = await recognizeBibCandidates(workingImage, signal);
+    if (jobObsolete(photoId, config, signal)) return;
     const candidates = normalizeBibCandidates(rawCandidates, config.patterns).map(
       ({ number, ...candidate }) => ({ ...candidate, text: number }),
     );
@@ -311,7 +325,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
       ocrError: null,
     });
   } catch (error) {
-    if (!configStillDesired(photoId, config)) return;
+    if (signal.aborted || !configStillDesired(photoId, config)) return;
     await updateOcrState(photoId, {
       ocrStatus: "failed",
       modelVersion: BIB_OCR_ASSET_VERSION,
@@ -324,16 +338,25 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
 }
 
 function queueOcr(photoId: string, config: BibConfigView): void {
+  const previousDesired = desiredOcrConfigs.get(photoId);
+  const revisionChanged =
+    previousDesired !== undefined && configRevision(previousDesired) !== configRevision(config);
   desiredOcrConfigs.set(photoId, config);
-  if (ocrJobs.has(photoId)) return;
+  if (ocrJobs.has(photoId)) {
+    if (revisionChanged) ocrControllers.get(photoId)?.abort();
+    return;
+  }
   const startedRevision = configRevision(config);
-  const job = runLocalBibOcr(photoId, config).catch((error) => {
-    console.warn("Local bib OCR job failed", error);
+  const controller = new AbortController();
+  ocrControllers.set(photoId, controller);
+  const job = runLocalBibOcr(photoId, config, controller.signal).catch((error) => {
+    if (!controller.signal.aborted) console.warn("Local bib OCR job failed", error);
   });
   ocrJobs.set(photoId, job);
   void job.finally(() => {
     if (ocrJobs.get(photoId) !== job) return;
     ocrJobs.delete(photoId);
+    if (ocrControllers.get(photoId) === controller) ocrControllers.delete(photoId);
     const desired = desiredOcrConfigs.get(photoId);
     if (desired !== undefined && configRevision(desired) !== startedRevision) {
       queueOcr(photoId, desired);
