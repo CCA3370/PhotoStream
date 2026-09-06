@@ -90,7 +90,7 @@ test.afterAll(async () => {
   if (ownsBrowser) await browser?.close();
 });
 
-test("local OCR remains optional while confirmed bib search completes the password-gated flow", async () => {
+test("local-first OCR keeps manual confirmation authoritative while recognition finishes", async () => {
   test.setTimeout(240_000);
   test.skip(csrfToken === undefined, "E2E test account is not configured");
   const unique = Date.now();
@@ -176,8 +176,16 @@ test("local OCR remains optional while confirmed bib search completes the passwo
       assetCacheHeaders.set(response.url(), response.headers()["cache-control"] ?? "");
     }
   };
+  let releaseOcrAssets: () => void = () => undefined;
+  const ocrAssetGate = new Promise<void>((resolve) => {
+    releaseOcrAssets = resolve;
+  });
   page.on("request", recordRequest);
   page.on("response", recordResponse);
+  await page.route("**/assets/models/bib-ocr/**", async (route) => {
+    await ocrAssetGate;
+    await route.continue();
+  });
   try {
     const fixture = await numberedJpeg(page);
     await page.goto(appUrl(`/studio/albums/${album.album.id}/upload`));
@@ -188,18 +196,56 @@ test("local OCR remains optional while confirmed bib search completes the passwo
       mimeType: "image/jpeg",
       buffer: fixture,
     });
-    const task = page.locator('[data-slot="card"]').filter({ hasText: fixtureName }).last();
-    await expect(
-      task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
-    ).toBeVisible({ timeout: 45_000 });
-    await expect(task.getByText("OCR 已完成", { exact: true }).first()).toBeVisible({
-      timeout: 180_000,
+    await expect(page.locator('[data-local-photo-id][data-ocr-status="processing"]')).toHaveCount(1, {
+      timeout: 45_000,
     });
-    await task.getByLabel("手工添加号码").fill("101999");
-    await task.getByRole("button", { name: "手工确认号码" }).click();
-    await expect(task.getByText("有确认号码", { exact: true })).toBeVisible();
-    await expect(task.getByText("初一", { exact: true })).toBeVisible();
-    await expect(task.getByText("一班", { exact: true })).toBeVisible();
+
+    await page.goto(appUrl(`/studio/albums/${album.album.id}/review`));
+    const pendingCard = page.locator('[data-bib-ocr-pending="true"]').first();
+    await expect(pendingCard).toBeVisible();
+    const blockedBibButton = pendingCard.getByRole("button", { name: "号码识别中" });
+    await expect(blockedBibButton).toBeDisabled();
+
+    await pendingCard.getByRole("button", { name: "查看大图" }).click();
+    await expect(page.getByText("号码识别中", { exact: true })).toBeVisible();
+    await expect(page.getByText("正在识别号码，可直接手动输入并确认。", { exact: true })).toBeVisible();
+    const manualInput = page.getByLabel("确认号码，多个号码用英文逗号分隔");
+    await manualInput.fill("101999");
+    await page.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(page.getByRole("button", { name: "修改号码确认" }).first()).toBeVisible();
+
+    releaseOcrAssets();
+    await page.getByRole("button", { name: "关闭审核图片查看器" }).click();
+    const completedCard = page.locator('[data-bib-ocr-pending="false"]').first();
+    await expect(completedCard).toBeVisible({ timeout: 180_000 });
+    await expect(completedCard.getByRole("button", { name: "修改号码确认" })).toBeEnabled();
+    await completedCard.getByRole("button", { name: "发布" }).click();
+    await expect(completedCard.getByRole("button", { name: "隐藏" })).toBeVisible({ timeout: 90_000 });
+
+    let mediaId: string | null = null;
+    await expect
+      .poll(async () => {
+        const response = await context.request.get(
+          appUrl(`/api/v1/albums/${album.album.id}/media?limit=100`),
+        );
+        const media = (await response.json()) as InternalMediaList;
+        mediaId = media.items[0]?.id ?? null;
+        return media.items.length;
+      })
+      .toBe(1);
+    expect(mediaId).not.toBeNull();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get(appUrl(`/api/v1/media/${mediaId as string}/bib`));
+        const state = (await response.json()) as BibMediaState;
+        return {
+          decision: state.review.decision,
+          confirmed: state.tags
+            .filter((tag) => tag.status === "confirmed")
+            .map((tag) => tag.number),
+        };
+      })
+      .toEqual({ decision: "numbers_confirmed", confirmed: ["101999"] });
 
     const assetRequests = observedUrls.filter((url) => url.includes("/assets/models/bib-ocr/"));
     expect(assetRequests.some((url) => url.endsWith("/sdk/runtime.mjs"))).toBe(true);
@@ -252,6 +298,8 @@ test("local OCR remains optional while confirmed bib search completes the passwo
     await expect(page.getByRole("button", { name: "保存号码规则与映射" })).toBeVisible();
     await expectNoAxeViolations(page);
   } finally {
+    releaseOcrAssets();
+    await page.unroute("**/assets/models/bib-ocr/**");
     page.off("request", recordRequest);
     page.off("response", recordResponse);
   }
@@ -331,14 +379,19 @@ test("ignored local photo fixtures complete an unlabeled OCR smoke run", async (
       mimeType: "image/jpeg",
       buffer: await readFile(fixture.path),
     });
-    const task = page.locator('[data-slot="card"]').filter({ hasText: label });
-    await expect(
-      task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
-    ).toBeVisible({ timeout: 90_000 });
-    await expect(task.getByText("OCR 已完成", { exact: true }).first()).toBeVisible({
+    await expect(page.locator('[data-local-photo-id][data-ocr-status="completed"]').first()).toBeVisible({
       timeout: 180_000,
     });
     durations.push(performance.now() - startedAt);
+  }
+
+  await page.goto(appUrl(`/studio/albums/${album.album.id}/review`));
+  await expect(page.locator('[data-bib-ocr-pending="false"]')).toHaveCount(3);
+  for (let remaining = 3; remaining > 0; remaining -= 1) {
+    const publishButton = page.getByRole("button", { name: "发布" }).first();
+    await expect(publishButton).toBeVisible();
+    await publishButton.click();
+    await expect.poll(() => page.getByRole("button", { name: "发布" }).count()).toBe(remaining - 1);
   }
 
   const mediaResponse = await context.request.get(
@@ -348,11 +401,14 @@ test("ignored local photo fixtures complete an unlabeled OCR smoke run", async (
   expect(media.items).toHaveLength(3);
   const candidateCounts: number[] = [];
   for (const item of media.items) {
-    const response = await context.request.get(appUrl(`/api/v1/media/${item.id}/bib`));
-    expect(response.status()).toBe(200);
-    const state = (await response.json()) as BibMediaState;
-    expect(state.review.ocrStatus).toBe("completed");
-    candidateCounts.push(state.tags.length);
+    await expect
+      .poll(async () => {
+        const response = await context.request.get(appUrl(`/api/v1/media/${item.id}/bib`));
+        const state = (await response.json()) as BibMediaState;
+        if (state.review.ocrStatus === "completed") candidateCounts.push(state.tags.length);
+        return state.review.ocrStatus;
+      })
+      .toBe("completed");
   }
   durations.sort((left, right) => left - right);
   candidateCounts.sort((left, right) => left - right);
