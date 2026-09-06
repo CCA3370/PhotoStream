@@ -2,13 +2,7 @@
 
 import type { BibMediaState, BibTagView } from "@photostream/contracts";
 import { normalizeBibNumber } from "@photostream/contracts";
-import {
-  BadgeCheckIcon,
-  CheckIcon,
-  HashIcon,
-  LoaderCircleIcon,
-  ScanTextIcon,
-} from "lucide-react";
+import { BadgeCheckIcon, CheckIcon, HashIcon, LoaderCircleIcon, ScanTextIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -231,7 +225,11 @@ export function BibReviewEditor({
           )}
           variant="outline"
         >
-          {confirmed ? <BadgeCheckIcon data-icon="inline-start" /> : <ScanTextIcon data-icon="inline-start" />}
+          {confirmed ? (
+            <BadgeCheckIcon data-icon="inline-start" />
+          ) : (
+            <ScanTextIcon data-icon="inline-start" />
+          )}
           {noNumber ? "已确认无号码" : confirmed ? "号码已确认" : "待确认号码"}
         </Badge>
         <span className={cn("text-xs", dark ? "text-white/55" : "text-muted-foreground")}>
@@ -281,7 +279,10 @@ export function BibReviewEditor({
                     </span>
                   )}
                   <Badge
-                    className={cn("h-4 px-1 text-[10px]", dark && "border-white/10 bg-white/10 text-white")}
+                    className={cn(
+                      "h-4 px-1 text-[10px]",
+                      dark && "border-white/10 bg-white/10 text-white",
+                    )}
                     variant={tagStatusVariant(tag)}
                   >
                     {tagStatusLabel(tag)}
@@ -321,7 +322,8 @@ export function BibReviewEditor({
           <Button
             className={cn(
               "shrink-0",
-              dark && "border-emerald-400/25 bg-emerald-500/25 text-emerald-50 hover:bg-emerald-500/35",
+              dark &&
+                "border-emerald-400/25 bg-emerald-500/25 text-emerald-50 hover:bg-emerald-500/35",
             )}
             disabled={busy || number.trim().length === 0}
             size="sm"
@@ -350,7 +352,8 @@ export function BibReviewEditor({
         <Button
           className={cn(
             "shrink-0",
-            dark && "border-white/15 bg-white/[0.05] text-white/75 hover:bg-white/10 hover:text-white",
+            dark &&
+              "border-white/15 bg-white/[0.05] text-white/75 hover:bg-white/10 hover:text-white",
           )}
           disabled={busy || noNumber}
           onClick={() => void confirmNoNumber()}
@@ -385,14 +388,11 @@ export function BibReviewDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>号码确认</DialogTitle>
-          <DialogDescription>核对自动识别结果，也可以直接修正号码或确认此照片没有号码。</DialogDescription>
+          <DialogDescription>
+            核对自动识别结果，也可以直接修正号码或确认此照片没有号码。
+          </DialogDescription>
         </DialogHeader>
-        <BibReviewEditor
-          mediaId={mediaId}
-          onChange={onChange}
-          onError={onError}
-          state={state}
-        />
+        <BibReviewEditor mediaId={mediaId} onChange={onChange} onError={onError} state={state} />
       </DialogContent>
     </Dialog>
   );
