@@ -396,7 +396,12 @@ export function localBibMediaState(photo: LocalReviewPhoto): BibMediaState {
     review: {
       mediaId,
       decision: photo.bib.decision,
-      ocrStatus: photo.bib.ocrStatus === "disabled" ? "not_started" : photo.bib.ocrStatus,
+      ocrStatus:
+        photo.bib.ocrStatus === "not_started"
+          ? "processing"
+          : photo.bib.ocrStatus === "disabled"
+            ? "not_started"
+            : photo.bib.ocrStatus,
       ocrModelVersion: photo.bib.modelVersion,
       decidedAt: photo.bib.decidedAt,
     },
