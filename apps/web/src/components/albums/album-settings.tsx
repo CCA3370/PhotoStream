@@ -119,6 +119,7 @@ export function AlbumSettings({
   initialAlbum: AlbumView;
   bibConfig: BibConfigView;
   faceConfig: FaceConfigView;
+  statistics?: unknown;
 }>) {
   const noticeTimer = useRef<number | null>(null);
   const pendingRef = useRef(new Set<PendingAction>());
