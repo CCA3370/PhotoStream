@@ -1,31 +1,33 @@
 "use client";
 
 import type {
-  AlbumStatistics,
   AlbumView,
   BibConfigView,
   FaceConfigView,
   UpdateAlbumRequest,
 } from "@photostream/contracts";
-import { KeyRoundIcon } from "lucide-react";
-import { useState } from "react";
+import { CopyIcon, ExternalLinkIcon, KeyRoundIcon, LoaderCircleIcon } from "lucide-react";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ErrorDialog } from "@/components/ui/error-dialog";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { clientMutation } from "@/lib/client-api";
@@ -35,305 +37,484 @@ interface PasswordRotation {
   readonly generatedPassword: string;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1024;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+type PendingAction =
+  | "access"
+  | "basic"
+  | "original-download"
+  | "password"
+  | "preview-download"
+  | "public-info"
+  | "publish";
+
+const stateLabels: Record<AlbumView["state"], string> = {
+  draft: "草稿",
+  live: "直播中",
+  ended: "已结束",
+  archived: "已归档",
+};
+
+function stateVariant(state: AlbumView["state"]): "default" | "outline" | "secondary" {
+  if (state === "live") return "default";
+  if (state === "archived") return "outline";
+  return "secondary";
+}
+
+function mergeAlbumUpdate(
+  current: AlbumView,
+  updated: AlbumView,
+  input: UpdateAlbumRequest,
+): AlbumView {
+  return {
+    ...current,
+    ...(input.title === undefined ? {} : { title: updated.title }),
+    ...(input.description === undefined ? {} : { description: updated.description }),
+    ...(input.access === undefined ? {} : { access: updated.access }),
+    ...(input.publishMode === undefined ? {} : { publishMode: updated.publishMode }),
+    ...(input.previewDownloadEnabled === undefined
+      ? {}
+      : { previewDownloadEnabled: updated.previewDownloadEnabled }),
+    ...(input.originalDownloadEnabled === undefined
+      ? {}
+      : { originalDownloadEnabled: updated.originalDownloadEnabled }),
+    ...(input.privacyNotice === undefined ? {} : { privacyNotice: updated.privacyNotice }),
+    ...(input.complaintContact === undefined
+      ? {}
+      : { complaintContact: updated.complaintContact }),
+    updatedAt: updated.updatedAt,
+  };
+}
+
+function SettingRow({
+  children,
+  description,
+  status,
+  title,
+}: Readonly<{
+  children: ReactNode;
+  description?: string;
+  status?: ReactNode;
+  title: string;
+}>) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium">{title}</p>
+          {status}
+        </div>
+        {description === undefined ? null : (
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
 }
 
 export function AlbumSettings({
   initialAlbum,
   bibConfig,
   faceConfig,
-  statistics,
 }: Readonly<{
   initialAlbum: AlbumView;
   bibConfig: BibConfigView;
   faceConfig: FaceConfigView;
-  statistics: AlbumStatistics;
 }>) {
+  const noticeTimer = useRef<number | null>(null);
+  const pendingRef = useRef(new Set<PendingAction>());
   const [album, setAlbum] = useState(initialAlbum);
-  const [pending, setPending] = useState(false);
+  const [pendingActions, setPendingActions] = useState<ReadonlySet<PendingAction>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [title, setTitle] = useState(initialAlbum.title);
   const [description, setDescription] = useState(initialAlbum.description);
   const [privacyNotice, setPrivacyNotice] = useState(initialAlbum.privacyNotice);
   const [complaintContact, setComplaintContact] = useState(initialAlbum.complaintContact);
 
-  async function update(input: UpdateAlbumRequest, label: string): Promise<void> {
-    if (pending) return;
-    setPending(true);
+  useEffect(
+    () => () => {
+      if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+    },
+    [],
+  );
+
+  function isPending(action: PendingAction): boolean {
+    return pendingActions.has(action);
+  }
+
+  function beginPending(action: PendingAction): boolean {
+    if (pendingRef.current.has(action)) return false;
+    pendingRef.current.add(action);
+    setPendingActions(new Set(pendingRef.current));
+    return true;
+  }
+
+  function endPending(action: PendingAction): void {
+    pendingRef.current.delete(action);
+    setPendingActions(new Set(pendingRef.current));
+  }
+
+  function showNotice(text: string): void {
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+    setNotice(text);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 1_800);
+  }
+
+  async function update(
+    input: UpdateAlbumRequest,
+    label: string,
+    action: PendingAction,
+  ): Promise<void> {
+    if (!beginPending(action)) return;
     setError(null);
-    setSaved(null);
     try {
       const updated = await clientMutation<AlbumView>(`/api/v1/albums/${album.id}`, {
         method: "PATCH",
         body: input,
       });
-      setAlbum(updated);
-      setTitle(updated.title);
-      setDescription(updated.description);
-      setPrivacyNotice(updated.privacyNotice);
-      setComplaintContact(updated.complaintContact);
-      setSaved(label);
+      setAlbum((current) => mergeAlbumUpdate(current, updated, input));
+      if (action === "basic") {
+        setTitle(updated.title);
+        setDescription(updated.description);
+      }
+      if (action === "public-info") {
+        setPrivacyNotice(updated.privacyNotice);
+        setComplaintContact(updated.complaintContact);
+      }
+      showNotice(label);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存设置失败");
     } finally {
-      setPending(false);
+      endPending(action);
     }
   }
 
   async function rotatePassword(): Promise<void> {
-    if (pending) return;
-    setPending(true);
+    if (!beginPending("password")) return;
     setError(null);
     try {
       const result = await clientMutation<PasswordRotation>(
         `/api/v1/albums/${album.id}/rotate-password`,
         { idempotencyKey: crypto.randomUUID() },
       );
-      setAlbum(result.album);
+      setAlbum((current) => ({ ...current, updatedAt: result.album.updatedAt }));
       setNewPassword(result.generatedPassword);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更换口令失败");
     } finally {
-      setPending(false);
+      endPending("password");
     }
   }
 
+  async function copyText(value: string, success: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(value);
+      showNotice(success);
+    } catch {
+      setError("复制失败，请手动复制");
+    }
+  }
+
+  const basicDirty = title.trim() !== album.title || description.trim() !== album.description;
+  const publicInfoDirty =
+    privacyNotice.trim() !== album.privacyNotice || complaintContact.trim() !== album.complaintContact;
+  const galleryPath = `/g/${album.slug}`;
+
   return (
     <div className="flex flex-col gap-3">
-      {error === null ? null : (
-        <Alert variant="destructive">
-          <AlertTitle>设置未保存</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {saved === null ? null : (
-        <Alert>
-          <AlertTitle>{saved}</AlertTitle>
-        </Alert>
-      )}
-      {newPassword === null ? null : (
-        <Alert>
-          <KeyRoundIcon aria-hidden="true" />
-          <AlertTitle>新活动口令</AlertTitle>
-          <AlertDescription>
-            <p className="font-mono text-base text-foreground">{newPassword}</p>
-            <p>旧访客会话已失效，请立即保存。</p>
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge variant={stateVariant(album.state)}>{stateLabels[album.state]}</Badge>
+          <code className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            {galleryPath}
+          </code>
+          <Badge variant="outline">{album.access === "public" ? "公开访问" : "口令访问"}</Badge>
+          <Badge variant="outline">
+            {album.publishMode === "auto" ? "自动发布" : "审核后发布"}
+          </Badge>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            aria-label="复制观众页地址"
+            onClick={() =>
+              void copyText(`${window.location.origin}${galleryPath}`, "观众页地址已复制")
+            }
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <CopyIcon />
+          </Button>
+          <Link
+            className={buttonVariants({ size: "sm", variant: "ghost" })}
+            href={galleryPath}
+            target="_blank"
+          >
+            观众页
+            <ExternalLinkIcon data-icon="inline-end" />
+          </Link>
+        </div>
+      </div>
 
       <Tabs className="gap-3" defaultValue="general">
-        <TabsList className="max-w-full gap-1.5 overflow-x-auto p-1">
+        <TabsList className="w-fit max-w-full gap-1 overflow-x-auto p-1">
           <TabsTrigger className="px-3" value="general">
-            常规设置
+            常规
           </TabsTrigger>
           <TabsTrigger className="px-3" value="features">
-            智能功能
-          </TabsTrigger>
-          <TabsTrigger className="px-3" value="statistics">
-            统计
+            查找功能
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general">
-          <Card className="overflow-hidden">
-            <CardContent className="p-0">
-              <section className="p-4" aria-labelledby="settings-basic-heading">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold" id="settings-basic-heading">
-                    基本信息
-                  </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">活动名称与观众可见说明</p>
-                </div>
-                <form
-                  action={(formData) =>
-                    void update(
-                      {
-                        title: String(formData.get("title") ?? title),
-                        description: String(formData.get("description") ?? description),
-                      },
-                      "基本信息已更新",
-                    )
-                  }
-                >
-                  <FieldGroup className="gap-3">
-                    <Field>
-                      <FieldLabel htmlFor="settings-title">活动标题</FieldLabel>
-                      <Input
-                        id="settings-title"
-                        name="title"
-                        onChange={(event) => setTitle(event.currentTarget.value)}
-                        required
-                        value={title}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
-                      <Textarea
-                        id="settings-description"
-                        name="description"
-                        onChange={(event) => setDescription(event.currentTarget.value)}
-                        value={description}
-                      />
-                    </Field>
-                    <Button className="w-fit" disabled={pending} size="sm" type="submit">
-                      {pending ? "正在保存…" : "保存基本信息"}
-                    </Button>
-                  </FieldGroup>
-                </form>
-              </section>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+            <div className="flex min-w-0 flex-col gap-3">
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b py-3.5">
+                  <CardTitle>基本信息</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <form
+                    className="flex flex-col gap-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void update(
+                        { title: title.trim(), description: description.trim() },
+                        "基本信息已保存",
+                        "basic",
+                      );
+                    }}
+                  >
+                    <FieldGroup className="gap-3">
+                      <Field>
+                        <FieldLabel htmlFor="settings-title">活动标题</FieldLabel>
+                        <Input
+                          id="settings-title"
+                          maxLength={120}
+                          onChange={(event) => setTitle(event.currentTarget.value)}
+                          required
+                          value={title}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
+                        <Textarea
+                          className="min-h-24 resize-y"
+                          id="settings-description"
+                          maxLength={1_000}
+                          onChange={(event) => setDescription(event.currentTarget.value)}
+                          value={description}
+                        />
+                      </Field>
+                    </FieldGroup>
+                    <div className="flex min-h-7 items-center justify-between gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {basicDirty ? "有未保存修改" : null}
+                      </span>
+                      <Button
+                        disabled={!basicDirty || title.trim().length === 0 || isPending("basic")}
+                        size="sm"
+                        type="submit"
+                      >
+                        {isPending("basic") ? (
+                          <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                        ) : null}
+                        {isPending("basic") ? "保存中" : "保存"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
 
-              <section className="border-t p-4" aria-labelledby="settings-access-heading">
-                <div className="mb-2">
-                  <h3 className="text-sm font-semibold" id="settings-access-heading">
-                    访问与发布
-                  </h3>
-                </div>
-                <div className="divide-y">
-                  <Field className="py-3" orientation="horizontal">
-                    <div className="flex-1">
-                      <FieldLabel htmlFor="album-public">公开访问</FieldLabel>
-                      <FieldDescription>关闭时使用活动口令访问</FieldDescription>
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b py-3.5">
+                  <CardTitle>公开信息</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <form
+                    className="flex flex-col gap-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void update(
+                        {
+                          privacyNotice: privacyNotice.trim(),
+                          complaintContact: complaintContact.trim(),
+                        },
+                        "公开信息已保存",
+                        "public-info",
+                      );
+                    }}
+                  >
+                    <FieldGroup className="gap-3">
+                      <Field>
+                        <FieldLabel htmlFor="privacy-notice">隐私说明</FieldLabel>
+                        <Textarea
+                          className="min-h-24 resize-y"
+                          id="privacy-notice"
+                          maxLength={2_000}
+                          onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
+                          value={privacyNotice}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="complaint-contact">删除/投诉联系方式</FieldLabel>
+                        <Input
+                          id="complaint-contact"
+                          maxLength={300}
+                          onChange={(event) => setComplaintContact(event.currentTarget.value)}
+                          value={complaintContact}
+                        />
+                      </Field>
+                    </FieldGroup>
+                    <div className="flex min-h-7 items-center justify-between gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {publicInfoDirty ? "有未保存修改" : null}
+                      </span>
+                      <Button
+                        disabled={!publicInfoDirty || isPending("public-info")}
+                        size="sm"
+                        type="submit"
+                      >
+                        {isPending("public-info") ? (
+                          <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                        ) : null}
+                        {isPending("public-info") ? "保存中" : "保存"}
+                      </Button>
                     </div>
-                    <Switch
-                      checked={album.access === "public"}
-                      disabled={pending}
-                      id="album-public"
-                      onCheckedChange={(checked) =>
-                        void update({ access: checked ? "public" : "password" }, "访问方式已更新")
-                      }
-                    />
-                  </Field>
-                  <Field className="py-3" orientation="horizontal">
-                    <div className="flex-1">
-                      <FieldLabel htmlFor="album-auto-publish">自动发布</FieldLabel>
-                      <FieldDescription>关闭时由审核员确认后发布</FieldDescription>
-                    </div>
-                    <Switch
-                      checked={album.publishMode === "auto"}
-                      disabled={pending}
-                      id="album-auto-publish"
-                      onCheckedChange={(checked) =>
-                        void update({ publishMode: checked ? "auto" : "review" }, "发布方式已更新")
-                      }
-                    />
-                  </Field>
-                  <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <div>
-                      <p className="text-sm font-medium">活动口令</p>
-                      <p className="text-xs text-muted-foreground">更换后旧访客会话立即失效</p>
-                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-3">
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b py-3.5">
+                  <CardTitle>访问与发布</CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y p-0">
+                  <SettingRow
+                    description="关闭后访客需要输入活动口令"
+                    status={
+                      <Badge variant="secondary">
+                        {album.access === "public" ? "公开" : "口令"}
+                      </Badge>
+                    }
+                    title="公开访问"
+                  >
+                    {isPending("access") ? (
+                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Switch
+                        aria-label="公开访问"
+                        checked={album.access === "public"}
+                        onCheckedChange={(checked) =>
+                          void update(
+                            { access: checked ? "public" : "password" },
+                            "访问方式已更新",
+                            "access",
+                          )
+                        }
+                      />
+                    )}
+                  </SettingRow>
+
+                  <SettingRow
+                    description="关闭后照片进入审核列表，由审核员确认发布"
+                    status={
+                      <Badge variant="secondary">
+                        {album.publishMode === "auto" ? "自动" : "审核"}
+                      </Badge>
+                    }
+                    title="自动发布"
+                  >
+                    {isPending("publish") ? (
+                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Switch
+                        aria-label="自动发布"
+                        checked={album.publishMode === "auto"}
+                        onCheckedChange={(checked) =>
+                          void update(
+                            { publishMode: checked ? "auto" : "review" },
+                            "发布方式已更新",
+                            "publish",
+                          )
+                        }
+                      />
+                    )}
+                  </SettingRow>
+
+                  <SettingRow description="更换后旧访客会话立即失效" title="活动口令">
                     <Button
-                      disabled={pending}
+                      disabled={isPending("password")}
                       onClick={() => void rotatePassword()}
                       size="sm"
                       type="button"
                       variant="outline"
                     >
-                      <KeyRoundIcon data-icon="inline-start" />
-                      更换口令
+                      {isPending("password") ? (
+                        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                      ) : (
+                        <KeyRoundIcon data-icon="inline-start" />
+                      )}
+                      {isPending("password") ? "更换中" : "更换"}
                     </Button>
-                  </div>
-                </div>
-              </section>
+                  </SettingRow>
+                </CardContent>
+              </Card>
 
-              <section className="border-t p-4" aria-labelledby="settings-download-heading">
-                <div className="mb-2">
-                  <h3 className="text-sm font-semibold" id="settings-download-heading">
-                    下载权限
-                  </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    原图可能保留相机元数据，请按活动需要开启
-                  </p>
-                </div>
-                <div className="divide-y">
-                  {(
-                    [
-                      ["previewDownloadEnabled", "普通图下载", "1920 派生图"],
-                      ["originalDownloadEnabled", "照片原图下载", "原始文件"],
-                    ] as const
-                  ).map(([field, label, fieldDescription]) => (
-                    <Field className="py-3" key={field} orientation="horizontal">
-                      <div className="flex-1">
-                        <FieldLabel htmlFor={field}>{label}</FieldLabel>
-                        <FieldDescription>{fieldDescription}</FieldDescription>
-                      </div>
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b py-3.5">
+                  <CardTitle>下载权限</CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y p-0">
+                  <SettingRow description="允许访客下载 1920px 派生图" title="普通图下载">
+                    {isPending("preview-download") ? (
+                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    ) : (
                       <Switch
-                        checked={album[field]}
-                        disabled={pending}
-                        id={field}
+                        aria-label="普通图下载"
+                        checked={album.previewDownloadEnabled}
                         onCheckedChange={(checked) =>
-                          void update({ [field]: checked }, `${label}已更新`)
+                          void update(
+                            { previewDownloadEnabled: checked },
+                            "普通图下载权限已更新",
+                            "preview-download",
+                          )
                         }
                       />
-                    </Field>
-                  ))}
-                </div>
-              </section>
-
-              <section className="border-t p-4" aria-labelledby="settings-public-heading">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold" id="settings-public-heading">
-                    公开说明
-                  </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">隐私说明与删除投诉联系方式</p>
-                </div>
-                <form
-                  action={(formData) =>
-                    void update(
-                      {
-                        privacyNotice: String(formData.get("privacyNotice") ?? privacyNotice),
-                        complaintContact: String(
-                          formData.get("complaintContact") ?? complaintContact,
-                        ),
-                      },
-                      "公开说明已更新",
-                    )
-                  }
-                >
-                  <FieldGroup className="gap-3">
-                    <Field>
-                      <FieldLabel htmlFor="privacy-notice">隐私说明</FieldLabel>
-                      <Textarea
-                        id="privacy-notice"
-                        name="privacyNotice"
-                        onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
-                        value={privacyNotice}
+                    )}
+                  </SettingRow>
+                  <SettingRow
+                    description="原始文件可能包含相机元数据"
+                    title="照片原图下载"
+                  >
+                    {isPending("original-download") ? (
+                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Switch
+                        aria-label="照片原图下载"
+                        checked={album.originalDownloadEnabled}
+                        onCheckedChange={(checked) =>
+                          void update(
+                            { originalDownloadEnabled: checked },
+                            "原图下载权限已更新",
+                            "original-download",
+                          )
+                        }
                       />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="complaint-contact">删除/投诉联系方式</FieldLabel>
-                      <Input
-                        id="complaint-contact"
-                        name="complaintContact"
-                        onChange={(event) => setComplaintContact(event.currentTarget.value)}
-                        value={complaintContact}
-                      />
-                    </Field>
-                    <Button className="w-fit" disabled={pending} size="sm" type="submit">
-                      {pending ? "正在保存…" : "保存公开说明"}
-                    </Button>
-                  </FieldGroup>
-                </form>
-              </section>
-            </CardContent>
-          </Card>
+                    )}
+                  </SettingRow>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="features">
           <Tabs className="gap-3" defaultValue="bib">
-            <TabsList className="gap-1.5 p-1">
+            <TabsList className="w-fit max-w-full gap-1 overflow-x-auto p-1">
               <TabsTrigger className="px-3" value="bib">
                 号码识别
               </TabsTrigger>
@@ -349,60 +530,48 @@ export function AlbumSettings({
             </TabsContent>
           </Tabs>
         </TabsContent>
-
-        <TabsContent value="statistics">
-          <div className="flex flex-col gap-3">
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">媒体项</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">{statistics.mediaCount}</p>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">逻辑存储</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">
-                  {formatBytes(statistics.logicalBytes)}
-                </p>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">独立访客</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">
-                  {statistics.uniqueVisitors}
-                </p>
-              </div>
-            </div>
-
-            <Card className="overflow-hidden">
-              <CardHeader className="border-b py-3.5">
-                <CardTitle>日统计</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>日期</TableHead>
-                      <TableHead>打开</TableHead>
-                      <TableHead>会话</TableHead>
-                      <TableHead>下载</TableHead>
-                      <TableHead>访客</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {statistics.daily.map((day) => (
-                      <TableRow key={day.day}>
-                        <TableCell>{day.day}</TableCell>
-                        <TableCell>{day.opens}</TableCell>
-                        <TableCell>{day.sessions}</TableCell>
-                        <TableCell>{day.downloads}</TableCell>
-                        <TableCell>{day.uniqueVisitors}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
       </Tabs>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setNewPassword(null);
+        }}
+        open={newPassword !== null}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新活动口令</DialogTitle>
+            <DialogDescription>旧访客会话已失效，请保存新口令。</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2">
+            <code className="min-w-0 flex-1 select-all truncate px-1 text-base font-semibold">
+              {newPassword}
+            </code>
+            <Button
+              aria-label="复制新活动口令"
+              onClick={() =>
+                newPassword === null ? undefined : void copyText(newPassword, "活动口令已复制")
+              }
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <CopyIcon />
+            </Button>
+          </div>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
+
+      {notice === null ? null : (
+        <div className="pointer-events-none fixed inset-x-0 top-1/2 z-[70] flex -translate-y-1/2 justify-center px-4">
+          <div className="rounded-md bg-black/85 px-4 py-2 text-sm font-medium text-white shadow-xl">
+            {notice}
+          </div>
+        </div>
+      )}
+
+      <ErrorDialog message={error} onClose={() => setError(null)} title="操作失败" />
     </div>
   );
 }
