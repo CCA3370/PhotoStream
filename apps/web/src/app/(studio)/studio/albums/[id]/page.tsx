@@ -54,7 +54,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
             {session.user.role === "admin" ? <AlbumActions album={album} /> : null}
           </>
         }
-        description={album.description || undefined}
+        description={album.description}
         headingId="album-heading"
         section="活动概览"
         title={album.title}
