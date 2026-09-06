@@ -146,9 +146,9 @@ export function ReviewWorkspace({
   const [category, setCategory] = useState("all");
   const [uploader, setUploader] = useState("all");
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [pendingActions, setPendingActions] = useState<
-    ReadonlyMap<string, ReviewPendingAction>
-  >(new Map());
+  const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
+    new Map(),
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -217,11 +217,10 @@ export function ReviewWorkspace({
 
   const items = useMemo<readonly ReviewItem[]>(() => {
     const remoteIds = new Set(remoteMedia.map((item) => item.id));
-    const localByMediaId = new Map(
-      localMedia.flatMap((item) =>
-        item.photo.mediaId === null ? [] : ([[item.photo.mediaId, item]] as const),
-      ),
-    );
+    const localByMediaId = new Map<string, LocalView>();
+    for (const item of localMedia) {
+      if (item.photo.mediaId !== null) localByMediaId.set(item.photo.mediaId, item);
+    }
     const localItems: ReviewItem[] = localMedia
       .filter((item) => item.photo.mediaId === null || !remoteIds.has(item.photo.mediaId))
       .map((item) => ({
@@ -274,7 +273,8 @@ export function ReviewWorkspace({
       items.filter((item) => {
         if (category !== "all" && item.categoryId !== category) return false;
         if (uploader !== "all" && item.uploaderId !== uploader) return false;
-        if (filter === "local") return item.source === "local" && item.publicationStatus === "local";
+        if (filter === "local")
+          return item.source === "local" && item.publicationStatus === "local";
         if (filter === "featured") return item.featured;
         if (filter === "published") return item.publicationStatus === "published";
         if (filter === "hidden") return item.publicationStatus === "hidden";
@@ -284,7 +284,8 @@ export function ReviewWorkspace({
   );
 
   const lightboxSourceItems = useMemo(() => {
-    if (activeKey === null || visibleItems.some((item) => item.key === activeKey)) return visibleItems;
+    if (activeKey === null || visibleItems.some((item) => item.key === activeKey))
+      return visibleItems;
     const activeItem = items.find((item) => item.key === activeKey);
     return activeItem === undefined ? visibleItems : [...visibleItems, activeItem];
   }, [activeKey, items, visibleItems]);
@@ -344,14 +345,16 @@ export function ReviewWorkspace({
     try {
       const next = !item.featured;
       const mediaId = remoteId(item);
-      if (item.source === "local" && mediaId === null) {
+      if (item.source === "local" && item.publicationStatus === "local") {
         await patchLocalReviewPhoto(item.local.photo.id, { featured: next });
       } else if (mediaId !== null) {
         await clientMutation(`/api/v1/media/${mediaId}/featured`, {
           body: { featured: next },
         });
-        if (item.local !== undefined && item.local !== null) {
-          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(() => undefined);
+        if (item.local !== null) {
+          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(
+            () => undefined,
+          );
         }
         setFeaturedIds((current) => {
           const updated = new Set(current);
@@ -375,13 +378,12 @@ export function ReviewWorkspace({
       if (item.source === "local") {
         if (item.publicationStatus === "published") return;
         const result = await publishLocalReviewPhoto(item.local.photo);
-        await refreshRemote();
         await patchLocalReviewPhoto(item.local.photo.id, {
           mediaId: result.mediaId,
           uploadState: "published",
           error: null,
         });
-        await refreshFeatured();
+        await Promise.all([refreshRemote(), refreshFeatured()]);
       } else {
         await clientMutation<{ readonly ok: true }>(`/api/v1/media/${item.remote.id}/publish`, {
           idempotencyKey: `review-publish-${crypto.randomUUID()}`,
@@ -441,7 +443,7 @@ export function ReviewWorkspace({
     const currentIndex = lightboxSourceItems.findIndex((candidate) => candidate.key === item.key);
     const nextKey =
       activeKey === item.key && lightboxSourceItems.length > 1 && currentIndex >= 0
-        ? lightboxSourceItems[(currentIndex + 1) % lightboxSourceItems.length]?.key ?? null
+        ? (lightboxSourceItems[(currentIndex + 1) % lightboxSourceItems.length]?.key ?? null)
         : null;
     setPending(item.key, "delete");
     try {
@@ -456,7 +458,7 @@ export function ReviewWorkspace({
           next.delete(mediaId);
           return next;
         });
-        const linkedLocal = item.source === "local" ? item.local : item.local;
+        const linkedLocal = item.local;
         if (linkedLocal !== null) {
           await deleteLocalReviewPhoto(linkedLocal.photo.id).catch(() => undefined);
         }
