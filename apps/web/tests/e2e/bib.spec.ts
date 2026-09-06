@@ -196,9 +196,12 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
       mimeType: "image/jpeg",
       buffer: fixture,
     });
-    await expect(page.locator('[data-local-photo-id][data-ocr-status="processing"]')).toHaveCount(1, {
-      timeout: 45_000,
-    });
+    await expect(page.locator('[data-local-photo-id][data-ocr-status="processing"]')).toHaveCount(
+      1,
+      {
+        timeout: 45_000,
+      },
+    );
 
     await page.goto(appUrl(`/studio/albums/${album.album.id}/review`));
     const pendingCard = page.locator('[data-bib-ocr-pending="true"]').first();
@@ -208,7 +211,9 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
 
     await pendingCard.getByRole("button", { name: "查看大图" }).click();
     await expect(page.getByText("号码识别中", { exact: true })).toBeVisible();
-    await expect(page.getByText("正在识别号码，可直接手动输入并确认。", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("正在识别号码，可直接手动输入并确认。", { exact: true }),
+    ).toBeVisible();
     const manualInput = page.getByLabel("确认号码，多个号码用英文逗号分隔");
     await manualInput.fill("101999");
     await page.getByRole("button", { name: "确认", exact: true }).click();
@@ -220,7 +225,9 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
     await expect(completedCard).toBeVisible({ timeout: 180_000 });
     await expect(completedCard.getByRole("button", { name: "修改号码确认" })).toBeEnabled();
     await completedCard.getByRole("button", { name: "发布" }).click();
-    await expect(completedCard.getByRole("button", { name: "隐藏" })).toBeVisible({ timeout: 90_000 });
+    await expect(completedCard.getByRole("button", { name: "隐藏" })).toBeVisible({
+      timeout: 90_000,
+    });
 
     let mediaId: string | null = null;
     await expect
@@ -236,7 +243,9 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
     expect(mediaId).not.toBeNull();
     await expect
       .poll(async () => {
-        const response = await context.request.get(appUrl(`/api/v1/media/${mediaId as string}/bib`));
+        const response = await context.request.get(
+          appUrl(`/api/v1/media/${mediaId as string}/bib`),
+        );
         const state = (await response.json()) as BibMediaState;
         return {
           decision: state.review.decision,
@@ -379,9 +388,10 @@ test("ignored local photo fixtures complete an unlabeled OCR smoke run", async (
       mimeType: "image/jpeg",
       buffer: await readFile(fixture.path),
     });
-    await expect(page.locator('[data-local-photo-id][data-ocr-status="completed"]').first()).toBeVisible({
-      timeout: 180_000,
-    });
+    await expect(page.locator('[data-local-photo-id][data-ocr-status="completed"]')).toHaveCount(
+      index + 1,
+      { timeout: 180_000 },
+    );
     durations.push(performance.now() - startedAt);
   }
 
