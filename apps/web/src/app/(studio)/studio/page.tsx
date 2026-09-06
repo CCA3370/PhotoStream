@@ -5,17 +5,11 @@ import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
 
 export default async function StudioPage() {
-  const [session, albums, statistics] = await Promise.all([
-    requireInternalSession(),
+  await requireInternalSession();
+  const [albums, statistics] = await Promise.all([
     serverApi<AlbumSummaryView[]>("/api/v1/albums"),
     serverApi<DashboardStatistics>("/api/v1/dashboard?limit=8"),
   ]);
 
-  return (
-    <DashboardView
-      albums={albums}
-      canCreateAlbum={session.user.role === "admin"}
-      initialData={statistics}
-    />
-  );
+  return <DashboardView albums={albums} initialData={statistics} />;
 }
