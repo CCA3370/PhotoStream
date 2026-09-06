@@ -5,16 +5,21 @@ import { BIB_OCR_ASSET_VERSION, bibOcrSupported, recognizeBibCandidates } from "
 import { clientGet, clientMutation } from "@/lib/client-api";
 import {
   getLocalReviewPhoto,
-  listLocalReviewPhotos,
   type LocalBibState,
   type LocalReviewPhoto,
+  listLocalReviewPhotos,
   updateLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 
 export const LOCAL_BIB_SERVER_STATE_EVENT = "photostream:local-bib-server-state";
 
 const ocrJobs = new Map<string, Promise<void>>();
+const desiredOcrConfigs = new Map<string, BibConfigView>();
 const syncTails = new Map<string, Promise<void>>();
+
+function configRevision(config: BibConfigView): string {
+  return `${config.recognitionEnabled}:${config.modelVersion}:${config.ruleVersion}`;
+}
 
 function serverStateChanged(photo: LocalReviewPhoto, state: BibMediaState): void {
   window.dispatchEvent(
@@ -24,10 +29,7 @@ function serverStateChanged(photo: LocalReviewPhoto, state: BibMediaState): void
   );
 }
 
-function nextOcrState(
-  current: LocalBibState,
-  change: Partial<LocalBibState>,
-): LocalBibState {
+function nextOcrState(current: LocalBibState, change: Partial<LocalBibState>): LocalBibState {
   return {
     ...current,
     ...change,
@@ -80,9 +82,13 @@ async function syncOcr(
 ): Promise<BibMediaState | null> {
   if (photo.mediaId === null || !config.recognitionEnabled) return null;
   if (photo.bib.ocrRevision <= photo.bib.ocrSyncedRevision) return null;
+  const modelVersion = photo.bib.modelVersion;
+  const ruleVersion = photo.bib.ruleVersion;
   if (
-    photo.bib.modelVersion !== config.modelVersion ||
-    photo.bib.ruleVersion !== config.ruleVersion
+    modelVersion === null ||
+    ruleVersion === null ||
+    modelVersion !== config.modelVersion ||
+    ruleVersion !== config.ruleVersion
   ) {
     return null;
   }
@@ -94,8 +100,8 @@ async function syncOcr(
     {
       body: {
         activityStatus,
-        modelVersion: photo.bib.modelVersion,
-        ruleVersion: photo.bib.ruleVersion,
+        modelVersion,
+        ruleVersion,
         candidates: activityStatus === "completed" ? photo.bib.candidates : [],
       },
       idempotencyKey: `local-bib-ocr-${photo.id}-${revision}-${activityStatus}`,
@@ -167,8 +173,7 @@ async function syncManual(
   if (photo.mediaId === null || photo.bib.decision === "pending") return initial;
   if (photo.bib.manualRevision <= photo.bib.manualSyncedRevision) return initial;
   const revision = photo.bib.manualRevision;
-  let current =
-    initial ?? (await clientGet<BibMediaState>(`/api/v1/media/${photo.mediaId}/bib`));
+  let current = initial ?? (await clientGet<BibMediaState>(`/api/v1/media/${photo.mediaId}/bib`));
   if (photo.bib.decision === "no_number_confirmed") {
     if (current.review.decision !== "no_number_confirmed") {
       current = await clientMutation<BibMediaState>(
@@ -191,10 +196,7 @@ async function syncManual(
   return current;
 }
 
-export async function syncLocalBibToServer(
-  photoId: string,
-  config: BibConfigView,
-): Promise<void> {
+export async function syncLocalBibToServer(photoId: string, config: BibConfigView): Promise<void> {
   await serialSync(photoId, async () => {
     const photo = await getLocalReviewPhoto(photoId);
     if (photo === null || photo.mediaId === null) return;
@@ -245,7 +247,7 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
   if (config.modelVersion !== BIB_OCR_ASSET_VERSION) {
     await updateOcrState(photoId, {
       ocrStatus: "failed",
-      modelVersion: BIB_OCR_ASSET_VERSION,
+      modelVersion: config.modelVersion,
       ruleVersion: config.ruleVersion,
       candidates: [],
       ocrError: "浏览器 OCR 模型版本与相册配置不一致",
@@ -309,13 +311,22 @@ async function runLocalBibOcr(photoId: string, config: BibConfigView): Promise<v
 }
 
 function queueOcr(photoId: string, config: BibConfigView): void {
+  desiredOcrConfigs.set(photoId, config);
   if (ocrJobs.has(photoId)) return;
+  const startedRevision = configRevision(config);
   const job = runLocalBibOcr(photoId, config).catch((error) => {
     console.warn("Local bib OCR job failed", error);
   });
   ocrJobs.set(photoId, job);
   void job.finally(() => {
-    if (ocrJobs.get(photoId) === job) ocrJobs.delete(photoId);
+    if (ocrJobs.get(photoId) !== job) return;
+    ocrJobs.delete(photoId);
+    const desired = desiredOcrConfigs.get(photoId);
+    if (desired !== undefined && configRevision(desired) !== startedRevision) {
+      queueOcr(photoId, desired);
+      return;
+    }
+    desiredOcrConfigs.delete(photoId);
   });
 }
 
@@ -326,7 +337,7 @@ export function startLocalBibOcr(photoId: string, config: BibConfigView): void {
 export async function resumeLocalBibOcr(albumId: string, config: BibConfigView): Promise<void> {
   const photos = await listLocalReviewPhotos(albumId);
   for (const photo of photos) {
+    if (photo.mediaId !== null) void syncLocalBibToServer(photo.id, config);
     if (shouldResumeOcr(photo, config)) queueOcr(photo.id, config);
-    else if (photo.mediaId !== null) void syncLocalBibToServer(photo.id, config);
   }
 }
