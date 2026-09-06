@@ -511,7 +511,7 @@ export function ReviewLightbox({
                     toolbarButtonClass,
                     "size-8",
                     published &&
-                      "border-blue-600 bg-blue-600 text-white hover:border-blue-500 hover:bg-blue-500 hover:text-white",
+                      "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
                   )}
                   disabled={selected.pending}
                   onClick={() => onStateAction(selected.key)}
