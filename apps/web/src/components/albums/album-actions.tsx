@@ -1,7 +1,7 @@
 "use client";
 
 import type { AlbumView } from "@photostream/contracts";
-import { ArchiveIcon, RadioTowerIcon, StopCircleIcon } from "lucide-react";
+import { ArchiveIcon, LoaderCircleIcon, RadioTowerIcon, StopCircleIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -9,16 +9,18 @@ import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientMutation } from "@/lib/client-api";
 
+type AlbumAction = "archive" | "end" | "restore" | "start";
+
 export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<AlbumAction | null>(null);
   const [refreshing, startTransition] = useTransition();
-  const pending = submitting || refreshing;
+  const pending = pendingAction !== null || refreshing;
 
-  async function mutate(action: "archive" | "end" | "restore" | "start"): Promise<void> {
-    if (submitting) return;
-    setSubmitting(true);
+  async function mutate(action: AlbumAction): Promise<void> {
+    if (pendingAction !== null) return;
+    setPendingAction(action);
     setError(null);
     try {
       await clientMutation(`/api/v1/albums/${album.id}/${action}`);
@@ -26,8 +28,16 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "活动状态更新失败");
     } finally {
-      setSubmitting(false);
+      setPendingAction(null);
     }
+  }
+
+  function icon(action: AlbumAction, fallback: React.ReactNode): React.ReactNode {
+    return pendingAction === action ? (
+      <LoaderCircleIcon aria-hidden="true" className="animate-spin" data-icon="inline-start" />
+    ) : (
+      fallback
+    );
   }
 
   return (
@@ -35,21 +45,21 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
       <div className="flex flex-wrap items-center gap-2">
         {album.state === "draft" ? (
           <Button disabled={pending} onClick={() => void mutate("start")} size="sm">
-            <RadioTowerIcon data-icon="inline-start" />
-            {pending ? "正在开始…" : "开始直播"}
+            {icon("start", <RadioTowerIcon data-icon="inline-start" />)}
+            {pendingAction === "start" ? "正在开始…" : "开始直播"}
           </Button>
         ) : null}
         {album.state === "live" ? (
           <Button disabled={pending} onClick={() => void mutate("end")} size="sm" variant="outline">
-            <StopCircleIcon data-icon="inline-start" />
-            {pending ? "正在结束…" : "结束直播"}
+            {icon("end", <StopCircleIcon data-icon="inline-start" />)}
+            {pendingAction === "end" ? "正在结束…" : "结束直播"}
           </Button>
         ) : null}
         {album.state === "ended" ? (
           <>
             <Button disabled={pending} onClick={() => void mutate("start")} size="sm">
-              <RadioTowerIcon data-icon="inline-start" />
-              恢复直播
+              {icon("start", <RadioTowerIcon data-icon="inline-start" />)}
+              {pendingAction === "start" ? "正在恢复…" : "恢复直播"}
             </Button>
             <Button
               disabled={pending}
@@ -57,8 +67,8 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
               size="sm"
               variant="outline"
             >
-              <ArchiveIcon data-icon="inline-start" />
-              归档
+              {icon("archive", <ArchiveIcon data-icon="inline-start" />)}
+              {pendingAction === "archive" ? "正在归档…" : "归档"}
             </Button>
           </>
         ) : null}
@@ -69,8 +79,8 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
             size="sm"
             variant="outline"
           >
-            <ArchiveIcon data-icon="inline-start" />
-            {pending ? "正在恢复…" : "恢复活动"}
+            {icon("restore", <ArchiveIcon data-icon="inline-start" />)}
+            {pendingAction === "restore" ? "正在恢复…" : "恢复活动"}
           </Button>
         ) : null}
       </div>
