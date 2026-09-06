@@ -20,15 +20,6 @@ import type { FaceReferenceStorage } from "./reference-storage.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
-const readinessKeys = [
-  "participantConsentRecordsConfirmed",
-  "guardianConsentRequirementsConfirmed",
-  "impactAssessmentCompleted",
-  "providerResourcesValidated",
-  "evaluationGatePassed",
-  "billingAlertsConfigured",
-  "indexedFacesAuthorized",
-] as const;
 
 const eventSchema = z
   .object({
@@ -165,21 +156,6 @@ export class FaceService {
       .where(eq(schema.albums.id, options.albumId))
       .limit(1);
     if (album === undefined) throw this.#notFound();
-    const ready =
-      this.#config.FACE_SEARCH_GLOBAL_ENABLED &&
-      album.access === "password" &&
-      album.privacyNotice.trim() !== "" &&
-      album.complaintContact.trim() !== "" &&
-      options.input.noticeVersion === this.#config.FACE_SEARCH_NOTICE_VERSION &&
-      this.#config.FACE_SEARCH_THRESHOLD_VERSION !== "unqualified" &&
-      readinessKeys.every((key) => options.input.readiness[key]);
-    if (options.input.enabled && !ready) {
-      throw new AppError({
-        code: "FACE_SEARCH_DISABLED",
-        message: "人脸检索启用条件尚未全部满足",
-        statusCode: 409,
-      });
-    }
     const existing = await this.#index(options.albumId);
     if (options.input.enabled && existing?.enabled === false && existing.datasetName !== null) {
       throw new AppError({
