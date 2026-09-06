@@ -206,7 +206,7 @@ export function BibReviewEditor({
         if (current.tags.some((tag) => tag.status === "confirmed" && tag.number === wantedNumber)) {
           continue;
         }
-        const candidate = current.tags.find(
+        const candidate: BibTagView | undefined = current.tags.find(
           (tag) =>
             tag.number === wantedNumber &&
             (tag.status === "suggested" || tag.status === "needs_review"),
