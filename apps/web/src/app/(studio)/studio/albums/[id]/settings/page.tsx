@@ -2,6 +2,7 @@ import type { AlbumView, BibConfigView, FaceConfigView } from "@photostream/cont
 
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
 import { AlbumSettings } from "@/components/albums/album-settings";
+import { AlbumWorkspaceHeader } from "@/components/albums/album-workspace-header";
 import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
 
@@ -16,12 +17,7 @@ export default async function AlbumSettingsPage({ params }: { params: Promise<{ 
 
   return (
     <section aria-labelledby="settings-heading" className="flex flex-col gap-4">
-      <div className="flex min-w-0 items-baseline gap-2">
-        <h2 className="shrink-0 text-xl font-semibold tracking-tight" id="settings-heading">
-          设置
-        </h2>
-        <span className="truncate text-sm text-muted-foreground">{album.title}</span>
-      </div>
+      <AlbumWorkspaceHeader headingId="settings-heading" section="活动设置" title={album.title} />
       <AlbumContextNav albumId={id} current="settings" role={session.user.role} />
       <AlbumSettings bibConfig={bibConfig} faceConfig={faceConfig} initialAlbum={album} />
     </section>
