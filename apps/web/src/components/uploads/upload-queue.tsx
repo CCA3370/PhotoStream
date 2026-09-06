@@ -103,12 +103,21 @@ export function UploadQueue({
       for (const file of files) {
         try {
           const processed = await processPhotoInWorker(file);
-          const localPhoto = createLocalReviewPhoto({
+          const created = createLocalReviewPhoto({
             albumId,
             categoryId: categoryId === "uncategorized" ? null : categoryId,
             file,
             processed,
           });
+          const localPhoto: LocalReviewPhoto = {
+            ...created,
+            bib: {
+              ...created.bib,
+              ocrStatus: bibConfig.recognitionEnabled ? "not_started" : "disabled",
+              modelVersion: bibConfig.modelVersion,
+              ruleVersion: bibConfig.ruleVersion,
+            },
+          };
           await putLocalReviewPhoto(localPhoto);
           startLocalBibOcr(localPhoto.id, bibConfig);
           completed += 1;
