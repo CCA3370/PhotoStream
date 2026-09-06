@@ -50,7 +50,11 @@ export function CategoryForm({ albumId }: Readonly<{ albumId: string }>) {
         />
         <Button disabled={pending} size="sm" type="submit" variant="outline">
           {pending ? (
-            <LoaderCircleIcon aria-hidden="true" className="animate-spin" data-icon="inline-start" />
+            <LoaderCircleIcon
+              aria-hidden="true"
+              className="animate-spin"
+              data-icon="inline-start"
+            />
           ) : (
             <PlusIcon aria-hidden="true" data-icon="inline-start" />
           )}
