@@ -192,7 +192,7 @@ export function ReviewLightbox({
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
     spaceTapRef.current = null;
-  }, [resetView, selected?.src, selectedKey]);
+  }, [resetView, selected?.key, selected?.src]);
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
@@ -397,7 +397,8 @@ export function ReviewLightbox({
       >
         <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
         <DialogDescription className="sr-only">
-          左右键切换，滚轮、双击或加减键缩放，拖动查看；已发布照片空格切换显示状态，未发布照片连续两次空格发布，回车切换精选，连续两次 Delete 删除。
+          左右键切换，滚轮、双击或加减键缩放，拖动查看；已发布照片空格切换显示状态，未发布照片连续两次空格发布，回车切换精选，连续两次
+          Delete 删除。
         </DialogDescription>
 
         <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
