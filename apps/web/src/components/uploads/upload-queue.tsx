@@ -54,7 +54,9 @@ export function UploadQueue({
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const rows = await listLocalReviewPhotos(albumId);
+    const rows = (await listLocalReviewPhotos(albumId)).filter(
+      (photo) => photo.uploadState !== "published",
+    );
     for (const url of previewUrls.current) URL.revokeObjectURL(url);
     const next = rows.map((photo) => {
       const preview =
