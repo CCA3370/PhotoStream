@@ -77,9 +77,7 @@ function mergeAlbumUpdate(
       ? {}
       : { originalDownloadEnabled: updated.originalDownloadEnabled }),
     ...(input.privacyNotice === undefined ? {} : { privacyNotice: updated.privacyNotice }),
-    ...(input.complaintContact === undefined
-      ? {}
-      : { complaintContact: updated.complaintContact }),
+    ...(input.complaintContact === undefined ? {} : { complaintContact: updated.complaintContact }),
     updatedAt: updated.updatedAt,
   };
 }
@@ -219,7 +217,8 @@ export function AlbumSettings({
 
   const basicDirty = title.trim() !== album.title || description.trim() !== album.description;
   const publicInfoDirty =
-    privacyNotice.trim() !== album.privacyNotice || complaintContact.trim() !== album.complaintContact;
+    privacyNotice.trim() !== album.privacyNotice ||
+    complaintContact.trim() !== album.complaintContact;
   const galleryPath = `/g/${album.slug}`;
 
   return (
@@ -487,10 +486,7 @@ export function AlbumSettings({
                       />
                     )}
                   </SettingRow>
-                  <SettingRow
-                    description="原始文件可能包含相机元数据"
-                    title="照片原图下载"
-                  >
+                  <SettingRow description="原始文件可能包含相机元数据" title="照片原图下载">
                     {isPending("original-download") ? (
                       <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
                     ) : (
