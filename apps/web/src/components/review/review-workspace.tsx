@@ -2,12 +2,15 @@
 
 import type {
   AlbumUploaderView,
+  BibMediaState,
   InternalMediaList,
   InternalMediaView,
 } from "@photostream/contracts";
 import {
+  BadgeCheckIcon,
   EyeIcon,
   EyeOffIcon,
+  HashIcon,
   LoaderCircleIcon,
   RefreshCwIcon,
   SendIcon,
@@ -17,6 +20,10 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  BibReviewDialog,
+  isBibReviewConfirmed,
+} from "@/components/bib/bib-review-editor";
 import {
   ReviewLightbox,
   type ReviewLightboxItem,
@@ -74,6 +81,7 @@ type ReviewItem =
       readonly uploaderId: null;
       readonly featured: boolean;
       readonly publicationStatus: "local" | "published";
+      readonly bib: null;
       readonly createdAt: string;
     }
   | {
@@ -90,6 +98,7 @@ type ReviewItem =
       readonly uploaderId: string;
       readonly featured: boolean;
       readonly publicationStatus: InternalMediaView["publicationStatus"];
+      readonly bib: BibMediaState | null;
       readonly createdAt: string;
     };
 
@@ -151,6 +160,7 @@ export function ReviewWorkspace({
   const [category, setCategory] = useState("all");
   const [uploader, setUploader] = useState("all");
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
   );
@@ -261,6 +271,7 @@ export function ReviewWorkspace({
           item.photo.uploadState === "published" && item.photo.mediaId !== null
             ? ("published" as const)
             : ("local" as const),
+        bib: null,
         createdAt: item.photo.createdAt,
       }));
     const remoteItems: ReviewItem[] = remoteMedia
@@ -282,6 +293,7 @@ export function ReviewWorkspace({
           uploaderId: item.uploaderId,
           featured: featuredIds.has(item.id),
           publicationStatus: item.publicationStatus,
+          bib: item.bib ?? null,
           createdAt: linkedLocal?.photo.createdAt ?? item.createdAt,
         };
       });
@@ -306,8 +318,9 @@ export function ReviewWorkspace({
   );
 
   const lightboxSourceItems = useMemo(() => {
-    if (activeKey === null || visibleItems.some((item) => item.key === activeKey))
+    if (activeKey === null || visibleItems.some((item) => item.key === activeKey)) {
       return visibleItems;
+    }
     const activeItem = items.find((item) => item.key === activeKey);
     return activeItem === undefined ? visibleItems : [...visibleItems, activeItem];
   }, [activeKey, items, visibleItems]);
@@ -324,6 +337,8 @@ export function ReviewWorkspace({
         height: item.source === "local" ? item.local.photo.height : item.remote.height,
         featured: item.featured,
         publicationStatus: item.publicationStatus,
+        mediaId: remoteId(item),
+        bib: item.bib,
         canDelete:
           item.source === "local"
             ? item.publicationStatus === "local" || userRole === "admin"
@@ -359,6 +374,12 @@ export function ReviewWorkspace({
     if (item.source === "remote") return userRole === "admin";
     if (item.publicationStatus === "published") return userRole === "admin";
     return true;
+  }
+
+  function updateBibState(mediaId: string, state: BibMediaState): void {
+    setRemoteMedia((current) =>
+      current.map((media) => (media.id === mediaId ? { ...media, bib: state } : media)),
+    );
   }
 
   async function toggleFeatured(item: ReviewItem): Promise<void> {
@@ -486,6 +507,7 @@ export function ReviewWorkspace({
         }
       }
       if (activeKey === item.key) setActiveKey(nextKey);
+      if (bibDialogKey === item.key) setBibDialogKey(null);
       showNotice("已删除");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "删除失败");
@@ -538,6 +560,7 @@ export function ReviewWorkspace({
     { id: "hidden", label: "已隐藏" },
     { id: "featured", label: "精选" },
   ];
+  const bibDialogItem = bibDialogKey === null ? null : itemByKey(bibDialogKey);
 
   return (
     <div className="flex flex-col gap-3">
@@ -627,41 +650,41 @@ export function ReviewWorkspace({
           当前筛选没有图片
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {visibleItems.map((item) => {
             const pendingAction = pendingActions.get(item.key) ?? null;
             const pending = pendingAction !== null;
             const published = item.publicationStatus === "published";
             const hidden = item.publicationStatus === "hidden";
+            const bibConfirmed = isBibReviewConfirmed(item.bib);
             return (
               <div
-                className="group relative aspect-square overflow-hidden rounded-md bg-muted outline-none focus-within:ring-2 focus-within:ring-ring"
+                className="group overflow-hidden rounded-lg border bg-card outline-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring"
                 key={item.key}
               >
-                <button
-                  aria-label="查看原图"
-                  className="absolute inset-0"
-                  onClick={() => setActiveKey(item.key)}
-                  type="button"
-                >
-                  {item.previewUrl === null ? null : (
-                    <Image
-                      alt="审核图片"
-                      className="object-cover"
-                      fill
-                      sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
-                      src={item.previewUrl}
-                      unoptimized
-                    />
-                  )}
-                </button>
-                <div className="absolute inset-x-0 top-0 z-10 flex justify-end gap-1 p-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="relative aspect-[4/3] bg-muted">
+                  <button
+                    aria-label="查看大图"
+                    className="absolute inset-0"
+                    onClick={() => setActiveKey(item.key)}
+                    type="button"
+                  >
+                    {item.previewUrl === null ? null : (
+                      <Image
+                        alt="审核图片"
+                        className="object-cover"
+                        fill
+                        sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
+                        src={item.previewUrl}
+                        unoptimized
+                      />
+                    )}
+                  </button>
+                </div>
+                <div className="flex items-center justify-center gap-1 border-t bg-card p-1.5">
                   <Button
                     aria-label={item.featured ? "取消精选" : "设为精选"}
-                    className={cn(
-                      "size-8 bg-black/70 text-white hover:bg-black/85",
-                      item.featured && "text-amber-400",
-                    )}
+                    className={cn("size-8", item.featured && "text-amber-600 dark:text-amber-400")}
                     disabled={pending}
                     onClick={() => void toggleFeatured(item)}
                     size="icon"
@@ -678,8 +701,8 @@ export function ReviewWorkspace({
                   <Button
                     aria-label={published ? "隐藏" : hidden ? "显示" : "发布"}
                     className={cn(
-                      "size-8 bg-black/70 text-white hover:bg-black/85",
-                      published && "bg-blue-600/90 hover:bg-blue-600",
+                      "size-8",
+                      published && "bg-blue-600 text-white hover:bg-blue-700 hover:text-white",
                     )}
                     disabled={pending}
                     onClick={() => void stateAction(item)}
@@ -699,8 +722,28 @@ export function ReviewWorkspace({
                     )}
                   </Button>
                   <Button
+                    aria-label={bibConfirmed ? "修改号码确认" : "确认号码"}
+                    className={cn(
+                      "size-8 text-white",
+                      bibConfirmed
+                        ? "bg-emerald-600 hover:bg-emerald-700 hover:text-white"
+                        : "bg-violet-600 hover:bg-violet-700 hover:text-white",
+                    )}
+                    onClick={() => setBibDialogKey(item.key)}
+                    size="icon"
+                    title={bibConfirmed ? "号码已确认，点击修改" : "号码待确认"}
+                    type="button"
+                    variant="ghost"
+                  >
+                    {bibConfirmed ? (
+                      <BadgeCheckIcon className="size-4" />
+                    ) : (
+                      <HashIcon className="size-4" />
+                    )}
+                  </Button>
+                  <Button
                     aria-label="删除"
-                    className="size-8 bg-red-600/90 text-white hover:bg-red-600"
+                    className="size-8 text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
                     disabled={pending || !canDeleteItem(item)}
                     onClick={() => void deleteItem(item)}
                     size="icon"
@@ -729,6 +772,8 @@ export function ReviewWorkspace({
 
       <ReviewLightbox
         items={lightboxItems}
+        onBibError={setError}
+        onBibStateChange={updateBibState}
         onClose={() => setActiveKey(null)}
         onDelete={(key) => {
           const item = itemByKey(key);
@@ -748,6 +793,21 @@ export function ReviewWorkspace({
           if (item !== null) void toggleVisibility(item);
         }}
         selectedKey={activeKey}
+      />
+
+      <BibReviewDialog
+        mediaId={bibDialogItem === null ? null : remoteId(bibDialogItem)}
+        onChange={(state) => {
+          if (bibDialogItem === null) return;
+          const mediaId = remoteId(bibDialogItem);
+          if (mediaId !== null) updateBibState(mediaId, state);
+        }}
+        onError={setError}
+        onOpenChange={(open) => {
+          if (!open) setBibDialogKey(null);
+        }}
+        open={bibDialogItem !== null}
+        state={bibDialogItem?.bib ?? null}
       />
 
       {notice === null ? null : (
