@@ -74,7 +74,6 @@ function progressFor(stage: Stage, status?: FaceSearchView["search"]["status"]):
 }
 
 export function FaceSearchPanel({
-  complaintContact,
   noticeVersion,
   onClose,
   privacyNotice,
@@ -292,7 +291,6 @@ export function FaceSearchPanel({
                     小时。误匹配可能造成错误照片展示，请勿据此确认身份或处分任何人。
                   </p>
                   <p>{privacyNotice}</p>
-                  <p>删除、撤回或投诉：{complaintContact}</p>
                 </AlertDescription>
               </Alert>
               <FieldSet>
