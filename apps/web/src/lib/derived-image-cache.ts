@@ -83,6 +83,7 @@ export async function loadDerivedImage(request: DerivedImageRequest): Promise<Bl
     if (!response.ok) throw new Error(`图片加载失败（${response.status}）`);
     const blob = await response.blob();
     if (blob.size === 0) throw new Error("图片内容为空");
+    if (blob.size !== request.bytes) return blob;
     await writeCached(request, blob);
     return blob;
   })();
