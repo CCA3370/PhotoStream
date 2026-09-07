@@ -1,4 +1,13 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 import { albums } from "./schema.js";
 
@@ -19,8 +28,13 @@ export const faceOperationDiagnostics = pgTable(
     endpoint: varchar("endpoint", { length: 255 }),
     projectName: varchar("project_name", { length: 128 }),
     datasetName: varchar("dataset_name", { length: 128 }),
-    context: jsonb("context").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+    context: jsonb("context")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("face_operation_diagnostics_album_time_idx").on(table.albumId, table.occurredAt)],
+  (table) => [
+    index("face_operation_diagnostics_album_time_idx").on(table.albumId, table.occurredAt),
+  ],
 );
