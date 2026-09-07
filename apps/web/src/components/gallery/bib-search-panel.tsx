@@ -549,7 +549,10 @@ export function BibSearchPanel({
                       }}
                       value={gradeOptionId}
                     >
-                      <SelectTrigger className="h-11 min-h-11 rounded-xl bg-background" id="public-bib-grade">
+                      <SelectTrigger
+                        className="h-11 min-h-11 rounded-xl bg-background"
+                        id="public-bib-grade"
+                      >
                         <SelectValue>
                           {(value) =>
                             value === null
@@ -590,7 +593,10 @@ export function BibSearchPanel({
                       }
                       value={classOptionId ?? "all"}
                     >
-                      <SelectTrigger className="h-11 min-h-11 rounded-xl bg-background" id="public-bib-class">
+                      <SelectTrigger
+                        className="h-11 min-h-11 rounded-xl bg-background"
+                        id="public-bib-class"
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
