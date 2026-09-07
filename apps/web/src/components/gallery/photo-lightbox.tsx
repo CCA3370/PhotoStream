@@ -26,10 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
-import {
-  readCachedOriginalImage,
-  writeCachedOriginalImage,
-} from "@/lib/original-image-cache";
+import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -544,9 +541,7 @@ export function PhotoLightbox({
                           toolbarButtonClass,
                           "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm",
                         )}
-                        disabled={
-                          originalPending || originalCacheChecking || originalUrl !== null
-                        }
+                        disabled={originalPending || originalCacheChecking || originalUrl !== null}
                         onClick={() => void loadOriginal()}
                         type="button"
                         variant="outline"
@@ -582,7 +577,7 @@ export function PhotoLightbox({
                     className={cn(
                       "flex min-w-0 shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
                       downloadMenuOpen
-                        ? "max-w-[min(22rem,calc(100vw-2.5rem))] translate-x-0 opacity-100"
+                        ? "max-w-[calc(100vw-2.5rem)] translate-x-0 opacity-100 sm:max-w-[22rem]"
                         : "pointer-events-none max-w-0 translate-x-4 opacity-0",
                     )}
                   >
