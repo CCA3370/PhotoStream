@@ -2,9 +2,9 @@
 
 import type { PublicMediaView } from "@photostream/contracts";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { PhotoLightbox } from "@/components/gallery/photo-lightbox";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -48,13 +48,15 @@ function MediaTile({
       className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-150 active:scale-[0.985] sm:rounded-xl sm:hover:-translate-y-px sm:hover:shadow-md sm:hover:ring-border"
       data-media-id={media.id}
     >
-      <Image
+      <CachedPhotoImage
         alt="活动照片"
+        bytes={preview.bytes}
         className={portrait ? "bg-muted object-contain" : "object-cover"}
-        fill
+        kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
+        mediaId={media.id}
+        scope={slug ?? media.albumId}
         sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1279px) 17vw, 15vw"
-        src={preview.url}
-        unoptimized
+        sourceUrl={preview.url}
       />
       <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-150 sm:group-hover:bg-black/[0.06] sm:group-focus-within:bg-black/[0.06]" />
       <button
