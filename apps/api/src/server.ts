@@ -7,8 +7,6 @@ import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { UserAdminService } from "./auth/user-admin-service.js";
 import { BibService } from "./bib/service.js";
 import { type AppConfig, loadConfig } from "./config.js";
-import { FaceAvailabilityService } from "./face/availability-service.js";
-import { directSwitchFaceDatabase } from "./face/direct-switch-database.js";
 import { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import { AliyunFaceProvider, UnavailableFaceProvider } from "./face/provider.js";
 import {
@@ -86,51 +84,21 @@ function faceInfrastructureConfigured(value: AppConfig): boolean {
   );
 }
 
-// The per-album switch is the product control. These legacy config fields are
-// forced into a non-gating state for FaceService compatibility and no longer
-// determine whether an administrator is allowed to turn the feature on.
-const faceRuntimeConfig: AppConfig = {
-  ...config,
-  FACE_SEARCH_GLOBAL_ENABLED: true,
-  FACE_SEARCH_THRESHOLD_VERSION:
-    config.FACE_SEARCH_THRESHOLD_VERSION === "unqualified"
-      ? "direct-switch"
-      : config.FACE_SEARCH_THRESHOLD_VERSION,
-};
 const hasFaceInfrastructure = faceInfrastructureConfigured(config);
 const faceProvider = hasFaceInfrastructure
-  ? new AliyunFaceProvider(faceRuntimeConfig)
+  ? new AliyunFaceProvider(config)
   : new UnavailableFaceProvider();
 const faceReferenceStorage = hasFaceInfrastructure
-  ? new AliyunFaceReferenceStorage(faceRuntimeConfig)
+  ? new AliyunFaceReferenceStorage(config)
   : new UnavailableFaceReferenceStorage();
-
-// FaceService historically asked PhotoService to require password access.
-// Drop only that policy option; ordinary album authorization remains intact.
-const facePhotoService = new Proxy(photoService, {
-  get(target, property, receiver) {
-    if (property === "getAuthorizedPublicAlbum") {
-      return (slug: string, visitorToken: string | undefined) =>
-        target.getAuthorizedPublicAlbum(slug, visitorToken);
-    }
-    const member = Reflect.get(target, property, receiver);
-    return typeof member === "function" ? member.bind(target) : member;
-  },
-}) as PhotoService;
-
 const faceService = new FaceService({
-  database: directSwitchFaceDatabase(database),
-  config: faceRuntimeConfig,
-  photoService: facePhotoService,
+  database,
+  config,
+  photoService,
   provider: faceProvider,
   references: faceReferenceStorage,
 });
-const faceAvailabilityService = new FaceAvailabilityService({
-  database,
-  config: faceRuntimeConfig,
-  photoService,
-});
-const eventBridgeVerifier = new EventBridgeVerifier(faceRuntimeConfig);
+const eventBridgeVerifier = new EventBridgeVerifier(config);
 await bibService.assertKeyCoverage();
 const app = await buildApp({
   config,
@@ -144,7 +112,6 @@ const app = await buildApp({
   dashboardService,
   bibService,
   faceService,
-  faceAvailabilityService,
   eventBridgeVerifier,
 });
 const deletionPoll = setInterval(() => {
@@ -223,5 +190,3 @@ async function shutdown(signal: string): Promise<void> {
 
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
-
-await app.listen({ host: config.HOST, port: config.PORT });
