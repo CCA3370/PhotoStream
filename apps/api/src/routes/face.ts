@@ -23,21 +23,17 @@ import {
 } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
-import type { FaceAvailabilityService } from "../face/availability-service.js";
 import {
   EventBridgeVerificationError,
   type EventBridgeVerifier,
 } from "../face/eventbridge-verifier.js";
 import type { FaceService } from "../face/service.js";
-import { faceSearchVisitorToken, visitorSessionToken } from "../media/visitor-http.js";
+import { faceSearchVisitorToken } from "../media/visitor-http.js";
 
 const albumParams = z.object({ id: z.string().uuid() }).strict();
 const slugParams = z.object({ slug: z.string().min(12).max(32) }).strict();
 const searchParams = z
   .object({ slug: z.string().min(12).max(32), searchId: z.string().uuid() })
-  .strict();
-const faceAvailabilitySchema = z
-  .object({ available: z.boolean(), noticeVersion: z.string().min(1).max(80) })
   .strict();
 
 function actorFrom(session: Awaited<ReturnType<typeof requireInternalSession>>) {
@@ -54,7 +50,6 @@ export async function registerFaceRoutes(
   options: {
     authService: AuthService;
     faceService: FaceService;
-    faceAvailabilityService: FaceAvailabilityService;
     eventBridgeVerifier: EventBridgeVerifier;
     config: AppConfig;
   },
@@ -101,12 +96,8 @@ export async function registerFaceRoutes(
     async (request, reply) => {
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
-      const actor = actorFrom(session);
       return options.faceService.updateConfig({
-        // The album switch is intentionally direct. The service still receives a
-        // current timestamp for legacy method compatibility, but no re-auth gate
-        // is presented to or required from the administrator.
-        actor: { ...actor, authenticatedAt: new Date() },
+        actor: actorFrom(session),
         albumId: request.params.id,
         input: request.body,
         requestId: request.id,
@@ -172,25 +163,6 @@ export async function registerFaceRoutes(
         { ...actorFrom(session), authenticatedAt: new Date() },
         request.params.id,
         request.id,
-      );
-    },
-  );
-
-  typed.get(
-    "/api/v1/public/albums/:slug/face-availability",
-    {
-      schema: {
-        operationId: "getPublicFaceAvailability",
-        tags: ["public", "face"],
-        params: slugParams,
-        response: { 200: faceAvailabilitySchema, ...errors },
-      },
-    },
-    async (request, reply) => {
-      privateResponse(reply);
-      return options.faceAvailabilityService.get(
-        request.params.slug,
-        visitorSessionToken(request, options.config, request.params.slug),
       );
     },
   );
