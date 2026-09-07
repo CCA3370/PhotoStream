@@ -144,96 +144,102 @@ export class FaceService {
   }
 
   async updateConfig(options: {
-    actor: InternalActor & { authenticatedAt: Date };
+    actor: InternalActor;
     albumId: string;
     input: FaceConfigUpdate;
     requestId: string;
   }): Promise<FaceConfigView> {
     requirePermission(options.actor, "album:configure");
     const [album] = await this.#database
-      .select()
+      .select({ id: schema.albums.id })
       .from(schema.albums)
       .where(eq(schema.albums.id, options.albumId))
       .limit(1);
     if (album === undefined) throw this.#notFound();
+
     const existing = await this.#index(options.albumId);
-    if (options.input.enabled && existing?.enabled === false && existing.datasetName !== null) {
-      throw new AppError({
-        code: "FACE_INDEX_NOT_READY",
-        message: "整册索引仍在删除中，请等待删除完成后重新启用",
-        statusCode: 409,
-        retryable: true,
-      });
-    }
-    if ((existing?.enabled ?? false) !== options.input.enabled) {
-      requireRecentAuthentication(options.actor.authenticatedAt);
-    }
-    const requestedDeletionDueAt = new Date(Date.now() + options.input.retentionDays * 86_400_000);
-    const deletionDueAt =
-      album.state !== "ended" && album.state !== "archived"
-        ? null
-        : existing?.deletionDueAt === null || existing?.deletionDueAt === undefined
-          ? requestedDeletionDueAt
-          : new Date(Math.min(existing.deletionDueAt.getTime(), requestedDeletionDueAt.getTime()));
+    if ((existing?.enabled ?? false) === options.input.enabled) return this.#configView(options.albumId);
+
+    const now = new Date();
     const datasetName = existing?.datasetName ?? `face_${randomBytes(18).toString("hex")}`;
+    const nextIndexState = options.input.enabled
+      ? existing?.datasetName == null ||
+        existing.indexState === "disabled" ||
+        existing.indexState === "deleting" ||
+        existing.indexState === "failed"
+        ? "provisioning"
+        : existing.indexState
+      : existing?.datasetName == null
+        ? "disabled"
+        : existing.indexState;
+
     await this.#database.transaction(async (transaction) => {
+      if (options.input.enabled) {
+        await transaction
+          .update(schema.faceAlbumJobs)
+          .set({ status: "cancelled", completedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(schema.faceAlbumJobs.albumId, options.albumId),
+              eq(schema.faceAlbumJobs.kind, "delete_dataset"),
+              eq(schema.faceAlbumJobs.status, "pending"),
+            ),
+          );
+      } else {
+        await transaction
+          .update(schema.faceAlbumJobs)
+          .set({ status: "cancelled", completedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(schema.faceAlbumJobs.albumId, options.albumId),
+              inArray(schema.faceAlbumJobs.kind, ["provision_dataset", "cluster"]),
+              eq(schema.faceAlbumJobs.status, "pending"),
+            ),
+          );
+      }
+
       await transaction
         .insert(schema.albumFaceIndexes)
         .values({
           albumId: options.albumId,
           enabled: options.input.enabled,
-          noticeVersion: options.input.noticeVersion,
+          noticeVersion: this.#config.FACE_SEARCH_NOTICE_VERSION,
           thresholdVersion: this.#config.FACE_SEARCH_THRESHOLD_VERSION,
-          ...options.input.readiness,
-          authorizationConfirmedAt: options.input.enabled ? new Date() : null,
-          indexState: options.input.enabled
-            ? existing?.enabled === true
-              ? existing.indexState
-              : "provisioning"
-            : existing?.datasetName === null || existing === null
-              ? "disabled"
-              : "deleting",
-          datasetName: options.input.enabled ? datasetName : existing?.datasetName,
-          retentionDays: options.input.retentionDays,
-          deletionDueAt,
-          lastErrorCode: null,
-          updatedAt: new Date(),
+          authorizationConfirmedAt: null,
+          indexState: nextIndexState,
+          datasetName: options.input.enabled ? datasetName : (existing?.datasetName ?? null),
+          deletionDueAt: null,
+          lastErrorCode: options.input.enabled ? null : (existing?.lastErrorCode ?? null),
+          updatedAt: now,
         })
         .onConflictDoUpdate({
           target: schema.albumFaceIndexes.albumId,
           set: {
             enabled: options.input.enabled,
-            noticeVersion: options.input.noticeVersion,
+            noticeVersion: this.#config.FACE_SEARCH_NOTICE_VERSION,
             thresholdVersion: this.#config.FACE_SEARCH_THRESHOLD_VERSION,
-            ...options.input.readiness,
-            authorizationConfirmedAt: options.input.enabled ? new Date() : null,
-            indexState: options.input.enabled
-              ? existing?.enabled === true
-                ? existing.indexState
-                : "provisioning"
-              : existing?.datasetName == null
-                ? "disabled"
-                : "deleting",
+            authorizationConfirmedAt: null,
+            indexState: nextIndexState,
             datasetName: options.input.enabled ? datasetName : existing?.datasetName,
-            retentionDays: options.input.retentionDays,
-            deletionDueAt,
-            lastErrorCode: null,
-            updatedAt: new Date(),
+            deletionDueAt: null,
+            lastErrorCode: options.input.enabled ? null : existing?.lastErrorCode,
+            updatedAt: now,
           },
         });
-      if (options.input.enabled) {
-        if (existing?.enabled !== true) {
-          await transaction
-            .insert(schema.faceAlbumJobs)
-            .values({ albumId: options.albumId, kind: "provision_dataset" })
-            .onConflictDoNothing();
-        }
-      } else if (existing?.datasetName != null) {
+
+      if (
+        options.input.enabled &&
+        (existing?.datasetName == null ||
+          existing.indexState === "disabled" ||
+          existing.indexState === "deleting" ||
+          existing.indexState === "failed")
+      ) {
         await transaction
           .insert(schema.faceAlbumJobs)
-          .values({ albumId: options.albumId, kind: "delete_dataset" })
+          .values({ albumId: options.albumId, kind: "provision_dataset", nextAttemptAt: now })
           .onConflictDoNothing();
       }
+
       if (!options.input.enabled) await this.#cancelAlbumSearches(transaction, options.albumId);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
@@ -241,10 +247,11 @@ export class FaceService {
         targetType: "album",
         targetId: options.albumId,
         result: "success",
-        changedFields: ["faceSearchEnabled", "faceNoticeVersion", "faceRetentionDays"],
+        changedFields: ["faceSearchEnabled"],
         requestId: options.requestId,
       });
     });
+
     if (!options.input.enabled) await this.#cleanupAlbumReferences(options.albumId);
     return this.#configView(options.albumId);
   }
@@ -387,7 +394,7 @@ export class FaceService {
     bytes: number;
   }) {
     const { album, index, sessionDigest, ipDigest } = await this.#authorizedSearchContext(options);
-    if (options.noticeVersion !== index.noticeVersion) {
+    if (options.noticeVersion !== this.#config.FACE_SEARCH_NOTICE_VERSION) {
       throw new AppError({
         code: "FACE_SEARCH_DISABLED",
         message: "隐私告知版本已更新",
@@ -813,7 +820,6 @@ export class FaceService {
     if (this.#maintenanceRunning) return;
     this.#maintenanceRunning = true;
     try {
-      await this.#enforceAlbumLifecycle();
       await this.#processAlbumJobs();
       await this.#reconcileMediaTasks();
       await this.#processMediaTasks();
@@ -829,13 +835,9 @@ export class FaceService {
     visitorToken: string | undefined;
     ip: string;
   }) {
-    const album = await this.#photoService.getAuthorizedPublicAlbum(
-      options.slug,
-      options.visitorToken,
-      { requirePassword: true },
-    );
+    const album = await this.#photoService.getAuthorizedPublicAlbum(options.slug, options.visitorToken);
     const index = await this.#index(album.id);
-    if (!this.#config.FACE_SEARCH_GLOBAL_ENABLED || index?.enabled !== true) {
+    if (index?.enabled !== true) {
       throw new AppError({
         code: "FACE_SEARCH_DISABLED",
         message: "此相册未启用人脸检索",
@@ -1042,7 +1044,7 @@ export class FaceService {
 
   async #configView(albumId: string): Promise<FaceConfigView> {
     const [album] = await this.#database
-      .select()
+      .select({ id: schema.albums.id })
       .from(schema.albums)
       .where(eq(schema.albums.id, albumId))
       .limit(1);
@@ -1054,31 +1056,15 @@ export class FaceService {
       .where(eq(schema.mediaFaceIndexTasks.albumId, albumId))
       .groupBy(schema.mediaFaceIndexTasks.status);
     const byStatus = new Map(counts.map((row) => [row.status, row.value]));
-    const readiness = {
-      participantConsentRecordsConfirmed: index?.participantConsentRecordsConfirmed ?? false,
-      guardianConsentRequirementsConfirmed: index?.guardianConsentRequirementsConfirmed ?? false,
-      impactAssessmentCompleted: index?.impactAssessmentCompleted ?? false,
-      providerResourcesValidated: index?.providerResourcesValidated ?? false,
-      evaluationGatePassed: index?.evaluationGatePassed ?? false,
-      billingAlertsConfigured: index?.billingAlertsConfigured ?? false,
-      indexedFacesAuthorized: index?.indexedFacesAuthorized ?? false,
-      globalFeatureEnabled: this.#config.FACE_SEARCH_GLOBAL_ENABLED,
-      passwordAccess: album.access === "password",
-      privacyNoticeConfigured: album.privacyNotice.trim() !== "",
-      complaintContactConfigured: album.complaintContact.trim() !== "",
-      noticeVersionCurrent: index?.noticeVersion === this.#config.FACE_SEARCH_NOTICE_VERSION,
-      thresholdVersionQualified: this.#config.FACE_SEARCH_THRESHOLD_VERSION !== "unqualified",
-    };
     return {
       albumId,
       enabled: index?.enabled ?? false,
-      readyToEnable: Object.values(readiness).every(Boolean),
-      noticeVersion: index?.noticeVersion ?? this.#config.FACE_SEARCH_NOTICE_VERSION,
-      thresholdVersion: index?.thresholdVersion ?? this.#config.FACE_SEARCH_THRESHOLD_VERSION,
-      indexState: index?.indexState ?? "disabled",
-      authorizationConfirmedAt: index?.authorizationConfirmedAt?.toISOString() ?? null,
-      retentionDays: index?.retentionDays ?? 30,
-      readiness,
+      indexState:
+        index === null
+          ? "disabled"
+          : !index.enabled && index.indexState !== "deleting"
+            ? "disabled"
+            : index.indexState,
       counts: {
         pending: (byStatus.get("pending") ?? 0) + (byStatus.get("indexing") ?? 0),
         indexed: byStatus.get("indexed") ?? 0,
@@ -1087,7 +1073,6 @@ export class FaceService {
       },
       lastIndexedAt: index?.lastIndexedAt?.toISOString() ?? null,
       lastClusteredAt: index?.lastClusteredAt?.toISOString() ?? null,
-      deletionDueAt: index?.deletionDueAt?.toISOString() ?? null,
       lastErrorCode: index?.lastErrorCode ?? null,
     };
   }
@@ -1138,66 +1123,6 @@ export class FaceService {
     for (const intent of intents) await this.#deleteReference(intent);
   }
 
-  async #enforceAlbumLifecycle() {
-    const rows = await this.#database
-      .select({ index: schema.albumFaceIndexes, album: schema.albums })
-      .from(schema.albumFaceIndexes)
-      .innerJoin(schema.albums, eq(schema.albums.id, schema.albumFaceIndexes.albumId));
-    for (const { index, album } of rows) {
-      if (album.access !== "password" && (index.enabled || index.datasetName !== null)) {
-        await this.#database.transaction(async (transaction) => {
-          await transaction
-            .update(schema.albumFaceIndexes)
-            .set({
-              enabled: false,
-              indexState: index.datasetName === null ? "disabled" : "deleting",
-              indexedFacesAuthorized: false,
-              authorizationConfirmedAt: null,
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.albumFaceIndexes.albumId, album.id));
-          if (index.datasetName !== null) {
-            await transaction
-              .insert(schema.faceAlbumJobs)
-              .values({ albumId: album.id, kind: "delete_dataset" })
-              .onConflictDoNothing();
-          }
-          await this.#cancelAlbumSearches(transaction, album.id);
-        });
-        await this.#cleanupAlbumReferences(album.id);
-      } else if (
-        index.deletionDueAt !== null &&
-        index.deletionDueAt <= new Date() &&
-        album.state !== "live"
-      ) {
-        await this.#database
-          .update(schema.albumFaceIndexes)
-          .set({ enabled: false, indexState: "deleting", updatedAt: new Date() })
-          .where(eq(schema.albumFaceIndexes.albumId, album.id));
-        await this.#database
-          .insert(schema.faceAlbumJobs)
-          .values({ albumId: album.id, kind: "delete_dataset" })
-          .onConflictDoNothing();
-      } else if (
-        (album.state === "ended" || album.state === "archived") &&
-        index.deletionDueAt === null
-      ) {
-        await this.#database
-          .update(schema.albumFaceIndexes)
-          .set({
-            deletionDueAt: new Date(Date.now() + index.retentionDays * 86_400_000),
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.albumFaceIndexes.albumId, album.id));
-      } else if (album.state === "live" && index.deletionDueAt !== null) {
-        await this.#database
-          .update(schema.albumFaceIndexes)
-          .set({ deletionDueAt: null, updatedAt: new Date() })
-          .where(eq(schema.albumFaceIndexes.albumId, album.id));
-      }
-    }
-  }
-
   async #processAlbumJobs() {
     const jobs = await this.#database
       .select()
@@ -1222,6 +1147,13 @@ export class FaceService {
         await this.#database
           .update(schema.faceAlbumJobs)
           .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.faceAlbumJobs.id, job.id));
+        continue;
+      }
+      if (job.kind !== "delete_dataset" && index.enabled !== true) {
+        await this.#database
+          .update(schema.faceAlbumJobs)
+          .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
           .where(eq(schema.faceAlbumJobs.id, job.id));
         continue;
       }
@@ -1424,9 +1356,11 @@ export class FaceService {
       .limit(25);
     for (const row of tasks) {
       if (row.datasetName === null || row.objectKey === null) continue;
+      if (!row.indexEnabled && (row.task.status === "pending" || row.task.status === "indexing")) {
+        continue;
+      }
       const uri = `oss://${this.#config.ALIYUN_OSS_MEDIA_BUCKET}/${row.objectKey}`;
-      const deletionTask =
-        !row.indexEnabled || row.task.status === "deleting" || row.task.status === "excluded";
+      const deletionTask = row.task.status === "deleting" || row.task.status === "excluded";
       let indexedNow = false;
       try {
         if (!deletionTask && row.task.status === "pending") {
