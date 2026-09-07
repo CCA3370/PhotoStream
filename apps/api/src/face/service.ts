@@ -9,7 +9,21 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 
 import { ALIYUN_REGION, type AppConfig } from "../config.js";
@@ -19,6 +33,8 @@ import type { FaceProvider } from "./provider.js";
 import type { FaceReferenceStorage } from "./reference-storage.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type DiagnosticSource = "aliyun_imm" | "aliyun_oss" | "internal";
+type DiagnosticContext = Record<string, string | number | boolean | null>;
 const terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
 
 const eventSchema = z
@@ -85,6 +101,70 @@ function providerFailure(): AppError {
     statusCode: 503,
     retryable: true,
   });
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function firstString(records: readonly (Record<string, unknown> | null)[], keys: readonly string[]) {
+  for (const record of records) {
+    if (record === null) continue;
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim() !== "") return value.trim();
+    }
+  }
+  return null;
+}
+
+function firstNumber(records: readonly (Record<string, unknown> | null)[], keys: readonly string[]) {
+  for (const record of records) {
+    if (record === null) continue;
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+      if (typeof value === "string" && value.trim() !== "") {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return Math.trunc(parsed);
+      }
+    }
+  }
+  return null;
+}
+
+function redactDiagnosticMessage(value: string): string {
+  return value
+    .replace(
+      /([?&](?:accesskeyid|signature|security-token|x-oss-security-token)=)[^&\s]+/giu,
+      "$1[redacted]",
+    )
+    .replace(
+      /(accesskey(?:id|secret)?|signature|security.?token)\s*[:=]\s*[^\s,;]+/giu,
+      "$1=[redacted]",
+    )
+    .slice(0, 4_000);
+}
+
+function providerErrorDetails(error: unknown): {
+  readonly code: string | null;
+  readonly message: string;
+  readonly requestId: string | null;
+  readonly statusCode: number | null;
+} {
+  const primary = asRecord(error);
+  const data = asRecord(primary?.data);
+  const response = asRecord(primary?.response);
+  const records = [primary, data, response] as const;
+  const message =
+    firstString(records, ["message", "Message", "errorMessage", "ErrorMessage"]) ??
+    (error instanceof Error ? error.message : String(error));
+  return {
+    code: firstString(records, ["code", "Code", "errorCode", "ErrorCode"]),
+    message: redactDiagnosticMessage(message.trim() === "" ? "Unknown provider error" : message),
+    requestId: firstString(records, ["requestId", "RequestId", "requestID", "request-id"]),
+    statusCode: firstNumber(records, ["statusCode", "status", "httpStatus", "status_code"]),
+  };
 }
 
 function requireRecentAuthentication(authenticatedAt: Date): void {
@@ -344,6 +424,10 @@ export class FaceService {
             eq(schema.mediaFaceIndexTasks.status, "failed"),
           ),
         ),
+      this.#database
+        .update(schema.albumFaceIndexes)
+        .set({ lastErrorCode: null, updatedAt: now })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId)),
     ]);
     return this.#configView(albumId);
   }
@@ -406,10 +490,20 @@ export class FaceService {
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
     const id = randomUUID();
-    const objectKey = `face-references/${new Date().toISOString().slice(0, 10)}/${id}.jpg`;
+    const objectKey = `face-search/${new Date().toISOString().slice(0, 10)}/${id}.jpg`;
     const referenceExpiresAt = new Date(Date.now() + 60 * 60_000);
     const resultExpiresAt = new Date(Date.now() + 2 * 60 * 60_000);
-    const upload = await this.#references.signPut(objectKey, 15 * 60);
+    let upload: Awaited<ReturnType<FaceReferenceStorage["signPut"]>>;
+    try {
+      upload = await this.#references.signPut(objectKey, 15 * 60);
+    } catch (error) {
+      await this.#recordDiagnostic(album.id, error, {
+        source: "aliyun_oss",
+        operation: "SignPutObject",
+        context: { searchId: id },
+      });
+      throw providerFailure();
+    }
     await this.#database.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`face-session:${sessionDigest}`}, 0))`,
@@ -515,7 +609,13 @@ export class FaceService {
     let metadata: Awaited<ReturnType<FaceReferenceStorage["head"]>>;
     try {
       metadata = await this.#references.head(intent.objectKey);
-    } catch {
+    } catch (error) {
+      await this.#recordDiagnostic(context.album.id, error, {
+        source: "aliyun_oss",
+        operation: "HeadObject",
+        datasetName: context.index.datasetName,
+        context: { searchId: intent.id },
+      });
       throw new AppError({
         code: "FACE_REFERENCE_INVALID",
         message: "参考照上传未完成",
@@ -547,7 +647,13 @@ export class FaceService {
     let validation: Awaited<ReturnType<FaceProvider["validateReference"]>>;
     try {
       validation = await this.#provider.validateReference(uri);
-    } catch {
+    } catch (error) {
+      await this.#recordDiagnostic(context.album.id, error, {
+        source: "aliyun_imm",
+        operation: "DetectImageFaces",
+        datasetName: context.index.datasetName,
+        context: { searchId: intent.id },
+      });
       await this.#failAndDelete(intent, "provider_unavailable");
       throw providerFailure();
     }
@@ -580,7 +686,13 @@ export class FaceService {
           .set({ initialSearchCompletedAt: new Date(), updatedAt: new Date() })
           .where(eq(schema.faceSearchIntents.id, intent.id));
       });
-    } catch {
+    } catch (error) {
+      await this.#recordDiagnostic(context.album.id, error, {
+        source: "aliyun_imm",
+        operation: "SearchImageFigureCluster / SimpleQuery",
+        datasetName: context.index.datasetName,
+        context: { searchId: intent.id },
+      });
       await this.#failAndDelete(intent, "provider_unavailable");
       throw providerFailure();
     }
@@ -597,7 +709,13 @@ export class FaceService {
           updatedAt: new Date(),
         })
         .where(eq(schema.faceSearchIntents.id, intent.id));
-    } catch {
+    } catch (error) {
+      await this.#recordDiagnostic(context.album.id, error, {
+        source: "aliyun_imm",
+        operation: "CreateFacesSearchingTask",
+        datasetName: context.index.datasetName,
+        context: { searchId: intent.id },
+      });
       await this.#database.transaction(async (transaction) => {
         await transaction
           .update(schema.faceSearchIntents)
@@ -738,6 +856,14 @@ export class FaceService {
     }
     const successful = event.data.Status === "Succeeded";
     const mediaIds = successful ? await this.#eventMediaIds(event.data.SimilarFaces) : [];
+    if (!successful) {
+      await this.#recordDiagnostic(intent.intent.albumId, new Error("FacesSearching task failed"), {
+        source: "aliyun_imm",
+        operation: "FacesSearchingTask",
+        datasetName: intent.datasetName,
+        context: { searchId: intent.intent.id, providerTaskId: event.data.TaskId },
+      });
+    }
     const processed = await this.#database.transaction(async (transaction) => {
       const claimed = await transaction
         .insert(schema.faceIntegrationEvents)
@@ -955,6 +1081,45 @@ export class FaceService {
     return rows.map((row) => row.mediaId);
   }
 
+  async #recordDiagnostic(
+    albumId: string,
+    error: unknown,
+    details: {
+      source: DiagnosticSource;
+      operation: string;
+      datasetName?: string | null;
+      context?: DiagnosticContext;
+    },
+  ): Promise<void> {
+    const provider = providerErrorDetails(error);
+    await this.#database.insert(schema.faceOperationDiagnostics).values({
+      albumId,
+      source: details.source,
+      operation: details.operation.slice(0, 120),
+      providerCode: provider.code?.slice(0, 200) ?? null,
+      providerMessage: provider.message,
+      providerRequestId: provider.requestId?.slice(0, 256) ?? null,
+      httpStatus: provider.statusCode,
+      region:
+        details.source === "aliyun_imm"
+          ? this.#config.ALIYUN_IMM_REGION
+          : details.source === "aliyun_oss"
+            ? this.#config.ALIYUN_OSS_REGION
+            : null,
+      endpoint:
+        details.source === "aliyun_imm"
+          ? `imm.${this.#config.ALIYUN_IMM_REGION}.aliyuncs.com`
+          : details.source === "aliyun_oss"
+            ? this.#config.ALIYUN_OSS_ENDPOINT
+            : null,
+      projectName:
+        details.source === "aliyun_imm" ? (this.#config.ALIYUN_IMM_PROJECT_NAME ?? null) : null,
+      datasetName: details.datasetName ?? null,
+      context: details.context ?? {},
+      occurredAt: new Date(),
+    });
+  }
+
   async #failAndDelete(
     intent: typeof schema.faceSearchIntents.$inferSelect,
     failureCode: FaceFailureCode,
@@ -994,7 +1159,12 @@ export class FaceService {
           updatedAt: new Date(),
         })
         .where(eq(schema.faceSearchIntents.id, intent.id));
-    } catch {
+    } catch (error) {
+      await this.#recordDiagnostic(intent.albumId, error, {
+        source: "aliyun_oss",
+        operation: "DeleteObject",
+        context: { searchId: intent.id },
+      });
       await this.#database
         .update(schema.faceSearchIntents)
         .set({
@@ -1054,11 +1224,19 @@ export class FaceService {
       .limit(1);
     if (album === undefined) throw this.#notFound();
     const index = await this.#index(albumId);
-    const counts = await this.#database
-      .select({ status: schema.mediaFaceIndexTasks.status, value: count() })
-      .from(schema.mediaFaceIndexTasks)
-      .where(eq(schema.mediaFaceIndexTasks.albumId, albumId))
-      .groupBy(schema.mediaFaceIndexTasks.status);
+    const [counts, recentErrors] = await Promise.all([
+      this.#database
+        .select({ status: schema.mediaFaceIndexTasks.status, value: count() })
+        .from(schema.mediaFaceIndexTasks)
+        .where(eq(schema.mediaFaceIndexTasks.albumId, albumId))
+        .groupBy(schema.mediaFaceIndexTasks.status),
+      this.#database
+        .select()
+        .from(schema.faceOperationDiagnostics)
+        .where(eq(schema.faceOperationDiagnostics.albumId, albumId))
+        .orderBy(desc(schema.faceOperationDiagnostics.occurredAt))
+        .limit(5),
+    ]);
     const byStatus = new Map(counts.map((row) => [row.status, row.value]));
     return {
       albumId,
@@ -1078,6 +1256,21 @@ export class FaceService {
       lastIndexedAt: index?.lastIndexedAt?.toISOString() ?? null,
       lastClusteredAt: index?.lastClusteredAt?.toISOString() ?? null,
       lastErrorCode: index?.lastErrorCode ?? null,
+      recentErrors: recentErrors.map((diagnostic) => ({
+        id: diagnostic.id,
+        source: diagnostic.source as "aliyun_imm" | "aliyun_oss" | "internal",
+        operation: diagnostic.operation,
+        providerCode: diagnostic.providerCode,
+        providerMessage: diagnostic.providerMessage,
+        providerRequestId: diagnostic.providerRequestId,
+        httpStatus: diagnostic.httpStatus,
+        region: diagnostic.region,
+        endpoint: diagnostic.endpoint,
+        projectName: diagnostic.projectName,
+        datasetName: diagnostic.datasetName,
+        context: diagnostic.context,
+        occurredAt: diagnostic.occurredAt.toISOString(),
+      })),
     };
   }
 
@@ -1161,6 +1354,8 @@ export class FaceService {
           .where(eq(schema.faceAlbumJobs.id, job.id));
         continue;
       }
+      let operation = `FaceAlbumJob:${job.kind}`;
+      let source: DiagnosticSource = "aliyun_imm";
       try {
         await this.#database
           .update(schema.faceAlbumJobs)
@@ -1171,19 +1366,29 @@ export class FaceService {
           })
           .where(eq(schema.faceAlbumJobs.id, job.id));
         if (job.kind === "provision_dataset") {
-          if (!(await this.#provider.datasetExists(index.datasetName)))
+          operation = "GetDataset";
+          if (!(await this.#provider.datasetExists(index.datasetName))) {
+            operation = "CreateDataset";
             await this.#provider.createDataset(index.datasetName);
+          }
           await this.#database
             .update(schema.albumFaceIndexes)
-            .set({ indexState: "indexing", updatedAt: new Date() })
+            .set({ indexState: "indexing", lastErrorCode: null, updatedAt: new Date() })
             .where(eq(schema.albumFaceIndexes.albumId, job.albumId));
         } else if (job.kind === "delete_dataset") {
           await this.#cleanupAlbumReferences(job.albumId);
+          operation = "GetDataset";
           if (await this.#provider.datasetExists(index.datasetName)) {
+            operation = "DeleteDatasetContents";
             await this.#provider.deleteDatasetContents(index.datasetName);
+            operation = "DeleteDataset";
             await this.#provider.deleteDataset(index.datasetName);
-            if (await this.#provider.datasetExists(index.datasetName))
+            operation = "GetDataset";
+            if (await this.#provider.datasetExists(index.datasetName)) {
+              source = "internal";
+              operation = "DatasetDeletionConfirmation";
               throw new Error("dataset_delete_not_confirmed");
+            }
           }
           await this.#database.transaction(async (transaction) => {
             await transaction
@@ -1206,6 +1411,7 @@ export class FaceService {
               .where(eq(schema.albumFaceIndexes.albumId, job.albumId));
           });
         } else if (job.providerTaskId === null) {
+          operation = "CreateFigureClusteringTask";
           const providerTaskId = await this.#provider.cluster(index.datasetName);
           await this.#database
             .update(schema.faceAlbumJobs)
@@ -1218,16 +1424,24 @@ export class FaceService {
             .where(eq(schema.faceAlbumJobs.id, job.id));
           continue;
         } else {
+          operation = "GetTask:FaceClustering";
           const taskStatus = await this.#provider.taskStatus(job.providerTaskId, "FaceClustering");
           if (taskStatus === "running") {
-            if (job.attempts + 1 >= 40) throw new Error("clustering_confirmation_timeout");
+            if (job.attempts + 1 >= 40) {
+              source = "internal";
+              operation = "FaceClusteringConfirmation";
+              throw new Error("clustering_confirmation_timeout");
+            }
             await this.#database
               .update(schema.faceAlbumJobs)
               .set({ nextAttemptAt: new Date(Date.now() + 15_000), updatedAt: new Date() })
               .where(eq(schema.faceAlbumJobs.id, job.id));
             continue;
           }
-          if (taskStatus === "failed") throw new Error("clustering_failed");
+          if (taskStatus === "failed") {
+            operation = "FaceClusteringTask";
+            throw new Error("clustering_failed");
+          }
           const [failedTasks] = await this.#database
             .select({ value: count() })
             .from(schema.mediaFaceIndexTasks)
@@ -1237,11 +1451,13 @@ export class FaceService {
                 eq(schema.mediaFaceIndexTasks.status, "failed"),
               ),
             );
+          const hasFailedTasks = (failedTasks?.value ?? 0) > 0;
           await this.#database
             .update(schema.albumFaceIndexes)
             .set({
               lastClusteredAt: new Date(),
-              indexState: (failedTasks?.value ?? 0) > 0 ? "degraded" : "ready",
+              indexState: hasFailedTasks ? "degraded" : "ready",
+              lastErrorCode: hasFailedTasks ? index.lastErrorCode : null,
               updatedAt: new Date(),
             })
             .where(eq(schema.albumFaceIndexes.albumId, job.albumId));
@@ -1255,7 +1471,18 @@ export class FaceService {
             updatedAt: new Date(),
           })
           .where(eq(schema.faceAlbumJobs.id, job.id));
-      } catch {
+      } catch (error) {
+        await this.#recordDiagnostic(job.albumId, error, {
+          source,
+          operation,
+          datasetName: index.datasetName,
+          context: {
+            jobId: job.id,
+            jobKind: job.kind,
+            attempts: job.attempts + 1,
+            providerTaskId: job.providerTaskId,
+          },
+        });
         const attempts = job.attempts + 1;
         await this.#database
           .update(schema.faceAlbumJobs)
@@ -1366,8 +1593,11 @@ export class FaceService {
       const uri = `oss://${this.#config.ALIYUN_OSS_MEDIA_BUCKET}/${row.objectKey}`;
       const deletionTask = row.task.status === "deleting" || row.task.status === "excluded";
       let indexedNow = false;
+      let operation = `MediaFaceIndexTask:${row.task.status}`;
+      let source: DiagnosticSource = "aliyun_imm";
       try {
         if (!deletionTask && row.task.status === "pending") {
+          operation = "IndexFileMeta";
           const providerTaskId = await this.#provider.indexMedia({
             datasetName: row.datasetName,
             mediaId: row.task.mediaId,
@@ -1384,6 +1614,7 @@ export class FaceService {
             })
             .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
         } else if (!deletionTask && row.task.status === "indexing") {
+          operation = "SimpleQuery:CustomId";
           if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId)) {
             indexedNow = true;
             await this.#database
@@ -1408,6 +1639,14 @@ export class FaceService {
               })
               .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
             if (attempts >= 20) {
+              source = "internal";
+              operation = "IndexConfirmation";
+              await this.#recordDiagnostic(row.task.albumId, new Error("index_confirmation_timeout"), {
+                source,
+                operation,
+                datasetName: row.datasetName,
+                context: { mediaId: row.task.mediaId, attempts },
+              });
               await this.#database
                 .update(schema.albumFaceIndexes)
                 .set({
@@ -1419,9 +1658,14 @@ export class FaceService {
             }
           }
         } else {
+          operation = "BatchDeleteFileMeta";
           await this.#provider.deleteMedia(row.datasetName, [uri]);
-          if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId))
+          operation = "SimpleQuery:DeleteConfirmation";
+          if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId)) {
+            source = "internal";
+            operation = "MediaDeletionConfirmation";
             throw new Error("media_delete_not_confirmed");
+          }
           if (row.task.status === "excluded")
             await this.#database
               .update(schema.mediaFaceIndexTasks)
@@ -1438,7 +1682,17 @@ export class FaceService {
             .set({ lastIndexedAt: new Date(), updatedAt: new Date() })
             .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
         }
-      } catch {
+      } catch (error) {
+        await this.#recordDiagnostic(row.task.albumId, error, {
+          source,
+          operation,
+          datasetName: row.datasetName,
+          context: {
+            mediaId: row.task.mediaId,
+            taskStatus: row.task.status,
+            attempts: row.task.attempts + 1,
+          },
+        });
         const attempts = row.task.attempts + 1;
         await this.#database
           .update(schema.mediaFaceIndexTasks)
@@ -1546,6 +1800,9 @@ export class FaceService {
     await this.#database
       .delete(schema.faceIntegrationEvents)
       .where(lt(schema.faceIntegrationEvents.processedAt, historyCutoff));
+    await this.#database
+      .delete(schema.faceOperationDiagnostics)
+      .where(lt(schema.faceOperationDiagnostics.occurredAt, new Date(now.getTime() - 30 * 86_400_000)));
   }
 
   #notFound() {
