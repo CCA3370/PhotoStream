@@ -26,6 +26,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
+import {
+  readCachedOriginalImage,
+  writeCachedOriginalImage,
+} from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -88,6 +92,8 @@ export function PhotoLightbox({
   const stageRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
+  const originalObjectUrlRef = useRef<string | null>(null);
+  const originalRequestRef = useRef(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -97,6 +103,7 @@ export function PhotoLightbox({
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [originalPending, setOriginalPending] = useState(false);
+  const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -155,14 +162,62 @@ export function PhotoLightbox({
 
   useEffect(() => {
     if (selectedId === null) return;
+    originalRequestRef.current += 1;
+    if (originalObjectUrlRef.current !== null) {
+      URL.revokeObjectURL(originalObjectUrlRef.current);
+      originalObjectUrlRef.current = null;
+    }
     setLoaded(false);
     setDownloadMenuOpen(false);
     setOriginalUrl(null);
     setOriginalPending(false);
+    setOriginalCacheChecking(false);
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
   }, [resetView, selectedId]);
+
+  useEffect(() => {
+    if (slug === undefined || selected === null || !selected.downloads.original) return;
+    let cancelled = false;
+    const mediaId = selected.id;
+    const expectedBytes = selected.downloads.originalBytes;
+    setOriginalCacheChecking(true);
+
+    void readCachedOriginalImage(slug, mediaId, expectedBytes)
+      .then((blob) => {
+        if (cancelled || blob === null) return;
+        const objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        if (originalObjectUrlRef.current !== null) {
+          URL.revokeObjectURL(originalObjectUrlRef.current);
+        }
+        originalObjectUrlRef.current = objectUrl;
+        setLoaded(false);
+        resetView();
+        setOriginalUrl(objectUrl);
+      })
+      .finally(() => {
+        if (!cancelled) setOriginalCacheChecking(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resetView, selected, slug]);
+
+  useEffect(
+    () => () => {
+      if (originalObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(originalObjectUrlRef.current);
+        originalObjectUrlRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
@@ -283,20 +338,45 @@ export function PhotoLightbox({
       selected === null ||
       !selected.downloads.original ||
       originalPending ||
+      originalCacheChecking ||
       originalUrl !== null
     ) {
       return;
     }
+
+    const mediaId = selected.id;
+    const expectedBytes = selected.downloads.originalBytes;
+    const requestId = originalRequestRef.current + 1;
+    originalRequestRef.current = requestId;
     setOriginalPending(true);
+
     try {
       const signed = await publicMutation<SignedOriginal>(
-        `/api/v1/public/albums/${slug}/downloads/${selected.id}/original`,
+        `/api/v1/public/albums/${slug}/downloads/${mediaId}/original`,
         { idempotencyKey: crypto.randomUUID() },
       );
+      const response = await fetch(signed.url, {
+        cache: "no-store",
+        credentials: "omit",
+        mode: "cors",
+      });
+      if (!response.ok) throw new Error("原图加载失败，请稍后重试。");
+      const blob = await response.blob();
+      if (blob.size === 0) throw new Error("原图内容为空，请稍后重试。");
+
+      await writeCachedOriginalImage(slug, mediaId, expectedBytes, blob);
+      if (originalRequestRef.current !== requestId) return;
+
+      const objectUrl = URL.createObjectURL(blob);
+      if (originalObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(originalObjectUrlRef.current);
+      }
+      originalObjectUrlRef.current = objectUrl;
       setLoaded(false);
       resetView();
-      setOriginalUrl(signed.url);
+      setOriginalUrl(objectUrl);
     } catch (caught) {
+      if (originalRequestRef.current !== requestId) return;
       toast.add({
         title: "原图加载失败",
         description: caught instanceof Error ? caught.message : "暂时无法加载原图，请稍后重试。",
@@ -304,7 +384,7 @@ export function PhotoLightbox({
         timeout: 4_000,
       });
     } finally {
-      setOriginalPending(false);
+      if (originalRequestRef.current === requestId) setOriginalPending(false);
     }
   }
 
@@ -437,102 +517,120 @@ export function PhotoLightbox({
                 {originalUrl === null ? null : " · 原图"}
               </div>
 
-              <div className="relative ml-auto min-h-12 min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl">
+              <div className="ml-auto flex min-w-0 max-w-[calc(100vw-1.25rem)] items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:max-w-full">
                 <div
-                  className={cn(
-                    "flex items-center justify-end gap-1.5 transition-[opacity,transform] duration-200 ease-out",
-                    downloadMenuOpen
-                      ? "pointer-events-none absolute inset-1.5 -translate-x-2 scale-[0.98] opacity-0"
-                      : "relative translate-x-0 scale-100 opacity-100",
-                  )}
                   aria-hidden={downloadMenuOpen}
-                >
-                  {slug === undefined ? null : (
-                    <PhotoLikeButton
-                      mediaId={selected.id}
-                      mode="toolbar"
-                      onChange={onLikeChange}
-                      slug={slug}
-                      state={selectedLikeState}
-                    />
-                  )}
-
-                  {canDownloadOriginal ? (
-                    <Button
-                      className={cn(
-                        toolbarButtonClass,
-                        "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm",
-                      )}
-                      disabled={originalPending || originalUrl !== null}
-                      onClick={() => void loadOriginal()}
-                      type="button"
-                      variant="outline"
-                    >
-                      <ImageIcon data-icon="inline-start" />
-                      {originalPending
-                        ? "加载中…"
-                        : originalUrl === null
-                          ? "查看原图"
-                          : "已加载原图"}
-                    </Button>
-                  ) : null}
-
-                  {canDownload ? (
-                    <Button
-                      className={toolbarButtonClass}
-                      onClick={() => setDownloadMenuOpen(true)}
-                      type="button"
-                      variant="outline"
-                    >
-                      <DownloadIcon data-icon="inline-start" />
-                      下载
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div
                   className={cn(
-                    "flex min-w-0 items-center justify-end gap-1.5 transition-[opacity,transform] duration-250 ease-out",
+                    "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
                     downloadMenuOpen
-                      ? "relative translate-x-0 scale-100 opacity-100"
-                      : "pointer-events-none absolute inset-1.5 translate-x-3 scale-[0.98] opacity-0",
+                      ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
+                      : "max-w-[24rem] translate-x-0 opacity-100",
                   )}
-                  aria-hidden={!downloadMenuOpen}
                 >
-                  {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
-                    <DownloadButton
-                      bytes={preview1920.bytes}
-                      className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
-                      kind="preview"
-                      label="普通图"
-                      mediaId={selected.id}
-                      slug={slug}
-                    />
-                  ) : null}
-                  {canDownloadOriginal &&
-                  slug !== undefined &&
-                  selected.downloads.originalBytes !== null ? (
-                    <DownloadButton
-                      bytes={selected.downloads.originalBytes}
-                      className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
-                      kind="original"
-                      label="原图"
-                      mediaId={selected.id}
-                      slug={slug}
-                    />
-                  ) : null}
-                  <Button
-                    aria-label="收起下载选项"
-                    className="size-9 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.13] hover:text-white"
-                    onClick={() => setDownloadMenuOpen(false)}
-                    size="icon"
-                    title="关闭下载选项"
-                    type="button"
-                    variant="outline"
-                  >
-                    <XIcon />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {slug === undefined ? null : (
+                      <PhotoLikeButton
+                        mediaId={selected.id}
+                        mode="toolbar"
+                        onChange={onLikeChange}
+                        slug={slug}
+                        state={selectedLikeState}
+                      />
+                    )}
+
+                    {canDownloadOriginal ? (
+                      <Button
+                        className={cn(
+                          toolbarButtonClass,
+                          "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm",
+                        )}
+                        disabled={
+                          originalPending || originalCacheChecking || originalUrl !== null
+                        }
+                        onClick={() => void loadOriginal()}
+                        type="button"
+                        variant="outline"
+                      >
+                        <ImageIcon data-icon="inline-start" />
+                        {originalPending
+                          ? "加载中…"
+                          : originalCacheChecking
+                            ? "恢复中…"
+                            : originalUrl === null
+                              ? "查看原图"
+                              : "已加载原图"}
+                      </Button>
+                    ) : null}
+
+                    {canDownload ? (
+                      <Button
+                        className={toolbarButtonClass}
+                        onClick={() => setDownloadMenuOpen(true)}
+                        type="button"
+                        variant="outline"
+                      >
+                        <DownloadIcon data-icon="inline-start" />
+                        下载
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
+
+                {canDownload ? (
+                  <div
+                    aria-hidden={!downloadMenuOpen}
+                    className={cn(
+                      "flex min-w-0 shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                      downloadMenuOpen
+                        ? "max-w-[min(22rem,calc(100vw-2.5rem))] translate-x-0 opacity-100"
+                        : "pointer-events-none max-w-0 translate-x-4 opacity-0",
+                    )}
+                  >
+                    <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                      {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
+                        <DownloadButton
+                          bytes={preview1920.bytes}
+                          className={cn(
+                            toolbarButtonClass,
+                            "min-w-0 shrink-0 px-2 text-[11px] sm:px-2.5 sm:text-xs",
+                          )}
+                          kind="preview"
+                          label="普通图"
+                          mediaId={selected.id}
+                          showIcon={false}
+                          slug={slug}
+                        />
+                      ) : null}
+                      {canDownloadOriginal &&
+                      slug !== undefined &&
+                      selected.downloads.originalBytes !== null ? (
+                        <DownloadButton
+                          bytes={selected.downloads.originalBytes}
+                          className={cn(
+                            toolbarButtonClass,
+                            "min-w-0 shrink-0 px-2 text-[11px] sm:px-2.5 sm:text-xs",
+                          )}
+                          kind="original"
+                          label="原图"
+                          mediaId={selected.id}
+                          showIcon={false}
+                          slug={slug}
+                        />
+                      ) : null}
+                      <Button
+                        aria-label="收起下载选项"
+                        className="size-9 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.13] hover:text-white"
+                        onClick={() => setDownloadMenuOpen(false)}
+                        size="icon"
+                        title="关闭下载选项"
+                        type="button"
+                        variant="outline"
+                      >
+                        <XIcon />
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
