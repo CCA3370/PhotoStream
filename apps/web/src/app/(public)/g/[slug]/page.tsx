@@ -21,6 +21,11 @@ interface FeaturedList {
   readonly mediaIds: readonly string[];
 }
 
+interface FaceAvailability {
+  readonly available: boolean;
+  readonly noticeVersion: string;
+}
+
 export default async function GalleryPage({
   params,
   searchParams,
@@ -40,7 +45,7 @@ export default async function GalleryPage({
         albumTitle={album.title}
         status={album.state === "live" ? "直播中" : "已结束"}
       >
-        <div className="mx-auto max-w-xl py-8 md:py-14">
+        <div className="mx-auto max-w-md py-6 sm:py-10">
           <UnlockAlbumForm slug={slug} />
         </div>
       </PublicGalleryShell>
@@ -52,20 +57,18 @@ export default async function GalleryPage({
     : album.categories.find((candidate) => candidate.id === requestedCategory);
   const mediaPath = new URLSearchParams({ limit: "30" });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
-  const [media, featured] = await Promise.all([
+  const [media, featured, faceAvailability] = await Promise.all([
     serverApi<MediaList>(`/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`),
     serverApi<FeaturedList>(`/api/v1/public/albums/${slug}/featured`),
+    serverApi<FaceAvailability>(`/api/v1/public/albums/${slug}/face-availability`),
   ]);
-  const faceSearch =
-    album.faceSearchAvailable && album.faceSearchNoticeVersion !== null
-      ? {
-          complaintContact: album.complaintContact,
-          noticeVersion: album.faceSearchNoticeVersion,
-          privacyNotice: album.privacyNotice,
-          slug,
-        }
-      : null;
-  const searchAvailable = album.bibSearchEnabled || faceSearch !== null;
+  const faceSearch = faceAvailability.available
+    ? {
+        noticeVersion: faceAvailability.noticeVersion,
+        privacyNotice: album.privacyNotice,
+      }
+    : undefined;
+  const searchAvailable = album.bibSearchEnabled || faceSearch !== undefined;
   const sectionTitle = featuredOnly ? "精选照片" : (category?.name ?? "全部照片");
 
   return (
@@ -78,7 +81,7 @@ export default async function GalleryPage({
 
       <nav
         aria-label="相册筛选"
-        className="sticky top-2 z-20 mb-5 flex gap-1.5 overflow-x-auto rounded-2xl border bg-background/90 p-1.5 shadow-sm backdrop-blur-xl"
+        className="sticky top-1.5 z-20 mb-3 flex gap-1 overflow-x-auto rounded-xl border bg-background/92 p-1 shadow-sm supports-backdrop-filter:backdrop-blur-xl sm:mb-4"
       >
         <Link
           aria-current={!featuredOnly && category === undefined ? "page" : undefined}
@@ -87,7 +90,7 @@ export default async function GalleryPage({
               variant: !featuredOnly && category === undefined ? "default" : "ghost",
               size: "sm",
             }),
-            "h-8 shrink-0 rounded-xl px-3.5",
+            "h-8 shrink-0 rounded-lg px-3",
           )}
           href={`/g/${slug}`}
         >
@@ -97,7 +100,7 @@ export default async function GalleryPage({
           aria-current={featuredOnly ? "page" : undefined}
           className={cn(
             buttonVariants({ variant: featuredOnly ? "default" : "ghost", size: "sm" }),
-            "h-8 shrink-0 rounded-xl px-3.5",
+            "h-8 shrink-0 rounded-lg px-3",
           )}
           href={`/g/${slug}?featured=1`}
         >
@@ -110,7 +113,7 @@ export default async function GalleryPage({
               aria-current={selected ? "page" : undefined}
               className={cn(
                 buttonVariants({ variant: selected ? "default" : "ghost", size: "sm" }),
-                "h-8 shrink-0 rounded-xl px-3.5",
+                "h-8 shrink-0 rounded-lg px-3",
               )}
               href={`/g/${slug}?category=${albumCategory.id}`}
               key={albumCategory.id}
@@ -121,8 +124,10 @@ export default async function GalleryPage({
         })}
       </nav>
 
-      <section aria-label={sectionTitle} className="flex flex-col gap-5">
-        <h2 className="truncate text-lg font-semibold tracking-tight sm:text-xl">{sectionTitle}</h2>
+      <section aria-label={sectionTitle} className="flex flex-col gap-3 sm:gap-4">
+        <h2 className="truncate px-0.5 text-base font-semibold tracking-tight sm:text-lg">
+          {sectionTitle}
+        </h2>
 
         {searchAvailable && !featuredOnly ? (
           <BibSearchPanel
@@ -132,7 +137,7 @@ export default async function GalleryPage({
             bibSearchEnabled={album.bibSearchEnabled}
             numberLengths={album.bibNumberLengths}
             {...(category === undefined ? {} : { categoryId: category.id })}
-            {...(faceSearch === null ? {} : { faceSearch })}
+            {...(faceSearch === undefined ? {} : { faceSearch })}
             slug={slug}
           >
             <PaginatedMediaGrid
