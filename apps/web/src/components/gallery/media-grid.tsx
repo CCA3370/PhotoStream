@@ -54,7 +54,7 @@ function MediaTile({
         className={portrait ? "bg-muted object-contain" : "object-cover"}
         kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
         mediaId={media.id}
-        scope={slug ?? media.albumId}
+        scope={slug ?? "public-media"}
         sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1279px) 17vw, 15vw"
         sourceUrl={preview.url}
       />
