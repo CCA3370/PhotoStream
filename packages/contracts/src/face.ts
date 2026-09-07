@@ -47,52 +47,19 @@ export const faceFailureCodeSchema = z.enum([
 ]);
 export type FaceFailureCode = z.infer<typeof faceFailureCodeSchema>;
 
-export const faceReadinessConfirmationSchema = z
-  .object({
-    participantConsentRecordsConfirmed: z.boolean(),
-    guardianConsentRequirementsConfirmed: z.boolean(),
-    impactAssessmentCompleted: z.boolean(),
-    providerResourcesValidated: z.boolean(),
-    evaluationGatePassed: z.boolean(),
-    billingAlertsConfigured: z.boolean(),
-    indexedFacesAuthorized: z.boolean(),
-  })
-  .strict();
-export type FaceReadinessConfirmation = z.infer<typeof faceReadinessConfirmationSchema>;
-
-export const faceReadinessViewSchema = faceReadinessConfirmationSchema
-  .extend({
-    globalFeatureEnabled: z.boolean(),
-    passwordAccess: z.boolean(),
-    privacyNoticeConfigured: z.boolean(),
-    complaintContactConfigured: z.boolean(),
-    noticeVersionCurrent: z.boolean(),
-    thresholdVersionQualified: z.boolean(),
-  })
-  .strict();
-export type FaceReadinessView = z.infer<typeof faceReadinessViewSchema>;
-
-export const faceConfigUpdateSchema = z
-  .object({
-    enabled: z.boolean(),
-    noticeVersion: z.string().trim().min(1).max(80),
-    retentionDays: z.number().int().min(1).max(30),
-    readiness: faceReadinessConfirmationSchema,
-  })
-  .strict();
+/**
+ * The per-album switch is the only product-level enablement control. Provider
+ * credentials, index progress and failures are runtime state, not prerequisites
+ * that an administrator has to acknowledge before turning the feature on.
+ */
+export const faceConfigUpdateSchema = z.object({ enabled: z.boolean() }).strict();
 export type FaceConfigUpdate = z.infer<typeof faceConfigUpdateSchema>;
 
 export const faceConfigViewSchema = z
   .object({
     albumId: z.string().uuid(),
     enabled: z.boolean(),
-    readyToEnable: z.boolean(),
-    noticeVersion: z.string().max(80).nullable(),
-    thresholdVersion: z.string().min(1).max(80),
     indexState: faceIndexStateSchema,
-    authorizationConfirmedAt: z.string().datetime().nullable(),
-    retentionDays: z.number().int().min(1).max(30),
-    readiness: faceReadinessViewSchema,
     counts: z
       .object({
         pending: z.number().int().min(0),
@@ -103,7 +70,6 @@ export const faceConfigViewSchema = z
       .strict(),
     lastIndexedAt: z.string().datetime().nullable(),
     lastClusteredAt: z.string().datetime().nullable(),
-    deletionDueAt: z.string().datetime().nullable(),
     lastErrorCode: z.string().max(100).nullable(),
   })
   .strict();
