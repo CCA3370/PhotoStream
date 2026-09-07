@@ -47,6 +47,25 @@ export const faceFailureCodeSchema = z.enum([
 ]);
 export type FaceFailureCode = z.infer<typeof faceFailureCodeSchema>;
 
+export const faceOperationDiagnosticSchema = z
+  .object({
+    id: z.string().uuid(),
+    source: z.enum(["aliyun_imm", "aliyun_oss", "internal"]),
+    operation: z.string().min(1).max(120),
+    providerCode: z.string().max(200).nullable(),
+    providerMessage: z.string().min(1).max(4_000),
+    providerRequestId: z.string().max(256).nullable(),
+    httpStatus: z.number().int().min(0).max(999).nullable(),
+    region: z.string().max(64).nullable(),
+    endpoint: z.string().max(255).nullable(),
+    projectName: z.string().max(128).nullable(),
+    datasetName: z.string().max(128).nullable(),
+    context: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    occurredAt: z.string().datetime(),
+  })
+  .strict();
+export type FaceOperationDiagnostic = z.infer<typeof faceOperationDiagnosticSchema>;
+
 /**
  * The per-album switch is the only product-level enablement control. Provider
  * credentials, index progress and failures are runtime state, not prerequisites
@@ -71,6 +90,7 @@ export const faceConfigViewSchema = z
     lastIndexedAt: z.string().datetime().nullable(),
     lastClusteredAt: z.string().datetime().nullable(),
     lastErrorCode: z.string().max(100).nullable(),
+    recentErrors: z.array(faceOperationDiagnosticSchema).max(5),
   })
   .strict();
 export type FaceConfigView = z.infer<typeof faceConfigViewSchema>;
