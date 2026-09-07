@@ -6,32 +6,14 @@ import {
   faceIndexExclusionsRequestSchema,
 } from "./face.js";
 
-const readiness = {
-  participantConsentRecordsConfirmed: true,
-  guardianConsentRequirementsConfirmed: true,
-  impactAssessmentCompleted: true,
-  providerResourcesValidated: true,
-  evaluationGatePassed: true,
-  billingAlertsConfigured: true,
-  indexedFacesAuthorized: true,
-} as const;
-
 describe("face search contracts", () => {
-  it("requires every enablement confirmation and rejects undeclared fields", () => {
+  it("uses a single strict switch as the album enablement contract", () => {
+    expect(faceConfigUpdateSchema.safeParse({ enabled: true }).success).toBe(true);
+    expect(faceConfigUpdateSchema.safeParse({ enabled: false }).success).toBe(true);
     expect(
       faceConfigUpdateSchema.safeParse({
         enabled: true,
-        noticeVersion: "face-notice-2026-08-31",
-        retentionDays: 30,
-        readiness,
-      }).success,
-    ).toBe(true);
-    expect(
-      faceConfigUpdateSchema.safeParse({
-        enabled: true,
-        noticeVersion: "face-notice-2026-08-31",
-        retentionDays: 31,
-        readiness: { ...readiness, studentName: "禁止保存" },
+        readiness: { evaluationGatePassed: false },
       }).success,
     ).toBe(false);
   });
