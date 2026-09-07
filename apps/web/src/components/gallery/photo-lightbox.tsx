@@ -5,6 +5,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
+  ImageIcon,
   Maximize2Icon,
   Minimize2Icon,
   XIcon,
@@ -23,6 +24,8 @@ import { DownloadButton } from "@/components/gallery/download-button";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
+import { publicMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -36,6 +39,13 @@ type Gesture =
   | { mode: "pan"; start: Point; origin: Point }
   | { mode: "swipe"; start: Point }
   | { mode: "pinch"; distance: number; zoom: number };
+
+interface SignedOriginal {
+  readonly url: string;
+  readonly filename: string;
+  readonly bytes: number;
+  readonly expiresAt: string;
+}
 
 function variant(media: PublicMediaView, kind: "photo_960" | "photo_1920") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
@@ -85,6 +95,8 @@ export function PhotoLightbox({
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
+  const [originalPending, setOriginalPending] = useState(false);
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -145,6 +157,8 @@ export function PhotoLightbox({
     if (selectedId === null) return;
     setLoaded(false);
     setDownloadMenuOpen(false);
+    setOriginalUrl(null);
+    setOriginalPending(false);
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
@@ -263,6 +277,37 @@ export function PhotoLightbox({
     changeZoom(zoom + (event.deltaY < 0 ? 0.35 : -0.35));
   }
 
+  async function loadOriginal(): Promise<void> {
+    if (
+      slug === undefined ||
+      selected === null ||
+      !selected.downloads.original ||
+      originalPending ||
+      originalUrl !== null
+    ) {
+      return;
+    }
+    setOriginalPending(true);
+    try {
+      const signed = await publicMutation<SignedOriginal>(
+        `/api/v1/public/albums/${slug}/downloads/${selected.id}/original`,
+        { idempotencyKey: crypto.randomUUID() },
+      );
+      setLoaded(false);
+      resetView();
+      setOriginalUrl(signed.url);
+    } catch (caught) {
+      toast.add({
+        title: "原图加载失败",
+        description: caught instanceof Error ? caught.message : "暂时无法加载原图，请稍后重试。",
+        type: "error",
+        timeout: 4_000,
+      });
+    } finally {
+      setOriginalPending(false);
+    }
+  }
+
   if (selected === null || large === null) return null;
 
   const canNavigate = items.length > 1;
@@ -273,6 +318,7 @@ export function PhotoLightbox({
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
+  const imageUrl = originalUrl ?? large.url;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -303,7 +349,7 @@ export function PhotoLightbox({
           >
             {!loaded ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
-                正在加载高清图片…
+                {originalPending || originalUrl !== null ? "正在加载原图…" : "正在加载高清图片…"}
               </div>
             ) : null}
             <div
@@ -318,10 +364,11 @@ export function PhotoLightbox({
                 )}
                 draggable={false}
                 fill
+                key={imageUrl}
                 onLoad={() => setLoaded(true)}
                 priority
                 sizes="100vw"
-                src={large.url}
+                src={imageUrl}
                 unoptimized
               />
             </div>
@@ -387,60 +434,43 @@ export function PhotoLightbox({
             <div className="pointer-events-auto mx-auto flex max-w-5xl items-end justify-between gap-3">
               <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
                 {selected.width} × {selected.height} · {Math.round(zoom * 100)}%
+                {originalUrl === null ? null : " · 原图"}
               </div>
 
-              <div className="ml-auto flex min-w-0 max-w-full items-center justify-end gap-1.5 rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl">
-                {slug === undefined ? null : (
-                  <PhotoLikeButton
-                    mediaId={selected.id}
-                    mode="toolbar"
-                    onChange={onLikeChange}
-                    slug={slug}
-                    state={selectedLikeState}
-                  />
-                )}
+              <div className="relative ml-auto min-h-12 min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl">
+                <div
+                  className={cn(
+                    "flex items-center justify-end gap-1.5 transition-[opacity,transform] duration-200 ease-out",
+                    downloadMenuOpen
+                      ? "pointer-events-none absolute inset-1.5 -translate-x-2 scale-[0.98] opacity-0"
+                      : "relative translate-x-0 scale-100 opacity-100",
+                  )}
+                  aria-hidden={downloadMenuOpen}
+                >
+                  {slug === undefined ? null : (
+                    <PhotoLikeButton
+                      mediaId={selected.id}
+                      mode="toolbar"
+                      onChange={onLikeChange}
+                      slug={slug}
+                      state={selectedLikeState}
+                    />
+                  )}
 
-                {canDownload ? (
-                  downloadMenuOpen ? (
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
-                        <DownloadButton
-                          bytes={preview1920.bytes}
-                          className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
-                          kind="preview"
-                          label="普通图"
-                          mediaId={selected.id}
-                          onSuccess={() => setDownloadMenuOpen(false)}
-                          showBytes={false}
-                          slug={slug}
-                        />
-                      ) : null}
-                      {canDownloadOriginal &&
-                      slug !== undefined &&
-                      selected.downloads.originalBytes !== null ? (
-                        <DownloadButton
-                          bytes={selected.downloads.originalBytes}
-                          className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
-                          kind="original"
-                          label="原图"
-                          mediaId={selected.id}
-                          onSuccess={() => setDownloadMenuOpen(false)}
-                          showBytes={false}
-                          slug={slug}
-                        />
-                      ) : null}
-                      <Button
-                        aria-label="收起下载选项"
-                        className="size-9 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.13] hover:text-white"
-                        onClick={() => setDownloadMenuOpen(false)}
-                        size="icon"
-                        type="button"
-                        variant="outline"
-                      >
-                        <XIcon />
-                      </Button>
-                    </div>
-                  ) : (
+                  {canDownloadOriginal ? (
+                    <Button
+                      className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm")}
+                      disabled={originalPending || originalUrl !== null}
+                      onClick={() => void loadOriginal()}
+                      type="button"
+                      variant="outline"
+                    >
+                      <ImageIcon data-icon="inline-start" />
+                      {originalPending ? "加载中…" : originalUrl === null ? "查看原图" : "已加载原图"}
+                    </Button>
+                  ) : null}
+
+                  {canDownload ? (
                     <Button
                       className={toolbarButtonClass}
                       onClick={() => setDownloadMenuOpen(true)}
@@ -450,8 +480,52 @@ export function PhotoLightbox({
                       <DownloadIcon data-icon="inline-start" />
                       下载
                     </Button>
-                  )
-                ) : null}
+                  ) : null}
+                </div>
+
+                <div
+                  className={cn(
+                    "flex min-w-0 items-center justify-end gap-1.5 transition-[opacity,transform] duration-250 ease-out",
+                    downloadMenuOpen
+                      ? "relative translate-x-0 scale-100 opacity-100"
+                      : "pointer-events-none absolute inset-1.5 translate-x-3 scale-[0.98] opacity-0",
+                  )}
+                  aria-hidden={!downloadMenuOpen}
+                >
+                  {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
+                    <DownloadButton
+                      bytes={preview1920.bytes}
+                      className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
+                      kind="preview"
+                      label="普通图"
+                      mediaId={selected.id}
+                      slug={slug}
+                    />
+                  ) : null}
+                  {canDownloadOriginal &&
+                  slug !== undefined &&
+                  selected.downloads.originalBytes !== null ? (
+                    <DownloadButton
+                      bytes={selected.downloads.originalBytes}
+                      className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
+                      kind="original"
+                      label="原图"
+                      mediaId={selected.id}
+                      slug={slug}
+                    />
+                  ) : null}
+                  <Button
+                    aria-label="收起下载选项"
+                    className="size-9 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.13] hover:text-white"
+                    onClick={() => setDownloadMenuOpen(false)}
+                    size="icon"
+                    title="关闭下载选项"
+                    type="button"
+                    variant="outline"
+                  >
+                    <XIcon />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
