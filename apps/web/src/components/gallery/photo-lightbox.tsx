@@ -20,12 +20,14 @@ import {
   useState,
 } from "react";
 
+import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton } from "@/components/gallery/download-button";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
+import { loadDerivedImage } from "@/lib/derived-image-cache";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
@@ -229,12 +231,16 @@ export function PhotoLightbox({
       const item = items[(selectedIndex + offset + items.length) % items.length];
       if (item === undefined) continue;
       const source = variant(item, "photo_1920") ?? variant(item, "photo_960");
-      if (source !== null) {
-        const image = document.createElement("img");
-        image.src = source.url;
-      }
+      if (source === null) continue;
+      void loadDerivedImage({
+        scope: slug ?? item.albumId,
+        mediaId: item.id,
+        kind: source.kind === "photo_1920" ? "photo_1920" : "photo_960",
+        bytes: source.bytes,
+        sourceUrl: source.url,
+      }).catch(() => undefined);
     }
-  }, [items, selectedIndex]);
+  }, [items, selectedIndex, slug]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -395,7 +401,6 @@ export function PhotoLightbox({
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
-  const imageUrl = originalUrl ?? large.url;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -433,21 +438,40 @@ export function PhotoLightbox({
               className="absolute inset-0 origin-center will-change-transform"
               style={{ transform: imageTransform }}
             >
-              <Image
-                alt="活动照片"
-                className={cn(
-                  "object-contain transition-opacity duration-150",
-                  loaded ? "opacity-100" : "opacity-0",
-                )}
-                draggable={false}
-                fill
-                key={imageUrl}
-                onLoad={() => setLoaded(true)}
-                priority
-                sizes="100vw"
-                src={imageUrl}
-                unoptimized
-              />
+              {originalUrl === null ? (
+                <CachedPhotoImage
+                  alt="活动照片"
+                  bytes={large.bytes}
+                  className={cn(
+                    "object-contain transition-opacity duration-150",
+                    loaded ? "opacity-100" : "opacity-0",
+                  )}
+                  draggable={false}
+                  kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
+                  mediaId={selected.id}
+                  onLoad={() => setLoaded(true)}
+                  priority
+                  scope={slug ?? selected.albumId}
+                  sizes="100vw"
+                  sourceUrl={large.url}
+                />
+              ) : (
+                <Image
+                  alt="活动照片"
+                  className={cn(
+                    "object-contain transition-opacity duration-150",
+                    loaded ? "opacity-100" : "opacity-0",
+                  )}
+                  draggable={false}
+                  fill
+                  key={originalUrl}
+                  onLoad={() => setLoaded(true)}
+                  priority
+                  sizes="100vw"
+                  src={originalUrl}
+                  unoptimized
+                />
+              )}
             </div>
           </div>
 
