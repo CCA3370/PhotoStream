@@ -20,6 +20,7 @@ import type { BibService } from "./bib/service.js";
 import type { AppConfig } from "./config.js";
 import { AppError } from "./errors.js";
 import type { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
+import type { FacePublicStateService } from "./face/public-state-service.js";
 import type { FaceService } from "./face/service.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
 import type { FeaturedService } from "./media/featured-service.js";
@@ -50,6 +51,7 @@ export interface BuildAppOptions {
   readonly dashboardService?: DashboardService;
   readonly bibService?: BibService;
   readonly faceService?: FaceService;
+  readonly facePublicStateService?: FacePublicStateService;
   readonly eventBridgeVerifier?: EventBridgeVerifier;
   readonly logger?: NonNullable<FastifyServerOptions["logger"]>;
 }
@@ -272,6 +274,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       authService,
       photoService: options.photoService,
       operationsService: options.operationsService,
+      ...(options.faceService === undefined ? {} : { faceService: options.faceService }),
       config: options.config,
     });
   }
@@ -295,10 +298,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       config: options.config,
     });
   }
-  if (options.faceService !== undefined && options.eventBridgeVerifier !== undefined) {
+  if (
+    options.faceService !== undefined &&
+    options.facePublicStateService !== undefined &&
+    options.eventBridgeVerifier !== undefined
+  ) {
     await registerFaceRoutes(app, {
       authService,
       faceService: options.faceService,
+      facePublicStateService: options.facePublicStateService,
       eventBridgeVerifier: options.eventBridgeVerifier,
       config: options.config,
     });
