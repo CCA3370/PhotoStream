@@ -3,10 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  type DerivedPhotoVariantKind,
-  loadDerivedImage,
-} from "@/lib/derived-image-cache";
+import { type DerivedPhotoVariantKind, loadDerivedImage } from "@/lib/derived-image-cache";
 
 export function CachedPhotoImage({
   alt,
