@@ -2,138 +2,25 @@
   "version": "7",
   "dialect": "postgresql",
   "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1787793577073,
-      "tag": "0000_oval_valkyrie",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1787831628463,
-      "tag": "0001_fluffy_harry_osborn",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1787836917819,
-      "tag": "0002_nappy_rictor",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1787916872355,
-      "tag": "0003_quiet_hedge_knight",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1787917011870,
-      "tag": "0004_dashing_reavers",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1787928602127,
-      "tag": "0005_lethal_hannibal_king",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1787928790597,
-      "tag": "0006_condemned_golden_guardian",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1787963356679,
-      "tag": "0007_productive_lady_ursula",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1787980494087,
-      "tag": "0008_first_skin",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1787998694934,
-      "tag": "0009_same_thor",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1788019425503,
-      "tag": "0010_secret_bill_hollister",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1788087376131,
-      "tag": "0011_freezing_apocalypse",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1788105352062,
-      "tag": "0012_rapid_violations",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1788172048243,
-      "tag": "0013_crazy_plazm",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1788218988602,
-      "tag": "0014_large_radioactive_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1788272458051,
-      "tag": "0015_dapper_rhino",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1788561600000,
-      "tag": "0016_kind_heart",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1788649200000,
-      "tag": "0017_featured_media",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1788780285304,
-      "tag": "0018_cool_nicolaos",
-      "breakpoints": true
-    }
+    {"idx":0,"version":"7","when":1787793577073,"tag":"0000_oval_valkyrie","breakpoints":true},
+    {"idx":1,"version":"7","when":1787831628463,"tag":"0001_fluffy_harry_osborn","breakpoints":true},
+    {"idx":2,"version":"7","when":1787836917819,"tag":"0002_nappy_rictor","breakpoints":true},
+    {"idx":3,"version":"7","when":1787916872355,"tag":"0003_quiet_hedge_knight","breakpoints":true},
+    {"idx":4,"version":"7","when":1787917011870,"tag":"0004_dashing_reavers","breakpoints":true},
+    {"idx":5,"version":"7","when":1787928602127,"tag":"0005_lethal_hannibal_king","breakpoints":true},
+    {"idx":6,"version":"7","when":1787928790597,"tag":"0006_condemned_golden_guardian","breakpoints":true},
+    {"idx":7,"version":"7","when":1787963356679,"tag":"0007_productive_lady_ursula","breakpoints":true},
+    {"idx":8,"version":"7","when":1787980494087,"tag":"0008_first_skin","breakpoints":true},
+    {"idx":9,"version":"7","when":1787998694934,"tag":"0009_same_thor","breakpoints":true},
+    {"idx":10,"version":"7","when":1788019425503,"tag":"0010_secret_bill_hollister","breakpoints":true},
+    {"idx":11,"version":"7","when":1788087376131,"tag":"0011_freezing_apocalypse","breakpoints":true},
+    {"idx":12,"version":"7","when":1788105352062,"tag":"0012_rapid_violations","breakpoints":true},
+    {"idx":13,"version":"7","when":1788172048243,"tag":"0013_crazy_plazm","breakpoints":true},
+    {"idx":14,"version":"7","when":1788218988602,"tag":"0014_large_radioactive_man","breakpoints":true},
+    {"idx":15,"version":"7","when":1788272458051,"tag":"0015_dapper_rhino","breakpoints":true},
+    {"idx":16,"version":"7","when":1788561600000,"tag":"0016_kind_heart","breakpoints":true},
+    {"idx":17,"version":"7","when":1788649200000,"tag":"0017_featured_media","breakpoints":true},
+    {"idx":18,"version":"7","when":1788780285304,"tag":"0018_cool_nicolaos","breakpoints":true},
+    {"idx":19,"version":"7","when":1788793200000,"tag":"0019_face_provider_diagnostics","breakpoints":true}
   ]
 }
