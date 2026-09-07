@@ -230,31 +230,10 @@ const bibConfig: BibConfigView = {
 const faceConfig: FaceConfigView = {
   albumId,
   enabled: false,
-  readyToEnable: false,
-  noticeVersion: "face-notice-2026-08-31",
-  thresholdVersion: "unqualified",
   indexState: "disabled",
-  authorizationConfirmedAt: null,
-  retentionDays: 30,
-  readiness: {
-    participantConsentRecordsConfirmed: false,
-    guardianConsentRequirementsConfirmed: false,
-    impactAssessmentCompleted: false,
-    providerResourcesValidated: false,
-    evaluationGatePassed: false,
-    billingAlertsConfigured: false,
-    indexedFacesAuthorized: false,
-    globalFeatureEnabled: false,
-    passwordAccess: true,
-    privacyNoticeConfigured: true,
-    complaintContactConfigured: true,
-    noticeVersionCurrent: false,
-    thresholdVersionQualified: false,
-  },
   counts: { pending: 0, indexed: 0, failed: 0, excluded: 0 },
   lastIndexedAt: null,
   lastClusteredAt: null,
-  deletionDueAt: null,
   lastErrorCode: null,
 };
 
@@ -294,7 +273,6 @@ export const FaceSearchConsent: Story = {
   render: () => (
     <div className="public-theme min-h-screen bg-background">
       <FaceSearchPanel
-        complaintContact="校内影像管理员"
         noticeVersion="face-notice-2026-08-31"
         onClose={() => undefined}
         privacyNotice="参考照仅用于本相册短期候选检索。"
