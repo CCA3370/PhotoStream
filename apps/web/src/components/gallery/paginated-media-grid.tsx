@@ -148,7 +148,7 @@ export function PaginatedMediaGrid({
           }
         } catch (caught) {
           if (!disposed) {
-            setLiveError(caught instanceof Error ? caught.message : "无法同步新影像");
+            setLiveError(caught instanceof Error ? caught.message : "无法同步新照片");
           }
         }
       } while (refreshQueued && !disposed);
@@ -182,7 +182,7 @@ export function PaginatedMediaGrid({
       setItems((current) => mergeMedia(current, page.items));
       setCursor(page.nextCursor);
     } catch (caught) {
-      setLoadMoreError(caught instanceof Error ? caught.message : "加载更多影像失败");
+      setLoadMoreError(caught instanceof Error ? caught.message : "加载更多照片失败");
     } finally {
       requestInFlight.current = false;
       setLoading(false);
@@ -202,7 +202,7 @@ export function PaginatedMediaGrid({
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void loadMore();
       },
-      { rootMargin: "400px 0px" },
+      { rootMargin: "500px 0px" },
     );
     observer.observe(button);
     return () => observer.disconnect();
@@ -217,7 +217,7 @@ export function PaginatedMediaGrid({
   );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3 sm:gap-4">
       <MediaGrid items={visibleItems} slug={slug} />
       {featuredOnly && cursor !== null ? (
         <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
@@ -226,18 +226,26 @@ export function PaginatedMediaGrid({
         </div>
       ) : cursor === null ? null : (
         <Button
-          className="self-center"
+          className="self-center rounded-full px-4"
           disabled={loading}
           onClick={() => void loadMore()}
           ref={loadMoreRef}
+          size="sm"
           type="button"
           variant="outline"
         >
-          {loading ? "正在加载…" : "加载更多影像"}
+          {loading ? (
+            <>
+              <LoaderCircleIcon className="size-3.5 animate-spin" />
+              正在加载…
+            </>
+          ) : (
+            "加载更多"
+          )}
         </Button>
       )}
       {featuredOnly && cursor === null && visibleItems.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">暂无精选照片</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">暂无精选照片</p>
       ) : null}
       <ErrorDialog
         message={loadMoreError}
@@ -247,7 +255,7 @@ export function PaginatedMediaGrid({
       <ErrorDialog
         message={liveError}
         onClose={() => setLiveError(null)}
-        title="无法实时更新影像"
+        title="无法实时更新照片"
       />
     </div>
   );
