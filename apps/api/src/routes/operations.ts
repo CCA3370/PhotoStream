@@ -26,6 +26,7 @@ import {
 } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
+import type { FaceService } from "../face/service.js";
 import type { OperationsService } from "../media/operations-service.js";
 import type { PhotoService } from "../media/service.js";
 import { anonymousVisitorId, visitorSessionToken } from "../media/visitor-http.js";
@@ -64,6 +65,7 @@ export async function registerOperationsRoutes(
     readonly authService: AuthService;
     readonly photoService: PhotoService;
     readonly operationsService: OperationsService;
+    readonly faceService?: FaceService;
     readonly config: AppConfig;
   },
 ): Promise<void> {
@@ -90,12 +92,29 @@ export async function registerOperationsRoutes(
     },
     async (request) => {
       const session = await requireInternalCsrf(request, options.authService, options.config);
-      return options.photoService.updateAlbum({
-        actor: actorFrom(session),
+      const actor = actorFrom(session);
+      const preserveFace =
+        request.body.access === "public" && options.faceService !== undefined
+          ? await options.faceService.getConfig(actor, request.params.id)
+          : null;
+      const updated = await options.photoService.updateAlbum({
+        actor,
         albumId: request.params.id,
         input: request.body,
         requestId: request.id,
       });
+      // Legacy PhotoService still contains the former public-access teardown.
+      // Restore the authoritative per-album switch immediately in the same API
+      // operation until that compatibility code can be removed independently.
+      if (preserveFace?.enabled === true && options.faceService !== undefined) {
+        await options.faceService.updateConfig({
+          actor,
+          albumId: request.params.id,
+          input: { enabled: true },
+          requestId: `${request.id}:preserve-face-switch`,
+        });
+      }
+      return updated;
     },
   );
 
