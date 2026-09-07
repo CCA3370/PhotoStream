@@ -1,6 +1,6 @@
 "use client";
 
-import type { FaceConfigView } from "@photostream/contracts";
+import type { FaceConfigView, FaceOperationDiagnostic } from "@photostream/contracts";
 import { LoaderCircleIcon, RefreshCcwIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 
@@ -37,12 +37,50 @@ const stateLabels: Record<FaceConfigView["indexState"], string> = {
 
 const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   dateStyle: "medium",
-  timeStyle: "short",
+  timeStyle: "medium",
   timeZone: "Asia/Shanghai",
 });
 
 function dateTime(value: string | null): string {
   return value === null ? "尚无" : dateTimeFormatter.format(new Date(value));
+}
+
+function troubleshootingHint(diagnostic: FaceOperationDiagnostic): string | null {
+  const haystack = `${diagnostic.providerCode ?? ""} ${diagnostic.providerMessage}`.toLowerCase();
+  if (/access.?denied|forbidden|not.?authorized|permission/u.test(haystack)) {
+    return "排查方向：检查 RAM 权限、IMM Project 对 Bucket 的绑定，以及对应对象前缀的读取权限。";
+  }
+  if (/no.?such|not.?found|object.?not.?exist|file.?not.?exist/u.test(haystack)) {
+    return "排查方向：确认对象已经上传，Bucket/地域正确，并检查传给 IMM 的 OSS URI 与对象前缀。";
+  }
+  if (/project|dataset/u.test(haystack) && /invalid|not.?exist|not.?found/u.test(haystack)) {
+    return "排查方向：确认 ALIYUN_IMM_PROJECT_NAME、Dataset 与 cn-beijing 环境完全一致。";
+  }
+  if (/timeout|timed.?out|network|socket|dns|econn/u.test(haystack)) {
+    return "排查方向：检查 API 容器到阿里云 IMM/OSS Endpoint 的 DNS、HTTPS 出站连接和超时。";
+  }
+  return null;
+}
+
+function formatDiagnostic(diagnostic: FaceOperationDiagnostic): string {
+  const contextEntries = Object.entries(diagnostic.context);
+  const hint = troubleshootingHint(diagnostic);
+  return [
+    `时间：${dateTime(diagnostic.occurredAt)}`,
+    `来源：${diagnostic.source}`,
+    `操作：${diagnostic.operation}`,
+    `Provider 错误码：${diagnostic.providerCode ?? "无"}`,
+    `HTTP 状态：${diagnostic.httpStatus ?? "无"}`,
+    `Provider RequestId：${diagnostic.providerRequestId ?? "无"}`,
+    `地域：${diagnostic.region ?? "无"}`,
+    `Endpoint：${diagnostic.endpoint ?? "无"}`,
+    `Project：${diagnostic.projectName ?? "无"}`,
+    `Dataset：${diagnostic.datasetName ?? "无"}`,
+    ...contextEntries.map(([key, value]) => `上下文 ${key}：${String(value)}`),
+    `Provider 消息：${diagnostic.providerMessage}`,
+    ...(hint === null ? [] : [hint]),
+    `诊断 ID：${diagnostic.id}`,
+  ].join("\n");
 }
 
 export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView }>) {
@@ -54,10 +92,21 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePasswordOpen, setDeletePasswordOpen] = useState(false);
   const [statusErrorOpen, setStatusErrorOpen] = useState(false);
+  const latestDiagnostic = config.recentErrors[0] ?? null;
   const dialogError =
     error ??
-    (statusErrorOpen && config.lastErrorCode !== null
-      ? `通用失败码：${config.lastErrorCode}`
+    (statusErrorOpen
+      ? latestDiagnostic === null
+        ? config.lastErrorCode === null
+          ? null
+          : `当前失败码：${config.lastErrorCode}\n该故障发生在结构化诊断上线前，没有可用的 Provider 详情。`
+        : [
+            ...(config.lastErrorCode === null ? [] : [`当前失败码：${config.lastErrorCode}`, ""]),
+            formatDiagnostic(latestDiagnostic),
+            ...(config.recentErrors.length > 1
+              ? [`\n另有 ${config.recentErrors.length - 1} 条较早诊断已保留在数据库中。`]
+              : []),
+          ].join("\n")
       : null);
 
   function accept(next: FaceConfigView, message: string): void {
@@ -193,14 +242,14 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
               <RefreshCcwIcon data-icon="inline-start" />
               重试失败任务
             </Button>
-            {config.lastErrorCode === null ? null : (
+            {config.lastErrorCode === null && latestDiagnostic === null ? null : (
               <Button
                 onClick={() => setStatusErrorOpen(true)}
                 size="sm"
                 type="button"
-                variant="destructive"
+                variant={config.lastErrorCode === null ? "outline" : "destructive"}
               >
-                查看失败详情
+                {config.lastErrorCode === null ? "查看最近错误" : "查看失败详情"}
               </Button>
             )}
           </div>
@@ -260,7 +309,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
           setError(null);
           setStatusErrorOpen(false);
         }}
-        title="人脸功能操作失败"
+        title={statusErrorOpen ? "人脸功能错误详情" : "人脸功能操作失败"}
       />
     </div>
   );
