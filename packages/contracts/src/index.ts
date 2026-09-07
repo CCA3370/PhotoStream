@@ -213,7 +213,6 @@ export const albumViewSchema = z
     previewDownloadEnabled: z.boolean(),
     originalDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
-    complaintContact: z.string().max(300),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -507,7 +506,6 @@ export const publicAlbumViewSchema = z
     previewDownloadEnabled: z.boolean(),
     originalDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
-    complaintContact: z.string().max(300),
     faceSearchAvailable: z.boolean(),
     faceSearchNoticeVersion: z.string().max(80).nullable(),
     bibSearchEnabled: z.boolean(),
@@ -603,7 +601,6 @@ export const updateAlbumRequestSchema = z
     previewDownloadEnabled: z.boolean().optional(),
     originalDownloadEnabled: z.boolean().optional(),
     privacyNotice: z.string().trim().max(2_000).optional(),
-    complaintContact: z.string().trim().max(300).optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "至少提供一个修改字段" });

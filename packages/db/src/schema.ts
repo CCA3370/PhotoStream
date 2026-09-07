@@ -255,7 +255,6 @@ export const albums = pgTable(
     bibRuleUsable: boolean("bib_rule_usable").notNull().default(false),
     bibMappingUsable: boolean("bib_mapping_usable").notNull().default(true),
     privacyNotice: varchar("privacy_notice", { length: 2_000 }).notNull().default(""),
-    complaintContact: varchar("complaint_contact", { length: 300 }).notNull().default(""),
     publishSequence: bigint("publish_sequence", { mode: "number" }).notNull().default(0),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     createdBy: uuid("created_by")

@@ -158,7 +158,8 @@ export class FaceService {
     if (album === undefined) throw this.#notFound();
 
     const existing = await this.#index(options.albumId);
-    if ((existing?.enabled ?? false) === options.input.enabled) return this.#configView(options.albumId);
+    if ((existing?.enabled ?? false) === options.input.enabled)
+      return this.#configView(options.albumId);
 
     const now = new Date();
     const datasetName = existing?.datasetName ?? `face_${randomBytes(18).toString("hex")}`;
@@ -393,7 +394,7 @@ export class FaceService {
     declaration: "self" | "guardian_or_authorized";
     bytes: number;
   }) {
-    const { album, index, sessionDigest, ipDigest } = await this.#authorizedSearchContext(options);
+    const { album, sessionDigest, ipDigest } = await this.#authorizedSearchContext(options);
     if (options.noticeVersion !== this.#config.FACE_SEARCH_NOTICE_VERSION) {
       throw new AppError({
         code: "FACE_SEARCH_DISABLED",
@@ -835,7 +836,10 @@ export class FaceService {
     visitorToken: string | undefined;
     ip: string;
   }) {
-    const album = await this.#photoService.getAuthorizedPublicAlbum(options.slug, options.visitorToken);
+    const album = await this.#photoService.getAuthorizedPublicAlbum(
+      options.slug,
+      options.visitorToken,
+    );
     const index = await this.#index(album.id);
     if (index?.enabled !== true) {
       throw new AppError({

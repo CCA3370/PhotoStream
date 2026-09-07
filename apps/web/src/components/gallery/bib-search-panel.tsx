@@ -416,7 +416,13 @@ export function BibSearchPanel({
         )}
         <div className="flex shrink-0 items-center gap-1.5">
           {resultMode === null ? null : (
-            <Button className="rounded-full" onClick={clearResult} size="sm" type="button" variant="ghost">
+            <Button
+              className="rounded-full"
+              onClick={clearResult}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
               <XIcon data-icon="inline-start" />
               清除
             </Button>
@@ -520,7 +526,10 @@ export function BibSearchPanel({
               <Field>
                 <FieldLabel htmlFor="public-bib-grade">年级</FieldLabel>
                 <Select
-                  items={gradeOptions.map((option) => ({ value: option.id, label: option.displayName }))}
+                  items={gradeOptions.map((option) => ({
+                    value: option.id,
+                    label: option.displayName,
+                  }))}
                   onValueChange={(value) => {
                     setGradeOptionId(typeof value === "string" ? value : null);
                     setClassOptionId(null);
@@ -532,7 +541,8 @@ export function BibSearchPanel({
                       {(value) =>
                         value === null
                           ? "选择年级"
-                          : (gradeOptions.find((option) => option.id === value)?.displayName ?? "选择年级")
+                          : (gradeOptions.find((option) => option.id === value)?.displayName ??
+                            "选择年级")
                       }
                     </SelectValue>
                   </SelectTrigger>
@@ -553,7 +563,10 @@ export function BibSearchPanel({
                   disabled={gradeOptionId === null}
                   items={[
                     { value: "all", label: "全部班级" },
-                    ...classOptions.map((option) => ({ value: option.id, label: option.displayName })),
+                    ...classOptions.map((option) => ({
+                      value: option.id,
+                      label: option.displayName,
+                    })),
                   ]}
                   onValueChange={(value) =>
                     setClassOptionId(typeof value === "string" && value !== "all" ? value : null)
@@ -590,15 +603,20 @@ export function BibSearchPanel({
                         为帮助你在本相册中查找可能包含目标人物的照片，系统会对你主动提交的一张参考照片进行人脸检测，并在本相册的人脸索引中进行相似度检索。该功能仅返回候选照片，不用于身份认证、考勤、评价或其他自动化决策。
                       </p>
                       <p>
-                        浏览器会先在本地纠正照片方向、移除 EXIF/GPS 等元数据并压缩为 JPEG；处理后的参考照片将直接上传至北京地区的临时私有存储，并由阿里云 IMM 完成人脸检测及相似度检索。业务服务只处理随机任务标识和短期候选结果，不建立姓名、学号或人物档案。
+                        浏览器会先在本地纠正照片方向、移除 EXIF/GPS 等元数据并压缩为
+                        JPEG；处理后的参考照片将直接上传至北京地区的临时私有存储，并由阿里云 IMM
+                        完成人脸检测及相似度检索。业务服务只处理随机任务标识和短期候选结果，不建立姓名、学号或人物档案。
                       </p>
                       <p>
-                        参考照片在检索完成后立即发起删除，异常情况下最长保留 1 小时；本次候选结果最长保留 2 小时，过期后自动失效。
+                        参考照片在检索完成后立即发起删除，异常情况下最长保留 1
+                        小时；本次候选结果最长保留 2 小时，过期后自动失效。
                       </p>
                       <p>
                         相似度检索可能出现漏检、误匹配或无结果。候选结果只用于帮助查找照片，不应作为确认任何人身份的唯一依据。
                       </p>
-                      <p>仅可提交本人，或你作为监护人/已经取得明确授权的人物照片。请勿提交无权处理的第三方照片。</p>
+                      <p>
+                        仅可提交本人，或你作为监护人/已经取得明确授权的人物照片。请勿提交无权处理的第三方照片。
+                      </p>
                       {faceSearch.privacyNotice.trim() === "" ? null : (
                         <p>本相册补充说明：{faceSearch.privacyNotice}</p>
                       )}
@@ -610,14 +628,17 @@ export function BibSearchPanel({
                     className="w-fit"
                     onValueChange={(values) => {
                       const value = values[0];
-                      if (value === "self" || value === "guardian_or_authorized") setDeclaration(value);
+                      if (value === "self" || value === "guardian_or_authorized")
+                        setDeclaration(value);
                     }}
                     spacing={2}
                     value={[declaration]}
                     variant="outline"
                   >
                     <ToggleGroupItem value="self">本人</ToggleGroupItem>
-                    <ToggleGroupItem value="guardian_or_authorized">监护人 / 已获授权</ToggleGroupItem>
+                    <ToggleGroupItem value="guardian_or_authorized">
+                      监护人 / 已获授权
+                    </ToggleGroupItem>
                   </ToggleGroup>
 
                   <div className="flex items-start gap-2.5 rounded-xl bg-muted/35 p-3">
@@ -626,7 +647,10 @@ export function BibSearchPanel({
                       id="face-search-consent"
                       onCheckedChange={setAcknowledged}
                     />
-                    <label className="text-xs leading-5 text-muted-foreground" htmlFor="face-search-consent">
+                    <label
+                      className="text-xs leading-5 text-muted-foreground"
+                      htmlFor="face-search-consent"
+                    >
                       我已阅读并理解上述处理说明，并单独同意为本次找图处理所提交的参考照片；我确认提交的是本人照片，或已获得相应授权。
                     </label>
                   </div>
@@ -635,16 +659,23 @@ export function BibSearchPanel({
 
               {faceStage === "choose" ? (
                 <div className="rounded-2xl border border-dashed p-5 text-center">
-                  <ScanFaceIcon aria-hidden="true" className="mx-auto mb-3 size-8 text-muted-foreground" />
+                  <ScanFaceIcon
+                    aria-hidden="true"
+                    className="mx-auto mb-3 size-8 text-muted-foreground"
+                  />
                   <p className="text-sm font-medium">选择一张清晰的单人照片</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     支持 JPEG、PNG、WebP；HEIC/HEIF 需设备能够原生解码。
                   </p>
-                  <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+                  <label
+                    className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                    htmlFor="face-reference-file"
+                  >
                     选择照片
                     <Input
                       accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                       className="sr-only"
+                      id="face-reference-file"
                       onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
                       type="file"
                     />
@@ -713,7 +744,11 @@ export function BibSearchPanel({
                   </Button>
                 ) : null}
                 {faceStage === "consent" ? (
-                  <Button disabled={!acknowledged} onClick={() => setFaceStage("choose")} type="button">
+                  <Button
+                    disabled={!acknowledged}
+                    onClick={() => setFaceStage("choose")}
+                    type="button"
+                  >
                     同意并继续
                   </Button>
                 ) : null}
@@ -733,11 +768,17 @@ export function BibSearchPanel({
               </>
             ) : (
               <Button
-                disabled={pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)}
+                disabled={
+                  pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)
+                }
                 onClick={() => void search()}
                 type="button"
               >
-                {mode === "attributes" ? <SlidersHorizontalIcon data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}
+                {mode === "attributes" ? (
+                  <SlidersHorizontalIcon data-icon="inline-start" />
+                ) : (
+                  <SearchIcon data-icon="inline-start" />
+                )}
                 {pending ? "查找中…" : "查找"}
               </Button>
             )}

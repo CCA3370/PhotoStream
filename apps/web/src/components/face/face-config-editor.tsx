@@ -139,7 +139,9 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {pending ? <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" /> : null}
+              {pending ? (
+                <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+              ) : null}
               <Switch
                 aria-label="人脸找图"
                 checked={config.enabled}
