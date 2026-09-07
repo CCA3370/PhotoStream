@@ -2,7 +2,6 @@
 
 import type { PublicMediaView } from "@photostream/contracts";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { Maximize2Icon } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -34,42 +33,40 @@ function MediaTile({
   slug?: string;
 }>) {
   const preview = variant(media, "photo_480") ?? variant(media, "photo_960");
+  const portrait = media.height > media.width;
   if (preview === null) {
     return (
       <div
         aria-hidden="true"
-        className="aspect-[4/3] rounded-lg bg-muted"
+        className="aspect-[4/3] rounded-[10px] bg-muted sm:rounded-xl"
         data-media-id={media.id}
       />
     );
   }
   return (
     <div
-      className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60 transition hover:ring-border"
+      className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-150 active:scale-[0.985] sm:rounded-xl sm:hover:-translate-y-px sm:hover:shadow-md sm:hover:ring-border"
       data-media-id={media.id}
     >
       <Image
         alt="活动照片"
+        className={portrait ? "bg-muted object-contain" : "object-cover"}
         fill
-        sizes="(max-width: 479px) 50vw, (max-width: 767px) 33vw, (max-width: 1279px) 25vw, 20vw"
+        sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1279px) 17vw, 15vw"
         src={preview.url}
-        style={{ objectFit: "cover" }}
         unoptimized
       />
-      <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10 group-focus-within:bg-black/10" />
+      <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-150 sm:group-hover:bg-black/[0.06] sm:group-focus-within:bg-black/[0.06]" />
       <button
         aria-label="打开活动照片"
-        className="absolute inset-0 z-10 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="absolute inset-0 z-10 touch-manipulation rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:rounded-xl"
         onClick={() => onOpen(media.id)}
         type="button"
       >
         <span className="sr-only">打开活动照片</span>
       </button>
-      <div className="pointer-events-none absolute top-2 right-2 z-20 grid size-8 place-items-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <Maximize2Icon aria-hidden="true" className="size-4" />
-      </div>
       {slug === undefined ? null : (
-        <div className="absolute bottom-1 left-1 z-20">
+        <div className="absolute bottom-1 left-1 z-20 sm:bottom-1.5 sm:left-1.5">
           <PhotoLikeButton
             mediaId={media.id}
             mode="thumbnail"
@@ -84,12 +81,16 @@ function MediaTile({
 }
 
 function gridLayout(width: number): { columns: number; gap: number } {
-  if (width < 480) return { columns: 2, gap: 8 };
-  if (width < 768) return { columns: 3, gap: 8 };
-  if (width < 1_024) return { columns: 4, gap: 10 };
-  if (width < 1_440) return { columns: 5, gap: 10 };
-  return { columns: 6, gap: 12 };
+  if (width < 480) return { columns: 2, gap: 5 };
+  if (width < 640) return { columns: 3, gap: 6 };
+  if (width < 768) return { columns: 4, gap: 7 };
+  if (width < 1_024) return { columns: 5, gap: 8 };
+  if (width < 1_280) return { columns: 6, gap: 9 };
+  return { columns: 7, gap: 10 };
 }
+
+const staticGridClass =
+  "grid grid-cols-2 gap-[5px] min-[480px]:grid-cols-3 min-[480px]:gap-1.5 sm:grid-cols-4 sm:gap-[7px] md:grid-cols-5 md:gap-2 lg:grid-cols-6 lg:gap-[9px] xl:grid-cols-7 xl:gap-2.5";
 
 function VirtualMediaGrid({
   items,
@@ -105,7 +106,7 @@ function VirtualMediaGrid({
   slug?: string;
 }>) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = useState({ columns: 2, gap: 8, width: 0, scrollMargin: 0 });
+  const [layout, setLayout] = useState({ columns: 2, gap: 5, width: 0, scrollMargin: 0 });
   const rowCount = Math.ceil(items.length / layout.columns);
   const tileWidth =
     layout.width === 0 ? 240 : (layout.width - layout.gap * (layout.columns - 1)) / layout.columns;
@@ -114,7 +115,7 @@ function VirtualMediaGrid({
     count: rowCount,
     estimateSize: () => rowStep,
     getItemKey: (index) => items[index * layout.columns]?.id ?? index,
-    overscan: 4,
+    overscan: 5,
     scrollMargin: layout.scrollMargin,
   });
 
@@ -122,12 +123,12 @@ function VirtualMediaGrid({
     const container = containerRef.current;
     if (container === null) return;
     const measure = () => {
-      const width = container.getBoundingClientRect().width;
-      const next = gridLayout(width);
+      const bounds = container.getBoundingClientRect();
+      const next = gridLayout(bounds.width);
       setLayout({
         ...next,
-        width,
-        scrollMargin: container.getBoundingClientRect().top + window.scrollY,
+        width: bounds.width,
+        scrollMargin: bounds.top + window.scrollY,
       });
     };
     measure();
@@ -146,9 +147,9 @@ function VirtualMediaGrid({
 
   if (layout.width === 0) {
     return (
-      <section aria-label="活动影像网格" className="w-full" ref={containerRef}>
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-          {items.slice(0, 18).map((media) => (
+      <section aria-label="活动照片网格" className="w-full" ref={containerRef}>
+        <div className={staticGridClass}>
+          {items.slice(0, 21).map((media) => (
             <MediaTile
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
@@ -165,7 +166,7 @@ function VirtualMediaGrid({
 
   return (
     <section
-      aria-label="活动影像网格"
+      aria-label="活动照片网格"
       className="relative w-full"
       data-virtualized="true"
       ref={containerRef}
@@ -278,7 +279,7 @@ export function MediaGrid({
 
   if (items.length === 0) {
     return (
-      <Empty className="min-h-64 rounded-xl border border-dashed">
+      <Empty className="min-h-48 rounded-xl border border-dashed sm:min-h-56">
         <EmptyHeader>
           <EmptyTitle>暂无照片</EmptyTitle>
         </EmptyHeader>
@@ -297,7 +298,7 @@ export function MediaGrid({
           {...(slug === undefined ? {} : { slug })}
         />
       ) : (
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <div className={staticGridClass}>
           {items.map((media) => (
             <MediaTile
               key={media.id}
