@@ -233,7 +233,7 @@ export function PhotoLightbox({
       const source = variant(item, "photo_1920") ?? variant(item, "photo_960");
       if (source === null) continue;
       void loadDerivedImage({
-        scope: slug ?? item.albumId,
+        scope: slug ?? "public-media",
         mediaId: item.id,
         kind: source.kind === "photo_1920" ? "photo_1920" : "photo_960",
         bytes: source.bytes,
@@ -451,7 +451,7 @@ export function PhotoLightbox({
                   mediaId={selected.id}
                   onLoad={() => setLoaded(true)}
                   priority
-                  scope={slug ?? selected.albumId}
+                  scope={slug ?? "public-media"}
                   sizes="100vw"
                   sourceUrl={large.url}
                 />
