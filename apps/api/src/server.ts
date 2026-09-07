@@ -9,6 +9,7 @@ import { BibService } from "./bib/service.js";
 import { type AppConfig, loadConfig } from "./config.js";
 import { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import { AliyunFaceProvider, UnavailableFaceProvider } from "./face/provider.js";
+import { FacePublicStateService } from "./face/public-state-service.js";
 import {
   AliyunFaceReferenceStorage,
   UnavailableFaceReferenceStorage,
@@ -98,6 +99,7 @@ const faceService = new FaceService({
   provider: faceProvider,
   references: faceReferenceStorage,
 });
+const facePublicStateService = new FacePublicStateService({ database, config, photoService });
 const eventBridgeVerifier = new EventBridgeVerifier(config);
 await bibService.assertKeyCoverage();
 const app = await buildApp({
@@ -112,6 +114,7 @@ const app = await buildApp({
   dashboardService,
   bibService,
   faceService,
+  facePublicStateService,
   eventBridgeVerifier,
 });
 const deletionPoll = setInterval(() => {
