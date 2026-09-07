@@ -9,21 +9,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { ALIYUN_REGION, type AppConfig } from "../config.js";
@@ -107,7 +93,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
 }
 
-function firstString(records: readonly (Record<string, unknown> | null)[], keys: readonly string[]) {
+function firstString(
+  records: readonly (Record<string, unknown> | null)[],
+  keys: readonly string[],
+) {
   for (const record of records) {
     if (record === null) continue;
     for (const key of keys) {
@@ -118,7 +107,10 @@ function firstString(records: readonly (Record<string, unknown> | null)[], keys:
   return null;
 }
 
-function firstNumber(records: readonly (Record<string, unknown> | null)[], keys: readonly string[]) {
+function firstNumber(
+  records: readonly (Record<string, unknown> | null)[],
+  keys: readonly string[],
+) {
   for (const record of records) {
     if (record === null) continue;
     for (const key of keys) {
@@ -1641,12 +1633,16 @@ export class FaceService {
             if (attempts >= 20) {
               source = "internal";
               operation = "IndexConfirmation";
-              await this.#recordDiagnostic(row.task.albumId, new Error("index_confirmation_timeout"), {
-                source,
-                operation,
-                datasetName: row.datasetName,
-                context: { mediaId: row.task.mediaId, attempts },
-              });
+              await this.#recordDiagnostic(
+                row.task.albumId,
+                new Error("index_confirmation_timeout"),
+                {
+                  source,
+                  operation,
+                  datasetName: row.datasetName,
+                  context: { mediaId: row.task.mediaId, attempts },
+                },
+              );
               await this.#database
                 .update(schema.albumFaceIndexes)
                 .set({
@@ -1802,7 +1798,9 @@ export class FaceService {
       .where(lt(schema.faceIntegrationEvents.processedAt, historyCutoff));
     await this.#database
       .delete(schema.faceOperationDiagnostics)
-      .where(lt(schema.faceOperationDiagnostics.occurredAt, new Date(now.getTime() - 30 * 86_400_000)));
+      .where(
+        lt(schema.faceOperationDiagnostics.occurredAt, new Date(now.getTime() - 30 * 86_400_000)),
+      );
   }
 
   #notFound() {
