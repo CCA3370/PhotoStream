@@ -234,6 +234,7 @@ const faceConfig: FaceConfigView = {
   lastIndexedAt: null,
   lastClusteredAt: null,
   lastErrorCode: null,
+  recentErrors: [],
 };
 
 export const SettingsAndStatistics: Story = {
