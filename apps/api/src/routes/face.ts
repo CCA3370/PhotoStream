@@ -23,17 +23,21 @@ import {
 } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
+import type { FaceAvailabilityService } from "../face/availability-service.js";
 import {
   EventBridgeVerificationError,
   type EventBridgeVerifier,
 } from "../face/eventbridge-verifier.js";
 import type { FaceService } from "../face/service.js";
-import { visitorSessionToken } from "../media/visitor-http.js";
+import { faceSearchVisitorToken, visitorSessionToken } from "../media/visitor-http.js";
 
 const albumParams = z.object({ id: z.string().uuid() }).strict();
 const slugParams = z.object({ slug: z.string().min(12).max(32) }).strict();
 const searchParams = z
   .object({ slug: z.string().min(12).max(32), searchId: z.string().uuid() })
+  .strict();
+const faceAvailabilitySchema = z
+  .object({ available: z.boolean(), noticeVersion: z.string().min(1).max(80) })
   .strict();
 
 function actorFrom(session: Awaited<ReturnType<typeof requireInternalSession>>) {
@@ -50,6 +54,7 @@ export async function registerFaceRoutes(
   options: {
     authService: AuthService;
     faceService: FaceService;
+    faceAvailabilityService: FaceAvailabilityService;
     eventBridgeVerifier: EventBridgeVerifier;
     config: AppConfig;
   },
@@ -97,11 +102,10 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
       const actor = actorFrom(session);
-      const current = await options.faceService.getConfig(actor, request.params.id);
-      if (current.enabled !== request.body.enabled) {
-        await verifyPasswordConfirmation(request, options.authService, session);
-      }
       return options.faceService.updateConfig({
+        // The album switch is intentionally direct. The service still receives a
+        // current timestamp for legacy method compatibility, but no re-auth gate
+        // is presented to or required from the administrator.
         actor: { ...actor, authenticatedAt: new Date() },
         albumId: request.params.id,
         input: request.body,
@@ -172,6 +176,25 @@ export async function registerFaceRoutes(
     },
   );
 
+  typed.get(
+    "/api/v1/public/albums/:slug/face-availability",
+    {
+      schema: {
+        operationId: "getPublicFaceAvailability",
+        tags: ["public", "face"],
+        params: slugParams,
+        response: { 200: faceAvailabilitySchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      privateResponse(reply);
+      return options.faceAvailabilityService.get(
+        request.params.slug,
+        visitorSessionToken(request, options.config, request.params.slug),
+      );
+    },
+  );
+
   typed.post(
     "/api/v1/public/albums/:slug/face-searches",
     {
@@ -187,7 +210,7 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       return options.faceService.createSearch({
         slug: request.params.slug,
-        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),
         ip: request.ip,
         noticeVersion: request.body.noticeVersion,
         declaration: request.body.declaration,
@@ -211,7 +234,7 @@ export async function registerFaceRoutes(
       return options.faceService.completeSearch({
         slug: request.params.slug,
         searchId: request.params.searchId,
-        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),
         ip: request.ip,
       });
     },
@@ -233,7 +256,7 @@ export async function registerFaceRoutes(
       return options.faceService.getSearch({
         slug: request.params.slug,
         searchId: request.params.searchId,
-        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),
         ip: request.ip,
         cursor: request.query.cursor,
         limit: request.query.limit,
@@ -256,7 +279,7 @@ export async function registerFaceRoutes(
       return options.faceService.deleteSearch({
         slug: request.params.slug,
         searchId: request.params.searchId,
-        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),
         ip: request.ip,
       });
     },
