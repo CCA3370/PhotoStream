@@ -6,7 +6,7 @@ function cacheKey(slug: string, mediaId: string, bytes: number | null): Request 
     window.location.origin,
   );
   if (bytes !== null) url.searchParams.set("bytes", String(bytes));
-  return new Request(url, { method: "GET" });
+  return new Request(url.toString(), { method: "GET" });
 }
 
 function supportsCacheStorage(): boolean {
