@@ -5,7 +5,7 @@ import type {
   FaceSearchView,
   PublicMediaView,
 } from "@photostream/contracts";
-import { ScanFaceIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
+import { ScanFaceIcon, ScanSearchIcon, SearchIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -611,9 +611,6 @@ export function BibSearchPanel({
                             小时；本次候选结果最长保留 2 小时。结果可能存在漏检、误匹配或无结果。
                           </p>
                           <p>请仅提交本人或已取得明确授权的人物照片。</p>
-                          {faceSearch.privacyNotice.trim() === "" ? null : (
-                            <p>本相册补充说明：{faceSearch.privacyNotice}</p>
-                          )}
                         </AlertDescription>
                       </Alert>
 
@@ -708,7 +705,7 @@ export function BibSearchPanel({
             </div>
           </div>
 
-          <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-5">
+          <DialogFooter className="shrink-0 border-t bg-background px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-3">
             {mode === "face" && faceSearch !== undefined ? (
               <>
                 {faceWorking ? (
@@ -748,18 +745,14 @@ export function BibSearchPanel({
               </>
             ) : (
               <Button
-                className="max-sm:w-full"
+                className="h-12 rounded-xl text-base font-medium max-sm:w-full sm:min-w-32"
                 disabled={
                   pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)
                 }
                 onClick={() => void search()}
                 type="button"
               >
-                {mode === "attributes" ? (
-                  <SlidersHorizontalIcon data-icon="inline-start" />
-                ) : (
-                  <SearchIcon data-icon="inline-start" />
-                )}
+                <ScanSearchIcon data-icon="inline-start" />
                 {pending ? "查找中…" : "查找"}
               </Button>
             )}
