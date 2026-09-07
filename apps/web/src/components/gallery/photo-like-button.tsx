@@ -76,8 +76,8 @@ export function PhotoLikeButton({
         aria-pressed={liked}
         className={cn(
           mode === "thumbnail"
-            ? "relative top-0.5 h-6 gap-0.5 border-0 bg-transparent px-0.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white hover:opacity-90"
-            : "h-9 gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white",
+            ? "h-7 touch-manipulation gap-1 rounded-full border border-white/10 bg-black/40 px-2 text-white shadow-sm backdrop-blur-md hover:bg-black/55 hover:text-white"
+            : "h-9 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white",
           "active:not-aria-[haspopup]:translate-y-0",
           className,
         )}
@@ -85,7 +85,7 @@ export function PhotoLikeButton({
         onClick={() => void toggle()}
         title={liked ? "取消点赞" : "点赞"}
         type="button"
-        variant={mode === "thumbnail" ? "ghost" : "outline"}
+        variant="outline"
       >
         {heart}
         <span
