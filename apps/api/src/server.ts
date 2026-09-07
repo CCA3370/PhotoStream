@@ -6,7 +6,9 @@ import { argon2PasswordHasher } from "./auth/password.js";
 import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { UserAdminService } from "./auth/user-admin-service.js";
 import { BibService } from "./bib/service.js";
-import { loadConfig } from "./config.js";
+import { type AppConfig, loadConfig } from "./config.js";
+import { FaceAvailabilityService } from "./face/availability-service.js";
+import { directSwitchFaceDatabase } from "./face/direct-switch-database.js";
 import { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import { AliyunFaceProvider, UnavailableFaceProvider } from "./face/provider.js";
 import {
@@ -72,20 +74,63 @@ const userAdminService = new UserAdminService({
 const operationsService = new OperationsService({ database, storage, config, cdnInvalidator });
 const dashboardService = new DashboardService({ database, storage });
 const bibService = new BibService({ database, config, photoService });
-const faceProvider = config.FACE_SEARCH_GLOBAL_ENABLED
-  ? new AliyunFaceProvider(config)
+
+function faceInfrastructureConfigured(value: AppConfig): boolean {
+  return (
+    value.ALIYUN_FACE_ACCESS_KEY_ID !== undefined &&
+    value.ALIYUN_FACE_ACCESS_KEY_SECRET !== undefined &&
+    value.ALIYUN_ACCOUNT_ID !== undefined &&
+    value.ALIYUN_IMM_PROJECT_NAME !== undefined &&
+    value.ALIYUN_OSS_MEDIA_BUCKET !== undefined &&
+    value.ALIYUN_OSS_FACE_REFERENCE_BUCKET !== undefined
+  );
+}
+
+// The per-album switch is the product control. These legacy config fields are
+// forced into a non-gating state for FaceService compatibility and no longer
+// determine whether an administrator is allowed to turn the feature on.
+const faceRuntimeConfig: AppConfig = {
+  ...config,
+  FACE_SEARCH_GLOBAL_ENABLED: true,
+  FACE_SEARCH_THRESHOLD_VERSION:
+    config.FACE_SEARCH_THRESHOLD_VERSION === "unqualified"
+      ? "direct-switch"
+      : config.FACE_SEARCH_THRESHOLD_VERSION,
+};
+const hasFaceInfrastructure = faceInfrastructureConfigured(config);
+const faceProvider = hasFaceInfrastructure
+  ? new AliyunFaceProvider(faceRuntimeConfig)
   : new UnavailableFaceProvider();
-const faceReferenceStorage = config.FACE_SEARCH_GLOBAL_ENABLED
-  ? new AliyunFaceReferenceStorage(config)
+const faceReferenceStorage = hasFaceInfrastructure
+  ? new AliyunFaceReferenceStorage(faceRuntimeConfig)
   : new UnavailableFaceReferenceStorage();
+
+// FaceService historically asked PhotoService to require password access.
+// Drop only that policy option; ordinary album authorization remains intact.
+const facePhotoService = new Proxy(photoService, {
+  get(target, property, receiver) {
+    if (property === "getAuthorizedPublicAlbum") {
+      return (slug: string, visitorToken: string | undefined) =>
+        target.getAuthorizedPublicAlbum(slug, visitorToken);
+    }
+    const member = Reflect.get(target, property, receiver);
+    return typeof member === "function" ? member.bind(target) : member;
+  },
+}) as PhotoService;
+
 const faceService = new FaceService({
-  database,
-  config,
-  photoService,
+  database: directSwitchFaceDatabase(database),
+  config: faceRuntimeConfig,
+  photoService: facePhotoService,
   provider: faceProvider,
   references: faceReferenceStorage,
 });
-const eventBridgeVerifier = new EventBridgeVerifier(config);
+const faceAvailabilityService = new FaceAvailabilityService({
+  database,
+  config: faceRuntimeConfig,
+  photoService,
+});
+const eventBridgeVerifier = new EventBridgeVerifier(faceRuntimeConfig);
 await bibService.assertKeyCoverage();
 const app = await buildApp({
   config,
@@ -99,6 +144,7 @@ const app = await buildApp({
   dashboardService,
   bibService,
   faceService,
+  faceAvailabilityService,
   eventBridgeVerifier,
 });
 const deletionPoll = setInterval(() => {
@@ -178,11 +224,4 @@ async function shutdown(signal: string): Promise<void> {
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
-try {
-  await app.listen({ host: config.HOST, port: config.PORT });
-} catch (error) {
-  app.log.fatal({ errorName: error instanceof Error ? error.name : "unknown" }, "startup failed");
-  await broker.close();
-  await pool.end();
-  process.exitCode = 1;
-}
+await app.listen({ host: config.HOST, port: config.PORT });
