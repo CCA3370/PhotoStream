@@ -12,6 +12,7 @@ export function CachedPhotoImage({
   alt,
   bytes,
   className,
+  draggable,
   kind,
   mediaId,
   onLoad,
@@ -23,6 +24,7 @@ export function CachedPhotoImage({
   alt: string;
   bytes: number;
   className?: string;
+  draggable?: boolean;
   kind: DerivedPhotoVariantKind;
   mediaId: string;
   onLoad?: () => void;
@@ -92,6 +94,7 @@ export function CachedPhotoImage({
         <Image
           alt={alt}
           className={className}
+          draggable={draggable}
           fill
           onLoad={onLoad}
           priority={priority}
