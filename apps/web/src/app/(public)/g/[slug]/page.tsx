@@ -1,4 +1,4 @@
-import type { PublicAlbumView, PublicMediaView } from "@photostream/contracts";
+import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostream/contracts";
 import Link from "next/link";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
@@ -21,9 +21,10 @@ interface FeaturedList {
   readonly mediaIds: readonly string[];
 }
 
-interface FaceAvailability {
-  readonly available: boolean;
+interface FaceState {
+  readonly enabled: boolean;
   readonly noticeVersion: string;
+  readonly indexState: FaceIndexState;
 }
 
 export default async function GalleryPage({
@@ -57,14 +58,14 @@ export default async function GalleryPage({
     : album.categories.find((candidate) => candidate.id === requestedCategory);
   const mediaPath = new URLSearchParams({ limit: "30" });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
-  const [media, featured, faceAvailability] = await Promise.all([
+  const [media, featured, faceState] = await Promise.all([
     serverApi<MediaList>(`/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`),
     serverApi<FeaturedList>(`/api/v1/public/albums/${slug}/featured`),
-    serverApi<FaceAvailability>(`/api/v1/public/albums/${slug}/face-availability`),
+    serverApi<FaceState>(`/api/v1/public/albums/${slug}/face-state`),
   ]);
-  const faceSearch = faceAvailability.available
+  const faceSearch = faceState.enabled
     ? {
-        noticeVersion: faceAvailability.noticeVersion,
+        noticeVersion: faceState.noticeVersion,
         privacyNotice: album.privacyNotice,
       }
     : undefined;
