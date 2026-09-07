@@ -459,14 +459,21 @@ export function PhotoLightbox({
 
                   {canDownloadOriginal ? (
                     <Button
-                      className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm")}
+                      className={cn(
+                        toolbarButtonClass,
+                        "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm",
+                      )}
                       disabled={originalPending || originalUrl !== null}
                       onClick={() => void loadOriginal()}
                       type="button"
                       variant="outline"
                     >
                       <ImageIcon data-icon="inline-start" />
-                      {originalPending ? "加载中…" : originalUrl === null ? "查看原图" : "已加载原图"}
+                      {originalPending
+                        ? "加载中…"
+                        : originalUrl === null
+                          ? "查看原图"
+                          : "已加载原图"}
                     </Button>
                   ) : null}
 
