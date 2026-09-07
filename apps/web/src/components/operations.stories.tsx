@@ -148,7 +148,6 @@ const album: AlbumView = {
   previewDownloadEnabled: false,
   originalDownloadEnabled: false,
   privacyNotice: "仅用于校内活动记录。",
-  complaintContact: "校内影像管理员",
   createdAt,
   updatedAt: createdAt,
 };

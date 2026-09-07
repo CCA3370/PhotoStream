@@ -95,8 +95,16 @@ export function PhotoLightbox({
       const renderedWidth = selected.width * fit * nextZoom;
       const renderedHeight = selected.height * fit * nextZoom;
       return {
-        x: clamp(next.x, -Math.max(0, (renderedWidth - rect.width) / 2), Math.max(0, (renderedWidth - rect.width) / 2)),
-        y: clamp(next.y, -Math.max(0, (renderedHeight - rect.height) / 2), Math.max(0, (renderedHeight - rect.height) / 2)),
+        x: clamp(
+          next.x,
+          -Math.max(0, (renderedWidth - rect.width) / 2),
+          Math.max(0, (renderedWidth - rect.width) / 2),
+        ),
+        y: clamp(
+          next.y,
+          -Math.max(0, (renderedHeight - rect.height) / 2),
+          Math.max(0, (renderedHeight - rect.height) / 2),
+        ),
       };
     },
     [selected],
@@ -298,10 +306,16 @@ export function PhotoLightbox({
                 正在加载高清图片…
               </div>
             ) : null}
-            <div className="absolute inset-0 origin-center will-change-transform" style={{ transform: imageTransform }}>
+            <div
+              className="absolute inset-0 origin-center will-change-transform"
+              style={{ transform: imageTransform }}
+            >
               <Image
                 alt="活动照片"
-                className={cn("object-contain transition-opacity duration-150", loaded ? "opacity-100" : "opacity-0")}
+                className={cn(
+                  "object-contain transition-opacity duration-150",
+                  loaded ? "opacity-100" : "opacity-0",
+                )}
                 draggable={false}
                 fill
                 onLoad={() => setLoaded(true)}
@@ -401,7 +415,9 @@ export function PhotoLightbox({
                           slug={slug}
                         />
                       ) : null}
-                      {canDownloadOriginal && slug !== undefined && selected.downloads.originalBytes !== null ? (
+                      {canDownloadOriginal &&
+                      slug !== undefined &&
+                      selected.downloads.originalBytes !== null ? (
                         <DownloadButton
                           bytes={selected.downloads.originalBytes}
                           className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}

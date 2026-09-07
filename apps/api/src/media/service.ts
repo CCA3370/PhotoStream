@@ -81,7 +81,6 @@ function albumView(row: typeof schema.albums.$inferSelect): AlbumView {
     previewDownloadEnabled: row.previewDownloadEnabled,
     originalDownloadEnabled: row.originalDownloadEnabled,
     privacyNotice: row.privacyNotice,
-    complaintContact: row.complaintContact,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -1564,7 +1563,6 @@ export class PhotoService {
         previewDownloadEnabled: album.previewDownloadEnabled,
         originalDownloadEnabled: album.originalDownloadEnabled,
         privacyNotice: album.privacyNotice,
-        complaintContact: album.complaintContact,
         faceSearchAvailable,
         faceSearchNoticeVersion: faceSearchAvailable ? (faceIndex.noticeVersion ?? null) : null,
         bibSearchEnabled,
