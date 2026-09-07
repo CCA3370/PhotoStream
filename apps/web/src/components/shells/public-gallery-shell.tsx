@@ -19,7 +19,7 @@ export function PublicGalleryShell({
 }: PublicGalleryShellProps) {
   return (
     <Toaster>
-      <div className="public-theme min-h-screen bg-background pb-14 text-foreground">
+      <div className="public-theme min-h-dvh bg-background pb-[calc(2.5rem+env(safe-area-inset-bottom))] text-foreground">
         <a
           className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
           href="#gallery-main"
@@ -27,45 +27,44 @@ export function PublicGalleryShell({
           跳到主要内容
         </a>
 
-        <header className="border-b bg-gradient-to-b from-muted/40 via-background to-background">
-          <div className="mx-auto max-w-[1560px] px-4 pt-5 pb-4 sm:px-6 sm:pt-7 sm:pb-5 lg:px-8">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-medium tracking-wide text-muted-foreground sm:text-xs">
-                PhotoStream · 北航实验学校中学部
-              </p>
+        <header className="border-b bg-background/96 supports-backdrop-filter:bg-background/88 supports-backdrop-filter:backdrop-blur-xl">
+          <div className="mx-auto max-w-[1560px] px-3.5 py-3 sm:px-5 sm:py-3.5 lg:px-7">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] font-medium text-muted-foreground sm:text-xs">
+                  北航实验学校中学部
+                </p>
+                <h1 className="mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-xl lg:text-2xl">
+                  {albumTitle}
+                </h1>
+                {albumDescription ? (
+                  <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-muted-foreground sm:text-sm">
+                    {albumDescription}
+                  </p>
+                ) : null}
+              </div>
+
               <Badge
-                className="h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px] sm:h-8 sm:px-3 sm:text-xs"
+                className="mt-0.5 h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px] sm:text-xs"
                 variant={status === "直播中" ? "default" : "secondary"}
               >
-                <RadioIcon aria-hidden="true" className="size-3.5" />
+                <RadioIcon aria-hidden="true" className="size-3" />
                 {status}
               </Badge>
-            </div>
-
-            <div className="mt-4 max-w-3xl sm:mt-5">
-              <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl lg:text-4xl">
-                {albumTitle}
-              </h1>
-              {albumDescription ? (
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:mt-2.5 sm:text-[15px]">
-                  {albumDescription}
-                </p>
-              ) : null}
             </div>
           </div>
         </header>
 
         <main
-          className="mx-auto max-w-[1560px] px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6"
+          className="mx-auto max-w-[1560px] px-2.5 py-3 sm:px-5 sm:py-4 lg:px-7 lg:py-5"
           id="gallery-main"
         >
           {children}
         </main>
 
-        <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur">
-          <div className="mx-auto flex min-h-12 max-w-[1560px] flex-col items-center justify-center px-4 py-1 text-center text-[11px] leading-4 text-muted-foreground sm:px-6 sm:text-xs lg:px-8">
-            <p>© 2026 CCA3370. All rights reserved.</p>
-            <p>Images © 2026 学生会电视台. All rights reserved.</p>
+        <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/94 pb-[env(safe-area-inset-bottom)] supports-backdrop-filter:backdrop-blur-xl">
+          <div className="mx-auto flex h-10 max-w-[1560px] items-center justify-center px-3 text-center text-[10px] leading-none text-muted-foreground sm:text-[11px]">
+            <p>© 2026 CCA3370 · Images © 2026 学生会电视台</p>
           </div>
         </footer>
       </div>
