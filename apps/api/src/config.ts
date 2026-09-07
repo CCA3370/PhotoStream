@@ -55,6 +55,8 @@ const configSchema = z
     BIB_OCR_AUTOMATION_STATUS: z
       .enum(["disabled", "experimental", "qualified"])
       .default("experimental"),
+    // Kept for deployment-file compatibility only. Product availability is
+    // controlled by the per-album switch and never by this legacy flag.
     FACE_SEARCH_GLOBAL_ENABLED: z.preprocess(environmentBoolean, z.boolean()).default(false),
     FACE_SEARCH_NOTICE_VERSION: z.string().min(1).max(80).default("face-notice-2026-08-31"),
     FACE_SEARCH_THRESHOLD_VERSION: z.string().min(1).max(80).default("unqualified"),
@@ -168,35 +170,6 @@ const configSchema = z
         message: "current and previous bib key versions must differ",
         path: ["BIB_KEY_VERSION_PREVIOUS"],
       });
-    }
-    if (value.FACE_SEARCH_GLOBAL_ENABLED) {
-      const required = [
-        "ALIYUN_FACE_ACCESS_KEY_ID",
-        "ALIYUN_FACE_ACCESS_KEY_SECRET",
-        "ALIYUN_ACCOUNT_ID",
-        "ALIYUN_IMM_PROJECT_NAME",
-        "ALIYUN_OSS_MEDIA_BUCKET",
-        "ALIYUN_OSS_FACE_REFERENCE_BUCKET",
-      ] as const;
-      for (const field of required) {
-        if (value[field] === undefined) {
-          context.addIssue({ code: "custom", message: `${field} is required`, path: [field] });
-        }
-      }
-      if (value.FACE_SEARCH_THRESHOLD_VERSION === "unqualified") {
-        context.addIssue({
-          code: "custom",
-          message: "a qualified threshold version is required",
-          path: ["FACE_SEARCH_THRESHOLD_VERSION"],
-        });
-      }
-      if (value.ALIYUN_OSS_MEDIA_BUCKET === value.ALIYUN_OSS_FACE_REFERENCE_BUCKET) {
-        context.addIssue({
-          code: "custom",
-          message: "media and temporary face references must use separate buckets",
-          path: ["ALIYUN_OSS_FACE_REFERENCE_BUCKET"],
-        });
-      }
     }
   });
 
