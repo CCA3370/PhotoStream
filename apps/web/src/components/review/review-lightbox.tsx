@@ -11,9 +11,6 @@ import {
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
-  MinusIcon,
-  PlusIcon,
-  RotateCcwIcon,
   SendIcon,
   StarIcon,
   Trash2Icon,
@@ -590,44 +587,6 @@ export function ReviewLightbox({
                 </div>
 
                 <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl">
-                  <Button
-                    aria-label="缩小"
-                    className={cn(toolbarButtonClass, "size-8")}
-                    disabled={zoom <= minZoom}
-                    onClick={() => changeZoom(zoom - 0.5)}
-                    size="icon-sm"
-                    title="缩小 (-)"
-                    type="button"
-                    variant="outline"
-                  >
-                    <MinusIcon />
-                  </Button>
-                  <Button
-                    aria-label="恢复适应屏幕"
-                    className={cn(toolbarButtonClass, "h-8 px-2.5")}
-                    disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
-                    onClick={resetView}
-                    size="sm"
-                    title="适应屏幕 (0)"
-                    type="button"
-                    variant="outline"
-                  >
-                    <RotateCcwIcon />
-                    适应
-                  </Button>
-                  <Button
-                    aria-label="放大"
-                    className={cn(toolbarButtonClass, "size-8")}
-                    disabled={zoom >= maxZoom}
-                    onClick={() => changeZoom(zoom + 0.5)}
-                    size="icon-sm"
-                    title="放大 (+)"
-                    type="button"
-                    variant="outline"
-                  >
-                    <PlusIcon />
-                  </Button>
-
                   {canLoadOriginal ? (
                     <Button
                       aria-label="查看原图"
