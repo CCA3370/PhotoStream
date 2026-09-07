@@ -193,3 +193,12 @@ async function shutdown(signal: string): Promise<void> {
 
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
+
+try {
+  await app.listen({ host: config.HOST, port: config.PORT });
+} catch (error) {
+  app.log.fatal({ errorName: error instanceof Error ? error.name : "unknown" }, "startup failed");
+  await broker.close();
+  await pool.end();
+  process.exitCode = 1;
+}
