@@ -7,7 +7,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export interface FaceSearchPanelProps {
-  readonly complaintContact: string;
   readonly noticeVersion: string;
   readonly onClose: () => void;
   readonly privacyNotice: string;
