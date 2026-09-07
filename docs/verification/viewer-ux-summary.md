@@ -10,5 +10,6 @@ This branch consolidates the public gallery UX and face-search controls before C
 - compact password-unlock flow and mobile-friendly touch targets
 - album-level face switch is the sole product enablement control; infrastructure/index states remain runtime status only
 - complaint/deletion contact content is removed from runtime contracts, UI, API serialization, and the database schema; migration 0018 drops the legacy column
+- generated Drizzle migration metadata is formatted with the repository-pinned Biome version
 
 CI results are authoritative for lint, typecheck, tests, and build.
