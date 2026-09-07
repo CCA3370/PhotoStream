@@ -405,13 +405,15 @@ export function BibSearchPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-1.5 rounded-2xl border bg-card/45 p-1.5 shadow-xs">
+      <div className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm">
         <button
-          className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 text-left transition-colors hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
           onClick={() => setOpen(true)}
           type="button"
         >
-          <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-colors group-hover:bg-muted">
+            <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+          </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{resultLabel}</span>
             <span className="block truncate text-[11px] leading-4 text-muted-foreground">
@@ -422,7 +424,7 @@ export function BibSearchPanel({
         {resultMode === null ? null : (
           <Button
             aria-label="清除找照片条件"
-            className="shrink-0 rounded-xl"
+            className="shrink-0 rounded-lg"
             onClick={clearResult}
             size="icon-sm"
             type="button"
@@ -469,17 +471,20 @@ export function BibSearchPanel({
       )}
 
       <Dialog open={open} onOpenChange={requestDialogChange}>
-        <DialogContent className="public-theme flex max-h-[86dvh] flex-col gap-0 overflow-hidden p-0 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-3xl max-sm:rounded-b-none sm:max-w-lg">
-          <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 sm:px-5">
-            <DialogTitle>找照片</DialogTitle>
-            <DialogDescription>按号码、年级班级或人脸筛选照片。</DialogDescription>
+        <DialogContent className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none sm:max-w-md sm:rounded-3xl">
+          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20 sm:hidden" />
+          <DialogHeader className="shrink-0 px-5 pt-3 pb-2.5 pr-12 sm:pt-5 sm:pb-3">
+            <DialogTitle className="text-base">找照片</DialogTitle>
+            <DialogDescription className="text-xs leading-5">
+              选择一种方式快速筛选照片
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">
-            <div className="flex flex-col gap-4">
+          <div className="min-h-0 overflow-y-auto px-4 py-3 sm:px-5 sm:pb-4">
+            <div className="flex flex-col gap-3.5">
               <ToggleGroup
                 aria-label="找照片方式"
-                className="grid w-full grid-cols-3 rounded-xl bg-muted/55 p-1"
+                className="grid w-full grid-cols-3 rounded-2xl border bg-muted/30 p-1"
                 onValueChange={(values) => {
                   const value = values[0];
                   if (value === "number" || value === "attributes" || value === "face") {
@@ -489,12 +494,20 @@ export function BibSearchPanel({
                 spacing={2}
                 value={[mode]}
               >
-                {bibSearchEnabled ? <ToggleGroupItem value="number">号码</ToggleGroupItem> : null}
+                {bibSearchEnabled ? (
+                  <ToggleGroupItem className="h-9 rounded-xl text-xs" value="number">
+                    号码
+                  </ToggleGroupItem>
+                ) : null}
                 {bibSearchEnabled && attributeFilterEnabled ? (
-                  <ToggleGroupItem value="attributes">年级班级</ToggleGroupItem>
+                  <ToggleGroupItem className="h-9 rounded-xl text-xs" value="attributes">
+                    年级班级
+                  </ToggleGroupItem>
                 ) : null}
                 {faceSearch === undefined ? null : (
-                  <ToggleGroupItem value="face">人脸</ToggleGroupItem>
+                  <ToggleGroupItem className="h-9 rounded-xl text-xs" value="face">
+                    人脸
+                  </ToggleGroupItem>
                 )}
               </ToggleGroup>
 
@@ -505,7 +518,7 @@ export function BibSearchPanel({
                   </FieldLabel>
                   <Input
                     autoComplete="off"
-                    className="h-10 rounded-xl text-base"
+                    className="h-12 rounded-2xl border-muted-foreground/15 bg-muted/20 px-4 text-base shadow-none"
                     id="public-bib-number"
                     inputMode="numeric"
                     maxLength={12}
@@ -520,7 +533,7 @@ export function BibSearchPanel({
               ) : null}
 
               {mode === "attributes" && bibSearchEnabled && attributeFilterEnabled ? (
-                <FieldGroup className="grid grid-cols-2 gap-2.5">
+                <FieldGroup className="grid grid-cols-2 gap-2.5 rounded-2xl bg-muted/20 p-3">
                   <Field>
                     <FieldLabel className="text-xs" htmlFor="public-bib-grade">
                       年级
@@ -536,7 +549,7 @@ export function BibSearchPanel({
                       }}
                       value={gradeOptionId}
                     >
-                      <SelectTrigger className="h-10 min-h-10 rounded-xl" id="public-bib-grade">
+                      <SelectTrigger className="h-11 min-h-11 rounded-xl bg-background" id="public-bib-grade">
                         <SelectValue>
                           {(value) =>
                             value === null
@@ -577,7 +590,7 @@ export function BibSearchPanel({
                       }
                       value={classOptionId ?? "all"}
                     >
-                      <SelectTrigger className="h-10 min-h-10 rounded-xl" id="public-bib-class">
+                      <SelectTrigger className="h-11 min-h-11 rounded-xl bg-background" id="public-bib-class">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -596,13 +609,13 @@ export function BibSearchPanel({
               ) : null}
 
               {mode === "face" && faceSearch !== undefined ? (
-                <div className="flex flex-col gap-3.5">
+                <div className="flex flex-col gap-3">
                   {faceStage === "consent" ? (
                     <>
-                      <Alert className="rounded-2xl">
+                      <Alert className="rounded-2xl border-0 bg-muted/35 shadow-none">
                         <ScanFaceIcon aria-hidden="true" />
                         <AlertTitle>人脸找图处理说明</AlertTitle>
-                        <AlertDescription className="flex flex-col gap-2 leading-5">
+                        <AlertDescription className="flex flex-col gap-1.5 text-xs leading-5">
                           <p>
                             系统会使用你提交的一张参考照片，只在本相册中查找可能包含同一人物的照片。参考照片仅用于本次找图，不用于身份认证或建立人物档案。
                           </p>
@@ -614,7 +627,7 @@ export function BibSearchPanel({
                         </AlertDescription>
                       </Alert>
 
-                      <div className="flex items-start gap-2.5 rounded-xl bg-muted/35 p-3">
+                      <div className="flex items-start gap-2.5 rounded-2xl border bg-background p-3.5">
                         <Checkbox
                           checked={acknowledged}
                           id="face-search-consent"
@@ -631,17 +644,16 @@ export function BibSearchPanel({
                   ) : null}
 
                   {faceStage === "choose" ? (
-                    <div className="rounded-2xl border border-dashed p-4 text-center">
-                      <ScanFaceIcon
-                        aria-hidden="true"
-                        className="mx-auto mb-2.5 size-7 text-muted-foreground"
-                      />
+                    <div className="rounded-2xl border bg-muted/15 p-5 text-center">
+                      <span className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-muted/70">
+                        <ScanFaceIcon aria-hidden="true" className="size-5 text-muted-foreground" />
+                      </span>
                       <p className="text-sm font-medium">选择一张清晰的单人照片</p>
                       <p className="mt-1 text-xs leading-5 text-muted-foreground">
                         支持 JPEG、PNG、WebP；HEIC/HEIF 需设备能够原生解码。
                       </p>
                       <label
-                        className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                        className="mt-3 inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-xs transition-opacity hover:opacity-90"
                         htmlFor="face-reference-file"
                       >
                         选择照片
@@ -657,7 +669,7 @@ export function BibSearchPanel({
                   ) : null}
 
                   {faceWorking ? (
-                    <div className="flex flex-col gap-3 rounded-2xl border bg-muted/18 p-4">
+                    <div className="flex flex-col gap-3 rounded-2xl border bg-muted/15 p-4">
                       <Progress value={faceProgress(faceStage, faceView)}>
                         <ProgressLabel>
                           {faceStage === "preparing"
@@ -684,7 +696,7 @@ export function BibSearchPanel({
                   ) : null}
 
                   {faceStage === "failed" ? (
-                    <Alert variant="destructive">
+                    <Alert className="rounded-2xl" variant="destructive">
                       <AlertTitle>本次检索未完整完成</AlertTitle>
                       <AlertDescription>
                         当前结果不完整，请重新尝试；未完成的任务不会显示为“没有找到”。
@@ -693,7 +705,7 @@ export function BibSearchPanel({
                   ) : null}
 
                   {faceCloseWarning ? (
-                    <Alert>
+                    <Alert className="rounded-2xl">
                       <AlertTitle>查找仍在进行</AlertTitle>
                       <AlertDescription>
                         建议等待查找完成；如果不再需要，可以取消本次搜索。
@@ -705,11 +717,12 @@ export function BibSearchPanel({
             </div>
           </div>
 
-          <DialogFooter className="shrink-0 border-t bg-background px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-3">
+          <DialogFooter className="shrink-0 border-t bg-background/95 px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-5 sm:py-3">
             {mode === "face" && faceSearch !== undefined ? (
               <>
                 {faceWorking ? (
                   <Button
+                    className="max-sm:w-full"
                     disabled={facePending}
                     onClick={() => void cancelFaceSearch()}
                     type="button"
@@ -720,7 +733,7 @@ export function BibSearchPanel({
                 ) : null}
                 {faceStage === "consent" ? (
                   <Button
-                    className="max-sm:w-full"
+                    className="h-12 rounded-xl max-sm:w-full"
                     disabled={!acknowledged}
                     onClick={() => setFaceStage("choose")}
                     type="button"
@@ -730,7 +743,7 @@ export function BibSearchPanel({
                 ) : null}
                 {faceStage === "failed" ? (
                   <Button
-                    className="max-sm:w-full"
+                    className="h-12 rounded-xl max-sm:w-full"
                     disabled={facePending}
                     onClick={() => {
                       setFaceView(null);
@@ -745,7 +758,7 @@ export function BibSearchPanel({
               </>
             ) : (
               <Button
-                className="h-12 rounded-xl text-base font-medium max-sm:w-full sm:min-w-32"
+                className="h-12 rounded-xl text-base font-medium max-sm:w-full sm:min-w-36"
                 disabled={
                   pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)
                 }
