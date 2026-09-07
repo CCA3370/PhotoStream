@@ -82,7 +82,7 @@ export default async function GalleryPage({
 
       <nav
         aria-label="相册筛选"
-        className="sticky top-1.5 z-20 mb-3 flex gap-1 overflow-x-auto rounded-xl border bg-background/92 p-1 shadow-sm supports-backdrop-filter:backdrop-blur-xl sm:mb-4"
+        className="sticky top-1.5 z-20 mb-2 flex gap-0.5 overflow-x-auto rounded-xl border bg-background/94 p-1 shadow-sm supports-backdrop-filter:backdrop-blur-xl sm:mb-3 sm:gap-1"
       >
         <Link
           aria-current={!featuredOnly && category === undefined ? "page" : undefined}
@@ -91,7 +91,7 @@ export default async function GalleryPage({
               variant: !featuredOnly && category === undefined ? "default" : "ghost",
               size: "sm",
             }),
-            "h-8 shrink-0 rounded-lg px-3",
+            "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 sm:px-3",
           )}
           href={`/g/${slug}`}
         >
@@ -101,7 +101,7 @@ export default async function GalleryPage({
           aria-current={featuredOnly ? "page" : undefined}
           className={cn(
             buttonVariants({ variant: featuredOnly ? "default" : "ghost", size: "sm" }),
-            "h-8 shrink-0 rounded-lg px-3",
+            "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 sm:px-3",
           )}
           href={`/g/${slug}?featured=1`}
         >
@@ -114,7 +114,7 @@ export default async function GalleryPage({
               aria-current={selected ? "page" : undefined}
               className={cn(
                 buttonVariants({ variant: selected ? "default" : "ghost", size: "sm" }),
-                "h-8 shrink-0 rounded-lg px-3",
+                "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 sm:px-3",
               )}
               href={`/g/${slug}?category=${albumCategory.id}`}
               key={albumCategory.id}
@@ -125,11 +125,7 @@ export default async function GalleryPage({
         })}
       </nav>
 
-      <section aria-label={sectionTitle} className="flex flex-col gap-3 sm:gap-4">
-        <h2 className="truncate px-0.5 text-base font-semibold tracking-tight sm:text-lg">
-          {sectionTitle}
-        </h2>
-
+      <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {searchAvailable && !featuredOnly ? (
           <BibSearchPanel
             attributeFilterEnabled={album.bibAttributeFilterEnabled}
@@ -150,14 +146,17 @@ export default async function GalleryPage({
             />
           </BibSearchPanel>
         ) : (
-          <PaginatedMediaGrid
-            {...(category === undefined ? {} : { categoryId: category.id })}
-            featuredOnly={featuredOnly}
-            initialFeaturedIds={featured.mediaIds}
-            initialPage={media}
-            key={featuredOnly ? "featured" : (category?.id ?? "all")}
-            slug={slug}
-          />
+          <>
+            <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
+            <PaginatedMediaGrid
+              {...(category === undefined ? {} : { categoryId: category.id })}
+              featuredOnly={featuredOnly}
+              initialFeaturedIds={featured.mediaIds}
+              initialPage={media}
+              key={featuredOnly ? "featured" : (category?.id ?? "all")}
+              slug={slug}
+            />
+          </>
         )}
       </section>
       {album.state === "live" ? (
