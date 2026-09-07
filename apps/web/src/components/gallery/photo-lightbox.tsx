@@ -7,9 +7,6 @@ import {
   DownloadIcon,
   Maximize2Icon,
   Minimize2Icon,
-  MinusIcon,
-  PlusIcon,
-  RotateCcwIcon,
   XIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -31,7 +28,7 @@ import { cn } from "@/lib/utils";
 const minZoom = 1;
 const maxZoom = 5;
 const toolbarButtonClass =
-  "rounded-lg border-white/10 bg-white/[0.06] text-white shadow-none backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12] hover:text-white active:not-aria-[haspopup]:translate-y-0 disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35";
+  "h-9 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0";
 
 type Point = { x: number; y: number };
 type Gesture =
@@ -40,7 +37,7 @@ type Gesture =
   | { mode: "swipe"; start: Point }
   | { mode: "pinch"; distance: number; zoom: number };
 
-function variant(media: PublicMediaView, kind: "photo_480" | "photo_960" | "photo_1920") {
+function variant(media: PublicMediaView, kind: "photo_960" | "photo_1920") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
 }
 
@@ -97,11 +94,9 @@ export function PhotoLightbox({
       const fit = Math.min(rect.width / selected.width, rect.height / selected.height);
       const renderedWidth = selected.width * fit * nextZoom;
       const renderedHeight = selected.height * fit * nextZoom;
-      const maxX = Math.max(0, (renderedWidth - rect.width) / 2);
-      const maxY = Math.max(0, (renderedHeight - rect.height) / 2);
       return {
-        x: clamp(next.x, -maxX, maxX),
-        y: clamp(next.y, -maxY, maxY),
+        x: clamp(next.x, -Math.max(0, (renderedWidth - rect.width) / 2), Math.max(0, (renderedWidth - rect.width) / 2)),
+        y: clamp(next.y, -Math.max(0, (renderedHeight - rect.height) / 2), Math.max(0, (renderedHeight - rect.height) / 2)),
       };
     },
     [selected],
@@ -243,7 +238,7 @@ export function PhotoLightbox({
     if (gesture.mode === "swipe") {
       const deltaX = point.x - gesture.start.x;
       const deltaY = point.y - gesture.start.y;
-      if (Math.abs(deltaX) >= 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      if (Math.abs(deltaX) >= 52 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
         selectOffset(deltaX < 0 ? 1 : -1);
       }
     }
@@ -279,7 +274,7 @@ export function PhotoLightbox({
       >
         <DialogTitle className="sr-only">照片查看器</DialogTitle>
         <DialogDescription className="sr-only">
-          可使用左右方向键切换照片，滚轮、双击或加减键缩放，拖动查看放大后的区域。
+          左右滑动或使用方向键切换照片；双指、双击、滚轮或键盘加减键可以缩放。
         </DialogDescription>
 
         <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
@@ -299,20 +294,14 @@ export function PhotoLightbox({
             role="application"
           >
             {!loaded ? (
-              <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+              <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 正在加载高清图片…
               </div>
             ) : null}
-            <div
-              className="absolute inset-0 origin-center will-change-transform"
-              style={{ transform: imageTransform }}
-            >
+            <div className="absolute inset-0 origin-center will-change-transform" style={{ transform: imageTransform }}>
               <Image
                 alt="活动照片"
-                className={cn(
-                  "object-contain transition-opacity duration-150",
-                  loaded ? "opacity-100" : "opacity-0",
-                )}
+                className={cn("object-contain transition-opacity duration-150", loaded ? "opacity-100" : "opacity-0")}
                 draggable={false}
                 fill
                 onLoad={() => setLoaded(true)}
@@ -324,14 +313,14 @@ export function PhotoLightbox({
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end bg-gradient-to-b from-black/70 via-black/20 to-transparent p-3 pb-14 sm:p-4 sm:pb-16">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent p-2.5 pb-14 sm:p-4 sm:pb-16">
             <div className="pointer-events-auto flex items-center gap-1.5">
               {fullscreenSupported ? (
                 <Button
                   aria-label={fullscreen ? "退出全屏" : "进入全屏"}
-                  className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
+                  className="size-9 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:size-10"
                   onClick={() => void toggleFullscreen()}
-                  size="icon-lg"
+                  size="icon"
                   title={fullscreen ? "退出全屏 (F)" : "全屏 (F)"}
                   type="button"
                   variant="outline"
@@ -341,9 +330,9 @@ export function PhotoLightbox({
               ) : null}
               <Button
                 aria-label="关闭照片查看器"
-                className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
+                className="size-9 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:size-10"
                 onClick={onClose}
-                size="icon-lg"
+                size="icon"
                 title="关闭 (Esc)"
                 type="button"
                 variant="outline"
@@ -357,180 +346,95 @@ export function PhotoLightbox({
             <>
               <Button
                 aria-label="上一张照片"
-                className="absolute top-1/2 left-2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:left-4 sm:size-11"
+                className="absolute top-1/2 left-3 z-20 hidden size-10 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:flex"
                 onClick={() => selectOffset(-1)}
-                size="icon-lg"
+                size="icon"
                 title="上一张 (←)"
                 type="button"
                 variant="outline"
               >
-                <ChevronLeftIcon className="size-5 sm:size-6" />
+                <ChevronLeftIcon className="size-5" />
               </Button>
               <Button
                 aria-label="下一张照片"
-                className="absolute top-1/2 right-2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:right-4 sm:size-11"
+                className="absolute top-1/2 right-3 z-20 hidden size-10 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:flex"
                 onClick={() => selectOffset(1)}
-                size="icon-lg"
+                size="icon"
                 title="下一张 (→)"
                 type="button"
                 variant="outline"
               >
-                <ChevronRightIcon className="size-5 sm:size-6" />
+                <ChevronRightIcon className="size-5" />
               </Button>
             </>
           ) : null}
 
-          {slug === undefined ? null : (
-            <PhotoLikeButton
-              mediaId={selected.id}
-              mode="toolbar"
-              onChange={onLikeChange}
-              slug={slug}
-              state={selectedLikeState}
-            />
-          )}
-
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
-            <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-2 text-[11px] text-white/60 sm:text-xs">
-                <span>
-                  {selected.width} × {selected.height}
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>{Math.round(zoom * 100)}%</span>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
+            <div className="pointer-events-auto mx-auto flex max-w-5xl items-end justify-between gap-3">
+              <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
+                {selected.width} × {selected.height} · {Math.round(zoom * 100)}%
               </div>
 
-              <div className="flex w-full max-w-full items-center gap-1.5 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl sm:ml-auto sm:w-auto">
-                <div
-                  aria-hidden={downloadMenuOpen}
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
-                    downloadMenuOpen
-                      ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
-                      : canDownload
-                        ? "max-w-[65%] translate-x-0 border-r border-white/10 pr-1.5 opacity-100 sm:max-w-48"
-                        : "max-w-full translate-x-0 opacity-100 sm:max-w-48",
-                  )}
-                >
-                  <Button
-                    aria-label="缩小"
-                    className={cn(toolbarButtonClass, "size-8 shrink-0")}
-                    disabled={zoom <= minZoom}
-                    onClick={() => changeZoom(zoom - 0.5)}
-                    size="icon-sm"
-                    title="缩小 (-)"
-                    type="button"
-                    variant="outline"
-                  >
-                    <MinusIcon />
-                  </Button>
-                  <Button
-                    aria-label="恢复适应屏幕"
-                    className={cn(toolbarButtonClass, "min-w-16 flex-1 px-2.5 sm:flex-none")}
-                    disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
-                    onClick={resetView}
-                    size="sm"
-                    title="适应屏幕 (0)"
-                    type="button"
-                    variant="outline"
-                  >
-                    <RotateCcwIcon />
-                    适应
-                  </Button>
-                  <Button
-                    aria-label="放大"
-                    className={cn(toolbarButtonClass, "size-8 shrink-0")}
-                    disabled={zoom >= maxZoom}
-                    onClick={() => changeZoom(zoom + 0.5)}
-                    size="icon-sm"
-                    title="放大 (+)"
-                    type="button"
-                    variant="outline"
-                  >
-                    <PlusIcon />
-                  </Button>
-                </div>
+              <div className="ml-auto flex min-w-0 max-w-full items-center justify-end gap-1.5 rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl">
+                {slug === undefined ? null : (
+                  <PhotoLikeButton
+                    mediaId={selected.id}
+                    mode="toolbar"
+                    onChange={onLikeChange}
+                    slug={slug}
+                    state={selectedLikeState}
+                  />
+                )}
 
                 {canDownload ? (
-                  <>
-                    <div
-                      aria-hidden={downloadMenuOpen}
-                      className={cn(
-                        "flex min-w-0 flex-1 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
-                        downloadMenuOpen
-                          ? "pointer-events-none max-w-0 translate-x-2 opacity-0"
-                          : "max-w-[35%] translate-x-0 opacity-100 sm:max-w-36",
-                      )}
-                    >
+                  downloadMenuOpen ? (
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
+                        <DownloadButton
+                          bytes={preview1920.bytes}
+                          className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
+                          kind="preview"
+                          label="普通图"
+                          mediaId={selected.id}
+                          onSuccess={() => setDownloadMenuOpen(false)}
+                          showBytes={false}
+                          slug={slug}
+                        />
+                      ) : null}
+                      {canDownloadOriginal && slug !== undefined && selected.downloads.originalBytes !== null ? (
+                        <DownloadButton
+                          bytes={selected.downloads.originalBytes}
+                          className={cn(toolbarButtonClass, "min-w-0 px-2.5 text-xs")}
+                          kind="original"
+                          label="原图"
+                          mediaId={selected.id}
+                          onSuccess={() => setDownloadMenuOpen(false)}
+                          showBytes={false}
+                          slug={slug}
+                        />
+                      ) : null}
                       <Button
-                        className={cn(
-                          toolbarButtonClass,
-                          "h-8 w-full px-2 text-xs sm:w-auto sm:px-3 sm:text-[0.8rem]",
-                        )}
-                        onClick={() => setDownloadMenuOpen(true)}
-                        size="sm"
+                        aria-label="收起下载选项"
+                        className="size-9 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.13] hover:text-white"
+                        onClick={() => setDownloadMenuOpen(false)}
+                        size="icon"
                         type="button"
                         variant="outline"
                       >
-                        <DownloadIcon data-icon="inline-start" />
-                        下载图片
+                        <XIcon />
                       </Button>
                     </div>
-
-                    <div
-                      aria-hidden={!downloadMenuOpen}
-                      className={cn(
-                        "flex min-w-0 flex-1 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out sm:flex-none",
-                        downloadMenuOpen
-                          ? "max-w-full translate-x-0 opacity-100 sm:max-w-[24rem]"
-                          : "pointer-events-none max-w-0 translate-x-4 opacity-0",
-                      )}
+                  ) : (
+                    <Button
+                      className={toolbarButtonClass}
+                      onClick={() => setDownloadMenuOpen(true)}
+                      type="button"
+                      variant="outline"
                     >
-                      <div className="flex w-full min-w-0 items-center gap-1.5">
-                        {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
-                          <DownloadButton
-                            bytes={preview1920.bytes}
-                            className={cn(
-                              toolbarButtonClass,
-                              "h-8 min-w-0 flex-1 shrink px-1.5 text-[11px] sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]",
-                            )}
-                            kind="preview"
-                            label="普通图"
-                            mediaId={selected.id}
-                            onSuccess={() => setDownloadMenuOpen(false)}
-                            slug={slug}
-                          />
-                        ) : null}
-                        {canDownloadOriginal &&
-                        slug !== undefined &&
-                        selected.downloads.originalBytes !== null ? (
-                          <DownloadButton
-                            bytes={selected.downloads.originalBytes}
-                            className={cn(
-                              toolbarButtonClass,
-                              "h-8 min-w-0 flex-1 shrink px-1.5 text-[11px] sm:flex-none sm:shrink-0 sm:px-3 sm:text-[0.8rem]",
-                            )}
-                            kind="original"
-                            label="原图"
-                            mediaId={selected.id}
-                            onSuccess={() => setDownloadMenuOpen(false)}
-                            slug={slug}
-                          />
-                        ) : null}
-                        <Button
-                          aria-label="收起下载选项"
-                          className={cn(toolbarButtonClass, "size-8 shrink-0")}
-                          onClick={() => setDownloadMenuOpen(false)}
-                          size="icon-sm"
-                          title="收起下载选项"
-                          type="button"
-                          variant="outline"
-                        >
-                          <XIcon />
-                        </Button>
-                      </div>
-                    </div>
-                  </>
+                      <DownloadIcon data-icon="inline-start" />
+                      下载
+                    </Button>
+                  )
                 ) : null}
               </div>
             </div>
