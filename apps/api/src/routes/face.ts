@@ -7,6 +7,7 @@ import {
   faceConfigUpdateSchema,
   faceConfigViewSchema,
   faceIndexExclusionsRequestSchema,
+  faceIndexStateSchema,
   faceSearchParamsSchema,
   faceSearchSafeStateSchema,
   faceSearchViewSchema,
@@ -27,13 +28,21 @@ import {
   EventBridgeVerificationError,
   type EventBridgeVerifier,
 } from "../face/eventbridge-verifier.js";
+import type { FacePublicStateService } from "../face/public-state-service.js";
 import type { FaceService } from "../face/service.js";
-import { faceSearchVisitorToken } from "../media/visitor-http.js";
+import { faceSearchVisitorToken, visitorSessionToken } from "../media/visitor-http.js";
 
 const albumParams = z.object({ id: z.string().uuid() }).strict();
 const slugParams = z.object({ slug: z.string().min(12).max(32) }).strict();
 const searchParams = z
   .object({ slug: z.string().min(12).max(32), searchId: z.string().uuid() })
+  .strict();
+const publicFaceStateSchema = z
+  .object({
+    enabled: z.boolean(),
+    noticeVersion: z.string().min(1).max(80),
+    indexState: faceIndexStateSchema,
+  })
   .strict();
 
 function actorFrom(session: Awaited<ReturnType<typeof requireInternalSession>>) {
@@ -50,6 +59,7 @@ export async function registerFaceRoutes(
   options: {
     authService: AuthService;
     faceService: FaceService;
+    facePublicStateService: FacePublicStateService;
     eventBridgeVerifier: EventBridgeVerifier;
     config: AppConfig;
   },
@@ -163,6 +173,25 @@ export async function registerFaceRoutes(
         { ...actorFrom(session), authenticatedAt: new Date() },
         request.params.id,
         request.id,
+      );
+    },
+  );
+
+  typed.get(
+    "/api/v1/public/albums/:slug/face-state",
+    {
+      schema: {
+        operationId: "getPublicFaceState",
+        tags: ["public", "face"],
+        params: slugParams,
+        response: { 200: publicFaceStateSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      privateResponse(reply);
+      return options.facePublicStateService.get(
+        request.params.slug,
+        visitorSessionToken(request, options.config, request.params.slug),
       );
     },
   );
