@@ -1,6 +1,10 @@
 "use client";
 
-import type { CreateFaceSearchResponse, FaceSearchView, PublicMediaView } from "@photostream/contracts";
+import type {
+  CreateFaceSearchResponse,
+  FaceSearchView,
+  PublicMediaView,
+} from "@photostream/contracts";
 import { ScanFaceIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
@@ -489,7 +493,9 @@ export function BibSearchPanel({
                 {bibSearchEnabled && attributeFilterEnabled ? (
                   <ToggleGroupItem value="attributes">年级班级</ToggleGroupItem>
                 ) : null}
-                {faceSearch === undefined ? null : <ToggleGroupItem value="face">人脸</ToggleGroupItem>}
+                {faceSearch === undefined ? null : (
+                  <ToggleGroupItem value="face">人脸</ToggleGroupItem>
+                )}
               </ToggleGroup>
 
               {mode === "number" && bibSearchEnabled ? (
@@ -601,7 +607,8 @@ export function BibSearchPanel({
                             系统会使用你提交的一张参考照片，只在本相册中查找可能包含同一人物的照片。参考照片仅用于本次找图，不用于身份认证或建立人物档案。
                           </p>
                           <p>
-                            参考照片会在查找结束后删除，异常情况下最长保留 1 小时；本次候选结果最长保留 2 小时。结果可能存在漏检、误匹配或无结果。
+                            参考照片会在查找结束后删除，异常情况下最长保留 1
+                            小时；本次候选结果最长保留 2 小时。结果可能存在漏检、误匹配或无结果。
                           </p>
                           <p>请仅提交本人或已取得明确授权的人物照片。</p>
                           {faceSearch.privacyNotice.trim() === "" ? null : (
