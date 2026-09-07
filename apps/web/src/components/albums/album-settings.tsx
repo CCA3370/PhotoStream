@@ -43,7 +43,7 @@ type PendingAction =
   | "original-download"
   | "password"
   | "preview-download"
-  | "public-info"
+  | "privacy"
   | "publish";
 
 const stateLabels: Record<AlbumView["state"], string> = {
@@ -77,7 +77,6 @@ function mergeAlbumUpdate(
       ? {}
       : { originalDownloadEnabled: updated.originalDownloadEnabled }),
     ...(input.privacyNotice === undefined ? {} : { privacyNotice: updated.privacyNotice }),
-    ...(input.complaintContact === undefined ? {} : { complaintContact: updated.complaintContact }),
     updatedAt: updated.updatedAt,
   };
 }
@@ -129,7 +128,6 @@ export function AlbumSettings({
   const [title, setTitle] = useState(initialAlbum.title);
   const [description, setDescription] = useState(initialAlbum.description);
   const [privacyNotice, setPrivacyNotice] = useState(initialAlbum.privacyNotice);
-  const [complaintContact, setComplaintContact] = useState(initialAlbum.complaintContact);
 
   useEffect(
     () => () => {
@@ -177,10 +175,7 @@ export function AlbumSettings({
         setTitle(updated.title);
         setDescription(updated.description);
       }
-      if (action === "public-info") {
-        setPrivacyNotice(updated.privacyNotice);
-        setComplaintContact(updated.complaintContact);
-      }
+      if (action === "privacy") setPrivacyNotice(updated.privacyNotice);
       showNotice(label);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存设置失败");
@@ -216,9 +211,7 @@ export function AlbumSettings({
   }
 
   const basicDirty = title.trim() !== album.title || description.trim() !== album.description;
-  const publicInfoDirty =
-    privacyNotice.trim() !== album.privacyNotice ||
-    complaintContact.trim() !== album.complaintContact;
+  const privacyDirty = privacyNotice.trim() !== album.privacyNotice;
   const galleryPath = `/g/${album.slug}`;
 
   return (
@@ -329,7 +322,7 @@ export function AlbumSettings({
 
               <Card className="overflow-hidden">
                 <CardHeader className="border-b py-3.5">
-                  <CardTitle>公开信息</CardTitle>
+                  <CardTitle>相册隐私说明</CardTitle>
                 </CardHeader>
                 <CardContent className="p-4">
                   <form
@@ -337,49 +330,36 @@ export function AlbumSettings({
                     onSubmit={(event) => {
                       event.preventDefault();
                       void update(
-                        {
-                          privacyNotice: privacyNotice.trim(),
-                          complaintContact: complaintContact.trim(),
-                        },
-                        "公开信息已保存",
-                        "public-info",
+                        { privacyNotice: privacyNotice.trim() },
+                        "隐私说明已保存",
+                        "privacy",
                       );
                     }}
                   >
-                    <FieldGroup className="gap-3">
-                      <Field>
-                        <FieldLabel htmlFor="privacy-notice">隐私说明</FieldLabel>
-                        <Textarea
-                          className="min-h-24 resize-y"
-                          id="privacy-notice"
-                          maxLength={2_000}
-                          onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
-                          value={privacyNotice}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="complaint-contact">删除/投诉联系方式</FieldLabel>
-                        <Input
-                          id="complaint-contact"
-                          maxLength={300}
-                          onChange={(event) => setComplaintContact(event.currentTarget.value)}
-                          value={complaintContact}
-                        />
-                      </Field>
-                    </FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="privacy-notice">补充说明</FieldLabel>
+                      <Textarea
+                        className="min-h-24 resize-y"
+                        id="privacy-notice"
+                        maxLength={2_000}
+                        onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
+                        placeholder="可选。这里的内容会作为本相册的人脸找图补充说明显示。"
+                        value={privacyNotice}
+                      />
+                    </Field>
                     <div className="flex min-h-7 items-center justify-between gap-3">
                       <span className="text-xs text-muted-foreground">
-                        {publicInfoDirty ? "有未保存修改" : null}
+                        {privacyDirty ? "有未保存修改" : null}
                       </span>
                       <Button
-                        disabled={!publicInfoDirty || isPending("public-info")}
+                        disabled={!privacyDirty || isPending("privacy")}
                         size="sm"
                         type="submit"
                       >
-                        {isPending("public-info") ? (
+                        {isPending("privacy") ? (
                           <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
                         ) : null}
-                        {isPending("public-info") ? "保存中" : "保存"}
+                        {isPending("privacy") ? "保存中" : "保存"}
                       </Button>
                     </div>
                   </form>
