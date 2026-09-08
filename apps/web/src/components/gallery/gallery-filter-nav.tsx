@@ -81,7 +81,7 @@ export function GalleryFilterNav({
     observer.observe(nav);
     observer.observe(active);
     return () => observer.disconnect();
-  }, [activeKey, items.length]);
+  }, [activeKey]);
 
   return (
     <nav
@@ -105,7 +105,8 @@ export function GalleryFilterNav({
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
               "relative z-10 h-8 shrink-0 touch-manipulation rounded-lg bg-transparent px-2.5 transition-colors duration-150 hover:bg-muted/55 sm:px-3",
-              active && "bg-transparent text-primary-foreground hover:bg-transparent hover:text-primary-foreground",
+              active &&
+                "bg-transparent text-primary-foreground hover:bg-transparent hover:text-primary-foreground",
             )}
             href={item.href}
             key={item.key}
