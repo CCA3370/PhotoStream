@@ -488,13 +488,22 @@ export function DashboardView({
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span>
-                号码 <strong className="font-semibold tabular-nums text-foreground">{numberFormatter.format(data.searchUsage.number)}</strong>
+                号码{" "}
+                <strong className="font-semibold tabular-nums text-foreground">
+                  {numberFormatter.format(data.searchUsage.number)}
+                </strong>
               </span>
               <span>
-                年级班级 <strong className="font-semibold tabular-nums text-foreground">{numberFormatter.format(data.searchUsage.attributes)}</strong>
+                年级班级{" "}
+                <strong className="font-semibold tabular-nums text-foreground">
+                  {numberFormatter.format(data.searchUsage.attributes)}
+                </strong>
               </span>
               <span>
-                人脸 <strong className="font-semibold tabular-nums text-foreground">{numberFormatter.format(data.searchUsage.face)}</strong>
+                人脸{" "}
+                <strong className="font-semibold tabular-nums text-foreground">
+                  {numberFormatter.format(data.searchUsage.face)}
+                </strong>
               </span>
             </div>
           </div>
