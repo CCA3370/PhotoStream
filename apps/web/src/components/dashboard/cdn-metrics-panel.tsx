@@ -156,13 +156,22 @@ export function CdnMetricsPanel({ data }: Readonly<{ data: CdnMetricsData }>) {
           </div>
           <div className="flex justify-end border-b px-3 py-2">
             <TabsList className="h-8 gap-0 overflow-hidden rounded-md border bg-muted/40 p-0">
-              <TabsTrigger className="rounded-none border-r px-3 text-xs last:border-r-0" value="traffic">
+              <TabsTrigger
+                className="rounded-none border-r px-3 text-xs last:border-r-0"
+                value="traffic"
+              >
                 流量
               </TabsTrigger>
-              <TabsTrigger className="rounded-none border-r px-3 text-xs last:border-r-0" value="bandwidth">
+              <TabsTrigger
+                className="rounded-none border-r px-3 text-xs last:border-r-0"
+                value="bandwidth"
+              >
                 带宽
               </TabsTrigger>
-              <TabsTrigger className="rounded-none border-r px-3 text-xs last:border-r-0" value="hit-rate">
+              <TabsTrigger
+                className="rounded-none border-r px-3 text-xs last:border-r-0"
+                value="hit-rate"
+              >
                 命中率
               </TabsTrigger>
               <TabsTrigger className="rounded-none px-3 text-xs" value="status">
