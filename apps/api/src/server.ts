@@ -134,6 +134,7 @@ const analyticsCleanup = setInterval(
     void Promise.all([
       operationsService.cleanupAnalytics(),
       operationsService.cleanupOperationalRecords(),
+      dashboardService.cleanupSearchUsage(),
     ]).catch((error: unknown) => {
       app.log.error(
         { errorName: error instanceof Error ? error.name : "unknown" },
