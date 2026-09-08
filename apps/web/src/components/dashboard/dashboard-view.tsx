@@ -16,8 +16,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
 import { CdnMetricsPanel } from "@/components/dashboard/cdn-metrics-panel";
+import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
 import { SearchUsageChart } from "@/components/dashboard/search-usage-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
