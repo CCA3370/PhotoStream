@@ -168,8 +168,14 @@ function errorStatusCode(reason: unknown): number | null {
   return null;
 }
 
-function failureMessage(failures: readonly MetricFailure[], domain: string, allFailed: boolean): string {
-  const codes = [...new Set(failures.flatMap((failure) => (failure.code === null ? [] : [failure.code])))];
+function failureMessage(
+  failures: readonly MetricFailure[],
+  domain: string,
+  allFailed: boolean,
+): string {
+  const codes = [
+    ...new Set(failures.flatMap((failure) => (failure.code === null ? [] : [failure.code]))),
+  ];
   const permissionCode = codes.find((code) =>
     /forbidden|accessdenied|nopermission|unauthorized|ram/i.test(code),
   );
@@ -187,7 +193,8 @@ function failureMessage(failures: readonly MetricFailure[], domain: string, allF
   const detail = failures
     .slice(0, 3)
     .map((failure) => {
-      const suffix = failure.code ?? (failure.statusCode === null ? "未知错误" : `HTTP ${failure.statusCode}`);
+      const suffix =
+        failure.code ?? (failure.statusCode === null ? "未知错误" : `HTTP ${failure.statusCode}`);
       return `${failure.label}：${suffix}`;
     })
     .join("；");
@@ -254,7 +261,9 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
     const calls = [
       {
         label: "流量",
-        promise: this.#client.describeDomainTrafficData(new DescribeDomainTrafficDataRequest(values)),
+        promise: this.#client.describeDomainTrafficData(
+          new DescribeDomainTrafficDataRequest(values),
+        ),
       },
       {
         label: "带宽",
@@ -268,7 +277,9 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
       },
       {
         label: "字节命中率",
-        promise: this.#client.describeDomainHitRateData(new DescribeDomainHitRateDataRequest(values)),
+        promise: this.#client.describeDomainHitRateData(
+          new DescribeDomainHitRateDataRequest(values),
+        ),
       },
       {
         label: "请求命中率",
