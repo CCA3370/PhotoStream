@@ -105,7 +105,11 @@ function faceProgress(stage: FaceStage, view: FaceSearchView | null): number {
   if (stage === "searching" && view === null) return 64;
   if (view?.search.status === "partial") return 88;
   if (view?.search.status === "processing") return 74;
-  if (stage === "complete" || view?.search.status === "completed" || view?.search.status === "failed") {
+  if (
+    stage === "complete" ||
+    view?.search.status === "completed" ||
+    view?.search.status === "failed"
+  ) {
     return 100;
   }
   return 0;
@@ -799,7 +803,10 @@ export function BibSearchPanel({
                           </div>
                         ) : (
                           <>
-                            <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
+                            <p
+                              aria-live="polite"
+                              className="text-xs leading-5 text-muted-foreground"
+                            >
                               {faceItems.length === 0
                                 ? "当前还没有返回候选，请等待查找完成后再判断结果。"
                                 : "结果仍在更新，查找完成前数量可能变化。"}
