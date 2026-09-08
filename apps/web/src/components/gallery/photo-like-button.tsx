@@ -1,7 +1,7 @@
 "use client";
 
 import { HeartIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
@@ -31,12 +31,34 @@ export function PhotoLikeButton({
 }>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [heartFeedback, setHeartFeedback] = useState<"like" | "unlike" | null>(null);
+  const [countFeedback, setCountFeedback] = useState(false);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liked = state?.likedByViewer ?? false;
+
+  useEffect(
+    () => () => {
+      if (feedbackTimerRef.current !== null) clearTimeout(feedbackTimerRef.current);
+    },
+    [],
+  );
+
+  function playFeedback(nextLiked: boolean): void {
+    if (feedbackTimerRef.current !== null) clearTimeout(feedbackTimerRef.current);
+    setHeartFeedback(nextLiked ? "like" : "unlike");
+    setCountFeedback(true);
+    feedbackTimerRef.current = setTimeout(() => {
+      setHeartFeedback(null);
+      setCountFeedback(false);
+      feedbackTimerRef.current = null;
+    }, 180);
+  }
 
   async function toggle(): Promise<void> {
     if (pending || state === null) return;
     const previous = state;
     const nextLiked = !previous.likedByViewer;
+    playFeedback(nextLiked);
     onChange({
       mediaId,
       count: Math.max(0, previous.count + (nextLiked ? 1 : -1)),
@@ -59,14 +81,22 @@ export function PhotoLikeButton({
   }
 
   const heart = (
-    <HeartIcon
+    <span
       aria-hidden="true"
       className={cn(
-        mode === "thumbnail" ? "size-3.5" : "size-4",
-        "transition-[color,fill] duration-150",
-        liked && "fill-rose-500 text-rose-500",
+        "grid place-items-center transition-transform duration-150 ease-out motion-reduce:transform-none motion-reduce:transition-none",
+        heartFeedback === "like" && "scale-[1.24]",
+        heartFeedback === "unlike" && "scale-90",
       )}
-    />
+    >
+      <HeartIcon
+        className={cn(
+          mode === "thumbnail" ? "size-3.5" : "size-4",
+          "transition-[color,fill] duration-150 motion-reduce:transition-none",
+          liked && "fill-rose-500 text-rose-500",
+        )}
+      />
+    </span>
   );
 
   return (
@@ -77,8 +107,8 @@ export function PhotoLikeButton({
         className={cn(
           mode === "thumbnail"
             ? "h-7 touch-manipulation gap-1 rounded-full border border-white/10 bg-black/40 px-2 text-white shadow-sm backdrop-blur-md hover:bg-black/55 hover:text-white"
-            : "h-9 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white",
-          "active:not-aria-[haspopup]:translate-y-0",
+            : "h-11 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white sm:h-9",
+          "active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] transition-[transform,background-color,border-color] duration-150 motion-reduce:transform-none motion-reduce:transition-none",
           className,
         )}
         disabled={pending || state === null}
@@ -90,8 +120,9 @@ export function PhotoLikeButton({
         {heart}
         <span
           className={cn(
-            "min-w-2 font-semibold tracking-tight tabular-nums",
+            "min-w-2 font-semibold tracking-tight tabular-nums transition-[transform,opacity] duration-150 ease-out motion-reduce:transform-none motion-reduce:transition-none",
             mode === "thumbnail" ? "text-[10px] leading-none" : "text-xs",
+            countFeedback && "-translate-y-0.5 scale-105 opacity-80",
           )}
         >
           {state === null ? "…" : state.count}
