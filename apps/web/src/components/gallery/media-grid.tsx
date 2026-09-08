@@ -33,7 +33,6 @@ function MediaTile({
   slug?: string;
 }>) {
   const preview = variant(media, "photo_480") ?? variant(media, "photo_960");
-  const portrait = media.height > media.width;
   if (preview === null) {
     return (
       <div
@@ -51,7 +50,7 @@ function MediaTile({
       <CachedPhotoImage
         alt="活动照片"
         bytes={preview.bytes}
-        className={portrait ? "bg-muted object-contain" : "object-cover"}
+        className="object-cover"
         kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
         mediaId={media.id}
         scope={slug ?? "public-media"}
