@@ -3,6 +3,7 @@
 import type { PublicMediaView } from "@photostream/contracts";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { PhotoLightbox } from "@/components/gallery/photo-lightbox";
@@ -15,6 +16,14 @@ import { cn } from "@/lib/utils";
 interface LikeListResponse {
   readonly items: readonly PhotoLikeState[];
 }
+
+interface NativeViewTransition {
+  readonly finished: Promise<void>;
+}
+
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => NativeViewTransition;
+};
 
 function variant(media: PublicMediaView, kind: "photo_480" | "photo_960") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
@@ -99,6 +108,48 @@ function gridLayout(width: number): { columns: number; gap: number } {
 
 const staticGridClass =
   "grid grid-cols-2 gap-[5px] min-[480px]:grid-cols-3 min-[480px]:gap-1.5 sm:grid-cols-4 sm:gap-[7px] md:grid-cols-5 md:gap-2 lg:grid-cols-6 lg:gap-[9px] xl:grid-cols-7 xl:gap-2.5";
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function transitionName(mediaId: string): string {
+  return `photostream-photo-${mediaId.replace(/[^a-zA-Z0-9_-]/gu, "-")}`;
+}
+
+function thumbnailTransitionElement(mediaId: string): HTMLElement | null {
+  const tile = document.querySelector<HTMLElement>(`[data-media-id="${mediaId}"]`);
+  const image = tile?.firstElementChild;
+  return image instanceof HTMLElement ? image : null;
+}
+
+function lightboxTransitionElement(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[aria-label="照片画布"]');
+}
+
+function setTransitionName(element: HTMLElement | null, name: string | null): void {
+  if (element === null) return;
+  if (name === null) element.style.removeProperty("view-transition-name");
+  else element.style.setProperty("view-transition-name", name);
+}
+
+function createTransitionStyle(name: string): HTMLStyleElement {
+  const style = document.createElement("style");
+  style.dataset.photostreamViewTransition = name;
+  style.textContent = `
+    ::view-transition-group(${name}) {
+      animation-duration: 320ms;
+      animation-timing-function: cubic-bezier(0.2, 0.78, 0.2, 1);
+    }
+    ::view-transition-old(${name}),
+    ::view-transition-new(${name}) {
+      animation-duration: 320ms;
+      animation-timing-function: cubic-bezier(0.2, 0.78, 0.2, 1);
+    }
+  `;
+  document.head.append(style);
+  return style;
+}
 
 function VirtualMediaGrid({
   freshIds,
@@ -224,6 +275,7 @@ export function MediaGrid({
   const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(new Set());
   const previousIdsRef = useRef<Set<string> | null>(null);
   const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionActiveRef = useRef(false);
   const mediaIds = useMemo(() => items.map((item) => item.id), [items]);
 
   const updateLikeState = useCallback((state: PhotoLikeState) => {
@@ -259,6 +311,97 @@ export function MediaGrid({
     },
     [slug],
   );
+
+  const openMedia = useCallback((mediaId: string): void => {
+    const documentWithTransition = document as ViewTransitionDocument;
+    const source = thumbnailTransitionElement(mediaId);
+    if (
+      transitionActiveRef.current ||
+      documentWithTransition.startViewTransition === undefined ||
+      source === null ||
+      prefersReducedMotion()
+    ) {
+      setSelectedId(mediaId);
+      return;
+    }
+
+    const name = transitionName(mediaId);
+    const style = createTransitionStyle(name);
+    setTransitionName(source, name);
+    transitionActiveRef.current = true;
+    let target: HTMLElement | null = null;
+
+    try {
+      const transition = documentWithTransition.startViewTransition(() => {
+        setTransitionName(source, null);
+        flushSync(() => setSelectedId(mediaId));
+        target = lightboxTransitionElement();
+        setTransitionName(target, name);
+      });
+      void transition.finished.finally(() => {
+        setTransitionName(source, null);
+        setTransitionName(target, null);
+        style.remove();
+        transitionActiveRef.current = false;
+      });
+    } catch {
+      setTransitionName(source, null);
+      style.remove();
+      transitionActiveRef.current = false;
+      setSelectedId(mediaId);
+    }
+  }, []);
+
+  const closeMedia = useCallback((): void => {
+    if (selectedId === null) return;
+    const documentWithTransition = document as ViewTransitionDocument;
+    const source = lightboxTransitionElement();
+    const target = thumbnailTransitionElement(selectedId);
+    const targetBounds = target?.getBoundingClientRect();
+    const targetVisible =
+      targetBounds !== undefined &&
+      targetBounds.bottom > 0 &&
+      targetBounds.top < window.innerHeight &&
+      targetBounds.right > 0 &&
+      targetBounds.left < window.innerWidth;
+
+    if (
+      transitionActiveRef.current ||
+      documentWithTransition.startViewTransition === undefined ||
+      source === null ||
+      target === null ||
+      !targetVisible ||
+      prefersReducedMotion()
+    ) {
+      setSelectedId(null);
+      return;
+    }
+
+    const name = transitionName(selectedId);
+    const style = createTransitionStyle(name);
+    setTransitionName(source, name);
+    transitionActiveRef.current = true;
+
+    try {
+      const transition = documentWithTransition.startViewTransition(() => {
+        setTransitionName(source, null);
+        flushSync(() => setSelectedId(null));
+        setTransitionName(target, name);
+      });
+      void transition.finished.finally(() => {
+        setTransitionName(source, null);
+        setTransitionName(target, null);
+        style.remove();
+        transitionActiveRef.current = false;
+      });
+    } catch {
+      setTransitionName(source, null);
+      setTransitionName(target, null);
+      style.remove();
+      transitionActiveRef.current = false;
+      setSelectedId(null);
+    }
+  }, [selectedId]);
 
   useEffect(() => {
     setSelectedId((current) =>
@@ -333,7 +476,7 @@ export function MediaGrid({
           items={items}
           likeStates={likeStates}
           onLikeChange={updateLikeState}
-          onOpen={setSelectedId}
+          onOpen={openMedia}
           {...(slug === undefined ? {} : { slug })}
         />
       ) : (
@@ -345,7 +488,7 @@ export function MediaGrid({
               likeState={likeStates.get(media.id) ?? null}
               media={media}
               onLikeChange={updateLikeState}
-              onOpen={setSelectedId}
+              onOpen={openMedia}
               {...(slug === undefined ? {} : { slug })}
             />
           ))}
@@ -354,7 +497,7 @@ export function MediaGrid({
       <PhotoLightbox
         items={items}
         likeStates={likeStates}
-        onClose={() => setSelectedId(null)}
+        onClose={closeMedia}
         onLikeChange={updateLikeState}
         onSelect={setSelectedId}
         selectedId={selectedId}
