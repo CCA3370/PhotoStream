@@ -14,6 +14,13 @@ export interface PhotoLikeState {
   readonly likedByViewer: boolean;
 }
 
+interface CountMotion {
+  readonly from: number;
+  readonly to: number;
+  readonly direction: 1 | -1;
+  readonly settled: boolean;
+}
+
 export function PhotoLikeButton({
   className,
   mediaId,
@@ -32,36 +39,55 @@ export function PhotoLikeButton({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [heartFeedback, setHeartFeedback] = useState<"like" | "unlike" | null>(null);
-  const [countFeedback, setCountFeedback] = useState(false);
+  const [countMotion, setCountMotion] = useState<CountMotion | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countFrameRef = useRef<number | null>(null);
   const liked = state?.likedByViewer ?? false;
 
   useEffect(
     () => () => {
       if (feedbackTimerRef.current !== null) clearTimeout(feedbackTimerRef.current);
+      if (countFrameRef.current !== null) cancelAnimationFrame(countFrameRef.current);
     },
     [],
   );
 
-  function playFeedback(nextLiked: boolean): void {
+  function playFeedback(nextLiked: boolean, from: number, to: number): void {
     if (feedbackTimerRef.current !== null) clearTimeout(feedbackTimerRef.current);
+    if (countFrameRef.current !== null) cancelAnimationFrame(countFrameRef.current);
     setHeartFeedback(nextLiked ? "like" : "unlike");
-    setCountFeedback(true);
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      setCountMotion(null);
+    } else {
+      setCountMotion({ from, to, direction: nextLiked ? 1 : -1, settled: false });
+      countFrameRef.current = requestAnimationFrame(() => {
+        countFrameRef.current = requestAnimationFrame(() => {
+          setCountMotion((current) =>
+            current === null ? null : { ...current, settled: true },
+          );
+          countFrameRef.current = null;
+        });
+      });
+    }
+
     feedbackTimerRef.current = setTimeout(() => {
       setHeartFeedback(null);
-      setCountFeedback(false);
+      setCountMotion(null);
       feedbackTimerRef.current = null;
-    }, 180);
+    }, 220);
   }
 
   async function toggle(): Promise<void> {
     if (pending || state === null) return;
     const previous = state;
     const nextLiked = !previous.likedByViewer;
-    playFeedback(nextLiked);
+    const nextCount = Math.max(0, previous.count + (nextLiked ? 1 : -1));
+    playFeedback(nextLiked, previous.count, nextCount);
     onChange({
       mediaId,
-      count: Math.max(0, previous.count + (nextLiked ? 1 : -1)),
+      count: nextCount,
       likedByViewer: nextLiked,
     });
     setPending(true);
@@ -120,12 +146,43 @@ export function PhotoLikeButton({
         {heart}
         <span
           className={cn(
-            "min-w-2 font-semibold tracking-tight tabular-nums transition-[transform,opacity] duration-150 ease-out motion-reduce:transform-none motion-reduce:transition-none",
+            "relative inline-grid h-[1em] min-w-2 overflow-hidden font-semibold tracking-tight tabular-nums",
             mode === "thumbnail" ? "text-[10px] leading-none" : "text-xs",
-            countFeedback && "-translate-y-0.5 scale-105 opacity-80",
           )}
         >
-          {state === null ? "…" : state.count}
+          {countMotion === null ? (
+            state === null ? (
+              "…"
+            ) : (
+              state.count
+            )
+          ) : (
+            <>
+              <span
+                aria-hidden="true"
+                className="col-start-1 row-start-1 transition-[transform,opacity] duration-180 ease-out motion-reduce:transition-none"
+                style={{
+                  opacity: countMotion.settled ? 0 : 1,
+                  transform: countMotion.settled
+                    ? `translateY(${countMotion.direction > 0 ? -110 : 110}%)`
+                    : "translateY(0)",
+                }}
+              >
+                {countMotion.from}
+              </span>
+              <span
+                className="col-start-1 row-start-1 transition-[transform,opacity] duration-180 ease-out motion-reduce:transition-none"
+                style={{
+                  opacity: countMotion.settled ? 1 : 0,
+                  transform: countMotion.settled
+                    ? "translateY(0)"
+                    : `translateY(${countMotion.direction > 0 ? 110 : -110}%)`,
+                }}
+              >
+                {countMotion.to}
+              </span>
+            </>
+          )}
         </span>
       </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="点赞失败" />
