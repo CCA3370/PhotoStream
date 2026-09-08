@@ -63,6 +63,14 @@ export class DashboardService {
     });
   }
 
+  async cleanupSearchUsage(now = new Date()): Promise<number> {
+    const deleted = await this.#database
+      .delete(schema.searchUsageEvents)
+      .where(lt(schema.searchUsageEvents.createdAt, new Date(now.getTime() - maxRangeMs)))
+      .returning({ id: schema.searchUsageEvents.id });
+    return deleted.length;
+  }
+
   async statistics(options: {
     readonly actor: InternalActor;
     readonly from: Date;
@@ -211,7 +219,10 @@ export class DashboardService {
             schema.media.capturedAt,
             schema.mediaVariants.objectKey,
           )
-          .orderBy(desc(sql`count(${schema.analyticsEvents.id})`), desc(schema.media.publishSequence))
+          .orderBy(
+            desc(sql`count(${schema.analyticsEvents.id})`),
+            desc(schema.media.publishSequence),
+          )
           .limit(options.limit),
         this.#database
           .select({
