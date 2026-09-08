@@ -16,6 +16,7 @@ import {
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { AnimatedResultCount } from "@/components/gallery/animated-result-count";
 import { MediaGrid } from "@/components/gallery/media-grid";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -461,12 +462,24 @@ export function BibSearchPanel({
         : resultMode === "face"
           ? "人脸找图"
           : "找照片";
+  const resultCountKey =
+    resultMode === "number"
+      ? `number:${number}`
+      : resultMode === "attributes"
+        ? `attributes:${gradeOptionId ?? ""}:${classOptionId ?? ""}`
+        : `face:${faceSearchId ?? ""}`;
   const resultSummary =
-    resultMode === null
-      ? "按号码、年级班级或人脸筛选"
-      : resultMode === "face" && faceStatus === "failed"
-        ? `检索未完整完成 · 已找到 ${resultItems.length} 张候选`
-        : `找到 ${resultItems.length} 张照片`;
+    resultMode === null ? (
+      "按号码、年级班级或人脸筛选"
+    ) : resultMode === "face" && faceStatus === "failed" ? (
+      <>
+        检索未完整完成 · 已找到 <AnimatedResultCount key={resultCountKey} value={resultItems.length} /> 张候选
+      </>
+    ) : (
+      <>
+        找到 <AnimatedResultCount key={resultCountKey} value={resultItems.length} /> 张照片
+      </>
+    );
 
   return (
     <div className="flex flex-col gap-4">
