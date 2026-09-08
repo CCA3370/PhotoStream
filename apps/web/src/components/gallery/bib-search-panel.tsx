@@ -36,6 +36,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { preprocessFaceReference } from "@/lib/face-reference";
+import { recordSearchUsage } from "@/lib/search-usage";
 
 interface SearchPage {
   readonly items: readonly PublicMediaView[];
@@ -149,7 +150,7 @@ export function BibSearchPanel({
       ? "输入完整号码"
       : `输入号码（${numberLengths.map((length) => `${length} 位`).join("或")}）`;
 
-  async function search(cursor?: string): Promise<void> {
+  async function search(cursor?: string, trackUsage = true): Promise<void> {
     if (pending || mode === "face") return;
     if (mode === "number" && number.length === 0) return;
     if (mode === "attributes" && gradeOptionId === null) return;
@@ -172,6 +173,7 @@ export function BibSearchPanel({
                 },
               },
             );
+      if (cursor === undefined && trackUsage) recordSearchUsage(slug, mode);
       setResult((current) => {
         if (cursor === undefined || current === null) return page;
         return { ...page, items: mergeItems(current.items, page.items) };
@@ -186,7 +188,7 @@ export function BibSearchPanel({
   }
 
   const refreshCurrentSearch = useEffectEvent(() => {
-    if (resultMode === "number" || resultMode === "attributes") void search();
+    if (resultMode === "number" || resultMode === "attributes") void search(undefined, false);
   });
 
   useEffect(() => {
@@ -292,6 +294,7 @@ export function BibSearchPanel({
           signal: controller.signal,
         },
       );
+      recordSearchUsage(slug, "face");
       setFaceSearchId(created.id);
       setFaceStage("uploading");
       const upload = await fetch(created.upload.url, {
