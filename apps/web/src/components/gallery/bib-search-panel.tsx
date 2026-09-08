@@ -506,10 +506,7 @@ export function BibSearchPanel({
                   </ToggleGroupItem>
                 ) : null}
                 {bibSearchEnabled && attributeFilterEnabled ? (
-                  <ToggleGroupItem
-                    className="h-11 rounded-xl text-xs sm:h-9"
-                    value="attributes"
-                  >
+                  <ToggleGroupItem className="h-11 rounded-xl text-xs sm:h-9" value="attributes">
                     年级班级
                   </ToggleGroupItem>
                 ) : null}
@@ -570,8 +567,8 @@ export function BibSearchPanel({
                             {(value) =>
                               value === null
                                 ? "选择年级"
-                                : (gradeOptions.find((option) => option.id === value)?.displayName ??
-                                  "选择年级")
+                                : (gradeOptions.find((option) => option.id === value)
+                                    ?.displayName ?? "选择年级")
                             }
                           </SelectValue>
                         </SelectTrigger>
@@ -666,7 +663,10 @@ export function BibSearchPanel({
                     {faceStage === "choose" ? (
                       <div className="rounded-2xl border bg-muted/15 p-5 text-center animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none">
                         <span className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-muted/70">
-                          <ScanFaceIcon aria-hidden="true" className="size-5 text-muted-foreground" />
+                          <ScanFaceIcon
+                            aria-hidden="true"
+                            className="size-5 text-muted-foreground"
+                          />
                         </span>
                         <p className="text-sm font-medium">选择你想查找人物的清晰单人照片</p>
                         <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
