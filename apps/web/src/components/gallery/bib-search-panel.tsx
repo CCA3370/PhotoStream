@@ -5,7 +5,7 @@ import type {
   FaceSearchView,
   PublicMediaView,
 } from "@photostream/contracts";
-import { ScanFaceIcon, ScanSearchIcon, SearchIcon, XIcon } from "lucide-react";
+import { CameraIcon, ScanFaceIcon, ScanSearchIcon, SearchIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -636,14 +636,15 @@ export function BibSearchPanel({
                         </AlertDescription>
                       </Alert>
 
-                      <div className="flex items-start gap-2.5 rounded-2xl border bg-background p-3.5">
+                      <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/10 px-3.5 py-3">
                         <Checkbox
                           checked={acknowledged}
+                          className="mt-0.5 size-5 rounded-md border-2 border-muted-foreground/30 bg-background shadow-xs transition-[border-color,background-color,box-shadow,transform] hover:border-primary/60 active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/40 data-checked:border-primary data-checked:bg-primary"
                           id="face-search-consent"
                           onCheckedChange={setAcknowledged}
                         />
                         <label
-                          className="text-xs leading-5 text-muted-foreground"
+                          className="cursor-pointer text-xs leading-5 text-muted-foreground"
                           htmlFor="face-search-consent"
                         >
                           我已阅读并同意上述处理方式，并确认提交的是本人或已获得明确授权的人物照片。
@@ -657,23 +658,40 @@ export function BibSearchPanel({
                       <span className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-muted/70">
                         <ScanFaceIcon aria-hidden="true" className="size-5 text-muted-foreground" />
                       </span>
-                      <p className="text-sm font-medium">选择一张清晰的单人照片</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        支持 JPEG、PNG、WebP；HEIC/HEIF 需设备能够原生解码。
+                      <p className="text-sm font-medium">选择你想查找人物的清晰单人照片</p>
+                      <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+                        照片中应只有你想在本相册中查找的人，尽量选择正脸、清晰、无遮挡的照片。
                       </p>
-                      <label
-                        className="mt-3 inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-xs transition-opacity hover:opacity-90"
-                        htmlFor="face-reference-file"
-                      >
-                        选择照片
-                        <Input
-                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
-                          className="sr-only"
-                          id="face-reference-file"
-                          onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
-                          type="file"
-                        />
-                      </label>
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        <label
+                          className="inline-flex h-11 min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-background px-4 text-sm font-medium shadow-xs transition-colors hover:bg-muted/55"
+                          htmlFor="face-reference-file"
+                        >
+                          选择照片
+                          <Input
+                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+                            className="sr-only"
+                            id="face-reference-file"
+                            onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
+                            type="file"
+                          />
+                        </label>
+                        <label
+                          className="inline-flex h-11 min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs transition-opacity hover:opacity-90"
+                          htmlFor="face-reference-camera"
+                        >
+                          <CameraIcon aria-hidden="true" className="size-4" />
+                          拍照
+                          <Input
+                            accept="image/*"
+                            capture="environment"
+                            className="sr-only"
+                            id="face-reference-camera"
+                            onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
+                            type="file"
+                          />
+                        </label>
+                      </div>
                     </div>
                   ) : null}
 
@@ -726,7 +744,7 @@ export function BibSearchPanel({
             </div>
           </div>
 
-          <DialogFooter className="shrink-0 border-t bg-background/95 px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-5 sm:py-3">
+          <DialogFooter className="shrink-0 border-t bg-background/95 px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-5 sm:py-3">
             {mode === "face" && faceSearch !== undefined ? (
               <>
                 {faceWorking ? (
