@@ -10,6 +10,7 @@ import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
+import { cn } from "@/lib/utils";
 
 interface LikeListResponse {
   readonly items: readonly PhotoLikeState[];
@@ -20,12 +21,14 @@ function variant(media: PublicMediaView, kind: "photo_480" | "photo_960") {
 }
 
 function MediaTile({
+  animateIn,
   likeState,
   media,
   onLikeChange,
   onOpen,
   slug,
 }: Readonly<{
+  animateIn?: boolean;
   likeState: PhotoLikeState | null;
   media: PublicMediaView;
   onLikeChange: (state: PhotoLikeState) => void;
@@ -44,20 +47,24 @@ function MediaTile({
   }
   return (
     <div
-      className="group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-150 active:scale-[0.985] sm:rounded-xl sm:hover:-translate-y-px sm:hover:shadow-md sm:hover:ring-border"
+      className={cn(
+        "group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-200 ease-out active:scale-[0.975] sm:rounded-xl sm:hover:-translate-y-0.5 sm:hover:scale-[1.012] sm:hover:shadow-md sm:hover:ring-border motion-reduce:transform-none motion-reduce:transition-none",
+        animateIn &&
+          "animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
+      )}
       data-media-id={media.id}
     >
       <CachedPhotoImage
         alt="活动照片"
         bytes={preview.bytes}
-        className="object-cover"
+        className="object-cover transition-transform duration-300 ease-out sm:group-hover:scale-[1.018] motion-reduce:transform-none motion-reduce:transition-none"
         kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
         mediaId={media.id}
         scope={slug ?? "public-media"}
         sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1279px) 17vw, 15vw"
         sourceUrl={preview.url}
       />
-      <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-150 sm:group-hover:bg-black/[0.06] sm:group-focus-within:bg-black/[0.06]" />
+      <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 sm:group-hover:bg-black/[0.055] sm:group-focus-within:bg-black/[0.055] motion-reduce:transition-none" />
       <button
         aria-label="打开活动照片"
         className="absolute inset-0 z-10 touch-manipulation rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:rounded-xl"
@@ -67,7 +74,7 @@ function MediaTile({
         <span className="sr-only">打开活动照片</span>
       </button>
       {slug === undefined ? null : (
-        <div className="absolute bottom-1 left-1 z-20 sm:bottom-1.5 sm:left-1.5">
+        <div className="absolute bottom-1 left-1 z-20 transition-[transform,opacity] duration-200 sm:bottom-1.5 sm:left-1.5 sm:translate-y-0.5 sm:opacity-90 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 motion-reduce:transform-none motion-reduce:transition-none">
           <PhotoLikeButton
             mediaId={media.id}
             mode="thumbnail"
@@ -94,12 +101,14 @@ const staticGridClass =
   "grid grid-cols-2 gap-[5px] min-[480px]:grid-cols-3 min-[480px]:gap-1.5 sm:grid-cols-4 sm:gap-[7px] md:grid-cols-5 md:gap-2 lg:grid-cols-6 lg:gap-[9px] xl:grid-cols-7 xl:gap-2.5";
 
 function VirtualMediaGrid({
+  freshIds,
   items,
   likeStates,
   onLikeChange,
   onOpen,
   slug,
 }: Readonly<{
+  freshIds: ReadonlySet<string>;
   items: readonly PublicMediaView[];
   likeStates: ReadonlyMap<string, PhotoLikeState>;
   onLikeChange: (state: PhotoLikeState) => void;
@@ -152,6 +161,7 @@ function VirtualMediaGrid({
         <div className={staticGridClass}>
           {items.slice(0, 21).map((media) => (
             <MediaTile
+              animateIn={freshIds.has(media.id)}
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
               media={media}
@@ -188,6 +198,7 @@ function VirtualMediaGrid({
           >
             {rowItems.map((media) => (
               <MediaTile
+                animateIn={freshIds.has(media.id)}
                 key={media.id}
                 likeState={likeStates.get(media.id) ?? null}
                 media={media}
@@ -210,6 +221,9 @@ export function MediaGrid({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [likeStates, setLikeStates] = useState<ReadonlyMap<string, PhotoLikeState>>(new Map());
   const [likeError, setLikeError] = useState<string | null>(null);
+  const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(new Set());
+  const previousIdsRef = useRef<Set<string> | null>(null);
+  const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaIds = useMemo(() => items.map((item) => item.id), [items]);
 
   const updateLikeState = useCallback((state: PhotoLikeState) => {
@@ -253,6 +267,29 @@ export function MediaGrid({
   }, [items]);
 
   useEffect(() => {
+    const nextIds = new Set(mediaIds);
+    const previousIds = previousIdsRef.current;
+    previousIdsRef.current = nextIds;
+    if (previousIds === null) return;
+
+    const added = mediaIds.filter((id) => !previousIds.has(id)).slice(0, 6);
+    if (added.length === 0) return;
+    if (freshTimerRef.current !== null) clearTimeout(freshTimerRef.current);
+    setFreshIds(new Set(added));
+    freshTimerRef.current = setTimeout(() => {
+      setFreshIds(new Set());
+      freshTimerRef.current = null;
+    }, 420);
+  }, [mediaIds]);
+
+  useEffect(
+    () => () => {
+      if (freshTimerRef.current !== null) clearTimeout(freshTimerRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
     if (slug === undefined || mediaIds.length === 0) return;
     let disposed = false;
     void loadLikeStates(mediaIds).catch((caught: unknown) => {
@@ -292,6 +329,7 @@ export function MediaGrid({
     <>
       {items.length > 200 ? (
         <VirtualMediaGrid
+          freshIds={freshIds}
           items={items}
           likeStates={likeStates}
           onLikeChange={updateLikeState}
@@ -302,6 +340,7 @@ export function MediaGrid({
         <div className={staticGridClass}>
           {items.map((media) => (
             <MediaTile
+              animateIn={freshIds.has(media.id)}
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
               media={media}
