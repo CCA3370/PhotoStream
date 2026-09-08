@@ -29,8 +29,18 @@ function variant(media: PublicMediaView, kind: "photo_480" | "photo_960") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
 }
 
+function freshAnimationIndex(freshIds: ReadonlySet<string>, mediaId: string): number | undefined {
+  let index = 0;
+  for (const id of freshIds) {
+    if (id === mediaId) return index;
+    index += 1;
+  }
+  return undefined;
+}
+
 function MediaTile({
   animateIn,
+  animationIndex,
   likeState,
   media,
   onLikeChange,
@@ -38,6 +48,7 @@ function MediaTile({
   slug,
 }: Readonly<{
   animateIn?: boolean;
+  animationIndex?: number;
   likeState: PhotoLikeState | null;
   media: PublicMediaView;
   onLikeChange: (state: PhotoLikeState) => void;
@@ -63,6 +74,11 @@ function MediaTile({
           "animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
       )}
       data-media-id={media.id}
+      style={
+        animateIn && animationIndex !== undefined
+          ? { animationDelay: `${animationIndex * 30}ms` }
+          : undefined
+      }
     >
       <div
         aria-hidden="true"
@@ -225,6 +241,7 @@ function VirtualMediaGrid({
           {items.slice(0, 21).map((media) => (
             <MediaTile
               animateIn={freshIds.has(media.id)}
+              animationIndex={freshAnimationIndex(freshIds, media.id)}
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
               media={media}
@@ -262,6 +279,7 @@ function VirtualMediaGrid({
             {rowItems.map((media) => (
               <MediaTile
                 animateIn={freshIds.has(media.id)}
+                animationIndex={freshAnimationIndex(freshIds, media.id)}
                 key={media.id}
                 likeState={likeStates.get(media.id) ?? null}
                 media={media}
@@ -434,7 +452,7 @@ export function MediaGrid({
     freshTimerRef.current = setTimeout(() => {
       setFreshIds(new Set());
       freshTimerRef.current = null;
-    }, 420);
+    }, 520);
   }, [mediaIds]);
 
   useEffect(
@@ -496,6 +514,7 @@ export function MediaGrid({
           {items.map((media) => (
             <MediaTile
               animateIn={freshIds.has(media.id)}
+              animationIndex={freshAnimationIndex(freshIds, media.id)}
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
               media={media}
