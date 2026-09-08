@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import * as RechartsPrimitive from "recharts";
 import type { TooltipValueType } from "recharts";
+import * as RechartsPrimitive from "recharts";
 
 import { cn } from "@/lib/utils";
 
@@ -85,6 +85,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   }
 
   return (
+    // biome-ignore lint/security/noDangerouslySetInnerHtml: This is the current official shadcn ChartStyle implementation; values come from local chart config.
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
@@ -93,8 +94,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ?? itemConfig.color;
+    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ?? itemConfig.color;
     return color ? `  --color-${key}: ${color};` : null;
   })
   .join("\n")}
@@ -148,11 +148,7 @@ function ChartTooltipContent({
       !labelKey && typeof label === "string" ? (config[label]?.label ?? label) : itemConfig?.label;
 
     if (labelFormatter) {
-      return (
-        <div className={cn("font-medium", labelClassName)}>
-          {labelFormatter(value, payload)}
-        </div>
-      );
+      return <div className={cn("font-medium", labelClassName)}>{labelFormatter(value, payload)}</div>;
     }
 
     if (!value) {
@@ -160,15 +156,7 @@ function ChartTooltipContent({
     }
 
     return <div className={cn("font-medium", labelClassName)}>{value}</div>;
-  }, [
-    label,
-    labelFormatter,
-    payload,
-    hideLabel,
-    labelClassName,
-    config,
-    labelKey,
-  ]);
+  }, [label, labelFormatter, payload, hideLabel, labelClassName, config, labelKey]);
 
   if (!active || !payload?.length) {
     return null;
@@ -193,6 +181,7 @@ function ChartTooltipContent({
             const indicatorColor = color ?? item.payload?.fill ?? item.color;
 
             return (
+              // biome-ignore lint/suspicious/noArrayIndexKey: This matches the current official shadcn tooltip implementation and Recharts payload has no guaranteed stable identifier.
               <div
                 key={index}
                 className={cn(
@@ -291,6 +280,7 @@ function ChartLegendContent({
           const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
           return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: This matches the current official shadcn legend implementation and Recharts payload has no guaranteed stable identifier.
             <div
               key={index}
               className={cn(
@@ -343,9 +333,9 @@ function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key:
 
 export {
   ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  ChartTooltip,
+  ChartTooltipContent,
 };
