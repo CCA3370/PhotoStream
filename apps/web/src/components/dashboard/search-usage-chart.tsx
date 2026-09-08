@@ -34,7 +34,7 @@ export function SearchUsageChart({ data }: Readonly<{ data: readonly SearchUsage
       ariaLabel="号码、年级班级和人脸找图使用量趋势"
       data={points}
       emptyLabel="暂无找图使用数据"
-      mode="line"
+      mode="area"
       series={series}
       valueFormatter={(value) => numberFormatter.format(Math.round(value))}
     />
