@@ -1,4 +1,4 @@
-import { apiErrorSchema } from "@photostream/contracts";
+import { apiErrorSchema, okResponseSchema } from "@photostream/contracts";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -14,6 +14,11 @@ const dashboardQuerySchema = z
     bucket: z.enum(["5m", "30m", "1h", "6h", "1d"]).optional(),
     limit: z.coerce.number().int().min(1).max(20).default(8),
   })
+  .strict();
+
+const searchUsageParamsSchema = z.object({ slug: z.string().min(12).max(32) }).strict();
+const searchUsageRequestSchema = z
+  .object({ method: z.enum(["number", "attributes", "face"]) })
   .strict();
 
 const rankedPhotoSchema = z
@@ -50,6 +55,23 @@ const dashboardResponseSchema = z
         })
         .strict(),
     ),
+    searchUsage: z
+      .object({
+        number: z.number().int().min(0),
+        attributes: z.number().int().min(0),
+        face: z.number().int().min(0),
+        points: z.array(
+          z
+            .object({
+              at: z.iso.datetime(),
+              number: z.number().int().min(0),
+              attributes: z.number().int().min(0),
+              face: z.number().int().min(0),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
     topPhotos: z.array(
       rankedPhotoSchema.extend({ downloads: z.number().int().positive() }).strict(),
     ),
@@ -72,8 +94,30 @@ export async function registerDashboardRoutes(
     400: apiErrorSchema,
     401: apiErrorSchema,
     403: apiErrorSchema,
+    404: apiErrorSchema,
     500: apiErrorSchema,
   };
+
+  typed.post(
+    "/api/v1/public/albums/:slug/analytics/search-usage",
+    {
+      config: { rateLimit: { max: 60, timeWindow: "10 minutes" } },
+      schema: {
+        operationId: "recordPhotoSearchUsage",
+        tags: ["public", "analytics"],
+        params: searchUsageParamsSchema,
+        body: searchUsageRequestSchema,
+        response: { 200: okResponseSchema, ...errors },
+      },
+    },
+    async (request) => {
+      await options.dashboardService.recordSearchUsage({
+        slug: request.params.slug,
+        method: request.body.method,
+      });
+      return { ok: true as const };
+    },
+  );
 
   typed.get(
     "/api/v1/dashboard",
