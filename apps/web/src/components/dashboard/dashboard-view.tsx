@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
+import { CdnMetricsPanel } from "@/components/dashboard/cdn-metrics-panel";
 import { SearchUsageChart } from "@/components/dashboard/search-usage-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,32 @@ export interface DashboardStatistics {
       readonly attributes: number;
       readonly face: number;
     }[];
+  };
+  readonly cdn: {
+    readonly status: "ok" | "partial" | "unavailable" | "error";
+    readonly domain: string | null;
+    readonly intervalSeconds: number;
+    readonly dataDelaySeconds: number;
+    readonly trafficBytes: number;
+    readonly originTrafficBytes: number;
+    readonly peakBandwidthBps: number;
+    readonly averageByteHitRate: number | null;
+    readonly averageRequestHitRate: number | null;
+    readonly requests: number;
+    readonly errorRequests: number;
+    readonly points: readonly {
+      readonly at: string;
+      readonly trafficBytes: number;
+      readonly bandwidthBps: number;
+      readonly originTrafficBytes: number;
+      readonly byteHitRate: number | null;
+      readonly requestHitRate: number | null;
+      readonly http2xx: number;
+      readonly http3xx: number;
+      readonly http4xx: number;
+      readonly http5xx: number;
+    }[];
+    readonly message: string | null;
   };
   readonly topPhotos: readonly {
     readonly mediaId: string;
@@ -512,6 +539,10 @@ export function DashboardView({
           <SearchUsageChart data={searchUsagePoints} />
         </CardContent>
       </Card>
+
+      <div className={cn("transition-opacity", pending && "opacity-60")}>
+        <CdnMetricsPanel data={data.cdn} />
+      </div>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.7fr)]">
         <Card
