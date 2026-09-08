@@ -5,7 +5,14 @@ import type {
   FaceSearchView,
   PublicMediaView,
 } from "@photostream/contracts";
-import { CameraIcon, ScanFaceIcon, ScanSearchIcon, SearchIcon, XIcon } from "lucide-react";
+import {
+  CameraIcon,
+  CheckIcon,
+  ScanFaceIcon,
+  ScanSearchIcon,
+  SearchIcon,
+  XIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -63,7 +70,14 @@ interface FaceSearchOptions {
 
 type SearchMode = "attributes" | "face" | "number";
 type ResultMode = "attributes" | "face" | "number";
-type FaceStage = "consent" | "choose" | "preparing" | "uploading" | "searching" | "failed";
+type FaceStage =
+  | "consent"
+  | "choose"
+  | "preparing"
+  | "uploading"
+  | "searching"
+  | "complete"
+  | "failed";
 
 function mergeItems(
   current: readonly PublicMediaView[],
@@ -91,7 +105,9 @@ function faceProgress(stage: FaceStage, view: FaceSearchView | null): number {
   if (stage === "searching" && view === null) return 64;
   if (view?.search.status === "partial") return 88;
   if (view?.search.status === "processing") return 74;
-  if (view?.search.status === "completed" || view?.search.status === "failed") return 100;
+  if (stage === "complete" || view?.search.status === "completed" || view?.search.status === "failed") {
+    return 100;
+  }
   return 0;
 }
 
@@ -133,6 +149,7 @@ export function BibSearchPanel({
   const [facePending, setFacePending] = useState(false);
   const [faceCloseWarning, setFaceCloseWarning] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const faceCompleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const gradeOptions = attributeOptions.filter((option) => option.dimension === "grade");
   const allowedClassIds = new Set(
@@ -149,6 +166,40 @@ export function BibSearchPanel({
     numberLengths.length === 0
       ? "输入完整号码"
       : `输入号码（${numberLengths.map((length) => `${length} 位`).join("或")}）`;
+  const searchModes: { label: string; value: SearchMode }[] = [];
+  if (bibSearchEnabled) searchModes.push({ label: "号码", value: "number" });
+  if (bibSearchEnabled && attributeFilterEnabled) {
+    searchModes.push({ label: "年级班级", value: "attributes" });
+  }
+  if (faceSearch !== undefined) searchModes.push({ label: "人脸", value: "face" });
+  const modeIndex = Math.max(
+    0,
+    searchModes.findIndex((item) => item.value === mode),
+  );
+
+  const completeFaceSearch = useCallback(() => {
+    if (faceCompleteTimerRef.current !== null) clearTimeout(faceCompleteTimerRef.current);
+    setFaceStage("complete");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const finish = () => {
+      setResultMode("face");
+      setOpen(false);
+      setFaceStage("choose");
+      faceCompleteTimerRef.current = null;
+    };
+    if (reduceMotion) {
+      finish();
+      return;
+    }
+    faceCompleteTimerRef.current = setTimeout(finish, 760);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (faceCompleteTimerRef.current !== null) clearTimeout(faceCompleteTimerRef.current);
+    },
+    [],
+  );
 
   async function search(cursor?: string, trackUsage = true): Promise<void> {
     if (pending || mode === "face") return;
@@ -236,8 +287,7 @@ export function BibSearchPanel({
         const next = await refreshFace(faceSearchId);
         if (cancelled) return;
         if (next.search.status === "completed") {
-          setResultMode("face");
-          setOpen(false);
+          completeFaceSearch();
           return;
         }
         if (next.search.status === "failed") {
@@ -269,13 +319,17 @@ export function BibSearchPanel({
       cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [faceSearchId, faceView?.search.status, refreshFace]);
+  }, [completeFaceSearch, faceSearchId, faceView?.search.status, refreshFace]);
 
   async function chooseFace(file: File | undefined): Promise<void> {
     if (file === undefined || faceSearch === undefined || facePending) return;
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
+    if (faceCompleteTimerRef.current !== null) {
+      clearTimeout(faceCompleteTimerRef.current);
+      faceCompleteTimerRef.current = null;
+    }
     setFacePending(true);
     setError(null);
     setFaceView(null);
@@ -313,8 +367,7 @@ export function BibSearchPanel({
       });
       const next = await refreshFace(created.id);
       if (next.search.status === "completed") {
-        setResultMode("face");
-        setOpen(false);
+        completeFaceSearch();
       } else if (next.search.status === "failed") {
         if (next.items.length > 0) {
           setResultMode("face");
@@ -334,6 +387,10 @@ export function BibSearchPanel({
 
   async function cancelFaceSearch(): Promise<void> {
     abortRef.current?.abort();
+    if (faceCompleteTimerRef.current !== null) {
+      clearTimeout(faceCompleteTimerRef.current);
+      faceCompleteTimerRef.current = null;
+    }
     const id = faceSearchId;
     setFacePending(true);
     try {
@@ -387,6 +444,7 @@ export function BibSearchPanel({
   }
 
   const faceWorking = mode === "face" && isFaceWorking(faceView, faceStage);
+  const faceCompleting = mode === "face" && faceStage === "complete";
   const faceItems = faceView?.items ?? [];
   const faceStatus = faceView?.search.status;
   const resultItems = resultMode === "face" ? faceItems : (result?.items ?? []);
@@ -490,31 +548,35 @@ export function BibSearchPanel({
             <div className="flex flex-col gap-3.5">
               <ToggleGroup
                 aria-label="找照片方式"
-                className="grid w-full grid-cols-3 rounded-2xl border bg-muted/30 p-1"
+                className="relative grid w-full rounded-2xl border bg-muted/30 p-1"
                 onValueChange={(values) => {
                   const value = values[0];
                   if (value === "number" || value === "attributes" || value === "face") {
                     changeMode(value);
                   }
                 }}
-                spacing={2}
+                spacing={0}
+                style={{ gridTemplateColumns: `repeat(${searchModes.length}, minmax(0, 1fr))` }}
                 value={[mode]}
               >
-                {bibSearchEnabled ? (
-                  <ToggleGroupItem className="h-11 rounded-xl text-xs sm:h-9" value="number">
-                    号码
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1 bottom-1 left-1 rounded-xl bg-background shadow-sm ring-1 ring-border/55 transition-transform duration-250 ease-out motion-reduce:transition-none"
+                  style={{
+                    transform: `translateX(${modeIndex * 100}%)`,
+                    width: `calc((100% - 0.5rem) / ${searchModes.length})`,
+                  }}
+                />
+                {searchModes.map((item) => (
+                  <ToggleGroupItem
+                    className="relative z-10 h-11 rounded-xl bg-transparent text-xs hover:bg-transparent aria-pressed:bg-transparent data-[state=on]:bg-transparent sm:h-9"
+                    disabled={faceCompleting}
+                    key={item.value}
+                    value={item.value}
+                  >
+                    {item.label}
                   </ToggleGroupItem>
-                ) : null}
-                {bibSearchEnabled && attributeFilterEnabled ? (
-                  <ToggleGroupItem className="h-11 rounded-xl text-xs sm:h-9" value="attributes">
-                    年级班级
-                  </ToggleGroupItem>
-                ) : null}
-                {faceSearch === undefined ? null : (
-                  <ToggleGroupItem className="h-11 rounded-xl text-xs sm:h-9" value="face">
-                    人脸
-                  </ToggleGroupItem>
-                )}
+                ))}
               </ToggleGroup>
 
               <div
@@ -705,29 +767,49 @@ export function BibSearchPanel({
                       </div>
                     ) : null}
 
-                    {faceWorking ? (
+                    {faceWorking || faceCompleting ? (
                       <div className="flex flex-col gap-3 rounded-2xl border bg-muted/15 p-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
-                        <Progress value={faceProgress(faceStage, faceView)}>
+                        <Progress
+                          className="[&_[data-slot=progress-indicator]]:duration-500 [&_[data-slot=progress-indicator]]:ease-out motion-reduce:[&_[data-slot=progress-indicator]]:duration-0"
+                          value={faceProgress(faceStage, faceView)}
+                        >
                           <ProgressLabel>
-                            {faceStage === "preparing"
-                              ? "正在处理参考照片"
-                              : faceStage === "uploading"
-                                ? "正在提交参考照片"
-                                : faceItems.length > 0
-                                  ? `已找到 ${faceItems.length} 张候选，正在继续查找`
-                                  : "正在查找照片"}
+                            {faceCompleting
+                              ? "查找完成"
+                              : faceStage === "preparing"
+                                ? "正在处理参考照片"
+                                : faceStage === "uploading"
+                                  ? "正在提交参考照片"
+                                  : faceItems.length > 0
+                                    ? `已找到 ${faceItems.length} 张候选，正在继续查找`
+                                    : "正在查找照片"}
                           </ProgressLabel>
                           <ProgressValue />
                         </Progress>
-                        <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
-                          {faceItems.length === 0
-                            ? "当前还没有返回候选，请等待查找完成后再判断结果。"
-                            : "结果仍在更新，查找完成前数量可能变化。"}
-                        </p>
-                        {faceItems.length === 0 ? null : (
-                          <div className="max-h-52 overflow-y-auto rounded-xl overscroll-contain">
-                            <MediaGrid items={faceItems} slug={slug} />
+                        {faceCompleting ? (
+                          <div className="flex items-center gap-2.5 text-xs text-muted-foreground animate-in fade-in-0 zoom-in-95 delay-150 duration-200 motion-reduce:animate-none">
+                            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                              <CheckIcon aria-hidden="true" className="size-4" />
+                            </span>
+                            <span>
+                              {faceItems.length === 0
+                                ? "检索已完成，正在整理结果"
+                                : `已找到 ${faceItems.length} 张照片，正在打开结果`}
+                            </span>
                           </div>
+                        ) : (
+                          <>
+                            <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
+                              {faceItems.length === 0
+                                ? "当前还没有返回候选，请等待查找完成后再判断结果。"
+                                : "结果仍在更新，查找完成前数量可能变化。"}
+                            </p>
+                            {faceItems.length === 0 ? null : (
+                              <div className="max-h-52 overflow-y-auto rounded-xl overscroll-contain">
+                                <MediaGrid items={faceItems} slug={slug} />
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     ) : null}
