@@ -144,8 +144,8 @@ describe("configuration", () => {
     expect(loadConfig(validEnvironment)).toMatchObject({
       FACE_SEARCH_GLOBAL_ENABLED: false,
       FACE_SEARCH_THRESHOLD_VERSION: "unqualified",
-      FACE_SEARCH_CLUSTER_THRESHOLD: 0.8,
-      FACE_SEARCH_ASYNC_THRESHOLD: 0.8,
+      FACE_SEARCH_CLUSTER_THRESHOLD: 0.5,
+      FACE_SEARCH_ASYNC_THRESHOLD: 0.5,
     });
     expect(
       loadConfig({
@@ -156,8 +156,8 @@ describe("configuration", () => {
     ).toMatchObject({
       FACE_SEARCH_GLOBAL_ENABLED: true,
       FACE_SEARCH_THRESHOLD_VERSION: "unqualified",
-      FACE_SEARCH_CLUSTER_THRESHOLD: 0.8,
-      FACE_SEARCH_ASYNC_THRESHOLD: 0.8,
+      FACE_SEARCH_CLUSTER_THRESHOLD: 0.5,
+      FACE_SEARCH_ASYNC_THRESHOLD: 0.5,
     });
     expect(
       loadConfig({
