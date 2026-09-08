@@ -141,6 +141,13 @@
       "when": 1788793200000,
       "tag": "0019_face_provider_diagnostics",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788879600000,
+      "tag": "0020_search_usage",
+      "breakpoints": true
     }
   ]
 }
