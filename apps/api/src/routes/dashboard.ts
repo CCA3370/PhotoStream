@@ -72,6 +72,38 @@ const dashboardResponseSchema = z
         ),
       })
       .strict(),
+    cdn: z
+      .object({
+        status: z.enum(["ok", "partial", "unavailable", "error"]),
+        domain: z.string().min(1).nullable(),
+        intervalSeconds: z.number().int().min(0),
+        dataDelaySeconds: z.number().int().min(0),
+        trafficBytes: z.number().min(0),
+        originTrafficBytes: z.number().min(0),
+        peakBandwidthBps: z.number().min(0),
+        averageByteHitRate: z.number().min(0).max(100).nullable(),
+        averageRequestHitRate: z.number().min(0).max(100).nullable(),
+        requests: z.number().min(0),
+        errorRequests: z.number().min(0),
+        points: z.array(
+          z
+            .object({
+              at: z.iso.datetime(),
+              trafficBytes: z.number().min(0),
+              bandwidthBps: z.number().min(0),
+              originTrafficBytes: z.number().min(0),
+              byteHitRate: z.number().min(0).max(100).nullable(),
+              requestHitRate: z.number().min(0).max(100).nullable(),
+              http2xx: z.number().min(0),
+              http3xx: z.number().min(0),
+              http4xx: z.number().min(0),
+              http5xx: z.number().min(0),
+            })
+            .strict(),
+        ),
+        message: z.string().nullable(),
+      })
+      .strict(),
     topPhotos: z.array(
       rankedPhotoSchema.extend({ downloads: z.number().int().positive() }).strict(),
     ),
