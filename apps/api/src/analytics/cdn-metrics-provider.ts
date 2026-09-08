@@ -78,13 +78,16 @@ function timestamp(value: unknown): string | null {
 function metricSeries(response: unknown, containerKeys: readonly string[]) {
   const body = bodyOf(response);
   let container: unknown = body;
-  for (const key of containerKeys) container = valueAt(container, key, key[0]?.toUpperCase() + key.slice(1));
+  for (const key of containerKeys)
+    container = valueAt(container, key, key[0]?.toUpperCase() + key.slice(1));
   return listAt(container, "dataModule", "DataModule")
     .map((item) => ({
       at: timestamp(valueAt(item, "timeStamp", "TimeStamp")),
       value: numeric(valueAt(item, "value", "Value")),
     }))
-    .filter((item): item is { at: string; value: number } => item.at !== null && item.value !== null);
+    .filter(
+      (item): item is { at: string; value: number } => item.at !== null && item.value !== null,
+    );
 }
 
 function httpSeries(response: unknown) {
@@ -105,7 +108,17 @@ function httpSeries(response: unknown) {
       }
       return { at, ...counts };
     })
-    .filter((item): item is { at: string; http2xx: number; http3xx: number; http4xx: number; http5xx: number } => item.at !== null);
+    .filter(
+      (
+        item,
+      ): item is {
+        at: string;
+        http2xx: number;
+        http3xx: number;
+        http4xx: number;
+        http5xx: number;
+      } => item.at !== null,
+    );
 }
 
 function average(values: readonly number[]): number | null {
@@ -162,14 +175,16 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
   }
 
   #request(name: string, values: RecordValue): unknown {
-    const constructor = (CdnSdk as unknown as RecordValue)[name];
-    if (typeof constructor !== "function") throw new Error(`CDN SDK request unavailable: ${name}`);
-    return new (constructor as RequestConstructor)(values);
+    const requestConstructor = (CdnSdk as unknown as RecordValue)[name];
+    if (typeof requestConstructor !== "function")
+      throw new Error(`CDN SDK request unavailable: ${name}`);
+    return new (requestConstructor as RequestConstructor)(values);
   }
 
   async #call(operation: string, requestName: string, values: RecordValue): Promise<unknown> {
     const method = (this.#client as unknown as RecordValue)[operation];
-    if (typeof method !== "function") throw new Error(`CDN SDK operation unavailable: ${operation}`);
+    if (typeof method !== "function")
+      throw new Error(`CDN SDK operation unavailable: ${operation}`);
     return (method as CdnOperation).call(this.#client, this.#request(requestName, values));
   }
 
