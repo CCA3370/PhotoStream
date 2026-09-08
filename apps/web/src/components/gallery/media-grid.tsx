@@ -132,8 +132,7 @@ function transitionName(mediaId: string): string {
 
 function thumbnailTransitionElement(mediaId: string): HTMLElement | null {
   const tile = document.querySelector<HTMLElement>(`[data-media-id="${mediaId}"]`);
-  const image = tile?.firstElementChild;
-  return image instanceof HTMLElement ? image : null;
+  return tile?.querySelector<HTMLElement>(":scope > span") ?? null;
 }
 
 function lightboxTransitionElement(): HTMLElement | null {
