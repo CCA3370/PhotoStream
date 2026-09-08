@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import * as faceDiagnosticsSchema from "./face-diagnostics-schema.js";
 import * as featuredSchema from "./featured-schema.js";
 import * as likesSchema from "./likes-schema.js";
+import * as searchAnalyticsSchema from "./search-analytics-schema.js";
 import * as coreSchema from "./schema.js";
 
 export const schema = {
@@ -12,6 +13,7 @@ export const schema = {
   ...likesSchema,
   ...featuredSchema,
   ...faceDiagnosticsSchema,
+  ...searchAnalyticsSchema,
 };
 
 export type Database = ReturnType<typeof createDatabase>;
