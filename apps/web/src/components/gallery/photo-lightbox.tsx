@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   DownloadIcon,
   ImageIcon,
+  LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   XIcon,
@@ -34,7 +35,7 @@ import { cn } from "@/lib/utils";
 const minZoom = 1;
 const maxZoom = 5;
 const toolbarButtonClass =
-  "h-9 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0";
+  "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
 
 type Point = { x: number; y: number };
 type Gesture =
@@ -91,11 +92,15 @@ export function PhotoLightbox({
   const stageRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
+  const transitionDirectionRef = useRef(0);
+  const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const originalObjectUrlRef = useRef<string | null>(null);
   const originalRequestRef = useRef(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeSettling, setSwipeSettling] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -147,7 +152,10 @@ export function PhotoLightbox({
       if (items.length < 2 || selectedIndex < 0) return;
       const index = (selectedIndex + offset + items.length) % items.length;
       const item = items[index];
-      if (item !== undefined) onSelect(item.id);
+      if (item !== undefined) {
+        transitionDirectionRef.current = offset;
+        onSelect(item.id);
+      }
     },
     [items, onSelect, selectedIndex],
   );
@@ -174,6 +182,31 @@ export function PhotoLightbox({
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
+
+    if (swipeTimerRef.current !== null) {
+      clearTimeout(swipeTimerRef.current);
+      swipeTimerRef.current = null;
+    }
+    const direction = transitionDirectionRef.current;
+    transitionDirectionRef.current = 0;
+    if (direction === 0) {
+      setSwipeSettling(false);
+      setSwipeOffset(0);
+      return;
+    }
+
+    setSwipeSettling(false);
+    setSwipeOffset(direction > 0 ? 52 : -52);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSwipeSettling(true);
+        setSwipeOffset(0);
+      });
+    });
+    swipeTimerRef.current = setTimeout(() => {
+      setSwipeSettling(false);
+      swipeTimerRef.current = null;
+    }, 260);
   }, [resetView, selectedId]);
 
   useEffect(() => {
@@ -210,6 +243,7 @@ export function PhotoLightbox({
 
   useEffect(
     () => () => {
+      if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
       if (originalObjectUrlRef.current !== null) {
         URL.revokeObjectURL(originalObjectUrlRef.current);
         originalObjectUrlRef.current = null;
@@ -277,6 +311,8 @@ export function PhotoLightbox({
     if (points.length >= 2) {
       gestureRef.current = { mode: "pinch", distance: distance(points), zoom };
       setDragging(false);
+      setSwipeSettling(false);
+      setSwipeOffset(0);
       return;
     }
     if (zoom > 1) {
@@ -284,6 +320,7 @@ export function PhotoLightbox({
       setDragging(true);
     } else {
       gestureRef.current = { mode: "swipe", start: point };
+      setSwipeSettling(false);
     }
   }
 
@@ -309,6 +346,11 @@ export function PhotoLightbox({
           zoom,
         ),
       );
+      return;
+    }
+    if (gesture.mode === "swipe" && points.length === 1) {
+      const deltaX = point.x - gesture.start.x;
+      setSwipeOffset(clamp(deltaX, -120, 120));
     }
   }
 
@@ -318,8 +360,24 @@ export function PhotoLightbox({
     if (gesture.mode === "swipe") {
       const deltaX = point.x - gesture.start.x;
       const deltaY = point.y - gesture.start.y;
-      if (Math.abs(deltaX) >= 52 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-        selectOffset(deltaX < 0 ? 1 : -1);
+      const shouldNavigate =
+        Math.abs(deltaX) >= 52 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+      setSwipeSettling(true);
+      if (shouldNavigate) {
+        const direction = deltaX < 0 ? 1 : -1;
+        setSwipeOffset(deltaX < 0 ? -82 : 82);
+        if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
+        swipeTimerRef.current = setTimeout(() => {
+          swipeTimerRef.current = null;
+          selectOffset(direction);
+        }, 90);
+      } else {
+        setSwipeOffset(0);
+        if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
+        swipeTimerRef.current = setTimeout(() => {
+          setSwipeSettling(false);
+          swipeTimerRef.current = null;
+        }, 220);
       }
     }
     pointersRef.current.delete(event.pointerId);
@@ -401,11 +459,15 @@ export function PhotoLightbox({
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
+  const swipeProgress = Math.min(1, Math.abs(swipeOffset) / 120);
+  const swipeTransform = `translate3d(${swipeOffset}px, 0, 0) scale(${1 - swipeProgress * 0.012})`;
+  const swipeOpacity = 1 - swipeProgress * 0.12;
+  const originalLoading = originalPending || originalCacheChecking;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="dark public-theme inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
+        className="dark public-theme inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-300 data-closed:duration-200 sm:max-w-none motion-reduce:duration-0"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">照片查看器</DialogTitle>
@@ -431,68 +493,93 @@ export function PhotoLightbox({
           >
             {!loaded ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
-                {originalPending || originalUrl !== null ? "正在加载原图…" : "正在加载高清图片…"}
+                <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
+                  <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                  {originalPending || originalUrl !== null ? "正在加载原图…" : "正在加载高清图片…"}
+                </div>
               </div>
             ) : null}
             <div
-              className="absolute inset-0 origin-center will-change-transform"
-              style={{ transform: imageTransform }}
-            >
-              {originalUrl === null ? (
-                <CachedPhotoImage
-                  alt="活动照片"
-                  bytes={large.bytes}
-                  className={cn(
-                    "object-contain transition-opacity duration-150",
-                    loaded ? "opacity-100" : "opacity-0",
-                  )}
-                  draggable={false}
-                  kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
-                  mediaId={selected.id}
-                  onLoad={() => setLoaded(true)}
-                  priority
-                  scope={slug ?? "public-media"}
-                  sizes="100vw"
-                  sourceUrl={large.url}
-                />
-              ) : (
-                <Image
-                  alt="活动照片"
-                  className={cn(
-                    "object-contain transition-opacity duration-150",
-                    loaded ? "opacity-100" : "opacity-0",
-                  )}
-                  draggable={false}
-                  fill
-                  key={originalUrl}
-                  onLoad={() => setLoaded(true)}
-                  priority
-                  sizes="100vw"
-                  src={originalUrl}
-                  unoptimized
-                />
+              className={cn(
+                "absolute inset-0 origin-center will-change-transform",
+                swipeSettling &&
+                  "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none",
               )}
+              style={{ opacity: swipeOpacity, transform: swipeTransform }}
+            >
+              <div
+                className="absolute inset-0 origin-center will-change-transform"
+                style={{ transform: imageTransform }}
+              >
+                {originalUrl === null ? (
+                  <CachedPhotoImage
+                    alt="活动照片"
+                    bytes={large.bytes}
+                    className={cn(
+                      "object-contain transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none",
+                      loaded ? "scale-100 opacity-100 blur-0" : "scale-[1.008] opacity-0 blur-[2px]",
+                    )}
+                    draggable={false}
+                    kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
+                    mediaId={selected.id}
+                    onLoad={() => setLoaded(true)}
+                    priority
+                    scope={slug ?? "public-media"}
+                    sizes="100vw"
+                    sourceUrl={large.url}
+                  />
+                ) : (
+                  <Image
+                    alt="活动照片"
+                    className={cn(
+                      "object-contain transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none",
+                      loaded ? "scale-100 opacity-100 blur-0" : "scale-[1.008] opacity-0 blur-[2px]",
+                    )}
+                    draggable={false}
+                    fill
+                    key={originalUrl}
+                    onLoad={() => setLoaded(true)}
+                    priority
+                    sizes="100vw"
+                    src={originalUrl}
+                    unoptimized
+                  />
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent p-2.5 pb-14 sm:p-4 sm:pb-16">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 sm:p-4 sm:pb-16">
             <div className="pointer-events-auto flex items-center gap-1.5">
               {fullscreenSupported ? (
                 <Button
                   aria-label={fullscreen ? "退出全屏" : "进入全屏"}
-                  className="size-9 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:size-10"
+                  className="size-11 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.94] sm:size-10 motion-reduce:transform-none motion-reduce:transition-none"
                   onClick={() => void toggleFullscreen()}
                   size="icon"
                   title={fullscreen ? "退出全屏 (F)" : "全屏 (F)"}
                   type="button"
                   variant="outline"
                 >
-                  {fullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
+                  <span className="relative grid size-5 place-items-center">
+                    <Maximize2Icon
+                      className={cn(
+                        "absolute size-5 transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                        fullscreen ? "scale-75 opacity-0" : "scale-100 opacity-100",
+                      )}
+                    />
+                    <Minimize2Icon
+                      className={cn(
+                        "absolute size-5 transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                        fullscreen ? "scale-100 opacity-100" : "scale-75 opacity-0",
+                      )}
+                    />
+                  </span>
                 </Button>
               ) : null}
               <Button
                 aria-label="关闭照片查看器"
-                className="size-9 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:size-10"
+                className="size-11 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.94] sm:size-10 motion-reduce:transform-none motion-reduce:transition-none"
                 onClick={onClose}
                 size="icon"
                 title="关闭 (Esc)"
@@ -508,7 +595,7 @@ export function PhotoLightbox({
             <>
               <Button
                 aria-label="上一张照片"
-                className="absolute top-1/2 left-3 z-20 hidden size-10 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:flex"
+                className="absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none"
                 onClick={() => selectOffset(-1)}
                 size="icon"
                 title="上一张 (←)"
@@ -519,7 +606,7 @@ export function PhotoLightbox({
               </Button>
               <Button
                 aria-label="下一张照片"
-                className="absolute top-1/2 right-3 z-20 hidden size-10 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:flex"
+                className="absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none"
                 onClick={() => selectOffset(1)}
                 size="icon"
                 title="下一张 (→)"
@@ -532,25 +619,27 @@ export function PhotoLightbox({
           ) : null}
 
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
-            <div className="pointer-events-auto mx-auto flex max-w-5xl items-end justify-between gap-3">
+            <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
               <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
                 {selected.width} × {selected.height} · {Math.round(zoom * 100)}%
                 {originalUrl === null ? null : " · 原图"}
               </div>
 
-              <div className="ml-auto grid min-w-0 max-w-[calc(100vw-1.25rem)] items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:max-w-full">
+              <div className="ml-auto grid w-full min-w-0 items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:w-auto sm:max-w-full">
                 <div
                   aria-hidden={downloadMenuOpen}
+                  inert={downloadMenuOpen}
                   className={cn(
-                    "col-start-1 row-start-1 flex w-max max-w-full origin-left items-center transition-[opacity,transform] duration-300 ease-out",
+                    "col-start-1 row-start-1 flex w-full origin-left items-center transition-[opacity,transform] duration-300 ease-out sm:w-max motion-reduce:transition-none",
                     downloadMenuOpen
-                      ? "pointer-events-none translate-x-2 scale-x-[0.97] opacity-0"
-                      : "translate-x-0 scale-x-100 opacity-100",
+                      ? "pointer-events-none translate-x-2 scale-[0.985] opacity-0"
+                      : "translate-x-0 scale-100 opacity-100",
                   )}
                 >
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto">
                     {slug === undefined ? null : (
                       <PhotoLikeButton
+                        className="shrink-0"
                         mediaId={selected.id}
                         mode="toolbar"
                         onChange={onLikeChange}
@@ -563,27 +652,37 @@ export function PhotoLightbox({
                       <Button
                         className={cn(
                           toolbarButtonClass,
-                          "min-w-0 px-2.5 text-xs sm:px-3 sm:text-sm",
+                          "min-w-0 flex-1 px-2.5 text-xs sm:flex-none sm:px-3 sm:text-sm",
                         )}
-                        disabled={originalPending || originalCacheChecking || originalUrl !== null}
+                        disabled={originalLoading || originalUrl !== null}
                         onClick={() => void loadOriginal()}
                         type="button"
                         variant="outline"
                       >
-                        <ImageIcon data-icon="inline-start" />
-                        {originalPending
-                          ? "加载中…"
-                          : originalCacheChecking
-                            ? "恢复中…"
-                            : originalUrl === null
-                              ? "查看原图"
-                              : "已加载原图"}
+                        {originalLoading ? (
+                          <LoaderCircleIcon
+                            aria-hidden="true"
+                            className="animate-spin motion-reduce:animate-none"
+                            data-icon="inline-start"
+                          />
+                        ) : (
+                          <ImageIcon data-icon="inline-start" />
+                        )}
+                        <span className="truncate">
+                          {originalPending
+                            ? "加载中…"
+                            : originalCacheChecking
+                              ? "恢复中…"
+                              : originalUrl === null
+                                ? "查看原图"
+                                : "已加载原图"}
+                        </span>
                       </Button>
                     ) : null}
 
                     {canDownload ? (
                       <Button
-                        className={toolbarButtonClass}
+                        className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
                         onClick={() => setDownloadMenuOpen(true)}
                         type="button"
                         variant="outline"
@@ -598,20 +697,21 @@ export function PhotoLightbox({
                 {canDownload ? (
                   <div
                     aria-hidden={!downloadMenuOpen}
+                    inert={!downloadMenuOpen}
                     className={cn(
-                      "col-start-1 row-start-1 flex w-max max-w-full origin-right items-center justify-self-end transition-[opacity,transform] duration-300 ease-out",
+                      "col-start-1 row-start-1 flex w-full origin-right items-center justify-self-end transition-[opacity,transform] duration-300 ease-out sm:w-max motion-reduce:transition-none",
                       downloadMenuOpen
-                        ? "translate-x-0 scale-x-100 opacity-100"
-                        : "pointer-events-none -translate-x-2 scale-x-[0.97] opacity-0",
+                        ? "translate-x-0 scale-100 opacity-100"
+                        : "pointer-events-none -translate-x-2 scale-[0.985] opacity-0",
                     )}
                   >
-                    <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.75rem] items-center gap-1.5 sm:flex sm:w-auto">
                       {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
                         <DownloadButton
                           bytes={preview1920.bytes}
                           className={cn(
                             toolbarButtonClass,
-                            "min-w-0 shrink-0 px-2 text-[11px] sm:px-2.5 sm:text-xs",
+                            "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
                           )}
                           kind="preview"
                           label="普通图"
@@ -627,7 +727,7 @@ export function PhotoLightbox({
                           bytes={selected.downloads.originalBytes}
                           className={cn(
                             toolbarButtonClass,
-                            "min-w-0 shrink-0 px-2 text-[11px] sm:px-2.5 sm:text-xs",
+                            "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
                           )}
                           kind="original"
                           label="原图"
@@ -638,7 +738,7 @@ export function PhotoLightbox({
                       ) : null}
                       <Button
                         aria-label="收起下载选项"
-                        className="size-9 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.13] hover:text-white"
+                        className="size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,background-color] duration-150 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none"
                         onClick={() => setDownloadMenuOpen(false)}
                         size="icon"
                         title="关闭下载选项"
