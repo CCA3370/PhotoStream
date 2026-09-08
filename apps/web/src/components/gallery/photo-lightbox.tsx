@@ -314,11 +314,11 @@ export function PhotoLightbox({
   useEffect(() => {
     if (!fullscreen) {
       clearControlsHideTimer();
-      if (selectedId !== null) setControlsVisible(true);
+      if (viewerOpenRef.current) setControlsVisible(true);
       return;
     }
     revealControls();
-  }, [clearControlsHideTimer, fullscreen, revealControls, selectedId]);
+  }, [clearControlsHideTimer, fullscreen, revealControls]);
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -373,7 +373,16 @@ export function PhotoLightbox({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [changeZoom, fullscreenSupported, resetView, revealControls, selectOffset, selected, toggleFullscreen, zoom]);
+  }, [
+    changeZoom,
+    fullscreenSupported,
+    resetView,
+    revealControls,
+    selectOffset,
+    selected,
+    toggleFullscreen,
+    zoom,
+  ]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -639,7 +648,9 @@ export function PhotoLightbox({
             aria-hidden={!controlsVisible}
             className={cn(
               "pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 transition-[opacity,transform] duration-200 ease-out sm:p-4 sm:pb-16 motion-reduce:transition-none",
-              controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-2 opacity-0",
+              controlsVisible
+                ? "translate-y-0 opacity-100"
+                : "pointer-events-none -translate-y-2 opacity-0",
             )}
             data-lightbox-controls
             inert={!controlsVisible}
@@ -726,7 +737,9 @@ export function PhotoLightbox({
             aria-hidden={!controlsVisible}
             className={cn(
               "pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] transition-[opacity,transform] duration-200 ease-out sm:px-4 sm:pt-20 motion-reduce:transition-none",
-              controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0",
+              controlsVisible
+                ? "translate-y-0 opacity-100"
+                : "pointer-events-none translate-y-3 opacity-0",
             )}
             data-lightbox-controls
             inert={!controlsVisible}
@@ -824,7 +837,9 @@ export function PhotoLightbox({
                           className={cn(
                             toolbarButtonClass,
                             "w-full min-w-0 px-2 text-[11px] transition-[transform,opacity,background-color,border-color] duration-200 sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs motion-reduce:transition-none",
-                            downloadMenuOpen ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
+                            downloadMenuOpen
+                              ? "translate-y-0 opacity-100"
+                              : "translate-y-1 opacity-0",
                           )}
                           kind="preview"
                           label="普通图"
