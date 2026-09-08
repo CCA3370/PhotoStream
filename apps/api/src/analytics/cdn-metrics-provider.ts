@@ -34,7 +34,7 @@ export interface CdnMetricsSnapshot {
   readonly averageRequestHitRate: number | null;
   readonly requests: number;
   readonly errorRequests: number;
-  readonly points: readonly CdnMetricsPoint[];
+  readonly points: CdnMetricsPoint[];
   readonly message: string | null;
 }
 
