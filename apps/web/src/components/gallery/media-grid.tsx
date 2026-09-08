@@ -152,7 +152,7 @@ function thumbnailTransitionElement(mediaId: string): HTMLElement | null {
 }
 
 function lightboxTransitionElement(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('[aria-label="照片画布"]');
+  return document.querySelector<HTMLElement>("[data-lightbox-transition-image]");
 }
 
 function setTransitionName(element: HTMLElement | null, name: string | null): void {
@@ -166,12 +166,12 @@ function createTransitionStyle(name: string): HTMLStyleElement {
   style.dataset.photostreamViewTransition = name;
   style.textContent = `
     ::view-transition-group(${name}) {
-      animation-duration: 320ms;
+      animation-duration: 280ms;
       animation-timing-function: cubic-bezier(0.2, 0.78, 0.2, 1);
     }
     ::view-transition-old(${name}),
     ::view-transition-new(${name}) {
-      animation-duration: 320ms;
+      animation-duration: 280ms;
       animation-timing-function: cubic-bezier(0.2, 0.78, 0.2, 1);
     }
   `;
@@ -343,43 +343,7 @@ export function MediaGrid({
   );
 
   const openMedia = useCallback((mediaId: string): void => {
-    const documentWithTransition = document as ViewTransitionDocument;
-    const source = thumbnailTransitionElement(mediaId);
-    if (
-      transitionActiveRef.current ||
-      documentWithTransition.startViewTransition === undefined ||
-      source === null ||
-      prefersReducedMotion()
-    ) {
-      setSelectedId(mediaId);
-      return;
-    }
-
-    const name = transitionName(mediaId);
-    const style = createTransitionStyle(name);
-    setTransitionName(source, name);
-    transitionActiveRef.current = true;
-    let target: HTMLElement | null = null;
-
-    try {
-      const transition = documentWithTransition.startViewTransition(() => {
-        setTransitionName(source, null);
-        flushSync(() => setSelectedId(mediaId));
-        target = lightboxTransitionElement();
-        setTransitionName(target, name);
-      });
-      void transition.finished.finally(() => {
-        setTransitionName(source, null);
-        setTransitionName(target, null);
-        style.remove();
-        transitionActiveRef.current = false;
-      });
-    } catch {
-      setTransitionName(source, null);
-      style.remove();
-      transitionActiveRef.current = false;
-      setSelectedId(mediaId);
-    }
+    setSelectedId(mediaId);
   }, []);
 
   const closeMedia = useCallback((): void => {
