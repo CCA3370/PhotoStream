@@ -54,6 +54,61 @@ function privateResponse(reply: FastifyReply): void {
   void reply.header("referrer-policy", "no-referrer");
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function logFaceSearchSimilarityResults(
+  request: FastifyRequest,
+  payload: unknown,
+  config: AppConfig,
+): void {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+  if (data === null || data.TaskType !== "FacesSearching") return;
+
+  const groups = Array.isArray(data.SimilarFaces) ? data.SimilarFaces : [];
+  const mediaPrefix =
+    config.ALIYUN_OSS_MEDIA_BUCKET === undefined
+      ? null
+      : `oss://${config.ALIYUN_OSS_MEDIA_BUCKET}/`;
+  const candidates = groups.flatMap((groupValue) => {
+    const group = asRecord(groupValue);
+    const similarFaces = Array.isArray(group?.SimilarFaces) ? group.SimilarFaces : [];
+    return similarFaces.flatMap((candidateValue) => {
+      const candidate = asRecord(candidateValue);
+      if (candidate === null) return [];
+      const similarity = candidate.Similarity;
+      if (typeof similarity !== "number" || !Number.isFinite(similarity)) return [];
+      const uri = candidate.URI;
+      const objectKey =
+        typeof uri === "string" && mediaPrefix !== null && uri.startsWith(mediaPrefix)
+          ? uri.slice(mediaPrefix.length)
+          : null;
+      return [
+        {
+          objectKey,
+          similarity,
+          accepted: similarity >= config.FACE_SEARCH_ASYNC_THRESHOLD,
+        },
+      ];
+    });
+  });
+
+  request.log.info(
+    {
+      event: "face_search_similarity",
+      source: "aliyun_faces_searching",
+      providerTaskId: typeof data.TaskId === "string" ? data.TaskId : null,
+      providerStatus: typeof data.Status === "string" ? data.Status : null,
+      threshold: config.FACE_SEARCH_ASYNC_THRESHOLD,
+      candidateCount: candidates.length,
+      candidates,
+    },
+    "face search similarity results",
+  );
+}
+
 export async function registerFaceRoutes(
   app: FastifyInstance,
   options: {
@@ -329,7 +384,9 @@ export async function registerFaceRoutes(
         }
         throw error;
       }
-      return options.faceService.processEvent(request.body);
+      const result = await options.faceService.processEvent(request.body);
+      logFaceSearchSimilarityResults(request, request.body, options.config);
+      return result;
     },
   );
 }
