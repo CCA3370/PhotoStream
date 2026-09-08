@@ -473,7 +473,8 @@ export function BibSearchPanel({
       "按号码、年级班级或人脸筛选"
     ) : resultMode === "face" && faceStatus === "failed" ? (
       <>
-        检索未完整完成 · 已找到 <AnimatedResultCount key={resultCountKey} value={resultItems.length} /> 张候选
+        检索未完整完成 · 已找到{" "}
+        <AnimatedResultCount key={resultCountKey} value={resultItems.length} /> 张候选
       </>
     ) : (
       <>
