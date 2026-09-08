@@ -2,7 +2,11 @@ import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
 import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 
-import type { CdnMetricsProvider, CdnMetricsSnapshot } from "./cdn-metrics-provider.js";
+import {
+  type CdnMetricsProvider,
+  type CdnMetricsSnapshot,
+  UnavailableCdnMetricsProvider,
+} from "./cdn-metrics-provider.js";
 import { AppError } from "../errors.js";
 import type { ObjectStorage } from "../media/object-storage.js";
 import type { InternalActor } from "../media/service.js";
@@ -61,11 +65,11 @@ export class DashboardService {
   constructor(options: {
     readonly database: Database;
     readonly storage: ObjectStorage;
-    readonly cdnMetrics: CdnMetricsProvider;
+    readonly cdnMetrics?: CdnMetricsProvider;
   }) {
     this.#database = options.database;
     this.#storage = options.storage;
-    this.#cdnMetrics = options.cdnMetrics;
+    this.#cdnMetrics = options.cdnMetrics ?? new UnavailableCdnMetricsProvider();
   }
 
   async recordSearchUsage(options: {
