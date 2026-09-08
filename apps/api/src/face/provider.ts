@@ -61,6 +61,39 @@ export function selectQualifiedCluster(
   );
 }
 
+function logClusterSimilarityResults(
+  datasetName: string,
+  threshold: number,
+  clusters: readonly { readonly clusterId?: string; readonly similarity?: number }[],
+): void {
+  const candidates = clusters.map((candidate) => ({
+    similarity:
+      typeof candidate.similarity === "number" && Number.isFinite(candidate.similarity)
+        ? candidate.similarity
+        : null,
+    accepted: (candidate.similarity ?? 0) >= threshold,
+  }));
+  const selectedSimilarity = clusters
+    .filter(
+      (candidate) =>
+        typeof candidate.clusterId === "string" && (candidate.similarity ?? 0) >= threshold,
+    )
+    .sort((left, right) => (right.similarity ?? 0) - (left.similarity ?? 0))[0]?.similarity;
+  process.stdout.write(
+    `${JSON.stringify({
+      level: "info",
+      time: new Date().toISOString(),
+      event: "face_search_similarity",
+      source: "aliyun_figure_cluster",
+      datasetName,
+      threshold,
+      candidateCount: candidates.length,
+      selectedSimilarity: selectedSimilarity ?? null,
+      candidates,
+    })}\n`,
+  );
+}
+
 export interface FaceProvider {
   createDataset(datasetName: string): Promise<void>;
   datasetExists(datasetName: string): Promise<boolean>;
@@ -251,10 +284,9 @@ export class AliyunFaceProvider implements FaceProvider {
         sourceURI: referenceUri,
       }),
     );
-    const clusterId = selectQualifiedCluster(
-      clusterResponse.body?.clusters ?? [],
-      this.#clusterThreshold,
-    );
+    const clusters = clusterResponse.body?.clusters ?? [];
+    const clusterId = selectQualifiedCluster(clusters, this.#clusterThreshold);
+    logClusterSimilarityResults(datasetName, this.#clusterThreshold, clusters);
     if (clusterId === null) return [];
 
     const mediaIds: string[] = [];
