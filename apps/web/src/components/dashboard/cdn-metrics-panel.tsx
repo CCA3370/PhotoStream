@@ -109,11 +109,7 @@ function chartPoint(value: number, max: number, index: number, count: number): [
   return [x, y];
 }
 
-function linePath(
-  data: readonly CdnPoint[],
-  key: keyof CdnPoint,
-  max: number,
-): string {
+function linePath(data: readonly CdnPoint[], key: keyof CdnPoint, max: number): string {
   let path = "";
   let drawing = false;
   data.forEach((item, index) => {
