@@ -1,4 +1,4 @@
-import { index, pgEnum, pgTable, timestamp, uuid, bigserial } from "drizzle-orm/pg-core";
+import { bigserial, index, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { albums } from "./schema.js";
 
