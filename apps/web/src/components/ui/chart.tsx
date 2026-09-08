@@ -1,3 +1,5 @@
+// biome-ignore-all lint/security/noDangerouslySetInnerHtml: Mirrors the current official shadcn ChartStyle implementation; values come from local chart config.
+// biome-ignore-all lint/suspicious/noArrayIndexKey: Mirrors the current official shadcn tooltip and legend implementation over Recharts payload arrays.
 "use client";
 
 import * as React from "react";
@@ -85,7 +87,6 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   }
 
   return (
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: This is the current official shadcn ChartStyle implementation; values come from local chart config.
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
@@ -148,7 +149,9 @@ function ChartTooltipContent({
       !labelKey && typeof label === "string" ? (config[label]?.label ?? label) : itemConfig?.label;
 
     if (labelFormatter) {
-      return <div className={cn("font-medium", labelClassName)}>{labelFormatter(value, payload)}</div>;
+      return (
+        <div className={cn("font-medium", labelClassName)}>{labelFormatter(value, payload)}</div>
+      );
     }
 
     if (!value) {
@@ -181,7 +184,6 @@ function ChartTooltipContent({
             const indicatorColor = color ?? item.payload?.fill ?? item.color;
 
             return (
-              // biome-ignore lint/suspicious/noArrayIndexKey: This matches the current official shadcn tooltip implementation and Recharts payload has no guaranteed stable identifier.
               <div
                 key={index}
                 className={cn(
@@ -280,7 +282,6 @@ function ChartLegendContent({
           const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: This matches the current official shadcn legend implementation and Recharts payload has no guaranteed stable identifier.
             <div
               key={index}
               className={cn(
