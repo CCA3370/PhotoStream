@@ -79,11 +79,7 @@ export default async function GalleryPage({
     >
       <AlbumOpenTracker slug={slug} />
 
-      <GalleryFilterNav
-        categories={album.categories}
-        selectedKey={selectedFilterKey}
-        slug={slug}
-      />
+      <GalleryFilterNav categories={album.categories} selectedKey={selectedFilterKey} slug={slug} />
 
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {searchAvailable && !featuredOnly ? (
