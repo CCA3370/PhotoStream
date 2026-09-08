@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
+import { SearchUsageChart } from "@/components/dashboard/search-usage-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +53,17 @@ export interface DashboardStatistics {
     readonly downloads: number;
     readonly uniqueVisitors: number;
   }[];
+  readonly searchUsage: {
+    readonly number: number;
+    readonly attributes: number;
+    readonly face: number;
+    readonly points: readonly {
+      readonly at: string;
+      readonly number: number;
+      readonly attributes: number;
+      readonly face: number;
+    }[];
+  };
   readonly topPhotos: readonly {
     readonly mediaId: string;
     readonly albumId: string;
@@ -151,6 +163,27 @@ function fillPoints(data: DashboardStatistics) {
         sessions: 0,
         downloads: 0,
         uniqueVisitors: 0,
+      },
+    );
+  }
+  return points;
+}
+
+function fillSearchUsagePoints(data: DashboardStatistics) {
+  const interval = bucketMs[data.bucket];
+  const start = Math.floor(new Date(data.from).getTime() / interval) * interval;
+  const end = new Date(data.to).getTime();
+  const byTime = new Map(
+    data.searchUsage.points.map((point) => [new Date(point.at).getTime(), point]),
+  );
+  const points: DashboardStatistics["searchUsage"]["points"][number][] = [];
+  for (let at = start; at < end; at += interval) {
+    points.push(
+      byTime.get(at) ?? {
+        at: new Date(at).toISOString(),
+        number: 0,
+        attributes: 0,
+        face: 0,
       },
     );
   }
@@ -259,6 +292,7 @@ export function DashboardView({
   const [customFrom, setCustomFrom] = useState(() => localInputValue(new Date(initialData.from)));
   const [customTo, setCustomTo] = useState(() => localInputValue(new Date(initialData.to)));
   const points = useMemo(() => fillPoints(data), [data]);
+  const searchUsagePoints = useMemo(() => fillSearchUsagePoints(data), [data]);
   const liveAlbums = useMemo(
     () => albums.filter((album) => album.state === "live").slice(0, 5),
     [albums],
@@ -440,6 +474,33 @@ export function DashboardView({
         </CardHeader>
         <CardContent className="px-3 pt-3 pb-2 sm:px-5">
           <AnalyticsTrendChart data={points} />
+        </CardContent>
+      </Card>
+
+      <Card
+        className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}
+      >
+        <CardHeader className="gap-3 border-b py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <CardTitle>找图方式使用量</CardTitle>
+              <span className="text-xs text-muted-foreground">主动发起的首次检索</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                号码 <strong className="font-semibold tabular-nums text-foreground">{numberFormatter.format(data.searchUsage.number)}</strong>
+              </span>
+              <span>
+                年级班级 <strong className="font-semibold tabular-nums text-foreground">{numberFormatter.format(data.searchUsage.attributes)}</strong>
+              </span>
+              <span>
+                人脸 <strong className="font-semibold tabular-nums text-foreground">{numberFormatter.format(data.searchUsage.face)}</strong>
+              </span>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-3 pt-3 pb-2 sm:px-5">
+          <SearchUsageChart data={searchUsagePoints} />
         </CardContent>
       </Card>
 
