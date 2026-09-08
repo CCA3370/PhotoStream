@@ -1,15 +1,13 @@
 import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostream/contracts";
-import Link from "next/link";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
+import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
-import { buttonVariants } from "@/components/ui/button";
 import { serverApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 interface MediaList {
   readonly items: readonly PublicMediaView[];
@@ -71,6 +69,7 @@ export default async function GalleryPage({
     : undefined;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== undefined;
   const sectionTitle = featuredOnly ? "精选照片" : (category?.name ?? "全部照片");
+  const selectedFilterKey = featuredOnly ? "featured" : (category?.id ?? "all");
 
   return (
     <PublicGalleryShell
@@ -80,50 +79,11 @@ export default async function GalleryPage({
     >
       <AlbumOpenTracker slug={slug} />
 
-      <nav
-        aria-label="相册筛选"
-        className="sticky top-1.5 z-20 mb-2 flex gap-0.5 overflow-x-auto rounded-xl border bg-background/94 p-1 shadow-sm supports-backdrop-filter:backdrop-blur-xl sm:mb-3 sm:gap-1"
-      >
-        <Link
-          aria-current={!featuredOnly && category === undefined ? "page" : undefined}
-          className={cn(
-            buttonVariants({
-              variant: !featuredOnly && category === undefined ? "default" : "ghost",
-              size: "sm",
-            }),
-            "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 sm:px-3",
-          )}
-          href={`/g/${slug}`}
-        >
-          全部
-        </Link>
-        <Link
-          aria-current={featuredOnly ? "page" : undefined}
-          className={cn(
-            buttonVariants({ variant: featuredOnly ? "default" : "ghost", size: "sm" }),
-            "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 sm:px-3",
-          )}
-          href={`/g/${slug}?featured=1`}
-        >
-          精选
-        </Link>
-        {album.categories.map((albumCategory) => {
-          const selected = !featuredOnly && requestedCategory === albumCategory.id;
-          return (
-            <Link
-              aria-current={selected ? "page" : undefined}
-              className={cn(
-                buttonVariants({ variant: selected ? "default" : "ghost", size: "sm" }),
-                "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 sm:px-3",
-              )}
-              href={`/g/${slug}?category=${albumCategory.id}`}
-              key={albumCategory.id}
-            >
-              {albumCategory.name}
-            </Link>
-          );
-        })}
-      </nav>
+      <GalleryFilterNav
+        categories={album.categories}
+        selectedKey={selectedFilterKey}
+        slug={slug}
+      />
 
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {searchAvailable && !featuredOnly ? (
