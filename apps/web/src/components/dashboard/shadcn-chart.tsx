@@ -129,7 +129,12 @@ function maximum(
 
 function xLabelIndexes(length: number): readonly number[] {
   if (length <= 1) return [0];
-  const candidates = [0, Math.round((length - 1) / 3), Math.round(((length - 1) * 2) / 3), length - 1];
+  const candidates = [
+    0,
+    Math.round((length - 1) / 3),
+    Math.round(((length - 1) * 2) / 3),
+    length - 1,
+  ];
   return [...new Set(candidates)];
 }
 
@@ -247,9 +252,9 @@ export function ShadcnChart({
                 const yBottom = chartPoint(cumulative, max, index, data.length)[1];
                 cumulative += value;
                 const height = Math.max(yBottom - yTop, 0);
-                const isTop = series.slice(seriesIndex + 1).every((candidate) =>
-                  (valueAt(point, candidate.key) ?? 0) <= 0,
-                );
+                const isTop = series
+                  .slice(seriesIndex + 1)
+                  .every((candidate) => (valueAt(point, candidate.key) ?? 0) <= 0);
                 return (
                   <rect
                     fill={item.color}
