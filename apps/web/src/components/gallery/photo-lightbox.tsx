@@ -543,11 +543,12 @@ export function PhotoLightbox({
   const swipeTransform = `translate3d(${swipeOffset}px, 0, 0) scale(${1 - swipeProgress * 0.012})`;
   const swipeOpacity = 1 - swipeProgress * 0.12;
   const originalLoading = originalPending || originalCacheChecking;
+  const fittedImageWidth = `min(100%, calc(100dvh * ${selected.width / selected.height}))`;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="dark public-theme inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-300 data-closed:duration-200 sm:max-w-none motion-reduce:duration-0"
+        className="dark public-theme inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-200 data-open:zoom-in-100 data-closed:zoom-out-100 data-closed:duration-150 sm:max-w-none motion-reduce:duration-0"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">照片查看器</DialogTitle>
@@ -602,44 +603,53 @@ export function PhotoLightbox({
                 className="absolute inset-0 origin-center will-change-transform"
                 style={{ transform: imageTransform }}
               >
-                {originalUrl === null ? (
-                  <CachedPhotoImage
-                    alt="活动照片"
-                    bytes={large.bytes}
-                    className={cn(
-                      "object-contain transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none",
-                      loaded
-                        ? "scale-100 opacity-100 blur-0"
-                        : "scale-[1.008] opacity-0 blur-[2px]",
-                    )}
-                    draggable={false}
-                    kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
-                    mediaId={selected.id}
-                    onLoad={() => setLoaded(true)}
-                    priority
-                    scope={slug ?? "public-media"}
-                    sizes="100vw"
-                    sourceUrl={large.url}
-                  />
-                ) : (
-                  <Image
-                    alt="活动照片"
-                    className={cn(
-                      "object-contain transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none",
-                      loaded
-                        ? "scale-100 opacity-100 blur-0"
-                        : "scale-[1.008] opacity-0 blur-[2px]",
-                    )}
-                    draggable={false}
-                    fill
-                    key={originalUrl}
-                    onLoad={() => setLoaded(true)}
-                    priority
-                    sizes="100vw"
-                    src={originalUrl}
-                    unoptimized
-                  />
-                )}
+                <div
+                  className="absolute top-1/2 left-1/2 origin-center -translate-x-1/2 -translate-y-1/2"
+                  data-lightbox-transition-image
+                  style={{
+                    aspectRatio: `${selected.width} / ${selected.height}`,
+                    width: fittedImageWidth,
+                  }}
+                >
+                  {originalUrl === null ? (
+                    <CachedPhotoImage
+                      alt="活动照片"
+                      bytes={large.bytes}
+                      className={cn(
+                        "object-contain transition-[opacity,filter,transform] duration-220 ease-out motion-reduce:transition-none",
+                        loaded
+                          ? "scale-100 opacity-100 blur-0"
+                          : "scale-[1.004] opacity-0 blur-[1px]",
+                      )}
+                      draggable={false}
+                      kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
+                      mediaId={selected.id}
+                      onLoad={() => setLoaded(true)}
+                      priority
+                      scope={slug ?? "public-media"}
+                      sizes="100vw"
+                      sourceUrl={large.url}
+                    />
+                  ) : (
+                    <Image
+                      alt="活动照片"
+                      className={cn(
+                        "object-contain transition-[opacity,filter,transform] duration-220 ease-out motion-reduce:transition-none",
+                        loaded
+                          ? "scale-100 opacity-100 blur-0"
+                          : "scale-[1.004] opacity-0 blur-[1px]",
+                      )}
+                      draggable={false}
+                      fill
+                      key={originalUrl}
+                      onLoad={() => setLoaded(true)}
+                      priority
+                      sizes="100vw"
+                      src={originalUrl}
+                      unoptimized
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -755,10 +765,10 @@ export function PhotoLightbox({
                   aria-hidden={downloadMenuOpen}
                   inert={downloadMenuOpen}
                   className={cn(
-                    "col-start-1 row-start-1 flex w-full origin-left items-center transition-[opacity,transform] duration-300 ease-out sm:w-max motion-reduce:transition-none",
+                    "col-start-1 row-start-1 flex w-full origin-left items-center transition-[opacity,transform] ease-out sm:w-max motion-reduce:transition-none",
                     downloadMenuOpen
-                      ? "pointer-events-none translate-x-2 scale-[0.985] opacity-0"
-                      : "translate-x-0 scale-100 opacity-100",
+                      ? "pointer-events-none -translate-x-1 opacity-0 duration-100 delay-0"
+                      : "translate-x-0 opacity-100 duration-150 delay-[70ms]",
                   )}
                 >
                   <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto">
@@ -824,10 +834,10 @@ export function PhotoLightbox({
                     aria-hidden={!downloadMenuOpen}
                     inert={!downloadMenuOpen}
                     className={cn(
-                      "col-start-1 row-start-1 flex w-full origin-right items-center justify-self-end transition-[opacity,transform] duration-300 ease-out sm:w-max motion-reduce:transition-none",
+                      "col-start-1 row-start-1 flex w-full origin-right items-center justify-self-end transition-[opacity,transform] ease-out sm:w-max motion-reduce:transition-none",
                       downloadMenuOpen
-                        ? "translate-x-0 scale-100 opacity-100"
-                        : "pointer-events-none -translate-x-2 scale-[0.985] opacity-0",
+                        ? "translate-x-0 opacity-100 duration-180 delay-[70ms]"
+                        : "pointer-events-none translate-x-1 opacity-0 duration-100 delay-0",
                     )}
                   >
                     <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.75rem] items-center gap-1.5 sm:flex sm:w-auto">
@@ -836,10 +846,7 @@ export function PhotoLightbox({
                           bytes={preview1920.bytes}
                           className={cn(
                             toolbarButtonClass,
-                            "w-full min-w-0 px-2 text-[11px] transition-[transform,opacity,background-color,border-color] duration-200 sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs motion-reduce:transition-none",
-                            downloadMenuOpen
-                              ? "translate-y-0 opacity-100"
-                              : "translate-y-1 opacity-0",
+                            "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
                           )}
                           kind="preview"
                           label="普通图"
@@ -855,10 +862,7 @@ export function PhotoLightbox({
                           bytes={selected.downloads.originalBytes}
                           className={cn(
                             toolbarButtonClass,
-                            "w-full min-w-0 px-2 text-[11px] transition-[transform,opacity,background-color,border-color] duration-200 sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs motion-reduce:transition-none",
-                            downloadMenuOpen
-                              ? "translate-y-0 opacity-100 delay-[30ms]"
-                              : "translate-y-1 opacity-0 delay-0",
+                            "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
                           )}
                           kind="original"
                           label="原图"
@@ -869,12 +873,7 @@ export function PhotoLightbox({
                       ) : null}
                       <Button
                         aria-label="收起下载选项"
-                        className={cn(
-                          "size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,opacity,background-color] duration-200 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none",
-                          downloadMenuOpen
-                            ? "translate-y-0 opacity-100 delay-[60ms]"
-                            : "translate-y-1 opacity-0 delay-0",
-                        )}
+                        className="size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,background-color] duration-150 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none"
                         onClick={() => setDownloadMenuOpen(false)}
                         size="icon"
                         title="关闭下载选项"
