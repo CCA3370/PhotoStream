@@ -1,4 +1,11 @@
-import CdnClient, * as CdnSdk from "@alicloud/cdn20180510/dist/client.js";
+import CdnClient, {
+  DescribeDomainBpsDataRequest,
+  DescribeDomainHitRateDataRequest,
+  DescribeDomainHttpCodeDataRequest,
+  DescribeDomainReqHitRateDataRequest,
+  DescribeDomainSrcTrafficDataRequest,
+  DescribeDomainTrafficDataRequest,
+} from "@alicloud/cdn20180510/dist/client.js";
 import { $OpenApiUtil } from "@alicloud/openapi-core";
 
 import { ALIYUN_REGION } from "../config.js";
@@ -6,8 +13,6 @@ import { ALIYUN_REGION } from "../config.js";
 const threeDaysMs = 3 * 24 * 60 * 60 * 1_000;
 
 type RecordValue = Record<string, unknown>;
-type RequestConstructor = new (values: RecordValue) => unknown;
-type CdnOperation = (request: unknown) => Promise<unknown>;
 
 export interface CdnMetricsPoint {
   readonly at: string;
@@ -40,6 +45,12 @@ export interface CdnMetricsSnapshot {
 
 export interface CdnMetricsProvider {
   query(options: { readonly from: Date; readonly to: Date }): Promise<CdnMetricsSnapshot>;
+}
+
+interface MetricFailure {
+  readonly label: string;
+  readonly code: string | null;
+  readonly statusCode: number | null;
 }
 
 function record(value: unknown): RecordValue | null {
@@ -130,6 +141,61 @@ function aliyunTime(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/u, "Z");
 }
 
+function nestedValues(source: unknown): readonly unknown[] {
+  const root = record(source);
+  if (root === null) return [];
+  return [
+    root,
+    valueAt(root, "data", "Data"),
+    valueAt(root, "response", "Response"),
+    valueAt(root, "body", "Body"),
+  ];
+}
+
+function errorCode(reason: unknown): string | null {
+  for (const source of nestedValues(reason)) {
+    const code = valueAt(source, "code", "Code");
+    if (typeof code === "string" && code.length > 0) return code;
+  }
+  return null;
+}
+
+function errorStatusCode(reason: unknown): number | null {
+  for (const source of nestedValues(reason)) {
+    const statusCode = numeric(valueAt(source, "statusCode", "StatusCode", "status"));
+    if (statusCode !== null) return Math.round(statusCode);
+  }
+  return null;
+}
+
+function failureMessage(failures: readonly MetricFailure[], domain: string, allFailed: boolean): string {
+  const codes = [...new Set(failures.flatMap((failure) => (failure.code === null ? [] : [failure.code])))];
+  const permissionCode = codes.find((code) =>
+    /forbidden|accessdenied|nopermission|unauthorized|ram/i.test(code),
+  );
+  if (permissionCode !== undefined) return `阿里云 CDN RAM 权限不足（${permissionCode}）`;
+
+  const domainCode = codes.find((code) => /domain.*notfound|invaliddomain/i.test(code));
+  if (domainCode !== undefined)
+    return `CDN 域名 ${domain} 不属于当前阿里云账号或未配置为加速域名（${domainCode}）`;
+
+  const credentialCode = codes.find((code) =>
+    /accesskey|signature|securitytoken|invalidak|authentication/i.test(code),
+  );
+  if (credentialCode !== undefined) return `阿里云访问密钥无效或签名失败（${credentialCode}）`;
+
+  const detail = failures
+    .slice(0, 3)
+    .map((failure) => {
+      const suffix = failure.code ?? (failure.statusCode === null ? "未知错误" : `HTTP ${failure.statusCode}`);
+      return `${failure.label}：${suffix}`;
+    })
+    .join("；");
+  return allFailed
+    ? `无法读取阿里云 CDN 监控数据（${detail}）`
+    : `部分 CDN 监控指标暂不可用（${detail}）`;
+}
+
 const CdnClientConstructor =
   (CdnClient as unknown as { default?: typeof CdnClient.default }).default ??
   (CdnClient as unknown as typeof CdnClient.default);
@@ -174,20 +240,6 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
     this.#domain = new URL(options.mediaBaseUrl).hostname;
   }
 
-  #request(name: string, values: RecordValue): unknown {
-    const requestConstructor = (CdnSdk as unknown as RecordValue)[name];
-    if (typeof requestConstructor !== "function")
-      throw new Error(`CDN SDK request unavailable: ${name}`);
-    return new (requestConstructor as RequestConstructor)(values);
-  }
-
-  async #call(operation: string, requestName: string, values: RecordValue): Promise<unknown> {
-    const method = (this.#client as unknown as RecordValue)[operation];
-    if (typeof method !== "function")
-      throw new Error(`CDN SDK operation unavailable: ${operation}`);
-    return (method as CdnOperation).call(this.#client, this.#request(requestName, values));
-  }
-
   async query(options: { readonly from: Date; readonly to: Date }): Promise<CdnMetricsSnapshot> {
     const durationMs = options.to.getTime() - options.from.getTime();
     const intervalSeconds = durationMs <= threeDaysMs ? 300 : 3600;
@@ -199,15 +251,51 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
       interval: String(intervalSeconds),
     };
 
-    const results = await Promise.allSettled([
-      this.#call("describeDomainTrafficData", "DescribeDomainTrafficDataRequest", values),
-      this.#call("describeDomainBpsData", "DescribeDomainBpsDataRequest", values),
-      this.#call("describeDomainSrcTrafficData", "DescribeDomainSrcTrafficDataRequest", values),
-      this.#call("describeDomainHitRateData", "DescribeDomainHitRateDataRequest", values),
-      this.#call("describeDomainReqHitRateData", "DescribeDomainReqHitRateDataRequest", values),
-      this.#call("describeDomainHttpCodeData", "DescribeDomainHttpCodeDataRequest", values),
-    ]);
-    const fulfilled = results.filter((result) => result.status === "fulfilled").length;
+    const calls = [
+      {
+        label: "流量",
+        promise: this.#client.describeDomainTrafficData(new DescribeDomainTrafficDataRequest(values)),
+      },
+      {
+        label: "带宽",
+        promise: this.#client.describeDomainBpsData(new DescribeDomainBpsDataRequest(values)),
+      },
+      {
+        label: "回源流量",
+        promise: this.#client.describeDomainSrcTrafficData(
+          new DescribeDomainSrcTrafficDataRequest(values),
+        ),
+      },
+      {
+        label: "字节命中率",
+        promise: this.#client.describeDomainHitRateData(new DescribeDomainHitRateDataRequest(values)),
+      },
+      {
+        label: "请求命中率",
+        promise: this.#client.describeDomainReqHitRateData(
+          new DescribeDomainReqHitRateDataRequest(values),
+        ),
+      },
+      {
+        label: "HTTP 状态码",
+        promise: this.#client.describeDomainHttpCodeData(
+          new DescribeDomainHttpCodeDataRequest(values),
+        ),
+      },
+    ] as const;
+
+    const results = await Promise.allSettled(calls.map((call) => call.promise));
+    const failures = results.flatMap((result, index): MetricFailure[] => {
+      if (result.status === "fulfilled") return [];
+      return [
+        {
+          label: calls[index]?.label ?? `指标 ${index + 1}`,
+          code: errorCode(result.reason),
+          statusCode: errorStatusCode(result.reason),
+        },
+      ];
+    });
+    const fulfilled = results.length - failures.length;
     if (fulfilled === 0) {
       return {
         status: "error",
@@ -222,7 +310,7 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
         requests: 0,
         errorRequests: 0,
         points: [],
-        message: "无法读取阿里云 CDN 监控数据",
+        message: failureMessage(failures, this.#domain, true),
       };
     }
 
@@ -274,7 +362,7 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
     const errorRequests = sorted.reduce((sum, item) => sum + item.http4xx + item.http5xx, 0);
 
     return {
-      status: fulfilled === results.length ? "ok" : "partial",
+      status: failures.length === 0 ? "ok" : "partial",
       domain: this.#domain,
       intervalSeconds,
       dataDelaySeconds,
@@ -286,7 +374,7 @@ export class AliyunCdnMetricsProvider implements CdnMetricsProvider {
       requests,
       errorRequests,
       points: sorted,
-      message: fulfilled === results.length ? null : "部分 CDN 监控指标暂不可用",
+      message: failures.length === 0 ? null : failureMessage(failures, this.#domain, false),
     };
   }
 }
