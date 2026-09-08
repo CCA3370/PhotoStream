@@ -360,8 +360,7 @@ export function PhotoLightbox({
     if (gesture.mode === "swipe") {
       const deltaX = point.x - gesture.start.x;
       const deltaY = point.y - gesture.start.y;
-      const shouldNavigate =
-        Math.abs(deltaX) >= 52 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+      const shouldNavigate = Math.abs(deltaX) >= 52 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
       setSwipeSettling(true);
       if (shouldNavigate) {
         const direction = deltaX < 0 ? 1 : -1;
@@ -494,7 +493,10 @@ export function PhotoLightbox({
             {!loaded ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
-                  <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                  <LoaderCircleIcon
+                    aria-hidden="true"
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                  />
                   {originalPending || originalUrl !== null ? "正在加载原图…" : "正在加载高清图片…"}
                 </div>
               </div>
@@ -517,7 +519,9 @@ export function PhotoLightbox({
                     bytes={large.bytes}
                     className={cn(
                       "object-contain transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none",
-                      loaded ? "scale-100 opacity-100 blur-0" : "scale-[1.008] opacity-0 blur-[2px]",
+                      loaded
+                        ? "scale-100 opacity-100 blur-0"
+                        : "scale-[1.008] opacity-0 blur-[2px]",
                     )}
                     draggable={false}
                     kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
@@ -533,7 +537,9 @@ export function PhotoLightbox({
                     alt="活动照片"
                     className={cn(
                       "object-contain transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none",
-                      loaded ? "scale-100 opacity-100 blur-0" : "scale-[1.008] opacity-0 blur-[2px]",
+                      loaded
+                        ? "scale-100 opacity-100 blur-0"
+                        : "scale-[1.008] opacity-0 blur-[2px]",
                     )}
                     draggable={false}
                     fill
