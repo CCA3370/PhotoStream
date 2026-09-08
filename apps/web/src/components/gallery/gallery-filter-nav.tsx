@@ -52,7 +52,8 @@ export function GalleryFilterNav({
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
               "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 transition-colors duration-150 hover:bg-muted/55 sm:px-3",
-              active && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+              active &&
+                "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
             )}
             href={item.href}
             key={item.key}
