@@ -44,6 +44,7 @@ function MediaTile({
   onOpen: (mediaId: string) => void;
   slug?: string;
 }>) {
+  const [imageLoaded, setImageLoaded] = useState(false);
   const preview = variant(media, "photo_480") ?? variant(media, "photo_960");
   if (preview === null) {
     return (
@@ -63,12 +64,24 @@ function MediaTile({
       )}
       data-media-id={media.id}
     >
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-muted transition-opacity duration-300 motion-reduce:transition-none",
+          imageLoaded ? "opacity-0" : "animate-pulse opacity-100 motion-reduce:animate-none",
+        )}
+      />
       <CachedPhotoImage
         alt="活动照片"
         bytes={preview.bytes}
-        className="object-cover transition-transform duration-300 ease-out sm:group-hover:scale-[1.018] motion-reduce:transform-none motion-reduce:transition-none"
+        className={cn(
+          "object-cover transition-[transform,opacity,filter] duration-300 ease-out motion-reduce:transition-none",
+          imageLoaded ? "scale-100 opacity-100 blur-0" : "scale-[1.01] opacity-0 blur-[3px]",
+          "sm:group-hover:scale-[1.018] motion-reduce:transform-none",
+        )}
         kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
         mediaId={media.id}
+        onLoad={() => setImageLoaded(true)}
         scope={slug ?? "public-media"}
         sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1279px) 17vw, 15vw"
         sourceUrl={preview.url}
