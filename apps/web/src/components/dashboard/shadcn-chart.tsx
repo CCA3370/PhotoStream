@@ -14,12 +14,12 @@ import {
 } from "recharts";
 
 import {
+  type ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-  type ChartConfig,
 } from "@/components/ui/chart";
 
 export interface ShadcnChartPoint {
@@ -184,11 +184,7 @@ export function ShadcnChart({
                   stopColor={`var(--color-${item.key})`}
                   stopOpacity={index === 0 ? 0.8 : 0.55}
                 />
-                <stop
-                  offset="95%"
-                  stopColor={`var(--color-${item.key})`}
-                  stopOpacity={0.1}
-                />
+                <stop offset="95%" stopColor={`var(--color-${item.key})`} stopOpacity={0.1} />
               </linearGradient>
             ))}
           </defs>
@@ -230,13 +226,7 @@ export function ShadcnChart({
               dataKey={item.key}
               fill={`var(--color-${item.key})`}
               key={item.key}
-              radius={
-                index === 0
-                  ? [0, 0, 4, 4]
-                  : index === series.length - 1
-                    ? [4, 4, 0, 0]
-                    : 0
-              }
+              radius={index === 0 ? [0, 0, 4, 4] : index === series.length - 1 ? [4, 4, 0, 0] : 0}
               stackId="a"
             />
           ))}
