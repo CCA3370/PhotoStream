@@ -538,14 +538,14 @@ export function PhotoLightbox({
                 {originalUrl === null ? null : " · 原图"}
               </div>
 
-              <div className="ml-auto flex min-w-0 max-w-[calc(100vw-1.25rem)] items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:max-w-full">
+              <div className="ml-auto grid min-w-0 max-w-[calc(100vw-1.25rem)] items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:max-w-full">
                 <div
                   aria-hidden={downloadMenuOpen}
                   className={cn(
-                    "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                    "col-start-1 row-start-1 flex w-max max-w-full origin-left items-center transition-[opacity,transform] duration-300 ease-out",
                     downloadMenuOpen
-                      ? "pointer-events-none max-w-0 -translate-x-3 opacity-0"
-                      : "max-w-[24rem] translate-x-0 opacity-100",
+                      ? "pointer-events-none translate-x-2 scale-x-[0.97] opacity-0"
+                      : "translate-x-0 scale-x-100 opacity-100",
                   )}
                 >
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -599,10 +599,10 @@ export function PhotoLightbox({
                   <div
                     aria-hidden={!downloadMenuOpen}
                     className={cn(
-                      "flex min-w-0 shrink-0 items-center overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out",
+                      "col-start-1 row-start-1 flex w-max max-w-full origin-right items-center justify-self-end transition-[opacity,transform] duration-300 ease-out",
                       downloadMenuOpen
-                        ? "max-w-[calc(100vw-2.5rem)] translate-x-0 opacity-100 sm:max-w-[22rem]"
-                        : "pointer-events-none max-w-0 translate-x-4 opacity-0",
+                        ? "translate-x-0 scale-x-100 opacity-100"
+                        : "pointer-events-none -translate-x-2 scale-x-[0.97] opacity-0",
                     )}
                   >
                     <div className="flex min-w-0 max-w-full items-center gap-1.5">
