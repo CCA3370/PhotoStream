@@ -410,11 +410,11 @@ export function BibSearchPanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm">
         <button
-          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
           onClick={() => setOpen(true)}
           type="button"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-colors group-hover:bg-muted">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
             <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           </span>
           <span className="min-w-0 flex-1">
@@ -427,7 +427,7 @@ export function BibSearchPanel({
         {resultMode === null ? null : (
           <Button
             aria-label="清除找照片条件"
-            className="shrink-0 rounded-lg"
+            className="shrink-0 rounded-lg animate-in fade-in-0 zoom-in-90 duration-200 motion-reduce:animate-none"
             onClick={clearResult}
             size="icon-sm"
             type="button"
@@ -441,11 +441,14 @@ export function BibSearchPanel({
       {resultMode === null ? (
         children
       ) : resultItems.length === 0 ? (
-        <div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground">
+        <div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
           {resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}
         </div>
       ) : (
-        <section aria-label="照片查找结果" className="flex flex-col gap-4">
+        <section
+          aria-label="照片查找结果"
+          className="flex flex-col gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-250 motion-reduce:animate-none"
+        >
           <MediaGrid items={resultItems} slug={slug} />
           {resultNextCursor == null ? null : resultMode === "face" ? (
             <Button
@@ -474,7 +477,7 @@ export function BibSearchPanel({
       )}
 
       <Dialog open={open} onOpenChange={requestDialogChange}>
-        <DialogContent className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none sm:max-w-md sm:rounded-3xl">
+        <DialogContent className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none max-sm:data-open:slide-in-from-bottom-full max-sm:data-open:zoom-in-100 max-sm:data-closed:slide-out-to-bottom-full max-sm:data-closed:zoom-out-100 max-sm:duration-300 sm:max-w-md sm:rounded-3xl motion-reduce:duration-0">
           <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20 sm:hidden" />
           <DialogHeader className="shrink-0 px-5 pt-3 pb-2.5 pr-12 sm:pt-5 sm:pb-3">
             <DialogTitle className="text-base">找照片</DialogTitle>
@@ -483,7 +486,7 @@ export function BibSearchPanel({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 overflow-y-auto px-4 py-3 sm:px-5 sm:pb-4">
+          <div className="min-h-0 overflow-y-auto px-4 py-3 overscroll-contain sm:px-5 sm:pb-4">
             <div className="flex flex-col gap-3.5">
               <ToggleGroup
                 aria-label="找照片方式"
@@ -498,249 +501,260 @@ export function BibSearchPanel({
                 value={[mode]}
               >
                 {bibSearchEnabled ? (
-                  <ToggleGroupItem className="h-9 rounded-xl text-xs" value="number">
+                  <ToggleGroupItem className="h-11 rounded-xl text-xs sm:h-9" value="number">
                     号码
                   </ToggleGroupItem>
                 ) : null}
                 {bibSearchEnabled && attributeFilterEnabled ? (
-                  <ToggleGroupItem className="h-9 rounded-xl text-xs" value="attributes">
+                  <ToggleGroupItem
+                    className="h-11 rounded-xl text-xs sm:h-9"
+                    value="attributes"
+                  >
                     年级班级
                   </ToggleGroupItem>
                 ) : null}
                 {faceSearch === undefined ? null : (
-                  <ToggleGroupItem className="h-9 rounded-xl text-xs" value="face">
+                  <ToggleGroupItem className="h-11 rounded-xl text-xs sm:h-9" value="face">
                     人脸
                   </ToggleGroupItem>
                 )}
               </ToggleGroup>
 
-              {mode === "number" && bibSearchEnabled ? (
-                <Field>
-                  <FieldLabel className="sr-only" htmlFor="public-bib-number">
-                    输入号码找照片
-                  </FieldLabel>
-                  <Input
-                    autoComplete="off"
-                    className="h-12 rounded-2xl border-muted-foreground/15 bg-muted/20 px-4 text-base shadow-none"
-                    id="public-bib-number"
-                    inputMode="numeric"
-                    maxLength={12}
-                    onChange={(event) => setNumber(event.currentTarget.value.replace(/\D/gu, ""))}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && number.length > 0) void search();
-                    }}
-                    placeholder={numberPlaceholder}
-                    value={number}
-                  />
-                </Field>
-              ) : null}
-
-              {mode === "attributes" && bibSearchEnabled && attributeFilterEnabled ? (
-                <FieldGroup className="grid grid-cols-2 gap-2.5 rounded-2xl bg-muted/20 p-3">
+              <div
+                className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+                key={mode}
+              >
+                {mode === "number" && bibSearchEnabled ? (
                   <Field>
-                    <FieldLabel className="text-xs" htmlFor="public-bib-grade">
-                      年级
+                    <FieldLabel className="sr-only" htmlFor="public-bib-number">
+                      输入号码找照片
                     </FieldLabel>
-                    <Select
-                      items={gradeOptions.map((option) => ({
-                        value: option.id,
-                        label: option.displayName,
-                      }))}
-                      onValueChange={(value) => {
-                        setGradeOptionId(typeof value === "string" ? value : null);
-                        setClassOptionId(null);
+                    <Input
+                      autoComplete="off"
+                      className="h-12 rounded-2xl border-muted-foreground/15 bg-muted/20 px-4 text-base shadow-none"
+                      id="public-bib-number"
+                      inputMode="numeric"
+                      maxLength={12}
+                      onChange={(event) => setNumber(event.currentTarget.value.replace(/\D/gu, ""))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && number.length > 0) void search();
                       }}
-                      value={gradeOptionId}
-                    >
-                      <SelectTrigger
-                        className="h-11 min-h-11 rounded-xl bg-background"
-                        id="public-bib-grade"
-                      >
-                        <SelectValue>
-                          {(value) =>
-                            value === null
-                              ? "选择年级"
-                              : (gradeOptions.find((option) => option.id === value)?.displayName ??
-                                "选择年级")
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {gradeOptions.map((option) => (
-                            <SelectItem key={option.id} value={option.id}>
-                              {option.displayName}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                      placeholder={numberPlaceholder}
+                      value={number}
+                    />
                   </Field>
-                  <Field data-disabled={gradeOptionId === null || undefined}>
-                    <FieldLabel className="text-xs" htmlFor="public-bib-class">
-                      班级
-                    </FieldLabel>
-                    <Select
-                      disabled={gradeOptionId === null}
-                      items={[
-                        { value: "all", label: "全部班级" },
-                        ...classOptions.map((option) => ({
+                ) : null}
+
+                {mode === "attributes" && bibSearchEnabled && attributeFilterEnabled ? (
+                  <FieldGroup className="grid grid-cols-2 gap-2.5 rounded-2xl bg-muted/20 p-3 max-sm:grid-cols-1">
+                    <Field>
+                      <FieldLabel className="text-xs" htmlFor="public-bib-grade">
+                        年级
+                      </FieldLabel>
+                      <Select
+                        items={gradeOptions.map((option) => ({
                           value: option.id,
                           label: option.displayName,
-                        })),
-                      ]}
-                      onValueChange={(value) =>
-                        setClassOptionId(
-                          typeof value === "string" && value !== "all" ? value : null,
-                        )
-                      }
-                      value={classOptionId ?? "all"}
-                    >
-                      <SelectTrigger
-                        className="h-11 min-h-11 rounded-xl bg-background"
-                        id="public-bib-class"
+                        }))}
+                        onValueChange={(value) => {
+                          setGradeOptionId(typeof value === "string" ? value : null);
+                          setClassOptionId(null);
+                        }}
+                        value={gradeOptionId}
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="all">全部班级</SelectItem>
-                          {classOptions.map((option) => (
-                            <SelectItem key={option.id} value={option.id}>
-                              {option.displayName}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </FieldGroup>
-              ) : null}
+                        <SelectTrigger
+                          className="h-12 min-h-12 rounded-xl bg-background sm:h-11 sm:min-h-11"
+                          id="public-bib-grade"
+                        >
+                          <SelectValue>
+                            {(value) =>
+                              value === null
+                                ? "选择年级"
+                                : (gradeOptions.find((option) => option.id === value)?.displayName ??
+                                  "选择年级")
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {gradeOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.displayName}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field data-disabled={gradeOptionId === null || undefined}>
+                      <FieldLabel className="text-xs" htmlFor="public-bib-class">
+                        班级
+                      </FieldLabel>
+                      <Select
+                        disabled={gradeOptionId === null}
+                        items={[
+                          { value: "all", label: "全部班级" },
+                          ...classOptions.map((option) => ({
+                            value: option.id,
+                            label: option.displayName,
+                          })),
+                        ]}
+                        onValueChange={(value) =>
+                          setClassOptionId(
+                            typeof value === "string" && value !== "all" ? value : null,
+                          )
+                        }
+                        value={classOptionId ?? "all"}
+                      >
+                        <SelectTrigger
+                          className="h-12 min-h-12 rounded-xl bg-background sm:h-11 sm:min-h-11"
+                          id="public-bib-class"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="all">全部班级</SelectItem>
+                            {classOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.displayName}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </FieldGroup>
+                ) : null}
 
-              {mode === "face" && faceSearch !== undefined ? (
-                <div className="flex flex-col gap-3">
-                  {faceStage === "consent" ? (
-                    <>
-                      <Alert className="rounded-2xl border-0 bg-muted/35 shadow-none">
-                        <ScanFaceIcon aria-hidden="true" />
-                        <AlertTitle>人脸找图处理说明</AlertTitle>
-                        <AlertDescription className="flex flex-col gap-1.5 text-xs leading-5">
-                          <p>
-                            系统会使用你提交的一张参考照片，只在本相册中查找可能包含同一人物的照片。参考照片仅用于本次找图，不用于身份认证或建立人物档案。
-                          </p>
-                          <p>
-                            参考照片会在查找结束后删除，异常情况下最长保留 1
-                            小时；本次候选结果最长保留 2 小时。结果可能存在漏检、误匹配或无结果。
-                          </p>
-                          <p>请仅提交本人或已取得明确授权的人物照片。</p>
+                {mode === "face" && faceSearch !== undefined ? (
+                  <div className="flex flex-col gap-3">
+                    {faceStage === "consent" ? (
+                      <div className="contents animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+                        <Alert className="rounded-2xl border-0 bg-muted/35 shadow-none">
+                          <ScanFaceIcon aria-hidden="true" />
+                          <AlertTitle>人脸找图处理说明</AlertTitle>
+                          <AlertDescription className="flex flex-col gap-1.5 text-xs leading-5">
+                            <p>
+                              系统会使用你提交的一张参考照片，只在本相册中查找可能包含同一人物的照片。参考照片仅用于本次找图，不用于身份认证或建立人物档案。
+                            </p>
+                            <p>
+                              参考照片会在查找结束后删除，异常情况下最长保留 1
+                              小时；本次候选结果最长保留 2 小时。结果可能存在漏检、误匹配或无结果。
+                            </p>
+                            <p>请仅提交本人或已取得明确授权的人物照片。</p>
+                          </AlertDescription>
+                        </Alert>
+
+                        <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/10 px-3.5 py-3">
+                          <Checkbox
+                            checked={acknowledged}
+                            className="mt-0.5 size-5 rounded-md border-2 border-muted-foreground/30 bg-background shadow-xs transition-[border-color,background-color,box-shadow,transform] hover:border-primary/60 active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/40 data-checked:border-primary data-checked:bg-primary"
+                            id="face-search-consent"
+                            onCheckedChange={setAcknowledged}
+                          />
+                          <label
+                            className="cursor-pointer text-xs leading-5 text-muted-foreground"
+                            htmlFor="face-search-consent"
+                          >
+                            我已阅读并同意上述处理方式，并确认提交的是本人或已获得明确授权的人物照片。
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {faceStage === "choose" ? (
+                      <div className="rounded-2xl border bg-muted/15 p-5 text-center animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none">
+                        <span className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-muted/70">
+                          <ScanFaceIcon aria-hidden="true" className="size-5 text-muted-foreground" />
+                        </span>
+                        <p className="text-sm font-medium">选择你想查找人物的清晰单人照片</p>
+                        <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+                          照片中应只有你想在本相册中查找的人，尽量选择正脸、清晰、无遮挡的照片。
+                        </p>
+                        <div className="mt-3 flex flex-wrap justify-center gap-2 max-sm:flex-col">
+                          <label
+                            className="inline-flex h-12 min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-background px-4 text-sm font-medium shadow-xs transition-[transform,background-color] duration-150 hover:bg-muted/55 active:scale-[0.98] sm:h-11 motion-reduce:transform-none motion-reduce:transition-none"
+                            htmlFor="face-reference-file"
+                          >
+                            选择照片
+                            <Input
+                              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+                              className="sr-only"
+                              id="face-reference-file"
+                              onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
+                              type="file"
+                            />
+                          </label>
+                          <label
+                            className="inline-flex h-12 min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs transition-[transform,opacity] duration-150 hover:opacity-90 active:scale-[0.98] sm:h-11 motion-reduce:transform-none motion-reduce:transition-none"
+                            htmlFor="face-reference-camera"
+                          >
+                            <CameraIcon aria-hidden="true" className="size-4" />
+                            拍照
+                            <Input
+                              accept="image/*"
+                              capture="environment"
+                              className="sr-only"
+                              id="face-reference-camera"
+                              onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
+                              type="file"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {faceWorking ? (
+                      <div className="flex flex-col gap-3 rounded-2xl border bg-muted/15 p-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
+                        <Progress value={faceProgress(faceStage, faceView)}>
+                          <ProgressLabel>
+                            {faceStage === "preparing"
+                              ? "正在处理参考照片"
+                              : faceStage === "uploading"
+                                ? "正在提交参考照片"
+                                : faceItems.length > 0
+                                  ? `已找到 ${faceItems.length} 张候选，正在继续查找`
+                                  : "正在查找照片"}
+                          </ProgressLabel>
+                          <ProgressValue />
+                        </Progress>
+                        <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
+                          {faceItems.length === 0
+                            ? "当前还没有返回候选，请等待查找完成后再判断结果。"
+                            : "结果仍在更新，查找完成前数量可能变化。"}
+                        </p>
+                        {faceItems.length === 0 ? null : (
+                          <div className="max-h-52 overflow-y-auto rounded-xl overscroll-contain">
+                            <MediaGrid items={faceItems} slug={slug} />
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {faceStage === "failed" ? (
+                      <Alert
+                        className="rounded-2xl animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+                        variant="destructive"
+                      >
+                        <AlertTitle>本次检索未完整完成</AlertTitle>
+                        <AlertDescription>
+                          当前结果不完整，请重新尝试；未完成的任务不会显示为“没有找到”。
                         </AlertDescription>
                       </Alert>
+                    ) : null}
 
-                      <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/10 px-3.5 py-3">
-                        <Checkbox
-                          checked={acknowledged}
-                          className="mt-0.5 size-5 rounded-md border-2 border-muted-foreground/30 bg-background shadow-xs transition-[border-color,background-color,box-shadow,transform] hover:border-primary/60 active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/40 data-checked:border-primary data-checked:bg-primary"
-                          id="face-search-consent"
-                          onCheckedChange={setAcknowledged}
-                        />
-                        <label
-                          className="cursor-pointer text-xs leading-5 text-muted-foreground"
-                          htmlFor="face-search-consent"
-                        >
-                          我已阅读并同意上述处理方式，并确认提交的是本人或已获得明确授权的人物照片。
-                        </label>
-                      </div>
-                    </>
-                  ) : null}
-
-                  {faceStage === "choose" ? (
-                    <div className="rounded-2xl border bg-muted/15 p-5 text-center">
-                      <span className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-muted/70">
-                        <ScanFaceIcon aria-hidden="true" className="size-5 text-muted-foreground" />
-                      </span>
-                      <p className="text-sm font-medium">选择你想查找人物的清晰单人照片</p>
-                      <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
-                        照片中应只有你想在本相册中查找的人，尽量选择正脸、清晰、无遮挡的照片。
-                      </p>
-                      <div className="mt-3 flex flex-wrap justify-center gap-2">
-                        <label
-                          className="inline-flex h-11 min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-background px-4 text-sm font-medium shadow-xs transition-colors hover:bg-muted/55"
-                          htmlFor="face-reference-file"
-                        >
-                          选择照片
-                          <Input
-                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
-                            className="sr-only"
-                            id="face-reference-file"
-                            onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
-                            type="file"
-                          />
-                        </label>
-                        <label
-                          className="inline-flex h-11 min-w-28 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs transition-opacity hover:opacity-90"
-                          htmlFor="face-reference-camera"
-                        >
-                          <CameraIcon aria-hidden="true" className="size-4" />
-                          拍照
-                          <Input
-                            accept="image/*"
-                            capture="environment"
-                            className="sr-only"
-                            id="face-reference-camera"
-                            onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
-                            type="file"
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {faceWorking ? (
-                    <div className="flex flex-col gap-3 rounded-2xl border bg-muted/15 p-4">
-                      <Progress value={faceProgress(faceStage, faceView)}>
-                        <ProgressLabel>
-                          {faceStage === "preparing"
-                            ? "正在处理参考照片"
-                            : faceStage === "uploading"
-                              ? "正在提交参考照片"
-                              : faceItems.length > 0
-                                ? `已找到 ${faceItems.length} 张候选，正在继续查找`
-                                : "正在查找照片"}
-                        </ProgressLabel>
-                        <ProgressValue />
-                      </Progress>
-                      <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
-                        {faceItems.length === 0
-                          ? "当前还没有返回候选，请等待查找完成后再判断结果。"
-                          : "结果仍在更新，查找完成前数量可能变化。"}
-                      </p>
-                      {faceItems.length === 0 ? null : (
-                        <div className="max-h-52 overflow-y-auto rounded-xl">
-                          <MediaGrid items={faceItems} slug={slug} />
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {faceStage === "failed" ? (
-                    <Alert className="rounded-2xl" variant="destructive">
-                      <AlertTitle>本次检索未完整完成</AlertTitle>
-                      <AlertDescription>
-                        当前结果不完整，请重新尝试；未完成的任务不会显示为“没有找到”。
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-
-                  {faceCloseWarning ? (
-                    <Alert className="rounded-2xl">
-                      <AlertTitle>查找仍在进行</AlertTitle>
-                      <AlertDescription>
-                        建议等待查找完成；如果不再需要，可以取消本次搜索。
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                </div>
-              ) : null}
+                    {faceCloseWarning ? (
+                      <Alert className="rounded-2xl animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
+                        <AlertTitle>查找仍在进行</AlertTitle>
+                        <AlertDescription>
+                          建议等待查找完成；如果不再需要，可以取消本次搜索。
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -749,7 +763,7 @@ export function BibSearchPanel({
               <>
                 {faceWorking ? (
                   <Button
-                    className="max-sm:w-full"
+                    className="max-sm:h-12 max-sm:w-full"
                     disabled={facePending}
                     onClick={() => void cancelFaceSearch()}
                     type="button"
