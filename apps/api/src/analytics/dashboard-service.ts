@@ -2,6 +2,7 @@ import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
 import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 
+import type { CdnMetricsProvider, CdnMetricsSnapshot } from "./cdn-metrics-provider.js";
 import { AppError } from "../errors.js";
 import type { ObjectStorage } from "../media/object-storage.js";
 import type { InternalActor } from "../media/service.js";
@@ -34,13 +35,37 @@ function automaticBucket(durationMs: number): DashboardBucket {
   return "1d";
 }
 
+function failedCdnMetrics(): CdnMetricsSnapshot {
+  return {
+    status: "error",
+    domain: null,
+    intervalSeconds: 0,
+    dataDelaySeconds: 0,
+    trafficBytes: 0,
+    originTrafficBytes: 0,
+    peakBandwidthBps: 0,
+    averageByteHitRate: null,
+    averageRequestHitRate: null,
+    requests: 0,
+    errorRequests: 0,
+    points: [],
+    message: "CDN 监控数据暂不可用",
+  };
+}
+
 export class DashboardService {
   readonly #database: Database;
   readonly #storage: ObjectStorage;
+  readonly #cdnMetrics: CdnMetricsProvider;
 
-  constructor(options: { readonly database: Database; readonly storage: ObjectStorage }) {
+  constructor(options: {
+    readonly database: Database;
+    readonly storage: ObjectStorage;
+    readonly cdnMetrics: CdnMetricsProvider;
+  }) {
     this.#database = options.database;
     this.#storage = options.storage;
+    this.#cdnMetrics = options.cdnMetrics;
   }
 
   async recordSearchUsage(options: {
@@ -116,10 +141,6 @@ export class DashboardService {
 
     const bucket = options.bucket ?? automaticBucket(durationMs);
     const seconds = bucketSeconds[bucket];
-    // The bucket width only comes from the fixed DashboardBucket whitelist above. Keep it as a SQL
-    // literal so SELECT/GROUP BY/ORDER BY contain the exact same PostgreSQL expression instead of
-    // distinct bind parameters ($1, $2, ...), which PostgreSQL does not consider equivalent for
-    // grouping purposes.
     const secondsSql = sql.raw(String(seconds));
     const bucketExpression =
       sql<Date>`to_timestamp(floor(extract(epoch from ${schema.analyticsEvents.createdAt}) / ${secondsSql}) * ${secondsSql})`.mapWith(
@@ -130,7 +151,7 @@ export class DashboardService {
         schema.searchUsageEvents.createdAt,
       );
 
-    const [trend, searchTrend, mediaAggregate, storageAggregate, topPhotos, topLikedPhotos] =
+    const [trend, searchTrend, mediaAggregate, storageAggregate, topPhotos, topLikedPhotos, cdn] =
       await Promise.all([
         this.#database
           .select({
@@ -256,6 +277,7 @@ export class DashboardService {
           )
           .orderBy(desc(sql`count(${schema.mediaLikes.id})`), desc(schema.media.publishSequence))
           .limit(options.limit),
+        this.#cdnMetrics.query({ from, to }).catch(() => failedCdnMetrics()),
       ]);
 
     const totals = trend.reduce(
@@ -315,6 +337,7 @@ export class DashboardService {
           face: row.face,
         })),
       },
+      cdn,
       topPhotos: topPhotos
         .filter((row) => row.publishSequence !== null)
         .map((row) => ({
