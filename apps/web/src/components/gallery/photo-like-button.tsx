@@ -64,9 +64,7 @@ export function PhotoLikeButton({
       setCountMotion({ from, to, direction: nextLiked ? 1 : -1, settled: false });
       countFrameRef.current = requestAnimationFrame(() => {
         countFrameRef.current = requestAnimationFrame(() => {
-          setCountMotion((current) =>
-            current === null ? null : { ...current, settled: true },
-          );
+          setCountMotion((current) => (current === null ? null : { ...current, settled: true }));
           countFrameRef.current = null;
         });
       });
