@@ -1,5 +1,9 @@
 import { createDatabase, createPool } from "@photostream/db";
 
+import {
+  AliyunCdnMetricsProvider,
+  UnavailableCdnMetricsProvider,
+} from "./analytics/cdn-metrics-provider.js";
 import { DashboardService } from "./analytics/dashboard-service.js";
 import { buildApp } from "./app.js";
 import { argon2PasswordHasher } from "./auth/password.js";
@@ -53,6 +57,14 @@ const cdnInvalidator =
         mediaBaseUrl: config.MEDIA_BASE_URL,
       })
     : new LocalCdnInvalidator();
+const cdnMetrics =
+  config.OBJECT_STORAGE_DRIVER === "aliyun"
+    ? new AliyunCdnMetricsProvider({
+        accessKeyId: config.ALIYUN_ACCESS_KEY_ID as string,
+        accessKeySecret: config.ALIYUN_ACCESS_KEY_SECRET as string,
+        mediaBaseUrl: config.MEDIA_BASE_URL,
+      })
+    : new UnavailableCdnMetricsProvider();
 const photoService = new PhotoService({
   database,
   storage,
@@ -71,7 +83,7 @@ const userAdminService = new UserAdminService({
   config,
 });
 const operationsService = new OperationsService({ database, storage, config, cdnInvalidator });
-const dashboardService = new DashboardService({ database, storage });
+const dashboardService = new DashboardService({ database, storage, cdnMetrics });
 const bibService = new BibService({ database, config, photoService });
 
 function faceInfrastructureConfigured(value: AppConfig): boolean {
