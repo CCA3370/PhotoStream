@@ -48,7 +48,7 @@ function MediaTile({
   slug,
 }: Readonly<{
   animateIn?: boolean;
-  animationIndex?: number;
+  animationIndex?: number | undefined;
   likeState: PhotoLikeState | null;
   media: PublicMediaView;
   onLikeChange: (state: PhotoLikeState) => void;
