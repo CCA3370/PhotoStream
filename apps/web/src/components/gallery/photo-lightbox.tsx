@@ -94,6 +94,9 @@ export function PhotoLightbox({
   const gestureRef = useRef<Gesture>({ mode: "idle" });
   const transitionDirectionRef = useRef(0);
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controlsEntranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewerOpenRef = useRef(false);
   const originalObjectUrlRef = useRef<string | null>(null);
   const originalRequestRef = useRef(0);
   const [zoom, setZoom] = useState(1);
@@ -104,10 +107,36 @@ export function PhotoLightbox({
   const [loaded, setLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [originalPending, setOriginalPending] = useState(false);
   const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
+
+  const clearControlsHideTimer = useCallback(() => {
+    if (controlsHideTimerRef.current === null) return;
+    clearTimeout(controlsHideTimerRef.current);
+    controlsHideTimerRef.current = null;
+  }, []);
+
+  const scheduleControlsHide = useCallback(() => {
+    clearControlsHideTimer();
+    if (!fullscreen || downloadMenuOpen) return;
+    controlsHideTimerRef.current = setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest("[data-lightbox-controls]")) {
+        controlsHideTimerRef.current = null;
+        return;
+      }
+      setControlsVisible(false);
+      controlsHideTimerRef.current = null;
+    }, 2_500);
+  }, [clearControlsHideTimer, downloadMenuOpen, fullscreen]);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    scheduleControlsHide();
+  }, [scheduleControlsHide]);
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -166,6 +195,27 @@ export function PhotoLightbox({
     if (document.fullscreenElement === null) await viewer.requestFullscreen();
     else await document.exitFullscreen();
   }, []);
+
+  useEffect(() => {
+    if (selectedId === null) {
+      viewerOpenRef.current = false;
+      setControlsVisible(false);
+      if (controlsEntranceTimerRef.current !== null) {
+        clearTimeout(controlsEntranceTimerRef.current);
+        controlsEntranceTimerRef.current = null;
+      }
+      clearControlsHideTimer();
+      return;
+    }
+    if (viewerOpenRef.current) return;
+    viewerOpenRef.current = true;
+    setControlsVisible(false);
+    if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
+    controlsEntranceTimerRef.current = setTimeout(() => {
+      setControlsVisible(true);
+      controlsEntranceTimerRef.current = null;
+    }, 110);
+  }, [clearControlsHideTimer, selectedId]);
 
   useEffect(() => {
     if (selectedId === null) return;
@@ -244,12 +294,14 @@ export function PhotoLightbox({
   useEffect(
     () => () => {
       if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
+      if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
+      clearControlsHideTimer();
       if (originalObjectUrlRef.current !== null) {
         URL.revokeObjectURL(originalObjectUrlRef.current);
         originalObjectUrlRef.current = null;
       }
     },
-    [],
+    [clearControlsHideTimer],
   );
 
   useEffect(() => {
@@ -258,6 +310,25 @@ export function PhotoLightbox({
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
+
+  useEffect(() => {
+    if (!fullscreen) {
+      clearControlsHideTimer();
+      if (selectedId !== null) setControlsVisible(true);
+      return;
+    }
+    revealControls();
+  }, [clearControlsHideTimer, fullscreen, revealControls, selectedId]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    if (downloadMenuOpen) {
+      clearControlsHideTimer();
+      setControlsVisible(true);
+      return;
+    }
+    scheduleControlsHide();
+  }, [clearControlsHideTimer, downloadMenuOpen, fullscreen, scheduleControlsHide]);
 
   useEffect(() => {
     if (selectedIndex < 0 || items.length < 2) return;
@@ -279,6 +350,7 @@ export function PhotoLightbox({
   useEffect(() => {
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      revealControls();
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         selectOffset(-1);
@@ -301,7 +373,7 @@ export function PhotoLightbox({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [changeZoom, fullscreenSupported, resetView, selectOffset, selected, toggleFullscreen, zoom]);
+  }, [changeZoom, fullscreenSupported, resetView, revealControls, selectOffset, selected, toggleFullscreen, zoom]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -474,7 +546,15 @@ export function PhotoLightbox({
           左右滑动或使用方向键切换照片；双指、双击、滚轮或键盘加减键可以缩放。
         </DialogDescription>
 
-        <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
+        <div
+          className="relative h-full w-full overflow-hidden bg-black"
+          onFocusCapture={() => revealControls()}
+          onPointerDownCapture={() => revealControls()}
+          onPointerMove={() => {
+            if (fullscreen) revealControls();
+          }}
+          ref={viewerRef}
+        >
           <div
             aria-label="照片画布"
             className={cn(
@@ -555,7 +635,15 @@ export function PhotoLightbox({
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 sm:p-4 sm:pb-16">
+          <div
+            aria-hidden={!controlsVisible}
+            className={cn(
+              "pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 transition-[opacity,transform] duration-200 ease-out sm:p-4 sm:pb-16 motion-reduce:transition-none",
+              controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-2 opacity-0",
+            )}
+            data-lightbox-controls
+            inert={!controlsVisible}
+          >
             <div className="pointer-events-auto flex items-center gap-1.5">
               {fullscreenSupported ? (
                 <Button
@@ -601,7 +689,12 @@ export function PhotoLightbox({
             <>
               <Button
                 aria-label="上一张照片"
-                className="absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none"
+                className={cn(
+                  "absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none",
+                  controlsVisible ? "opacity-100" : "pointer-events-none -translate-x-1 opacity-0",
+                )}
+                data-lightbox-controls
+                inert={!controlsVisible}
                 onClick={() => selectOffset(-1)}
                 size="icon"
                 title="上一张 (←)"
@@ -612,7 +705,12 @@ export function PhotoLightbox({
               </Button>
               <Button
                 aria-label="下一张照片"
-                className="absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none"
+                className={cn(
+                  "absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none",
+                  controlsVisible ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0",
+                )}
+                data-lightbox-controls
+                inert={!controlsVisible}
                 onClick={() => selectOffset(1)}
                 size="icon"
                 title="下一张 (→)"
@@ -624,7 +722,15 @@ export function PhotoLightbox({
             </>
           ) : null}
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
+          <div
+            aria-hidden={!controlsVisible}
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] transition-[opacity,transform] duration-200 ease-out sm:px-4 sm:pt-20 motion-reduce:transition-none",
+              controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0",
+            )}
+            data-lightbox-controls
+            inert={!controlsVisible}
+          >
             <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
               <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
                 {selected.width} × {selected.height} · {Math.round(zoom * 100)}%
@@ -717,7 +823,8 @@ export function PhotoLightbox({
                           bytes={preview1920.bytes}
                           className={cn(
                             toolbarButtonClass,
-                            "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
+                            "w-full min-w-0 px-2 text-[11px] transition-[transform,opacity,background-color,border-color] duration-200 sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs motion-reduce:transition-none",
+                            downloadMenuOpen ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
                           )}
                           kind="preview"
                           label="普通图"
@@ -733,7 +840,10 @@ export function PhotoLightbox({
                           bytes={selected.downloads.originalBytes}
                           className={cn(
                             toolbarButtonClass,
-                            "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
+                            "w-full min-w-0 px-2 text-[11px] transition-[transform,opacity,background-color,border-color] duration-200 sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs motion-reduce:transition-none",
+                            downloadMenuOpen
+                              ? "translate-y-0 opacity-100 delay-[30ms]"
+                              : "translate-y-1 opacity-0 delay-0",
                           )}
                           kind="original"
                           label="原图"
@@ -744,7 +854,12 @@ export function PhotoLightbox({
                       ) : null}
                       <Button
                         aria-label="收起下载选项"
-                        className="size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,background-color] duration-150 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none"
+                        className={cn(
+                          "size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,opacity,background-color] duration-200 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none",
+                          downloadMenuOpen
+                            ? "translate-y-0 opacity-100 delay-[60ms]"
+                            : "translate-y-1 opacity-0 delay-0",
+                        )}
                         onClick={() => setDownloadMenuOpen(false)}
                         size="icon"
                         title="关闭下载选项"
