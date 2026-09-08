@@ -88,6 +88,9 @@ function tooltipLabel(value: unknown): string {
   return Number.isNaN(date.getTime()) ? value : tooltipFormatter.format(date);
 }
 
+const chartClassName =
+  "aspect-auto h-[250px] w-full [&_.recharts-surface:focus]:outline-none [&_.recharts-surface:focus-visible]:outline-none";
+
 export function ShadcnChart({
   data,
   series,
@@ -157,20 +160,22 @@ export function ShadcnChart({
       tickFormatter={axisLabel}
     />
   );
-  const yAxis = <YAxis hide domain={yDomain} allowDataOverflow={fixedMax !== undefined} />;
-  const legend = showLegend ? <ChartLegend content={<ChartLegendContent />} /> : null;
+  const yAxis = <YAxis hide domain={yDomain} allowDataOverflow />;
+  const legend = showLegend ? (
+    <ChartLegend content={<ChartLegendContent />} itemSorter={null} />
+  ) : null;
 
   if (mode === "area") {
     return (
       <ChartContainer
         aria-label={ariaLabel}
-        className="aspect-auto h-[250px] w-full"
+        className={chartClassName}
         config={chartConfig}
         role="img"
       >
-        <AreaChart accessibilityLayer data={chartData}>
+        <AreaChart accessibilityLayer data={chartData} margin={{ left: 12, right: 12 }}>
           <defs>
-            {series.map((item, index) => (
+            {series.map((item) => (
               <linearGradient
                 id={`${gradientId}-${item.key}`}
                 key={item.key}
@@ -179,11 +184,7 @@ export function ShadcnChart({
                 y1="0"
                 y2="1"
               >
-                <stop
-                  offset="5%"
-                  stopColor={`var(--color-${item.key})`}
-                  stopOpacity={index === 0 ? 0.8 : 0.55}
-                />
+                <stop offset="5%" stopColor={`var(--color-${item.key})`} stopOpacity={0.8} />
                 <stop offset="95%" stopColor={`var(--color-${item.key})`} stopOpacity={0.1} />
               </linearGradient>
             ))}
@@ -194,11 +195,14 @@ export function ShadcnChart({
           {tooltip}
           {series.map((item) => (
             <Area
+              baseValue={0}
               dataKey={item.key}
               fill={`url(#${gradientId}-${item.key})`}
+              fillOpacity={0.4}
               key={item.key}
               stroke={`var(--color-${item.key})`}
-              type="natural"
+              strokeWidth={2}
+              type="monotone"
             />
           ))}
           {legend}
@@ -211,11 +215,11 @@ export function ShadcnChart({
     return (
       <ChartContainer
         aria-label={ariaLabel}
-        className="aspect-auto h-[250px] w-full"
+        className={chartClassName}
         config={chartConfig}
         role="img"
       >
-        <BarChart accessibilityLayer data={chartData}>
+        <BarChart accessibilityLayer data={chartData} margin={{ left: 12, right: 12 }}>
           <CartesianGrid vertical={false} />
           {xAxis}
           {yAxis}
@@ -238,7 +242,7 @@ export function ShadcnChart({
   return (
     <ChartContainer
       aria-label={ariaLabel}
-      className="aspect-auto h-[250px] w-full"
+      className={chartClassName}
       config={chartConfig}
       role="img"
     >
