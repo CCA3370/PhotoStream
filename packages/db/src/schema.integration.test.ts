@@ -191,6 +191,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       "face_album_jobs",
       "face_consent_receipts",
       "face_integration_events",
+      "face_operation_diagnostics",
       "face_search_candidates",
       "face_search_intents",
       "media_face_index_tasks",
@@ -205,6 +206,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
            'face_album_jobs',
            'face_consent_receipts',
            'face_integration_events',
+           'face_operation_diagnostics',
            'face_search_candidates',
            'face_search_intents',
            'media_face_index_tasks'
@@ -212,7 +214,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
          and (
            column_name like '%vector%'
            or column_name like '%similarity%'
-           or column_name like '%cluster%'
+           or (column_name like '%cluster%' and column_name <> 'last_clustered_at')
            or column_name like '%face_box%'
            or column_name like '%payload%'
            or column_name like '%uri%'

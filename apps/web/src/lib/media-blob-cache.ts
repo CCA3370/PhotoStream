@@ -1,3 +1,4 @@
+import { derivedCacheSegment, derivedSegmentBudget, mediaCacheBudget } from "./media-cache-policy";
 import { type MediaDeliveryMetric, recordMediaDeliveryMetric } from "./media-delivery-telemetry";
 
 // Content is keyed by immutable object identity, never by a temporary signature.
@@ -78,10 +79,8 @@ interface SharedRequest {
 const inFlight = new Map<string, SharedRequest>();
 const memory = new Map<string, { blob: Blob; cacheName: string }>();
 const writes = new Map<string, Promise<void>>();
-const mib = 1024 * 1024;
-const memoryBudget = 64 * mib;
+const memoryBudget = 64 * 1024 * 1024;
 const diskBudgets = new Map<string, number>();
-const fallbackDiskBudget = (name: string) => (name.includes("original") ? 128 : 64) * mib;
 
 function identity(request: MediaBlobIdentity): string {
   return `${request.cacheName}\u0000${request.key}\u0000${request.expectedBytes}`;
@@ -149,13 +148,13 @@ function cacheSupported(): boolean {
 async function diskBudget(name: string): Promise<number> {
   const known = diskBudgets.get(name);
   if (known !== undefined) return known;
-  let budget = fallbackDiskBudget(name);
+  let quota: number | undefined;
   try {
-    const quota = (await navigator.storage?.estimate())?.quota;
-    if (quota !== undefined && quota > 0) budget = Math.min(budget, Math.floor(quota * 0.05));
+    quota = (await navigator.storage?.estimate())?.quota;
   } catch {
     /* Storage estimation is optional. */
   }
+  const budget = mediaCacheBudget(name, quota);
   diskBudgets.set(name, budget);
   return budget;
 }
@@ -239,15 +238,21 @@ async function trimDisk(
   incoming: number,
   key: string,
   telemetryScope: string | undefined,
+  segment: ReturnType<typeof derivedCacheSegment> = null,
   forceOne = false,
 ): Promise<void> {
   const index = await diskIndex(cache, name);
+  const matchesSegment = (url: string) => segment === null || derivedCacheSegment(url) === segment;
   let total = incoming;
-  for (const [url, entry] of index) if (url !== key) total += entry.size;
+  for (const [url, entry] of index) {
+    if (url !== key && matchesSegment(url)) total += entry.size;
+  }
   if (total <= budget && !forceOne) return;
-  const entries = [...index].sort(
-    ([urlA, a], [urlB, b]) => (recentReads.get(urlA) ?? a.at) - (recentReads.get(urlB) ?? b.at),
-  );
+  const entries = [...index]
+    .filter(([url]) => matchesSegment(url))
+    .sort(
+      ([urlA, a], [urlB, b]) => (recentReads.get(urlA) ?? a.at) - (recentReads.get(urlB) ?? b.at),
+    );
   for (const [url, entry] of entries) {
     if (total <= budget && !forceOne) break;
     if (url === key) continue;
@@ -274,6 +279,23 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
       const budget = await diskBudget(request.cacheName);
       if (blob.size > budget) return;
       const cache = await caches.open(request.cacheName);
+      const segment = request.cacheName.includes("derived")
+        ? derivedCacheSegment(request.key)
+        : null;
+      if (segment !== null) {
+        const segmentBudget = derivedSegmentBudget(budget, segment);
+        if (blob.size <= segmentBudget) {
+          await trimDisk(
+            cache,
+            request.cacheName,
+            segmentBudget,
+            blob.size,
+            request.key,
+            request.telemetryScope,
+            segment,
+          );
+        }
+      }
       await trimDisk(
         cache,
         request.cacheName,
@@ -300,6 +322,7 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
           blob.size,
           request.key,
           request.telemetryScope,
+          null,
           true,
         );
         await cache.put(request.key, new Response(blob, { headers }));
