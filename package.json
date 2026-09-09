@@ -13,6 +13,7 @@
     "db:backup": "node scripts/database-backup.mjs",
     "db:restore": "node scripts/database-restore.mjs",
     "photos:audit-local": "node scripts/audit-local-photos.mjs",
+    "smoke:production": "node scripts/production-smoke.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "test:db": "pnpm --filter @photostream/db test:integration",
