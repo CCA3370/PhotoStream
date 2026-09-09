@@ -55,7 +55,7 @@ export function LoginForm() {
         <FieldGroup>
           <Field data-invalid={form.formState.errors.username ? true : undefined}>
             <FieldLabel htmlFor="username">用户名</FieldLabel>
-            <InputGroup className="min-h-11">
+            <InputGroup className="min-h-11" focusRing={false}>
               <InputGroupAddon aria-hidden="true">
                 <UserRoundIcon />
               </InputGroupAddon>
@@ -70,7 +70,7 @@ export function LoginForm() {
           </Field>
           <Field data-invalid={form.formState.errors.password ? true : undefined}>
             <FieldLabel htmlFor="password">密码</FieldLabel>
-            <InputGroup className="min-h-11">
+            <InputGroup className="min-h-11" focusRing={false}>
               <InputGroupAddon aria-hidden="true">
                 <KeyRoundIcon />
               </InputGroupAddon>
