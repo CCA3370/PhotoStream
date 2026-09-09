@@ -53,7 +53,7 @@ function DialogContent({
       <DialogOverlay
         className={
           isMobileBottomSheet
-            ? "max-sm:!backdrop-blur-none max-sm:duration-300 motion-reduce:duration-0"
+            ? "max-sm:backdrop-blur-none! max-sm:duration-300 motion-reduce:duration-0"
             : undefined
         }
       />
