@@ -106,7 +106,11 @@ function consumeSharedRequest(entry: SharedRequest, signal?: AbortSignal): Promi
     };
     const onAbort = () => {
       release();
-      reject(signal === undefined ? new DOMException("The operation was aborted.", "AbortError") : abortReason(signal));
+      reject(
+        signal === undefined
+          ? new DOMException("The operation was aborted.", "AbortError")
+          : abortReason(signal),
+      );
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     entry.promise.then(
