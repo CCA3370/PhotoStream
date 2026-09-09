@@ -19,7 +19,6 @@ ReadOnlyPaths=/opt/photostream /etc/photostream
 ReadWritePaths=/var/backups/photostream
 RestrictSUIDSGID=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
 TimeoutStartSec=45min
 
 [Install]
