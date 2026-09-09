@@ -38,7 +38,9 @@ describe("lightbox image policy", () => {
   });
 
   it("honors data saver and slow connections", () => {
-    expect(effectiveLightboxDpr({ devicePixelRatio: 3, saveData: true, effectiveType: "4g" })).toBe(1);
+    expect(effectiveLightboxDpr({ devicePixelRatio: 3, saveData: true, effectiveType: "4g" })).toBe(
+      1,
+    );
     expect(effectiveLightboxDpr({ devicePixelRatio: 3, effectiveType: "2g" })).toBe(1);
     expect(effectiveLightboxDpr({ devicePixelRatio: 3, effectiveType: "3g" })).toBe(1.5);
   });
