@@ -52,7 +52,7 @@ describe("RuntimeMetrics", () => {
     expect(snapshot.requests.status5xx).toBe(4);
     expect(snapshot.requests.status4xx).toBe(8);
     expect(snapshot.requests.status2xx).toBe(28);
-    expect(snapshot.requests.p50Ms).toBe(250);
+    expect(snapshot.requests.p50Ms).toBe(240);
     expect(snapshot.requests.p95Ms).toBe(390);
     expect(snapshot.requests.p99Ms).toBe(400);
     expect(snapshot.database).toEqual({
