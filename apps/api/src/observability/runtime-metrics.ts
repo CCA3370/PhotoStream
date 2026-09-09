@@ -12,7 +12,7 @@ export const runtimeJobNames = [
 
 export type RuntimeJobName = (typeof runtimeJobNames)[number];
 
-interface RuntimeClock {
+export interface RuntimeClock {
   readonly monotonicMs: () => number;
   readonly now: () => Date;
   readonly uptimeSeconds: () => number;
@@ -83,7 +83,10 @@ function rounded(value: number): number {
 function percentile(values: readonly number[], percentileValue: number): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
-  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(percentileValue * sorted.length) - 1));
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil(percentileValue * sorted.length) - 1),
+  );
   return rounded(sorted[index] ?? 0);
 }
 
@@ -141,20 +144,22 @@ export class RuntimeMetrics {
     this.#requestStarts.set(requestId, this.#clock.monotonicMs());
   }
 
-  finishRequest(requestId: string, statusCode: number): number | undefined {
+  finishRequest(requestId: string, statusCode: number, recordLatency = true): number | undefined {
     const startedAt = this.#requestStarts.get(requestId);
     if (startedAt === undefined) return undefined;
     this.#requestStarts.delete(requestId);
     const durationMs = Math.max(0, this.#clock.monotonicMs() - startedAt);
     this.#totalRequests += 1;
-    if (durationMs >= this.#slowThresholdMs) this.#slowRequests += 1;
     if (statusCode >= 500) this.#status5xx += 1;
     else if (statusCode >= 400) this.#status4xx += 1;
     else if (statusCode >= 300) this.#status3xx += 1;
     else if (statusCode >= 200) this.#status2xx += 1;
-    this.#durations.push(durationMs);
-    if (this.#durations.length > this.#sampleLimit) {
-      this.#durations.splice(0, this.#durations.length - this.#sampleLimit);
+    if (recordLatency) {
+      if (durationMs >= this.#slowThresholdMs) this.#slowRequests += 1;
+      this.#durations.push(durationMs);
+      if (this.#durations.length > this.#sampleLimit) {
+        this.#durations.splice(0, this.#durations.length - this.#sampleLimit);
+      }
     }
     return rounded(durationMs);
   }
