@@ -134,7 +134,6 @@ function NeighborSlide({
           draggable={false}
           kind={source.kind === "photo_1920" ? "photo_1920" : "photo_960"}
           mediaId={media.id}
-          priority
           scope={slug ?? "public-media"}
           sizes="100vw"
           sourceUrl={source.url}
