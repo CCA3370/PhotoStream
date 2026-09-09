@@ -6,6 +6,7 @@ const channel = "photostream_live_event";
 export class LiveEventBroker {
   readonly #emitter = new EventEmitter();
   #client: PoolClient | null = null;
+  #subscribers = 0;
 
   constructor() {
     this.#emitter.setMaxListeners(0);
@@ -32,11 +33,23 @@ export class LiveEventBroker {
     this.#client.release();
     this.#client = null;
     this.#emitter.removeAllListeners();
+    this.#subscribers = 0;
   }
 
   subscribe(albumId: string, listener: () => void): () => void {
     this.#emitter.on(albumId, listener);
-    return () => this.#emitter.off(albumId, listener);
+    this.#subscribers += 1;
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      this.#emitter.off(albumId, listener);
+      this.#subscribers = Math.max(0, this.#subscribers - 1);
+    };
+  }
+
+  subscriberCount(): number {
+    return this.#subscribers;
   }
 }
 
