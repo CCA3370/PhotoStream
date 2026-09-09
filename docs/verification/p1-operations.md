@@ -16,7 +16,7 @@ GET /api/v1/operations/runtime
 
 快照包括：
 
-- 最近最多 2,048 个已完成请求的 p50/p95/p99 延迟；
+- 最近最多 2,048 个普通已完成请求的 p50/p95/p99 延迟；`text/event-stream` 长连接不进入延迟直方图；
 - 总请求、当前 in-flight、>=1 秒慢请求和 2xx/3xx/4xx/5xx 计数；
 - Node RSS、heap used/total、external、ArrayBuffer 内存；
 - PostgreSQL pool 的 total/idle/waiting；
@@ -71,9 +71,9 @@ ALIYUN_ACCESS_KEY_SECRET=<dedicated-backup-secret>
 BACKUP_OSS_PREFIX=photostream/database
 ```
 
-上传器硬限制为 `https://oss-cn-beijing.aliyuncs.com`，对象设置 `private` ACL，并为加密备份与 manifest 写 SHA-256 元数据。不接受任意 Endpoint，避免备份凭证被配置错误的目标接收。
+上传器使用 OSS Signature V4 (`OSS4-HMAC-SHA256`)，并硬限制为 `https://oss-cn-beijing.aliyuncs.com` / `cn-beijing`。对象显式设置 `private` ACL，并为加密备份与 manifest 写 SHA-256 元数据。不接受任意 Endpoint，避免备份凭证被配置错误的目标接收。
 
-RAM 策略应只允许目标备份 Bucket/prefix 的 `PutObject`，不要复用主账号 AccessKey，也不要给备份主机 `DeleteObject`。因此代码不会远端自动删除旧备份。远端生命周期规则必须在单独云端授权后配置，建议至少覆盖 8 周恢复窗口；配置前远端对象只增不删。
+RAM 策略应只允许目标备份 Bucket/prefix 的 `oss:PutObject` 与 `oss:PutObjectAcl`，不要复用主账号 AccessKey，也不要给备份主机 `DeleteObject`。因此代码不会远端自动删除旧备份。远端生命周期规则必须在单独云端授权后配置，建议至少覆盖 8 周恢复窗口；配置前远端对象只增不删。
 
 ## 4. systemd 模板
 
@@ -124,4 +124,4 @@ PR 必须继续通过现有四路 CI：
 - Deployment contract；
 - Chromium smoke。
 
-另外 `pnpm lint` 会运行 backup envelope、14+8 retention 和 OSS 签名的确定性 guard。CI 不连接真实 OSS，也不使用生产凭证。
+另外 `pnpm lint` 会运行 backup envelope、14+8 retention 和 OSS V4 签名的确定性 guard。CI 不连接真实 OSS，也不使用生产凭证。
