@@ -193,12 +193,14 @@ const bibMaintenance = setInterval(() => {
 }, 30_000);
 bibMaintenance.unref();
 const faceMaintenance = setInterval(() => {
-  void runtimeMetrics.runJob("faceMaintenance", () => faceService.runMaintenance()).catch((error) => {
-    app.log.error(
-      { errorName: error instanceof Error ? error.name : "unknown" },
-      "face maintenance poll failed",
-    );
-  });
+  void runtimeMetrics
+    .runJob("faceMaintenance", () => faceService.runMaintenance())
+    .catch((error) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : "unknown" },
+        "face maintenance poll failed",
+      );
+    });
 }, 30_000);
 faceMaintenance.unref();
 const bibCleanup = setInterval(
