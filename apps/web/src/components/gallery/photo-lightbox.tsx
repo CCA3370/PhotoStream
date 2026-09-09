@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { toast } from "@/components/ui/toast";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
+import { selectLightboxVariantKind } from "@/lib/lightbox-image-policy";
 import { loadOriginalImage, readCachedOriginalImage } from "@/lib/original-image-cache";
 import { swipeIntentDirection } from "@/lib/photo-swipe-intent";
 import { cn } from "@/lib/utils";
@@ -54,12 +55,38 @@ interface SignedOriginal {
   readonly expiresAt: string;
 }
 
+interface NetworkInformationLike {
+  readonly saveData?: boolean;
+  readonly effectiveType?: string;
+}
+
 function variant(media: PublicMediaView, kind: "photo_960" | "photo_1920") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
 }
 
-function displayVariant(media: PublicMediaView) {
-  return variant(media, "photo_1920") ?? variant(media, "photo_960");
+function displayVariant(media: PublicMediaView, viewportWidth = 0, viewportHeight = 0) {
+  const has960 = variant(media, "photo_960") !== null;
+  const has1920 = variant(media, "photo_1920") !== null;
+  const connection =
+    typeof navigator === "undefined"
+      ? undefined
+      : (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+  const preferred = selectLightboxVariantKind({
+    mediaWidth: media.width,
+    mediaHeight: media.height,
+    viewportWidth,
+    viewportHeight,
+    devicePixelRatio: typeof window === "undefined" ? 1 : window.devicePixelRatio,
+    saveData: connection?.saveData,
+    effectiveType: connection?.effectiveType,
+    has960,
+    has1920,
+  });
+  if (preferred === null) return null;
+  return (
+    variant(media, preferred) ??
+    variant(media, preferred === "photo_1920" ? "photo_960" : "photo_1920")
+  );
 }
 
 function distance(points: readonly Point[]): number {
@@ -103,15 +130,19 @@ function NeighborSlide({
   scale,
   settling,
   slug,
+  viewportHeight,
+  viewportWidth,
 }: Readonly<{
   media: PublicMediaView | null;
   offset: number;
   scale: number;
   settling: boolean;
   slug?: string | undefined;
+  viewportHeight: number;
+  viewportWidth: number;
 }>) {
   if (media === null) return null;
-  const source = displayVariant(media);
+  const source = displayVariant(media, viewportWidth, viewportHeight);
   if (source === null) return null;
 
   return (
@@ -178,7 +209,6 @@ export function PhotoLightbox({
   const selectedIndex =
     selectedId === null ? -1 : items.findIndex((item) => item.id === selectedId);
   const selected = selectedIndex < 0 ? null : (items[selectedIndex] ?? null);
-  const large = selected === null ? null : displayVariant(selected);
   const previous =
     selectedIndex < 0 || items.length < 2
       ? null
@@ -194,6 +224,10 @@ export function PhotoLightbox({
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const targetRequestRef = useRef<{
+    readonly direction: -1 | 1;
+    readonly controller: AbortController;
+  } | null>(null);
   const controlsEntranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewerOpenRef = useRef(false);
@@ -205,6 +239,7 @@ export function PhotoLightbox({
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeSettling, setSwipeSettling] = useState(false);
   const [stageWidth, setStageWidth] = useState(0);
+  const [stageHeight, setStageHeight] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -218,6 +253,7 @@ export function PhotoLightbox({
   const [originalCheckedId, setOriginalCheckedId] = useState<string | null>(null);
   const [originalPending, setOriginalPending] = useState(false);
   const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
+  const large = selected === null ? null : displayVariant(selected, stageWidth, stageHeight);
 
   const setStageElement = useCallback((node: HTMLDivElement | null) => {
     stageResizeObserverRef.current?.disconnect();
@@ -225,9 +261,13 @@ export function PhotoLightbox({
     stageRef.current = node;
     if (node === null) {
       setStageWidth(0);
+      setStageHeight(0);
       return;
     }
-    const measure = () => setStageWidth(node.clientWidth);
+    const measure = () => {
+      setStageWidth(node.clientWidth);
+      setStageHeight(node.clientHeight);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
@@ -307,29 +347,49 @@ export function PhotoLightbox({
     [items, onSelect, selectedIndex],
   );
 
+  const cancelTargetRequest = useCallback(() => {
+    const current = targetRequestRef.current;
+    if (current === null) return;
+    targetRequestRef.current = null;
+    current.controller.abort();
+  }, []);
+
   const requestTarget = useCallback(
     (offset: -1 | 1) => {
+      const active = targetRequestRef.current;
+      if (active?.direction === offset && !active.controller.signal.aborted) return;
+      if (active !== null) active.controller.abort();
+      targetRequestRef.current = null;
+
       const item = offset === -1 ? previous : next;
       if (item === null) return;
-      const source = displayVariant(item);
+      const source = displayVariant(item, stageWidth, stageHeight);
       if (source === null) return;
+      const controller = new AbortController();
+      targetRequestRef.current = { direction: offset, controller };
       void loadDerivedImage({
         scope: slug ?? "public-media",
         mediaId: item.id,
         kind: source.kind === "photo_1920" ? "photo_1920" : "photo_960",
         bytes: source.bytes,
         sourceUrl: source.url,
+        signal: controller.signal,
         refreshUrl: async () =>
           (
             await clientGet<{ url: string }>(
               slug === undefined
                 ? `/api/v1/media/${encodeURIComponent(item.id)}/variants/${source.kind}`
                 : `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(item.id)}/variants/${source.kind}`,
+              controller.signal,
             )
           ).url,
-      }).catch(() => undefined);
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          if (targetRequestRef.current?.controller === controller) targetRequestRef.current = null;
+        });
     },
-    [previous, next, slug],
+    [previous, next, slug, stageHeight, stageWidth],
   );
 
   const animateOffset = useCallback(
@@ -360,6 +420,7 @@ export function PhotoLightbox({
 
   useEffect(() => {
     if (selectedId === null) {
+      cancelTargetRequest();
       viewerOpenRef.current = false;
       setControlsVisible(false);
       if (controlsEntranceTimerRef.current !== null) {
@@ -377,7 +438,7 @@ export function PhotoLightbox({
       setControlsVisible(true);
       controlsEntranceTimerRef.current = null;
     }, 110);
-  }, [clearControlsHideTimer, selectedId]);
+  }, [cancelTargetRequest, clearControlsHideTimer, selectedId]);
 
   useEffect(() => {
     if (selectedId === null || selected === null || large === null) return;
@@ -446,6 +507,7 @@ export function PhotoLightbox({
 
   useEffect(
     () => () => {
+      cancelTargetRequest();
       if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
       if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
       clearControlsHideTimer();
@@ -455,7 +517,7 @@ export function PhotoLightbox({
         originalObjectUrlRef.current = null;
       }
     },
-    [clearControlsHideTimer],
+    [cancelTargetRequest, clearControlsHideTimer],
   );
 
   useEffect(() => {
@@ -528,6 +590,7 @@ export function PhotoLightbox({
     pointersRef.current.set(event.pointerId, point);
     const points = [...pointersRef.current.values()];
     if (points.length >= 2) {
+      cancelTargetRequest();
       gestureRef.current = { mode: "pinch", distance: distance(points), zoom };
       setDragging(false);
       setSwipeOffset(0);
@@ -595,6 +658,7 @@ export function PhotoLightbox({
       if (shouldNavigate) {
         animateOffset(deltaX < 0 ? 1 : -1);
       } else {
+        cancelTargetRequest();
         setSwipeSettling(true);
         setSwipeOffset(0);
         if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
@@ -739,6 +803,8 @@ export function PhotoLightbox({
               scale={previousScale}
               settling={swipeSettling}
               slug={slug}
+              viewportHeight={stageHeight}
+              viewportWidth={stageWidth}
             />
 
             <div
@@ -769,6 +835,8 @@ export function PhotoLightbox({
                       scale={1}
                       settling={false}
                       slug={slug}
+                      viewportHeight={stageHeight}
+                      viewportWidth={stageWidth}
                     />
                   ) : null}
                   {originalUrl === null ? (
@@ -776,9 +844,11 @@ export function PhotoLightbox({
                       alt="活动照片"
                       bytes={large.bytes}
                       cacheOnly={
-                        slug !== undefined &&
-                        selected.downloads.original &&
-                        originalCheckedId !== selected.id
+                        stageWidth <= 0 ||
+                        stageHeight <= 0 ||
+                        (slug !== undefined &&
+                          selected.downloads.original &&
+                          originalCheckedId !== selected.id)
                       }
                       className={cn(
                         "object-contain transition-[opacity,filter] duration-160 ease-out motion-reduce:transition-none",
@@ -816,6 +886,8 @@ export function PhotoLightbox({
               scale={nextScale}
               settling={swipeSettling}
               slug={slug}
+              viewportHeight={stageHeight}
+              viewportWidth={stageWidth}
             />
           </div>
 
