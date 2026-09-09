@@ -4,7 +4,6 @@ import { createReadStream } from "node:fs";
 import {
   mkdir,
   open,
-  readFile,
   readdir,
   relative,
   resolve,
@@ -51,7 +50,8 @@ async function acquireLock(directory) {
     await handle.writeFile(`${process.pid} ${new Date().toISOString()}\n`);
     return { handle, lockPath };
   } catch (error) {
-    if (!(error instanceof Error) || !Object.hasOwn(error, "code") || error.code !== "EEXIST") throw error;
+    if (!(error instanceof Error) || !Object.hasOwn(error, "code") || error.code !== "EEXIST")
+      throw error;
     const lock = await stat(lockPath).catch(() => null);
     if (lock === null || Date.now() - lock.mtimeMs <= lockStaleMilliseconds) {
       throw new Error("Another database backup cycle appears to be running");
@@ -124,7 +124,10 @@ function uploadConfiguration() {
     throw new Error("Aliyun backup upload requires bucket and access key credentials");
   }
   const endpoint = process.env.ALIYUN_OSS_ENDPOINT ?? backupOssEndpoint;
-  const prefix = (process.env.BACKUP_OSS_PREFIX ?? "photostream/database").replace(/^\/+|\/+$/gu, "");
+  const prefix = (process.env.BACKUP_OSS_PREFIX ?? "photostream/database").replace(
+    /^\/+|\/+$/gu,
+    "",
+  );
   if (!/^[A-Za-z0-9._/-]{1,120}$/u.test(prefix) || prefix.includes("..")) {
     throw new Error("BACKUP_OSS_PREFIX is invalid");
   }
@@ -203,7 +206,9 @@ try {
 } catch (error) {
   if (outputPath !== undefined) {
     const manifestPath = `${outputPath}.manifest.json`;
-    const backupExists = await readFile(outputPath).then(() => true).catch(() => false);
+    const backupExists = await stat(outputPath)
+      .then(() => true)
+      .catch(() => false);
     if (!backupExists) await unlink(manifestPath).catch(() => undefined);
   }
   throw error;
