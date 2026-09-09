@@ -15,7 +15,8 @@ assert.equal(plan.keep.length, 22, "14 daily plus 8 older weekly backups must be
 assert.equal(plan.remove.length, 58, "all other recognized snapshots must be pruned");
 assert.deepEqual(plan.ignored.sort(), ["notes.pstrbk", "photostream-not-a-backup.txt"]);
 assert.equal(plan.keep[0], "photostream-20260910T030000Z.pstrbk");
-assert.ok(plan.keep.includes("photostream-20260827T030000Z.pstrbk") === false);
+assert.ok(plan.keep.includes("photostream-20260827T030000Z.pstrbk"));
+assert.ok(plan.remove.includes("photostream-20260826T030000Z.pstrbk"));
 
 const duplicates = planBackupRetention([
   "photostream-20260910T030000Z.pstrbk",
