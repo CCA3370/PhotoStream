@@ -100,8 +100,8 @@ services:
       - ${PHOTOSTREAM_CADDY_ENV:?PHOTOSTREAM_CADDY_ENV is required}
     ports:
       - "80:80"
-      - "443:443"
       - "443:443/udp"
+      - "443:443"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ${PHOTOSTREAM_CADDY_STATE:?PHOTOSTREAM_CADDY_STATE is required}:/etc/caddy/routes:ro
@@ -122,6 +122,9 @@ services:
   api-blue:
     <<: *api-common
     image: ${BLUE_API_IMAGE:?BLUE_API_IMAGE is required}
+    environment:
+      PHOTOSTREAM_SLOT: blue
+      PHOTOSTREAM_RELEASE: ${BLUE_API_IMAGE:?BLUE_API_IMAGE is required}
     profiles: [blue]
 
   web-blue:
@@ -132,6 +135,9 @@ services:
   api-green:
     <<: *api-common
     image: ${GREEN_API_IMAGE:?GREEN_API_IMAGE is required}
+    environment:
+      PHOTOSTREAM_SLOT: green
+      PHOTOSTREAM_RELEASE: ${GREEN_API_IMAGE:?GREEN_API_IMAGE is required}
     profiles: [green]
 
   web-green:
