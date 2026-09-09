@@ -149,4 +149,63 @@ describe("media body reuse", () => {
     expect(revoke.mock.calls.some(([url]) => url === displayed)).toBe(false);
     release();
   });
+
+  it("keeps a shared fetch alive when only the speculative consumer cancels", async () => {
+    cache = new MemoryCache();
+    const storage = { open: async () => cache };
+    vi.stubGlobal("window", { caches: storage, location: { origin: "https://app.test" } });
+    vi.stubGlobal("caches", storage);
+    let resolveNetwork: ((response: Response) => void) | undefined;
+    let sharedSignal: AbortSignal | undefined;
+    network.mockImplementation(
+      async (_url: string, init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          sharedSignal = init?.signal instanceof AbortSignal ? init.signal : undefined;
+          resolveNetwork = resolve;
+        }),
+    );
+    const { loadMediaBlob } = await import("./media-blob-cache");
+    const controller = new AbortController();
+    const request = { ...photo, key: `${photo.key}/shared`, expectedBytes: null };
+    const speculative = loadMediaBlob({ ...request, signal: controller.signal });
+    const display = loadMediaBlob(request);
+    await Promise.resolve();
+    controller.abort();
+    await expect(speculative).rejects.toMatchObject({ name: "AbortError" });
+    expect(sharedSignal?.aborted).toBe(false);
+    resolveNetwork?.(new Response(new Blob(["photo"], { type: "image/webp" })));
+    await expect(display).resolves.toBeInstanceOf(Blob);
+    expect(network).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts the underlying fetch when the last consumer cancels", async () => {
+    cache = new MemoryCache();
+    const storage = { open: async () => cache };
+    vi.stubGlobal("window", { caches: storage, location: { origin: "https://app.test" } });
+    vi.stubGlobal("caches", storage);
+    let sharedSignal: AbortSignal | undefined;
+    network.mockImplementation(
+      async (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          sharedSignal = init?.signal instanceof AbortSignal ? init.signal : undefined;
+          sharedSignal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    const { loadMediaBlob } = await import("./media-blob-cache");
+    const controller = new AbortController();
+    const pending = loadMediaBlob({
+      ...photo,
+      key: `${photo.key}/cancelled`,
+      expectedBytes: null,
+      signal: controller.signal,
+    });
+    await Promise.resolve();
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(sharedSignal?.aborted).toBe(true);
+  });
 });
