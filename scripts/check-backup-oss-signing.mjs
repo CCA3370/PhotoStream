@@ -32,10 +32,7 @@ assert.equal(
   signed.canonicalRequestHash,
   "c46d96390bdbc2d739ac9363293ae9d710b14e48081fcb22cd8ad54b63136eca",
 );
-assert.equal(
-  signed.signature,
-  "d3694c2dfc5371ee6acd35e88c4871ac95a7ba01d3a2f476768fe61218590097",
-);
+assert.equal(signed.signature, "d3694c2dfc5371ee6acd35e88c4871ac95a7ba01d3a2f476768fe61218590097");
 assert.equal(
   signed.authorization,
   "OSS4-HMAC-SHA256 Credential=LTAI****************/20250411/cn-hangzhou/oss/aliyun_v4_request,AdditionalHeaders=content-disposition;content-length,Signature=d3694c2dfc5371ee6acd35e88c4871ac95a7ba01d3a2f476768fe61218590097",
