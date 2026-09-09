@@ -1,9 +1,12 @@
+import { type MediaDeliveryMetric, recordMediaDeliveryMetric } from "./media-delivery-telemetry";
+
 // Content is keyed by immutable object identity, never by a temporary signature.
 // Callers must obtain current media/download authorization before consuming it.
 export interface MediaBlobIdentity {
   readonly cacheName: string;
   readonly key: string;
   readonly expectedBytes: number | null;
+  readonly telemetryScope?: string;
 }
 
 export interface MediaBlobRequest extends MediaBlobIdentity {
@@ -18,16 +21,7 @@ export class ImageFetchError extends Error {
   }
 }
 
-type Diagnostic =
-  | "memoryHit"
-  | "diskHit"
-  | "joined"
-  | "network"
-  | "readFailure"
-  | "writeFailure"
-  | "sizeMismatch"
-  | "refreshed"
-  | "evicted";
+type Diagnostic = MediaDeliveryMetric;
 const diagnostics: Partial<Record<Diagnostic, number>> = {};
 let diagnosticsEnabled = false;
 let diagnosticsInitialized = false;
@@ -61,8 +55,16 @@ export function setMediaCacheDiagnostics(enabled: boolean): void {
 export function getMediaCacheDiagnostics(): Readonly<Partial<Record<Diagnostic, number>>> {
   return { ...diagnostics };
 }
-export function recordMediaCacheDiagnostic(event: Diagnostic): void {
-  if (diagnosticsEnabled) diagnostics[event] = (diagnostics[event] ?? 0) + 1;
+export function recordMediaCacheDiagnostic(
+  event: Diagnostic,
+  telemetryScope?: string,
+  bytes = 0,
+): void {
+  if (diagnosticsEnabled) {
+    const increment = event === "networkBytes" ? Math.max(0, Math.floor(bytes)) : 1;
+    diagnostics[event] = (diagnostics[event] ?? 0) + increment;
+  }
+  recordMediaDeliveryMetric(telemetryScope, event, bytes);
 }
 
 const inFlight = new Map<string, Promise<Blob>>();
@@ -115,7 +117,7 @@ export async function readMediaBlob(request: MediaBlobIdentity): Promise<Blob | 
   if (existing !== undefined) {
     remember(request, existing.blob);
     recentReads.set(request.key, Date.now());
-    recordMediaCacheDiagnostic("memoryHit");
+    recordMediaCacheDiagnostic("memoryHit", request.telemetryScope, existing.blob.size);
     return existing.blob;
   }
   if (!cacheSupported()) return null;
@@ -128,16 +130,16 @@ export async function readMediaBlob(request: MediaBlobIdentity): Promise<Blob | 
       blob.size === 0 ||
       (request.expectedBytes !== null && blob.size !== request.expectedBytes)
     ) {
-      recordMediaCacheDiagnostic("sizeMismatch");
+      recordMediaCacheDiagnostic("sizeMismatch", request.telemetryScope);
       await cache.delete(request.key);
       return null;
     }
     remember(request, blob);
     recentReads.set(request.key, Date.now());
-    recordMediaCacheDiagnostic("diskHit");
+    recordMediaCacheDiagnostic("diskHit", request.telemetryScope, blob.size);
     return blob;
   } catch {
-    recordMediaCacheDiagnostic("readFailure");
+    recordMediaCacheDiagnostic("readFailure", request.telemetryScope);
     return null;
   }
 }
@@ -187,6 +189,7 @@ async function trimDisk(
   budget: number,
   incoming: number,
   key: string,
+  telemetryScope: string | undefined,
   forceOne = false,
 ): Promise<void> {
   const index = await diskIndex(cache, name);
@@ -204,13 +207,13 @@ async function trimDisk(
     recentReads.delete(url);
     total -= entry.size;
     forceOne = false;
-    recordMediaCacheDiagnostic("evicted");
+    recordMediaCacheDiagnostic("evicted", telemetryScope);
   }
 }
 
 export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Promise<void> {
   if (blob.size === 0 || (request.expectedBytes !== null && blob.size !== request.expectedBytes)) {
-    recordMediaCacheDiagnostic("sizeMismatch");
+    recordMediaCacheDiagnostic("sizeMismatch", request.telemetryScope);
     return;
   }
   remember(request, blob);
@@ -222,7 +225,14 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
       const budget = await diskBudget(request.cacheName);
       if (blob.size > budget) return;
       const cache = await caches.open(request.cacheName);
-      await trimDisk(cache, request.cacheName, budget, blob.size, request.key);
+      await trimDisk(
+        cache,
+        request.cacheName,
+        budget,
+        blob.size,
+        request.key,
+        request.telemetryScope,
+      );
       const headers = new Headers({
         "Content-Length": String(blob.size),
         "x-photostream-cached-at": String(Date.now()),
@@ -232,7 +242,7 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
         await cache.put(request.key, new Response(blob, { headers }));
       } catch (error) {
         if (!(error instanceof DOMException) || error.name !== "QuotaExceededError") throw error;
-        recordMediaCacheDiagnostic("writeFailure");
+        recordMediaCacheDiagnostic("writeFailure", request.telemetryScope);
         // Evict only this media cache, then retry once; never clear shell or user data.
         await trimDisk(
           cache,
@@ -240,6 +250,7 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
           Math.max(blob.size, Math.floor(budget / 2)),
           blob.size,
           request.key,
+          request.telemetryScope,
           true,
         );
         await cache.put(request.key, new Response(blob, { headers }));
@@ -249,7 +260,7 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
         at: Date.now(),
       });
     } catch {
-      recordMediaCacheDiagnostic("writeFailure");
+      recordMediaCacheDiagnostic("writeFailure", request.telemetryScope);
     }
   });
   writes.set(request.cacheName, task);
@@ -259,30 +270,31 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
 
 export async function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
   const key = identity(request);
-  const pending = inFlight.get(key);
-  if (pending !== undefined) {
-    recordMediaCacheDiagnostic("joined");
-    return pending;
+  const pendingRequest = inFlight.get(key);
+  if (pendingRequest !== undefined) {
+    recordMediaCacheDiagnostic("joined", request.telemetryScope);
+    return pendingRequest;
   }
   const task = (async () => {
     const cached = await readMediaBlob(request);
     if (cached !== null) return cached;
     const get = (url: string) => {
-      recordMediaCacheDiagnostic("network");
+      recordMediaCacheDiagnostic("network", request.telemetryScope);
       return fetch(url, { cache: "default", credentials: "omit", mode: "cors" });
     };
     let response = await get(request.sourceUrl);
     if ((response.status === 401 || response.status === 403) && request.refreshUrl !== undefined) {
       await response.body?.cancel();
       const freshUrl = await request.refreshUrl();
-      recordMediaCacheDiagnostic("refreshed");
+      recordMediaCacheDiagnostic("refreshed", request.telemetryScope);
       response = await get(freshUrl);
     }
     if (!response.ok) throw new ImageFetchError(response.status);
     const blob = await response.blob();
+    recordMediaCacheDiagnostic("networkBytes", request.telemetryScope, blob.size);
     if (blob.size === 0) throw new Error("图片内容为空，请稍后重试。");
     if (request.expectedBytes !== null && blob.size !== request.expectedBytes) {
-      recordMediaCacheDiagnostic("sizeMismatch");
+      recordMediaCacheDiagnostic("sizeMismatch", request.telemetryScope);
       throw new Error("图片大小与记录不一致，请刷新相册后重试。");
     }
     // Persist before settling the shared task so a second consumer never races a write.
