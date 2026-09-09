@@ -159,7 +159,7 @@ export class RuntimeMetrics {
     return rounded(durationMs);
   }
 
-  async runJob(name: RuntimeJobName, task: () => Promise<void>): Promise<void> {
+  async runJob(name: RuntimeJobName, task: () => Promise<unknown>): Promise<void> {
     const state = this.#jobs.get(name);
     if (state === undefined) throw new Error(`Unknown runtime job: ${name}`);
     if (state.running) {
