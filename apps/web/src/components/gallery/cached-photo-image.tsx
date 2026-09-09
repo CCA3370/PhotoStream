@@ -177,7 +177,9 @@ export function CachedPhotoImage({
           priority={priority}
           sizes={sizes}
           src={displayUrl}
-          style={fallbackMode !== "direct" && warmDecoded ? { filter: "none", opacity: 1 } : undefined}
+          style={
+            fallbackMode !== "direct" && warmDecoded ? { filter: "none", opacity: 1 } : undefined
+          }
           unoptimized
         />
       )}
