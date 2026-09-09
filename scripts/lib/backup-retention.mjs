@@ -43,8 +43,10 @@ function isoWeekKey(date) {
 export function planBackupRetention(names, options = {}) {
   const dailyCount = options.dailyCount ?? 14;
   const weeklyCount = options.weeklyCount ?? 8;
-  if (!Number.isInteger(dailyCount) || dailyCount < 1) throw new Error("dailyCount must be positive");
-  if (!Number.isInteger(weeklyCount) || weeklyCount < 0) throw new Error("weeklyCount must be non-negative");
+  if (!Number.isInteger(dailyCount) || dailyCount < 1)
+    throw new Error("dailyCount must be positive");
+  if (!Number.isInteger(weeklyCount) || weeklyCount < 0)
+    throw new Error("weeklyCount must be non-negative");
 
   const parsed = names
     .map(parseBackupFile)
@@ -81,6 +83,10 @@ export function planBackupRetention(names, options = {}) {
 }
 
 export function backupFileName(date = new Date()) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) throw new Error("date must be valid");
-  return `photostream-${date.toISOString().replace(/[-:]/gu, "").replace(/\.\d{3}Z$/u, "Z")}.pstrbk`;
+  if (!(date instanceof Date) || Number.isNaN(date.getTime()))
+    throw new Error("date must be valid");
+  return `photostream-${date
+    .toISOString()
+    .replace(/[-:]/gu, "")
+    .replace(/\.\d{3}Z$/u, "Z")}.pstrbk`;
 }
