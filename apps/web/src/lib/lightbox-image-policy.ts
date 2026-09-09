@@ -6,8 +6,8 @@ export interface LightboxImagePolicyInput {
   readonly viewportWidth: number;
   readonly viewportHeight: number;
   readonly devicePixelRatio: number;
-  readonly saveData?: boolean;
-  readonly effectiveType?: string;
+  readonly saveData?: boolean | undefined;
+  readonly effectiveType?: string | undefined;
   readonly has960: boolean;
   readonly has1920: boolean;
 }
@@ -16,8 +16,8 @@ const highResolutionThresholdPx = 1_200;
 
 export function effectiveLightboxDpr(options: {
   readonly devicePixelRatio: number;
-  readonly saveData?: boolean;
-  readonly effectiveType?: string;
+  readonly saveData?: boolean | undefined;
+  readonly effectiveType?: string | undefined;
 }): number {
   const dpr = Number.isFinite(options.devicePixelRatio)
     ? Math.max(1, Math.min(2, options.devicePixelRatio))
