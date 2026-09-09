@@ -51,7 +51,11 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay
-        className={isMobileBottomSheet ? "data-closed:backdrop-blur-none" : undefined}
+        className={
+          isMobileBottomSheet
+            ? "max-sm:!backdrop-blur-none max-sm:duration-300 motion-reduce:duration-0"
+            : undefined
+        }
       />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
