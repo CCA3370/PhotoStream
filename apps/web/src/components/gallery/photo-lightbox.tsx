@@ -100,11 +100,13 @@ function NeighborSlide({
   media,
   offset,
   scale,
+  settling,
   slug,
 }: Readonly<{
   media: PublicMediaView | null;
   offset: number;
   scale: number;
+  settling: boolean;
   slug?: string | undefined;
 }>) {
   if (media === null) return null;
@@ -114,7 +116,11 @@ function NeighborSlide({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 will-change-transform"
+      className={cn(
+        "pointer-events-none absolute inset-0 will-change-transform",
+        settling && "transition-transform duration-180 ease-out motion-reduce:transition-none",
+      )}
+      data-swipe-slide
       style={{ transform: `translate3d(${offset}px, 0, 0) scale(${scale})` }}
     >
       <div
@@ -183,6 +189,7 @@ export function PhotoLightbox({
   const [dragging, setDragging] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeSettling, setSwipeSettling] = useState(false);
+  const [stageWidth, setStageWidth] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -268,7 +275,8 @@ export function PhotoLightbox({
   const animateOffset = useCallback(
     (offset: -1 | 1) => {
       if (items.length < 2 || selectedIndex < 0 || swipeSettling) return;
-      const width = stageRef.current?.clientWidth ?? window.innerWidth;
+      const width = stageRef.current?.clientWidth ?? stageWidth;
+      if (width <= 0) return;
       setSwipeSettling(true);
       setSwipeOffset(offset > 0 ? -width : width);
       if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
@@ -279,7 +287,7 @@ export function PhotoLightbox({
         commitOffset(offset);
       }, swipeSettleMs);
     },
-    [commitOffset, items.length, selectedIndex, swipeSettling],
+    [commitOffset, items.length, selectedIndex, stageWidth, swipeSettling],
   );
 
   const toggleFullscreen = useCallback(async () => {
@@ -309,6 +317,16 @@ export function PhotoLightbox({
       controlsEntranceTimerRef.current = null;
     }, 110);
   }, [clearControlsHideTimer, selectedId]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (stage === null) return;
+    const measure = () => setStageWidth(stage.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [selectedId]);
 
   useEffect(() => {
     if (selectedId === null || selected === null || large === null) return;
@@ -509,7 +527,8 @@ export function PhotoLightbox({
       return;
     }
     if (gesture.mode === "swipe" && points.length === 1) {
-      const width = stageRef.current?.clientWidth ?? window.innerWidth;
+      const width = stageRef.current?.clientWidth ?? stageWidth;
+      if (width <= 0) return;
       const deltaX = point.x - gesture.start.x;
       setSwipeOffset(clamp(deltaX, -width, width));
     }
@@ -618,7 +637,6 @@ export function PhotoLightbox({
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
-  const stageWidth = stageRef.current?.clientWidth ?? (typeof window === "undefined" ? 1 : window.innerWidth);
   const previousOffset = -stageWidth + swipeOffset;
   const currentOffset = swipeOffset;
   const nextOffset = stageWidth + swipeOffset;
@@ -673,77 +691,76 @@ export function PhotoLightbox({
               </div>
             ) : null}
 
+            <NeighborSlide
+              media={stageWidth > 0 ? previous : null}
+              offset={previousOffset}
+              scale={previousScale}
+              settling={swipeSettling}
+              slug={slug}
+            />
+
             <div
               className={cn(
-                "absolute inset-0",
+                "absolute inset-0 will-change-transform",
                 swipeSettling &&
-                  "[&_[data-swipe-slide]]:transition-transform [&_[data-swipe-slide]]:duration-180 [&_[data-swipe-slide]]:ease-out motion-reduce:[&_[data-swipe-slide]]:transition-none",
+                  "transition-transform duration-180 ease-out motion-reduce:transition-none",
               )}
+              data-swipe-slide
+              style={{ transform: `translate3d(${currentOffset}px, 0, 0) scale(${currentScale})` }}
             >
-              <div data-swipe-slide>
-                <NeighborSlide
-                  media={previous}
-                  offset={previousOffset}
-                  scale={previousScale}
-                  slug={slug}
-                />
-              </div>
-
               <div
-                className="absolute inset-0 will-change-transform"
-                data-swipe-slide
-                style={{ transform: `translate3d(${currentOffset}px, 0, 0) scale(${currentScale})` }}
+                className="absolute inset-0 origin-center will-change-transform"
+                style={{ transform: imageTransform }}
               >
                 <div
-                  className="absolute inset-0 origin-center will-change-transform"
-                  style={{ transform: imageTransform }}
+                  className="absolute top-1/2 left-1/2 origin-center -translate-x-1/2 -translate-y-1/2"
+                  data-lightbox-transition-image
+                  style={{
+                    aspectRatio: `${selected.width} / ${selected.height}`,
+                    width: fittedImageWidth(selected),
+                  }}
                 >
-                  <div
-                    className="absolute top-1/2 left-1/2 origin-center -translate-x-1/2 -translate-y-1/2"
-                    data-lightbox-transition-image
-                    style={{
-                      aspectRatio: `${selected.width} / ${selected.height}`,
-                      width: fittedImageWidth(selected),
-                    }}
-                  >
-                    {originalUrl === null ? (
-                      <CachedPhotoImage
-                        alt="活动照片"
-                        bytes={large.bytes}
-                        className={cn(
-                          "object-contain transition-[opacity,filter] duration-160 ease-out motion-reduce:transition-none",
-                          loaded ? "opacity-100 blur-0" : "opacity-0 blur-[1px]",
-                        )}
-                        draggable={false}
-                        kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
-                        mediaId={selected.id}
-                        onLoad={() => setLoaded(true)}
-                        priority
-                        scope={slug ?? "public-media"}
-                        sizes="100vw"
-                        sourceUrl={large.url}
-                      />
-                    ) : (
-                      <Image
-                        alt="活动照片"
-                        className="object-contain"
-                        draggable={false}
-                        fill
-                        key={originalUrl}
-                        priority
-                        sizes="100vw"
-                        src={originalUrl}
-                        unoptimized
-                      />
-                    )}
-                  </div>
+                  {originalUrl === null ? (
+                    <CachedPhotoImage
+                      alt="活动照片"
+                      bytes={large.bytes}
+                      className={cn(
+                        "object-contain transition-[opacity,filter] duration-160 ease-out motion-reduce:transition-none",
+                        loaded ? "opacity-100 blur-0" : "opacity-0 blur-[1px]",
+                      )}
+                      draggable={false}
+                      kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
+                      mediaId={selected.id}
+                      onLoad={() => setLoaded(true)}
+                      priority
+                      scope={slug ?? "public-media"}
+                      sizes="100vw"
+                      sourceUrl={large.url}
+                    />
+                  ) : (
+                    <Image
+                      alt="活动照片"
+                      className="object-contain"
+                      draggable={false}
+                      fill
+                      key={originalUrl}
+                      priority
+                      sizes="100vw"
+                      src={originalUrl}
+                      unoptimized
+                    />
+                  )}
                 </div>
               </div>
-
-              <div data-swipe-slide>
-                <NeighborSlide media={next} offset={nextOffset} scale={nextScale} slug={slug} />
-              </div>
             </div>
+
+            <NeighborSlide
+              media={stageWidth > 0 ? next : null}
+              offset={nextOffset}
+              scale={nextScale}
+              settling={swipeSettling}
+              slug={slug}
+            />
           </div>
 
           <div
