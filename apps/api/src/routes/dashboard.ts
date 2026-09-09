@@ -22,29 +22,32 @@ const searchUsageRequestSchema = z
   .strict();
 const deliveryCounterSchema = z.number().int().min(0).max(100_000);
 const deliveryBytesSchema = z.number().int().min(0).max(10 * 1024 * 1024 * 1024);
+const mediaDeliveryFields = {
+  memoryHits: deliveryCounterSchema,
+  memoryBytes: deliveryBytesSchema,
+  diskHits: deliveryCounterSchema,
+  diskBytes: deliveryBytesSchema,
+  joinedRequests: deliveryCounterSchema,
+  networkRequests: deliveryCounterSchema,
+  networkBytes: deliveryBytesSchema,
+  readFailures: deliveryCounterSchema,
+  writeFailures: deliveryCounterSchema,
+  sizeMismatches: deliveryCounterSchema,
+  refreshedUrls: deliveryCounterSchema,
+  evictions: deliveryCounterSchema,
+  directFallbacks: deliveryCounterSchema,
+} as const;
 const mediaDeliveryRequestSchema = z
-  .object({
-    memoryHits: deliveryCounterSchema,
-    memoryBytes: deliveryBytesSchema,
-    diskHits: deliveryCounterSchema,
-    diskBytes: deliveryBytesSchema,
-    joinedRequests: deliveryCounterSchema,
-    networkRequests: deliveryCounterSchema,
-    networkBytes: deliveryBytesSchema,
-    readFailures: deliveryCounterSchema,
-    writeFailures: deliveryCounterSchema,
-    sizeMismatches: deliveryCounterSchema,
-    refreshedUrls: deliveryCounterSchema,
-    evictions: deliveryCounterSchema,
-    directFallbacks: deliveryCounterSchema,
-  })
+  .object(mediaDeliveryFields)
   .strict()
   .refine((value) => Object.values(value).some((item) => item > 0), {
     message: "媒体交付统计不能为空",
   });
-
-const browserDeliverySchema = mediaDeliveryRequestSchema
-  .safeExtend({ cacheHitRate: z.number().min(0).max(100).nullable() })
+const browserDeliverySchema = z
+  .object({
+    ...mediaDeliveryFields,
+    cacheHitRate: z.number().min(0).max(100).nullable(),
+  })
   .strict();
 
 const rankedPhotoSchema = z
