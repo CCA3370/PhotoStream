@@ -28,6 +28,7 @@ import type { MediaLikeService } from "./media/like-service.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
 import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
+import type { RuntimeMetrics } from "./observability/runtime-metrics.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBibRoutes } from "./routes/bib.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
@@ -36,6 +37,7 @@ import { registerFeaturedRoutes } from "./routes/featured.js";
 import { registerLikeRoutes } from "./routes/likes.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
+import { registerRuntimeRoutes } from "./routes/runtime.js";
 import { registerUserRoutes } from "./routes/users.js";
 
 export interface BuildAppOptions {
@@ -53,6 +55,7 @@ export interface BuildAppOptions {
   readonly faceService?: FaceService;
   readonly facePublicStateService?: FacePublicStateService;
   readonly eventBridgeVerifier?: EventBridgeVerifier;
+  readonly runtimeMetrics?: RuntimeMetrics;
   readonly logger?: NonNullable<FastifyServerOptions["logger"]>;
 }
 
@@ -110,17 +113,20 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.addHook("onRequest", async (request) => {
     assertRequestOrigin(request, options.config);
+    options.runtimeMetrics?.startRequest(request.id);
   });
   app.addHook("onSend", async (request, reply, payload) => {
     void reply.header("x-request-id", request.id);
     return payload;
   });
   app.addHook("onResponse", async (request, reply) => {
+    const durationMs = options.runtimeMetrics?.finishRequest(request.id, reply.statusCode);
     request.log.info(
       {
         method: request.method,
         route: requestRouteForLog(request),
         statusCode: reply.statusCode,
+        durationMs,
       },
       "request completed",
     );
@@ -236,6 +242,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     options.config,
   );
   await registerAuthRoutes(app, { authService, config: options.config });
+  if (options.runtimeMetrics !== undefined) {
+    await registerRuntimeRoutes(app, {
+      authService,
+      runtimeMetrics: options.runtimeMetrics,
+      config: options.config,
+    });
+  }
   if (options.userAdminService !== undefined) {
     await registerUserRoutes(app, {
       authService,
