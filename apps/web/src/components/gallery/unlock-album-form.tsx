@@ -47,7 +47,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           <FieldLabel className="sr-only" htmlFor="album-password">
             相册口令
           </FieldLabel>
-          <InputGroup className="min-h-11 rounded-xl" focusRing={false}>
+          <InputGroup className="min-h-11 rounded-xl">
             <InputGroupAddon aria-hidden="true">
               <LockKeyholeIcon />
             </InputGroupAddon>
@@ -58,6 +58,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
               id="album-password"
               name="password"
               placeholder="输入相册口令"
+              style={{ boxShadow: "none", outline: "none" }}
               type="password"
             />
           </InputGroup>
