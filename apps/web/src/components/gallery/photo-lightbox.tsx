@@ -176,6 +176,7 @@ export function PhotoLightbox({
   const preview1920 = selected === null ? null : variant(selected, "photo_1920");
   const viewerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const stageResizeObserverRef = useRef<ResizeObserver | null>(null);
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -198,6 +199,21 @@ export function PhotoLightbox({
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [originalPending, setOriginalPending] = useState(false);
   const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
+
+  const setStageElement = useCallback((node: HTMLDivElement | null) => {
+    stageResizeObserverRef.current?.disconnect();
+    stageResizeObserverRef.current = null;
+    stageRef.current = node;
+    if (node === null) {
+      setStageWidth(0);
+      return;
+    }
+    const measure = () => setStageWidth(node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    stageResizeObserverRef.current = observer;
+  }, []);
 
   const clearControlsHideTimer = useCallback(() => {
     if (controlsHideTimerRef.current === null) return;
@@ -319,16 +335,6 @@ export function PhotoLightbox({
   }, [clearControlsHideTimer, selectedId]);
 
   useEffect(() => {
-    const stage = stageRef.current;
-    if (stage === null) return;
-    const measure = () => setStageWidth(stage.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, [selectedId]);
-
-  useEffect(() => {
     if (selectedId === null || selected === null || large === null) return;
     originalRequestRef.current += 1;
     if (originalObjectUrlRef.current !== null) {
@@ -395,6 +401,7 @@ export function PhotoLightbox({
       if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
       if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
       clearControlsHideTimer();
+      stageResizeObserverRef.current?.disconnect();
       if (originalObjectUrlRef.current !== null) {
         URL.revokeObjectURL(originalObjectUrlRef.current);
         originalObjectUrlRef.current = null;
@@ -509,7 +516,11 @@ export function PhotoLightbox({
     const gesture = gestureRef.current;
     const points = [...pointersRef.current.values()];
     if (gesture.mode === "pinch" && points.length >= 2 && gesture.distance > 0) {
-      const nextZoom = clamp(gesture.zoom * (distance(points) / gesture.distance), minZoom, maxZoom);
+      const nextZoom = clamp(
+        gesture.zoom * (distance(points) / gesture.distance),
+        minZoom,
+        maxZoom,
+      );
       setZoom(nextZoom);
       setPan((current) => clampPan(current, nextZoom));
       return;
@@ -676,7 +687,7 @@ export function PhotoLightbox({
             onPointerMove={onPointerMove}
             onPointerUp={finishPointer}
             onWheel={onWheel}
-            ref={stageRef}
+            ref={setStageElement}
             role="application"
           >
             {!loaded && originalUrl === null ? (
