@@ -43,13 +43,19 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
+  const isMobileBottomSheet =
+    typeof className === "string" &&
+    className.includes("max-sm:top-auto") &&
+    className.includes("max-sm:bottom-0");
+
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={isMobileBottomSheet ? "data-closed:backdrop-blur-none" : undefined} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          isMobileBottomSheet && "max-sm:[&>div:first-child]:hidden",
           className,
         )}
         {...props}
@@ -58,7 +64,16 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            render={<Button variant="ghost" className="absolute top-2 right-2" size="icon-sm" />}
+            render={
+              <Button
+                variant="ghost"
+                className={cn(
+                  "absolute",
+                  isMobileBottomSheet ? "top-4 right-5 sm:top-3 sm:right-3" : "top-2 right-2",
+                )}
+                size="icon-sm"
+              />
+            }
           >
             <XIcon />
             <span className="sr-only">关闭</span>
