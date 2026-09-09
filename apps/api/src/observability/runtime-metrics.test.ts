@@ -44,14 +44,17 @@ describe("RuntimeMetrics", () => {
       time.advance(index * 10);
       metrics.finishRequest(id, index % 10 === 0 ? 500 : index % 4 === 0 ? 404 : 200);
     }
+    metrics.startRequest("sse-request");
+    time.advance(5_000);
+    metrics.finishRequest("sse-request", 200, false);
 
     const snapshot = metrics.snapshot();
-    expect(snapshot.requests.total).toBe(40);
+    expect(snapshot.requests.total).toBe(41);
     expect(snapshot.requests.sampleSize).toBe(32);
     expect(snapshot.requests.slow).toBe(31);
     expect(snapshot.requests.status5xx).toBe(4);
     expect(snapshot.requests.status4xx).toBe(8);
-    expect(snapshot.requests.status2xx).toBe(28);
+    expect(snapshot.requests.status2xx).toBe(29);
     expect(snapshot.requests.p50Ms).toBe(240);
     expect(snapshot.requests.p95Ms).toBe(390);
     expect(snapshot.requests.p99Ms).toBe(400);
