@@ -221,7 +221,12 @@ export class DashboardService {
           uniqueVisitors: sql<number>`count(distinct ${schema.analyticsEvents.visitorDigest})::int`,
         })
         .from(schema.analyticsEvents)
-        .where(and(gte(schema.analyticsEvents.createdAt, from), lt(schema.analyticsEvents.createdAt, to)))
+        .where(
+          and(
+            gte(schema.analyticsEvents.createdAt, from),
+            lt(schema.analyticsEvents.createdAt, to),
+          ),
+        )
         .groupBy(bucketExpression)
         .orderBy(bucketExpression),
       this.#database
@@ -233,7 +238,10 @@ export class DashboardService {
         })
         .from(schema.searchUsageEvents)
         .where(
-          and(gte(schema.searchUsageEvents.createdAt, from), lt(schema.searchUsageEvents.createdAt, to)),
+          and(
+            gte(schema.searchUsageEvents.createdAt, from),
+            lt(schema.searchUsageEvents.createdAt, to),
+          ),
         )
         .groupBy(searchBucketExpression)
         .orderBy(searchBucketExpression),
@@ -370,7 +378,9 @@ export class DashboardService {
     const [uniqueVisitorAggregate] = await this.#database
       .select({ count: sql<number>`count(distinct ${schema.analyticsEvents.visitorDigest})::int` })
       .from(schema.analyticsEvents)
-      .where(and(gte(schema.analyticsEvents.createdAt, from), lt(schema.analyticsEvents.createdAt, to)));
+      .where(
+        and(gte(schema.analyticsEvents.createdAt, from), lt(schema.analyticsEvents.createdAt, to)),
+      );
 
     const deliveryRow = mediaDeliveryAggregate[0];
     const memoryHits = numeric(deliveryRow?.memoryHits);
@@ -395,8 +405,7 @@ export class DashboardService {
       refreshedUrls: numeric(deliveryRow?.refreshedUrls),
       evictions: numeric(deliveryRow?.evictions),
       directFallbacks: numeric(deliveryRow?.directFallbacks),
-      cacheHitRate:
-        cacheDecisions === 0 ? null : ((memoryHits + diskHits) / cacheDecisions) * 100,
+      cacheHitRate: cacheDecisions === 0 ? null : ((memoryHits + diskHits) / cacheDecisions) * 100,
     };
 
     const thumbnailExpiresAt = new Date(now.getTime() + thumbnailValidityMs);

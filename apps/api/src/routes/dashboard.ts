@@ -21,7 +21,11 @@ const searchUsageRequestSchema = z
   .object({ method: z.enum(["number", "attributes", "face"]) })
   .strict();
 const deliveryCounterSchema = z.number().int().min(0).max(100_000);
-const deliveryBytesSchema = z.number().int().min(0).max(10 * 1024 * 1024 * 1024);
+const deliveryBytesSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(10 * 1024 * 1024 * 1024);
 const mediaDeliveryFields = {
   memoryHits: deliveryCounterSchema,
   memoryBytes: deliveryBytesSchema,

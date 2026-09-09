@@ -68,7 +68,11 @@ export function accumulateMediaDelivery(
   const size = safeBytes(bytes);
   switch (metric) {
     case "memoryHit":
-      return { ...current, memoryHits: current.memoryHits + 1, memoryBytes: current.memoryBytes + size };
+      return {
+        ...current,
+        memoryHits: current.memoryHits + 1,
+        memoryBytes: current.memoryBytes + size,
+      };
     case "diskHit":
       return { ...current, diskHits: current.diskHits + 1, diskBytes: current.diskBytes + size };
     case "joined":
@@ -92,7 +96,10 @@ export function accumulateMediaDelivery(
   }
 }
 
-function mergeDelivery(left: MediaDeliverySnapshot, right: MediaDeliverySnapshot): MediaDeliverySnapshot {
+function mergeDelivery(
+  left: MediaDeliverySnapshot,
+  right: MediaDeliverySnapshot,
+): MediaDeliverySnapshot {
   return {
     memoryHits: left.memoryHits + right.memoryHits,
     memoryBytes: left.memoryBytes + right.memoryBytes,
@@ -111,7 +118,9 @@ function mergeDelivery(left: MediaDeliverySnapshot, right: MediaDeliverySnapshot
 }
 
 function validScope(scope: string | undefined): scope is string {
-  return scope !== undefined && scope !== "public-media" && scope.length >= 12 && scope.length <= 32;
+  return (
+    scope !== undefined && scope !== "public-media" && scope.length >= 12 && scope.length <= 32
+  );
 }
 
 function clearFlushTimer(scope: string): void {

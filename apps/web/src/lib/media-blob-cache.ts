@@ -1,7 +1,4 @@
-import {
-  type MediaDeliveryMetric,
-  recordMediaDeliveryMetric,
-} from "./media-delivery-telemetry";
+import { type MediaDeliveryMetric, recordMediaDeliveryMetric } from "./media-delivery-telemetry";
 
 // Content is keyed by immutable object identity, never by a temporary signature.
 // Callers must obtain current media/download authorization before consuming it.
