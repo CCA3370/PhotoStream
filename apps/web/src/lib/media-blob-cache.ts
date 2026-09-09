@@ -1,8 +1,4 @@
-import {
-  derivedCacheSegment,
-  derivedSegmentBudget,
-  mediaCacheBudget,
-} from "./media-cache-policy";
+import { derivedCacheSegment, derivedSegmentBudget, mediaCacheBudget } from "./media-cache-policy";
 import { type MediaDeliveryMetric, recordMediaDeliveryMetric } from "./media-delivery-telemetry";
 
 // Content is keyed by immutable object identity, never by a temporary signature.
@@ -255,8 +251,7 @@ async function trimDisk(
   const entries = [...index]
     .filter(([url]) => matchesSegment(url))
     .sort(
-      ([urlA, a], [urlB, b]) =>
-        (recentReads.get(urlA) ?? a.at) - (recentReads.get(urlB) ?? b.at),
+      ([urlA, a], [urlB, b]) => (recentReads.get(urlA) ?? a.at) - (recentReads.get(urlB) ?? b.at),
     );
   for (const [url, entry] of entries) {
     if (total <= budget && !forceOne) break;
