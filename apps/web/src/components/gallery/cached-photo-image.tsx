@@ -3,7 +3,17 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
-import { type DerivedPhotoVariantKind, loadDerivedImage } from "@/lib/derived-image-cache";
+import {
+  type DerivedPhotoVariantKind,
+  getWarmDerivedImageUrl,
+  isWarmDerivedImageDecoded,
+  loadDerivedImage,
+} from "@/lib/derived-image-cache";
+
+interface ResolvedImage {
+  readonly identity: string;
+  readonly url: string;
+}
 
 export function CachedPhotoImage({
   alt,
@@ -31,9 +41,14 @@ export function CachedPhotoImage({
   sourceUrl: string;
 }>) {
   const hostRef = useRef<HTMLSpanElement>(null);
-  const objectUrlRef = useRef<string | null>(null);
   const [active, setActive] = useState(priority);
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [resolved, setResolved] = useState<ResolvedImage | null>(null);
+  const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
+  const cacheRequest = { scope, mediaId, kind, bytes };
+  const warmUrl = getWarmDerivedImageUrl(cacheRequest);
+  const warmDecoded = warmUrl !== null && isWarmDerivedImageDecoded(cacheRequest);
+  const resolvedUrl =
+    warmUrl ?? (resolved !== null && resolved.identity === identity ? resolved.url : null);
 
   useEffect(() => {
     if (priority || active) return;
@@ -56,34 +71,35 @@ export function CachedPhotoImage({
   }, [active, priority]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || warmUrl !== null) return;
     let cancelled = false;
-    setResolvedUrl(null);
+    setResolved((current) => (current?.identity === identity ? current : null));
 
     void loadDerivedImage({ scope, mediaId, kind, bytes, sourceUrl })
-      .then((blob) => {
+      .then(() => {
         if (cancelled) return;
-        const objectUrl = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        if (objectUrlRef.current !== null) URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = objectUrl;
-        setResolvedUrl(objectUrl);
+        const nextUrl = getWarmDerivedImageUrl({ scope, mediaId, kind, bytes });
+        setResolved({ identity, url: nextUrl ?? sourceUrl });
       })
       .catch(() => {
-        if (!cancelled) setResolvedUrl(sourceUrl);
+        if (!cancelled) setResolved({ identity, url: sourceUrl });
       });
 
     return () => {
       cancelled = true;
-      if (objectUrlRef.current !== null) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
     };
-  }, [active, bytes, kind, mediaId, scope, sourceUrl]);
+  }, [active, bytes, identity, kind, mediaId, scope, sourceUrl, warmUrl]);
+
+  useEffect(() => {
+    if (!warmDecoded || onLoad === undefined) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) onLoad();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onLoad, warmDecoded]);
 
   return (
     <span className="absolute inset-0" ref={hostRef}>
@@ -97,6 +113,7 @@ export function CachedPhotoImage({
           priority={priority}
           sizes={sizes}
           src={resolvedUrl}
+          style={warmDecoded ? { filter: "none", opacity: 1 } : undefined}
           unoptimized
         />
       )}
