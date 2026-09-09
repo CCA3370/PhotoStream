@@ -12,6 +12,7 @@ interface DerivedImageRequest {
   readonly bytes: number;
   readonly sourceUrl: string;
   readonly refreshUrl?: () => Promise<string>;
+  readonly signal?: AbortSignal;
 }
 
 interface WarmImage {
@@ -24,14 +25,16 @@ const listeners = new Map<() => void, string | undefined>();
 const retained = new Map<string, number>();
 export function subscribeDerivedImages(
   listener: () => void,
-  request?: Omit<DerivedImageRequest, "sourceUrl">,
+  request?: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
 ): () => void {
   listeners.set(listener, request === undefined ? undefined : imageIdentity(request));
   return () => {
     listeners.delete(listener);
   };
 }
-export function retainDerivedImage(request: Omit<DerivedImageRequest, "sourceUrl">): () => void {
+export function retainDerivedImage(
+  request: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
+): () => void {
   const key = imageIdentity(request);
   retained.set(key, (retained.get(key) ?? 0) + 1);
   return () => {
@@ -43,11 +46,11 @@ export function retainDerivedImage(request: Omit<DerivedImageRequest, "sourceUrl
 }
 const warmImages = new Map<string, WarmImage>();
 
-function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl">): string {
+function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
   return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}`;
 }
 
-function cacheUrl(request: Omit<DerivedImageRequest, "sourceUrl">): string {
+function cacheUrl(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
   const url = new URL(
     `/__photostream/cache/derived/${encodeURIComponent(request.scope)}/${encodeURIComponent(request.mediaId)}/${request.kind}`,
     window.location.origin,
@@ -73,12 +76,17 @@ function trimWarmImages(protectedKey?: string): void {
   }
 }
 
-export function markDerivedImageDecoded(request: Omit<DerivedImageRequest, "sourceUrl">): void {
+export function markDerivedImageDecoded(
+  request: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
+): void {
   const image = warmImages.get(imageIdentity(request));
   if (image !== undefined) image.decoded = true;
 }
 
-function rememberWarmImage(request: Omit<DerivedImageRequest, "sourceUrl">, blob: Blob): WarmImage {
+function rememberWarmImage(
+  request: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
+  blob: Blob,
+): WarmImage {
   const identity = imageIdentity(request);
   const existing = warmImages.get(identity);
   if (existing !== undefined) return touchWarmImage(identity, existing);
@@ -98,7 +106,7 @@ function rememberWarmImage(request: Omit<DerivedImageRequest, "sourceUrl">, blob
 }
 
 export function getWarmDerivedImageUrl(
-  request: Omit<DerivedImageRequest, "sourceUrl">,
+  request: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
 ): string | null {
   if (typeof window === "undefined") return null;
   const identity = imageIdentity(request);
@@ -108,7 +116,7 @@ export function getWarmDerivedImageUrl(
 }
 
 export function isWarmDerivedImageDecoded(
-  request: Omit<DerivedImageRequest, "sourceUrl">,
+  request: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
 ): boolean {
   if (typeof window === "undefined") return false;
   const identity = imageIdentity(request);
@@ -118,7 +126,7 @@ export function isWarmDerivedImageDecoded(
   return image.decoded;
 }
 
-function blobIdentity(request: Omit<DerivedImageRequest, "sourceUrl">) {
+function blobIdentity(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">) {
   return {
     cacheName: derivedImageCacheName,
     key: cacheUrl(request),
@@ -128,7 +136,7 @@ function blobIdentity(request: Omit<DerivedImageRequest, "sourceUrl">) {
 }
 
 export async function readCachedDerivedImage(
-  request: Omit<DerivedImageRequest, "sourceUrl">,
+  request: Omit<DerivedImageRequest, "sourceUrl" | "signal">,
 ): Promise<Blob | null> {
   if (typeof window === "undefined") return null;
   const warm = warmImages.get(imageIdentity(request));
@@ -145,6 +153,7 @@ export async function loadDerivedImage(request: DerivedImageRequest): Promise<Bl
     ...blobIdentity(request),
     sourceUrl: request.sourceUrl,
     ...(request.refreshUrl === undefined ? {} : { refreshUrl: request.refreshUrl }),
+    ...(request.signal === undefined ? {} : { signal: request.signal }),
   });
   rememberWarmImage(request, blob);
   return blob;
