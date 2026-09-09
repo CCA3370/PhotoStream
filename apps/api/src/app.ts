@@ -120,7 +120,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return payload;
   });
   app.addHook("onResponse", async (request, reply) => {
-    const durationMs = options.runtimeMetrics?.finishRequest(request.id, reply.statusCode);
+    const contentType = reply.getHeader("content-type");
+    const isEventStream =
+      typeof contentType === "string" && contentType.toLowerCase().includes("text/event-stream");
+    const durationMs = options.runtimeMetrics?.finishRequest(
+      request.id,
+      reply.statusCode,
+      !isEventStream,
+    );
     request.log.info(
       {
         method: request.method,
