@@ -1,0 +1,25 @@
+[Unit]
+Description=PhotoStream encrypted PostgreSQL backup
+Documentation=file:/opt/photostream/docs/13-operations-runbook.md
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/photostream/backup.env
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/photostream
+EnvironmentFile=/etc/photostream/backup.env
+ExecStart=/usr/bin/node /opt/photostream/scripts/database-backup-cycle.mjs --directory /var/backups/photostream
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/photostream /etc/photostream
+ReadWritePaths=/var/backups/photostream
+RestrictSUIDSGID=true
+LockPersonality=true
+TimeoutStartSec=45min
+
+[Install]
+WantedBy=multi-user.target

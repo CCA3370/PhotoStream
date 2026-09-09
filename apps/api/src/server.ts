@@ -26,6 +26,7 @@ import { LiveEventBroker } from "./media/live-event-broker.js";
 import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
 import { PhotoService } from "./media/service.js";
+import { RuntimeMetrics } from "./observability/runtime-metrics.js";
 
 const config = loadConfig(process.env);
 const pool = createPool(config.DATABASE_URL);
@@ -33,6 +34,14 @@ const database = createDatabase(pool);
 const authStore = new PostgresAuthStore(database);
 const broker = new LiveEventBroker();
 await broker.start(pool);
+const runtimeMetrics = new RuntimeMetrics({
+  pool,
+  broker,
+  ...(process.env.PHOTOSTREAM_RELEASE === undefined
+    ? {}
+    : { release: process.env.PHOTOSTREAM_RELEASE }),
+  ...(process.env.PHOTOSTREAM_SLOT === undefined ? {} : { slot: process.env.PHOTOSTREAM_SLOT }),
+});
 const storage =
   config.OBJECT_STORAGE_DRIVER === "aliyun"
     ? new AliyunObjectStorage({
@@ -128,65 +137,82 @@ const app = await buildApp({
   faceService,
   facePublicStateService,
   eventBridgeVerifier,
+  runtimeMetrics,
 });
 const deletionPoll = setInterval(() => {
-  void Promise.all([
-    operationsService.processPendingDeletionTasks(),
-    photoService.processExpiredUploadCleanups(),
-  ]).catch((error: unknown) => {
-    app.log.error(
-      { errorName: error instanceof Error ? error.name : "unknown" },
-      "deletion poll failed",
-    );
-  });
+  void runtimeMetrics
+    .runJob("deletion", async () => {
+      await Promise.all([
+        operationsService.processPendingDeletionTasks(),
+        photoService.processExpiredUploadCleanups(),
+      ]);
+    })
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : "unknown" },
+        "deletion poll failed",
+      );
+    });
 }, 30_000);
 deletionPoll.unref();
 const analyticsCleanup = setInterval(
   () => {
-    void Promise.all([
-      operationsService.cleanupAnalytics(),
-      operationsService.cleanupOperationalRecords(),
-      dashboardService.cleanupSearchUsage(),
-    ]).catch((error: unknown) => {
-      app.log.error(
-        { errorName: error instanceof Error ? error.name : "unknown" },
-        "analytics cleanup failed",
-      );
-    });
+    void runtimeMetrics
+      .runJob("analyticsCleanup", async () => {
+        await Promise.all([
+          operationsService.cleanupAnalytics(),
+          operationsService.cleanupOperationalRecords(),
+          dashboardService.cleanupSearchUsage(),
+        ]);
+      })
+      .catch((error: unknown) => {
+        app.log.error(
+          { errorName: error instanceof Error ? error.name : "unknown" },
+          "analytics cleanup failed",
+        );
+      });
   },
   24 * 60 * 60 * 1_000,
 );
 analyticsCleanup.unref();
 const bibMaintenance = setInterval(() => {
-  void Promise.all([
-    bibService.processPendingRecalculations(),
-    bibService.expireStaleOcrActivities(),
-    bibService.processKeyRotation(),
-  ]).catch((error: unknown) => {
-    app.log.error(
-      { errorName: error instanceof Error ? error.name : "unknown" },
-      "bib maintenance poll failed",
-    );
-  });
+  void runtimeMetrics
+    .runJob("bibMaintenance", async () => {
+      await Promise.all([
+        bibService.processPendingRecalculations(),
+        bibService.expireStaleOcrActivities(),
+        bibService.processKeyRotation(),
+      ]);
+    })
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : "unknown" },
+        "bib maintenance poll failed",
+      );
+    });
 }, 30_000);
 bibMaintenance.unref();
 const faceMaintenance = setInterval(() => {
-  void faceService.runMaintenance().catch((error: unknown) => {
-    app.log.error(
-      { errorName: error instanceof Error ? error.name : "unknown" },
-      "face maintenance poll failed",
-    );
-  });
+  void runtimeMetrics
+    .runJob("faceMaintenance", () => faceService.runMaintenance())
+    .catch((error) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : "unknown" },
+        "face maintenance poll failed",
+      );
+    });
 }, 30_000);
 faceMaintenance.unref();
 const bibCleanup = setInterval(
   () => {
-    void bibService.cleanupStaleCandidates().catch((error: unknown) => {
-      app.log.error(
-        { errorName: error instanceof Error ? error.name : "unknown" },
-        "bib candidate cleanup failed",
-      );
-    });
+    void runtimeMetrics
+      .runJob("bibCleanup", () => bibService.cleanupStaleCandidates())
+      .catch((error: unknown) => {
+        app.log.error(
+          { errorName: error instanceof Error ? error.name : "unknown" },
+          "bib candidate cleanup failed",
+        );
+      });
   },
   24 * 60 * 60 * 1_000,
 );
