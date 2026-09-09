@@ -184,10 +184,15 @@ describe("media body reuse", () => {
     vi.stubGlobal("window", { caches: storage, location: { origin: "https://app.test" } });
     vi.stubGlobal("caches", storage);
     let sharedSignal: AbortSignal | undefined;
+    let signalNetworkStarted: (() => void) | undefined;
+    const networkStarted = new Promise<void>((resolve) => {
+      signalNetworkStarted = resolve;
+    });
     network.mockImplementation(
       async (_url: string, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
           sharedSignal = init?.signal instanceof AbortSignal ? init.signal : undefined;
+          signalNetworkStarted?.();
           sharedSignal?.addEventListener(
             "abort",
             () => reject(new DOMException("aborted", "AbortError")),
@@ -203,7 +208,8 @@ describe("media body reuse", () => {
       expectedBytes: null,
       signal: controller.signal,
     });
-    await Promise.resolve();
+    await networkStarted;
+    expect(sharedSignal).toBeDefined();
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(sharedSignal?.aborted).toBe(true);
