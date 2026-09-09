@@ -28,12 +28,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
-import { loadDerivedImage } from "@/lib/derived-image-cache";
+import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
 const maxZoom = 5;
+const swipeSettleMs = 180;
+const neighborScale = 0.93;
 const toolbarButtonClass =
   "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
 
@@ -55,6 +57,10 @@ function variant(media: PublicMediaView, kind: "photo_960" | "photo_1920") {
   return media.variants.find((candidate) => candidate.kind === kind) ?? null;
 }
 
+function displayVariant(media: PublicMediaView) {
+  return variant(media, "photo_1920") ?? variant(media, "photo_960");
+}
+
 function distance(points: readonly Point[]): number {
   const [first, second] = points;
   if (first === undefined || second === undefined) return 0;
@@ -63,6 +69,73 @@ function distance(points: readonly Point[]): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function fittedImageWidth(media: PublicMediaView): string {
+  return `min(100%, calc(100dvh * ${media.width / media.height}))`;
+}
+
+function slideScale(side: -1 | 0 | 1, offset: number, width: number): number {
+  if (width <= 0) return side === 0 ? 1 : neighborScale;
+  const centerDistance = Math.min(1, Math.abs(side * width + offset) / width);
+  return 1 - (1 - neighborScale) * centerDistance;
+}
+
+async function decodeObjectUrl(url: string): Promise<void> {
+  if (typeof window === "undefined") return;
+  const decoder = new window.Image();
+  decoder.decoding = "async";
+  decoder.src = url;
+  if (typeof decoder.decode === "function") {
+    await decoder.decode().catch(() => undefined);
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    decoder.onload = () => resolve();
+    decoder.onerror = () => resolve();
+  });
+}
+
+function NeighborSlide({
+  media,
+  offset,
+  scale,
+  slug,
+}: Readonly<{
+  media: PublicMediaView | null;
+  offset: number;
+  scale: number;
+  slug?: string | undefined;
+}>) {
+  if (media === null) return null;
+  const source = displayVariant(media);
+  if (source === null) return null;
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 will-change-transform"
+      style={{ transform: `translate3d(${offset}px, 0, 0) scale(${scale})` }}
+    >
+      <div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+        style={{ aspectRatio: `${media.width} / ${media.height}`, width: fittedImageWidth(media) }}
+      >
+        <CachedPhotoImage
+          alt=""
+          bytes={source.bytes}
+          className="object-contain"
+          draggable={false}
+          kind={source.kind === "photo_1920" ? "photo_1920" : "photo_960"}
+          mediaId={media.id}
+          priority
+          scope={slug ?? "public-media"}
+          sizes="100vw"
+          sourceUrl={source.url}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function PhotoLightbox({
@@ -85,14 +158,20 @@ export function PhotoLightbox({
   const selectedIndex =
     selectedId === null ? -1 : items.findIndex((item) => item.id === selectedId);
   const selected = selectedIndex < 0 ? null : (items[selectedIndex] ?? null);
-  const large =
-    selected === null ? null : (variant(selected, "photo_1920") ?? variant(selected, "photo_960"));
+  const large = selected === null ? null : displayVariant(selected);
+  const previous =
+    selectedIndex < 0 || items.length < 2
+      ? null
+      : (items[(selectedIndex - 1 + items.length) % items.length] ?? null);
+  const next =
+    selectedIndex < 0 || items.length < 2
+      ? null
+      : (items[(selectedIndex + 1) % items.length] ?? null);
   const preview1920 = selected === null ? null : variant(selected, "photo_1920");
   const viewerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
-  const transitionDirectionRef = useRef(0);
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsEntranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -139,7 +218,7 @@ export function PhotoLightbox({
   }, [scheduleControlsHide]);
 
   const clampPan = useCallback(
-    (next: Point, nextZoom: number): Point => {
+    (value: Point, nextZoom: number): Point => {
       const stage = stageRef.current;
       if (stage === null || selected === null || nextZoom <= 1) return { x: 0, y: 0 };
       const rect = stage.getBoundingClientRect();
@@ -148,12 +227,12 @@ export function PhotoLightbox({
       const renderedHeight = selected.height * fit * nextZoom;
       return {
         x: clamp(
-          next.x,
+          value.x,
           -Math.max(0, (renderedWidth - rect.width) / 2),
           Math.max(0, (renderedWidth - rect.width) / 2),
         ),
         y: clamp(
-          next.y,
+          value.y,
           -Math.max(0, (renderedHeight - rect.height) / 2),
           Math.max(0, (renderedHeight - rect.height) / 2),
         ),
@@ -164,9 +243,9 @@ export function PhotoLightbox({
 
   const changeZoom = useCallback(
     (value: number) => {
-      const next = clamp(value, minZoom, maxZoom);
-      setZoom(next);
-      setPan((current) => clampPan(current, next));
+      const nextZoom = clamp(value, minZoom, maxZoom);
+      setZoom(nextZoom);
+      setPan((current) => clampPan(current, nextZoom));
     },
     [clampPan],
   );
@@ -176,17 +255,31 @@ export function PhotoLightbox({
     setPan({ x: 0, y: 0 });
   }, []);
 
-  const selectOffset = useCallback(
+  const commitOffset = useCallback(
     (offset: number) => {
       if (items.length < 2 || selectedIndex < 0) return;
       const index = (selectedIndex + offset + items.length) % items.length;
       const item = items[index];
-      if (item !== undefined) {
-        transitionDirectionRef.current = offset;
-        onSelect(item.id);
-      }
+      if (item !== undefined) onSelect(item.id);
     },
     [items, onSelect, selectedIndex],
+  );
+
+  const animateOffset = useCallback(
+    (offset: -1 | 1) => {
+      if (items.length < 2 || selectedIndex < 0 || swipeSettling) return;
+      const width = stageRef.current?.clientWidth ?? window.innerWidth;
+      setSwipeSettling(true);
+      setSwipeOffset(offset > 0 ? -width : width);
+      if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
+      swipeTimerRef.current = setTimeout(() => {
+        swipeTimerRef.current = null;
+        setSwipeSettling(false);
+        setSwipeOffset(0);
+        commitOffset(offset);
+      }, swipeSettleMs);
+    },
+    [commitOffset, items.length, selectedIndex, swipeSettling],
   );
 
   const toggleFullscreen = useCallback(async () => {
@@ -218,13 +311,20 @@ export function PhotoLightbox({
   }, [clearControlsHideTimer, selectedId]);
 
   useEffect(() => {
-    if (selectedId === null) return;
+    if (selectedId === null || selected === null || large === null) return;
     originalRequestRef.current += 1;
     if (originalObjectUrlRef.current !== null) {
       URL.revokeObjectURL(originalObjectUrlRef.current);
       originalObjectUrlRef.current = null;
     }
-    setLoaded(false);
+    setLoaded(
+      isWarmDerivedImageDecoded({
+        scope: slug ?? "public-media",
+        mediaId: selected.id,
+        kind: large.kind === "photo_1920" ? "photo_1920" : "photo_960",
+        bytes: large.bytes,
+      }),
+    );
     setDownloadMenuOpen(false);
     setOriginalUrl(null);
     setOriginalPending(false);
@@ -232,32 +332,13 @@ export function PhotoLightbox({
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
-
     if (swipeTimerRef.current !== null) {
       clearTimeout(swipeTimerRef.current);
       swipeTimerRef.current = null;
     }
-    const direction = transitionDirectionRef.current;
-    transitionDirectionRef.current = 0;
-    if (direction === 0) {
-      setSwipeSettling(false);
-      setSwipeOffset(0);
-      return;
-    }
-
     setSwipeSettling(false);
-    setSwipeOffset(direction > 0 ? 52 : -52);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setSwipeSettling(true);
-        setSwipeOffset(0);
-      });
-    });
-    swipeTimerRef.current = setTimeout(() => {
-      setSwipeSettling(false);
-      swipeTimerRef.current = null;
-    }, 260);
-  }, [resetView, selectedId]);
+    setSwipeOffset(0);
+  }, [large, resetView, selected, selectedId, slug]);
 
   useEffect(() => {
     if (slug === undefined || selected === null || !selected.downloads.original) return;
@@ -267,9 +348,10 @@ export function PhotoLightbox({
     setOriginalCacheChecking(true);
 
     void readCachedOriginalImage(slug, mediaId, expectedBytes)
-      .then((blob) => {
+      .then(async (blob) => {
         if (cancelled || blob === null) return;
         const objectUrl = URL.createObjectURL(blob);
+        await decodeObjectUrl(objectUrl);
         if (cancelled) {
           URL.revokeObjectURL(objectUrl);
           return;
@@ -278,9 +360,8 @@ export function PhotoLightbox({
           URL.revokeObjectURL(originalObjectUrlRef.current);
         }
         originalObjectUrlRef.current = objectUrl;
-        setLoaded(false);
-        resetView();
         setOriginalUrl(objectUrl);
+        setLoaded(true);
       })
       .finally(() => {
         if (!cancelled) setOriginalCacheChecking(false);
@@ -289,7 +370,7 @@ export function PhotoLightbox({
     return () => {
       cancelled = true;
     };
-  }, [resetView, selected, slug]);
+  }, [selected, slug]);
 
   useEffect(
     () => () => {
@@ -332,10 +413,9 @@ export function PhotoLightbox({
 
   useEffect(() => {
     if (selectedIndex < 0 || items.length < 2) return;
-    for (const offset of [-1, 1]) {
-      const item = items[(selectedIndex + offset + items.length) % items.length];
-      if (item === undefined) continue;
-      const source = variant(item, "photo_1920") ?? variant(item, "photo_960");
+    for (const item of [previous, next]) {
+      if (item === null) continue;
+      const source = displayVariant(item);
       if (source === null) continue;
       void loadDerivedImage({
         scope: slug ?? "public-media",
@@ -345,7 +425,7 @@ export function PhotoLightbox({
         sourceUrl: source.url,
       }).catch(() => undefined);
     }
-  }, [items, selectedIndex, slug]);
+  }, [items.length, next, previous, selectedIndex, slug]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -353,10 +433,10 @@ export function PhotoLightbox({
       revealControls();
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        selectOffset(-1);
+        animateOffset(-1);
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
-        selectOffset(1);
+        animateOffset(1);
       } else if (event.key === "+" || event.key === "=") {
         event.preventDefault();
         changeZoom(zoom + 0.5);
@@ -374,17 +454,18 @@ export function PhotoLightbox({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [
+    animateOffset,
     changeZoom,
     fullscreenSupported,
     resetView,
     revealControls,
-    selectOffset,
     selected,
     toggleFullscreen,
     zoom,
   ]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (swipeSettling) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, point);
@@ -392,7 +473,6 @@ export function PhotoLightbox({
     if (points.length >= 2) {
       gestureRef.current = { mode: "pinch", distance: distance(points), zoom };
       setDragging(false);
-      setSwipeSettling(false);
       setSwipeOffset(0);
       return;
     }
@@ -401,7 +481,6 @@ export function PhotoLightbox({
       setDragging(true);
     } else {
       gestureRef.current = { mode: "swipe", start: point };
-      setSwipeSettling(false);
     }
   }
 
@@ -412,9 +491,9 @@ export function PhotoLightbox({
     const gesture = gestureRef.current;
     const points = [...pointersRef.current.values()];
     if (gesture.mode === "pinch" && points.length >= 2 && gesture.distance > 0) {
-      const next = clamp(gesture.zoom * (distance(points) / gesture.distance), minZoom, maxZoom);
-      setZoom(next);
-      setPan((current) => clampPan(current, next));
+      const nextZoom = clamp(gesture.zoom * (distance(points) / gesture.distance), minZoom, maxZoom);
+      setZoom(nextZoom);
+      setPan((current) => clampPan(current, nextZoom));
       return;
     }
     if (gesture.mode === "pan") {
@@ -430,8 +509,9 @@ export function PhotoLightbox({
       return;
     }
     if (gesture.mode === "swipe" && points.length === 1) {
+      const width = stageRef.current?.clientWidth ?? window.innerWidth;
       const deltaX = point.x - gesture.start.x;
-      setSwipeOffset(clamp(deltaX, -120, 120));
+      setSwipeOffset(clamp(deltaX, -width, width));
     }
   }
 
@@ -442,22 +522,16 @@ export function PhotoLightbox({
       const deltaX = point.x - gesture.start.x;
       const deltaY = point.y - gesture.start.y;
       const shouldNavigate = Math.abs(deltaX) >= 52 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
-      setSwipeSettling(true);
       if (shouldNavigate) {
-        const direction = deltaX < 0 ? 1 : -1;
-        setSwipeOffset(deltaX < 0 ? -82 : 82);
-        if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
-        swipeTimerRef.current = setTimeout(() => {
-          swipeTimerRef.current = null;
-          selectOffset(direction);
-        }, 90);
+        animateOffset(deltaX < 0 ? 1 : -1);
       } else {
+        setSwipeSettling(true);
         setSwipeOffset(0);
         if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
         swipeTimerRef.current = setTimeout(() => {
           setSwipeSettling(false);
           swipeTimerRef.current = null;
-        }, 220);
+        }, swipeSettleMs);
       }
     }
     pointersRef.current.delete(event.pointerId);
@@ -509,13 +583,18 @@ export function PhotoLightbox({
       if (originalRequestRef.current !== requestId) return;
 
       const objectUrl = URL.createObjectURL(blob);
+      await decodeObjectUrl(objectUrl);
+      if (originalRequestRef.current !== requestId) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
       if (originalObjectUrlRef.current !== null) {
         URL.revokeObjectURL(originalObjectUrlRef.current);
       }
       originalObjectUrlRef.current = objectUrl;
-      setLoaded(false);
-      resetView();
       setOriginalUrl(objectUrl);
+      setLoaded(true);
+      resetView();
     } catch (caught) {
       if (originalRequestRef.current !== requestId) return;
       toast.add({
@@ -539,11 +618,13 @@ export function PhotoLightbox({
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
-  const swipeProgress = Math.min(1, Math.abs(swipeOffset) / 120);
-  const swipeTransform = `translate3d(${swipeOffset}px, 0, 0) scale(${1 - swipeProgress * 0.012})`;
-  const swipeOpacity = 1 - swipeProgress * 0.12;
-  const originalLoading = originalPending || originalCacheChecking;
-  const fittedImageWidth = `min(100%, calc(100dvh * ${selected.width / selected.height}))`;
+  const stageWidth = stageRef.current?.clientWidth ?? (typeof window === "undefined" ? 1 : window.innerWidth);
+  const previousOffset = -stageWidth + swipeOffset;
+  const currentOffset = swipeOffset;
+  const nextOffset = stageWidth + swipeOffset;
+  const previousScale = slideScale(-1, swipeOffset, stageWidth);
+  const currentScale = slideScale(0, swipeOffset, stageWidth);
+  const nextScale = slideScale(1, swipeOffset, stageWidth);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -580,76 +661,87 @@ export function PhotoLightbox({
             ref={stageRef}
             role="application"
           >
-            {!loaded ? (
+            {!loaded && originalUrl === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
                   <LoaderCircleIcon
                     aria-hidden="true"
                     className="size-4 animate-spin motion-reduce:animate-none"
                   />
-                  {originalPending || originalUrl !== null ? "正在加载原图…" : "正在加载高清图片…"}
+                  正在加载高清图片…
                 </div>
               </div>
             ) : null}
+
             <div
               className={cn(
-                "absolute inset-0 origin-center will-change-transform",
+                "absolute inset-0",
                 swipeSettling &&
-                  "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none",
+                  "[&_[data-swipe-slide]]:transition-transform [&_[data-swipe-slide]]:duration-180 [&_[data-swipe-slide]]:ease-out motion-reduce:[&_[data-swipe-slide]]:transition-none",
               )}
-              style={{ opacity: swipeOpacity, transform: swipeTransform }}
             >
+              <div data-swipe-slide>
+                <NeighborSlide
+                  media={previous}
+                  offset={previousOffset}
+                  scale={previousScale}
+                  slug={slug}
+                />
+              </div>
+
               <div
-                className="absolute inset-0 origin-center will-change-transform"
-                style={{ transform: imageTransform }}
+                className="absolute inset-0 will-change-transform"
+                data-swipe-slide
+                style={{ transform: `translate3d(${currentOffset}px, 0, 0) scale(${currentScale})` }}
               >
                 <div
-                  className="absolute top-1/2 left-1/2 origin-center -translate-x-1/2 -translate-y-1/2"
-                  data-lightbox-transition-image
-                  style={{
-                    aspectRatio: `${selected.width} / ${selected.height}`,
-                    width: fittedImageWidth,
-                  }}
+                  className="absolute inset-0 origin-center will-change-transform"
+                  style={{ transform: imageTransform }}
                 >
-                  {originalUrl === null ? (
-                    <CachedPhotoImage
-                      alt="活动照片"
-                      bytes={large.bytes}
-                      className={cn(
-                        "object-contain transition-[opacity,filter,transform] duration-220 ease-out motion-reduce:transition-none",
-                        loaded
-                          ? "scale-100 opacity-100 blur-0"
-                          : "scale-[1.004] opacity-0 blur-[1px]",
-                      )}
-                      draggable={false}
-                      kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
-                      mediaId={selected.id}
-                      onLoad={() => setLoaded(true)}
-                      priority
-                      scope={slug ?? "public-media"}
-                      sizes="100vw"
-                      sourceUrl={large.url}
-                    />
-                  ) : (
-                    <Image
-                      alt="活动照片"
-                      className={cn(
-                        "object-contain transition-[opacity,filter,transform] duration-220 ease-out motion-reduce:transition-none",
-                        loaded
-                          ? "scale-100 opacity-100 blur-0"
-                          : "scale-[1.004] opacity-0 blur-[1px]",
-                      )}
-                      draggable={false}
-                      fill
-                      key={originalUrl}
-                      onLoad={() => setLoaded(true)}
-                      priority
-                      sizes="100vw"
-                      src={originalUrl}
-                      unoptimized
-                    />
-                  )}
+                  <div
+                    className="absolute top-1/2 left-1/2 origin-center -translate-x-1/2 -translate-y-1/2"
+                    data-lightbox-transition-image
+                    style={{
+                      aspectRatio: `${selected.width} / ${selected.height}`,
+                      width: fittedImageWidth(selected),
+                    }}
+                  >
+                    {originalUrl === null ? (
+                      <CachedPhotoImage
+                        alt="活动照片"
+                        bytes={large.bytes}
+                        className={cn(
+                          "object-contain transition-[opacity,filter] duration-160 ease-out motion-reduce:transition-none",
+                          loaded ? "opacity-100 blur-0" : "opacity-0 blur-[1px]",
+                        )}
+                        draggable={false}
+                        kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
+                        mediaId={selected.id}
+                        onLoad={() => setLoaded(true)}
+                        priority
+                        scope={slug ?? "public-media"}
+                        sizes="100vw"
+                        sourceUrl={large.url}
+                      />
+                    ) : (
+                      <Image
+                        alt="活动照片"
+                        className="object-contain"
+                        draggable={false}
+                        fill
+                        key={originalUrl}
+                        priority
+                        sizes="100vw"
+                        src={originalUrl}
+                        unoptimized
+                      />
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div data-swipe-slide>
+                <NeighborSlide media={next} offset={nextOffset} scale={nextScale} slug={slug} />
               </div>
             </div>
           </div>
@@ -716,7 +808,7 @@ export function PhotoLightbox({
                 )}
                 data-lightbox-controls
                 inert={!controlsVisible}
-                onClick={() => selectOffset(-1)}
+                onClick={() => animateOffset(-1)}
                 size="icon"
                 title="上一张 (←)"
                 type="button"
@@ -732,7 +824,7 @@ export function PhotoLightbox({
                 )}
                 data-lightbox-controls
                 inert={!controlsVisible}
-                onClick={() => selectOffset(1)}
+                onClick={() => animateOffset(1)}
                 size="icon"
                 title="下一张 (→)"
                 type="button"
@@ -789,12 +881,12 @@ export function PhotoLightbox({
                           toolbarButtonClass,
                           "min-w-0 flex-1 px-2.5 text-xs sm:flex-none sm:px-3 sm:text-sm",
                         )}
-                        disabled={originalLoading || originalUrl !== null}
+                        disabled={originalPending || originalCacheChecking || originalUrl !== null}
                         onClick={() => void loadOriginal()}
                         type="button"
                         variant="outline"
                       >
-                        {originalLoading ? (
+                        {originalPending ? (
                           <LoaderCircleIcon
                             aria-hidden="true"
                             className="animate-spin motion-reduce:animate-none"
@@ -806,11 +898,9 @@ export function PhotoLightbox({
                         <span className="truncate">
                           {originalPending
                             ? "加载中…"
-                            : originalCacheChecking
-                              ? "恢复中…"
-                              : originalUrl === null
-                                ? "查看原图"
-                                : "已加载原图"}
+                            : originalUrl === null
+                              ? "查看原图"
+                              : "已加载原图"}
                         </span>
                       </Button>
                     ) : null}
