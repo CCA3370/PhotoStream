@@ -55,7 +55,7 @@ export function LoginForm() {
         <FieldGroup>
           <Field data-invalid={form.formState.errors.username ? true : undefined}>
             <FieldLabel htmlFor="username">用户名</FieldLabel>
-            <InputGroup className="min-h-11" focusRing={false}>
+            <InputGroup className="min-h-11">
               <InputGroupAddon aria-hidden="true">
                 <UserRoundIcon />
               </InputGroupAddon>
@@ -63,6 +63,7 @@ export function LoginForm() {
                 aria-invalid={form.formState.errors.username ? true : undefined}
                 autoComplete="username"
                 id="username"
+                style={{ outline: "none", boxShadow: "none", WebkitTapHighlightColor: "transparent" }}
                 {...form.register("username")}
               />
             </InputGroup>
@@ -70,7 +71,7 @@ export function LoginForm() {
           </Field>
           <Field data-invalid={form.formState.errors.password ? true : undefined}>
             <FieldLabel htmlFor="password">密码</FieldLabel>
-            <InputGroup className="min-h-11" focusRing={false}>
+            <InputGroup className="min-h-11">
               <InputGroupAddon aria-hidden="true">
                 <KeyRoundIcon />
               </InputGroupAddon>
@@ -78,6 +79,7 @@ export function LoginForm() {
                 aria-invalid={form.formState.errors.password ? true : undefined}
                 autoComplete="current-password"
                 id="password"
+                style={{ outline: "none", boxShadow: "none", WebkitTapHighlightColor: "transparent" }}
                 type="password"
                 {...form.register("password")}
               />
