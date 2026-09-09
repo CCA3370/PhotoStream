@@ -172,6 +172,6 @@ jobs:
           API_INTERNAL_URL: http://127.0.0.1:3001
           MEDIA_BASE_URL: https://cdn.example.invalid
         run: >-
-          pnpm --filter @photostream/web test:e2e --
+          pnpm --filter @photostream/web exec playwright test
           tests/e2e/foundation.spec.ts
           --grep "Tailwind compatibility|document responses|Base UI dialog|5000 item gallery"
