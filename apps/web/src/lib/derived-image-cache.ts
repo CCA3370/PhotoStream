@@ -17,6 +17,13 @@ interface WarmImage {
   decoded: boolean;
 }
 
+type IdleSchedulerWindow = Window & {
+  requestIdleCallback?: (
+    callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
+    options?: { timeout: number },
+  ) => number;
+};
+
 const inFlight = new Map<string, Promise<Blob>>();
 const warmImages = new Map<string, WarmImage>();
 
@@ -59,23 +66,37 @@ function trimWarmImages(): void {
   }
 }
 
-function beginDecode(image: WarmImage): void {
-  if (image.objectUrl === null || image.decoded || typeof window === "undefined") return;
-  const decoder = new window.Image();
-  decoder.decoding = "async";
-  decoder.src = image.objectUrl;
-  if (typeof decoder.decode !== "function") {
-    decoder.onload = () => {
-      image.decoded = true;
-    };
+function scheduleLowPriority(task: () => void): void {
+  if (typeof window === "undefined") return;
+  const scheduler = window as IdleSchedulerWindow;
+  if (scheduler.requestIdleCallback !== undefined) {
+    scheduler.requestIdleCallback(() => task(), { timeout: 1_000 });
     return;
   }
-  void decoder
-    .decode()
-    .then(() => {
-      image.decoded = true;
-    })
-    .catch(() => undefined);
+  window.setTimeout(task, 80);
+}
+
+function beginDecode(image: WarmImage): void {
+  if (image.objectUrl === null || image.decoded || typeof window === "undefined") return;
+  const objectUrl = image.objectUrl;
+  scheduleLowPriority(() => {
+    if (image.decoded) return;
+    const decoder = new window.Image();
+    decoder.decoding = "async";
+    decoder.src = objectUrl;
+    if (typeof decoder.decode !== "function") {
+      decoder.onload = () => {
+        image.decoded = true;
+      };
+      return;
+    }
+    void decoder
+      .decode()
+      .then(() => {
+        image.decoded = true;
+      })
+      .catch(() => undefined);
+  });
 }
 
 function rememberWarmImage(request: Omit<DerivedImageRequest, "sourceUrl">, blob: Blob): WarmImage {
