@@ -22,6 +22,23 @@ interface CdnPoint {
   readonly http5xx: number;
 }
 
+interface BrowserDeliveryData {
+  readonly memoryHits: number;
+  readonly memoryBytes: number;
+  readonly diskHits: number;
+  readonly diskBytes: number;
+  readonly joinedRequests: number;
+  readonly networkRequests: number;
+  readonly networkBytes: number;
+  readonly readFailures: number;
+  readonly writeFailures: number;
+  readonly sizeMismatches: number;
+  readonly refreshedUrls: number;
+  readonly evictions: number;
+  readonly directFallbacks: number;
+  readonly cacheHitRate: number | null;
+}
+
 export interface CdnMetricsData {
   readonly status: "ok" | "partial" | "unavailable" | "error";
   readonly domain: string | null;
@@ -36,6 +53,7 @@ export interface CdnMetricsData {
   readonly errorRequests: number;
   readonly points: readonly CdnPoint[];
   readonly message: string | null;
+  readonly browser?: BrowserDeliveryData;
 }
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
@@ -118,6 +136,18 @@ export function CdnMetricsPanel({ data }: Readonly<{ data: CdnMetricsData }>) {
     ["请求数", numberFormatter.format(data.requests)],
     ["4xx/5xx", `${errorRate.toFixed(errorRate >= 10 ? 1 : 2)}%`],
   ] as const;
+  const browser = data.browser;
+  const browserSummaries =
+    browser === undefined
+      ? []
+      : ([
+          ["本地缓存命中率", formatPercent(browser.cacheHitRate)],
+          ["本地命中", numberFormatter.format(browser.memoryHits + browser.diskHits)],
+          ["缓存复用量", formatBytes(browser.memoryBytes + browser.diskBytes)],
+          ["网络取图", numberFormatter.format(browser.networkRequests)],
+          ["网络媒体量", formatBytes(browser.networkBytes)],
+          ["直接回退", numberFormatter.format(browser.directFallbacks)],
+        ] as const);
 
   return (
     <Card className="overflow-hidden shadow-none">
@@ -139,6 +169,44 @@ export function CdnMetricsPanel({ data }: Readonly<{ data: CdnMetricsData }>) {
           </div>
         </div>
       </CardHeader>
+
+      {browser === undefined ? null : (
+        <div className="border-b">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium">浏览器媒体交付</p>
+              <Badge className="font-normal" variant="outline">
+                匿名聚合
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              请求合并 {numberFormatter.format(browser.joinedRequests)} · 淘汰{" "}
+              {numberFormatter.format(browser.evictions)} · URL 刷新{" "}
+              {numberFormatter.format(browser.refreshedUrls)}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-px border-t bg-border sm:grid-cols-3 xl:grid-cols-6">
+            {browserSummaries.map(([label, value]) => (
+              <div className="bg-card px-3 py-2.5" key={label}>
+                <p className="text-[11px] text-muted-foreground">{label}</p>
+                <p className="mt-0.5 text-sm font-semibold tabular-nums">{value}</p>
+              </div>
+            ))}
+          </div>
+          {browser.readFailures +
+            browser.writeFailures +
+            browser.sizeMismatches +
+            browser.directFallbacks ===
+          0 ? null : (
+            <p className="border-t px-4 py-2 text-[11px] text-muted-foreground">
+              缓存读取失败 {numberFormatter.format(browser.readFailures)} · 写入失败{" "}
+              {numberFormatter.format(browser.writeFailures)} · 大小不一致{" "}
+              {numberFormatter.format(browser.sizeMismatches)} · 直接回退{" "}
+              {numberFormatter.format(browser.directFallbacks)}
+            </p>
+          )}
+        </div>
+      )}
 
       {data.status === "unavailable" || (data.status === "error" && data.points.length === 0) ? (
         <CardContent className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">

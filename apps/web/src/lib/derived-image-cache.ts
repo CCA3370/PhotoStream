@@ -119,7 +119,12 @@ export function isWarmDerivedImageDecoded(
 }
 
 function blobIdentity(request: Omit<DerivedImageRequest, "sourceUrl">) {
-  return { cacheName: derivedImageCacheName, key: cacheUrl(request), expectedBytes: request.bytes };
+  return {
+    cacheName: derivedImageCacheName,
+    key: cacheUrl(request),
+    expectedBytes: request.bytes,
+    ...(request.scope === "public-media" ? {} : { telemetryScope: request.scope }),
+  };
 }
 
 export async function readCachedDerivedImage(

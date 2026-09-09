@@ -14,6 +14,7 @@ import {
   retainDerivedImage,
   subscribeDerivedImages,
 } from "@/lib/derived-image-cache";
+import { recordMediaCacheDiagnostic } from "@/lib/media-blob-cache";
 
 interface ResolvedImage {
   readonly identity: string;
@@ -59,6 +60,7 @@ export function CachedPhotoImage({
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
   const cacheRequest = { scope, mediaId, kind, bytes };
+  const telemetryScope = scope === "public-media" ? undefined : scope;
   const warmUrl = getWarmDerivedImageUrl(cacheRequest);
   const warmDecoded = warmUrl !== null && isWarmDerivedImageDecoded(cacheRequest);
   const resolvedUrl =
@@ -131,12 +133,27 @@ export function CachedPhotoImage({
         }
       })
       .catch(() => {
-        if (!cancelled && !cacheOnly) setFallback({ identity, mode: "direct" });
+        if (!cancelled && !cacheOnly) {
+          recordMediaCacheDiagnostic("directFallback", telemetryScope);
+          setFallback({ identity, mode: "direct" });
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [active, priority, cacheOnly, bytes, identity, kind, mediaId, scope, sourceUrl, warmUrl]);
+  }, [
+    active,
+    priority,
+    cacheOnly,
+    bytes,
+    identity,
+    kind,
+    mediaId,
+    scope,
+    sourceUrl,
+    telemetryScope,
+    warmUrl,
+  ]);
 
   useEffect(() => {
     if (!warmDecoded || onLoad === undefined) return;
@@ -165,6 +182,9 @@ export function CachedPhotoImage({
           fill
           onError={() => {
             if (cacheOnly) return;
+            if (fallbackMode !== "direct") {
+              recordMediaCacheDiagnostic("directFallback", telemetryScope);
+            }
             setFallback({
               identity,
               mode: fallbackMode === "direct" ? "failed" : "direct",

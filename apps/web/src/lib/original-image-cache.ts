@@ -16,6 +16,7 @@ function identity(slug: string, mediaId: string, expectedBytes: number | null) {
     cacheName: originalImageCacheName,
     key: cacheKey(slug, mediaId, expectedBytes).url,
     expectedBytes,
+    telemetryScope: slug,
   };
 }
 
