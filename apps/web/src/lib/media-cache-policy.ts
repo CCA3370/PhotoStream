@@ -10,7 +10,11 @@ const fallbackCaps = {
 export function mediaCacheBudget(cacheName: string, quota?: number): number {
   const derived = cacheName.includes("derived");
   const original = cacheName.includes("original");
-  const cap = derived ? fallbackCaps.derived : original ? fallbackCaps.original : fallbackCaps.default;
+  const cap = derived
+    ? fallbackCaps.derived
+    : original
+      ? fallbackCaps.original
+      : fallbackCaps.default;
   const quotaShare = derived ? 0.08 : 0.05;
   if (quota === undefined || !Number.isFinite(quota) || quota <= 0) return cap;
   return Math.min(cap, Math.floor(quota * quotaShare));
