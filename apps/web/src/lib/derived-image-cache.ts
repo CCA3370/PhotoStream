@@ -78,10 +78,7 @@ function beginDecode(image: WarmImage): void {
     .catch(() => undefined);
 }
 
-function rememberWarmImage(
-  request: Omit<DerivedImageRequest, "sourceUrl">,
-  blob: Blob,
-): WarmImage {
+function rememberWarmImage(request: Omit<DerivedImageRequest, "sourceUrl">, blob: Blob): WarmImage {
   const identity = imageIdentity(request);
   const existing = warmImages.get(identity);
   if (existing !== undefined) return touchWarmImage(identity, existing);
