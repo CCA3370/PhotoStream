@@ -14,6 +14,11 @@ export function internalImageKey(src: string): string {
   return url.toString();
 }
 
+interface FallbackState {
+  readonly source: string;
+  readonly failed: boolean;
+}
+
 export function InternalCachedImage({
   src,
   mediaId,
@@ -29,6 +34,7 @@ export function InternalCachedImage({
   const host = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [resolved, setResolved] = useState<{ source: string; url: string } | null>(null);
+  const [fallback, setFallback] = useState<FallbackState | null>(null);
   const errorRef = useRef(onError);
   errorRef.current = onError;
   const direct = !/^https?:\/\//.test(src);
@@ -79,9 +85,10 @@ export function InternalCachedImage({
         if (disposed) return;
         objectUrl = URL.createObjectURL(blob);
         setResolved({ source: stableSource, url: objectUrl });
+        setFallback((current) => (current?.source === stableSource ? null : current));
       })
       .catch(() => {
-        if (!disposed) errorRef.current?.();
+        if (!disposed) setFallback({ source: stableSource, failed: false });
       });
     return () => {
       disposed = true;
@@ -89,11 +96,33 @@ export function InternalCachedImage({
     };
   }, [direct, eager, mediaId, stableSource, variantKind, visible]);
 
-  const display = direct ? src : resolved?.source === stableSource ? resolved.url : null;
+  const fallbackState = fallback?.source === stableSource ? fallback : null;
+  const cachedDisplay = resolved?.source === stableSource ? resolved.url : null;
+  const display = direct
+    ? src
+    : fallbackState?.failed
+      ? null
+      : fallbackState !== null
+        ? src
+        : cachedDisplay;
+  const usingDirectFallback = !direct && fallbackState !== null && !fallbackState.failed;
+
   return (
     <span className="absolute inset-0" ref={host}>
       {display === null ? null : (
-        <Image {...props} src={display} unoptimized onError={() => onError?.()} />
+        <Image
+          {...props}
+          src={display}
+          unoptimized
+          onError={() => {
+            if (!direct && !usingDirectFallback) {
+              setFallback({ source: stableSource, failed: false });
+              return;
+            }
+            if (usingDirectFallback) setFallback({ source: stableSource, failed: true });
+            errorRef.current?.();
+          }}
+        />
       )}
     </span>
   );

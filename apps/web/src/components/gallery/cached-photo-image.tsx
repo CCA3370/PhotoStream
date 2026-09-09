@@ -20,6 +20,11 @@ interface ResolvedImage {
   readonly url: string;
 }
 
+interface FallbackState {
+  readonly identity: string;
+  readonly mode: "direct" | "failed";
+}
+
 export function CachedPhotoImage({
   alt,
   bytes,
@@ -49,7 +54,7 @@ export function CachedPhotoImage({
 }>) {
   const hostRef = useRef<HTMLSpanElement>(null);
   const [, setCacheRevision] = useState(0);
-  const [failed, setFailed] = useState(false);
+  const [fallback, setFallback] = useState<FallbackState | null>(null);
   const [active, setActive] = useState(priority);
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
@@ -58,6 +63,9 @@ export function CachedPhotoImage({
   const warmDecoded = warmUrl !== null && isWarmDerivedImageDecoded(cacheRequest);
   const resolvedUrl =
     warmUrl ?? (resolved !== null && resolved.identity === identity ? resolved.url : null);
+  const fallbackMode = fallback?.identity === identity ? fallback.mode : null;
+  const displayUrl =
+    fallbackMode === "direct" ? sourceUrl : fallbackMode === "failed" ? null : resolvedUrl;
 
   useEffect(() => {
     if (cacheOnly || priority || active) return;
@@ -98,7 +106,6 @@ export function CachedPhotoImage({
   useEffect(() => {
     if ((!active && !priority && !cacheOnly) || warmUrl !== null) return;
     let cancelled = false;
-    setFailed(false);
     setResolved((current) => (current?.identity === identity ? current : null));
     const request = { scope, mediaId, kind, bytes };
     const work = cacheOnly
@@ -118,10 +125,13 @@ export function CachedPhotoImage({
       .then(() => {
         if (cancelled) return;
         const nextUrl = getWarmDerivedImageUrl(request);
-        if (nextUrl !== null) setResolved({ identity, url: nextUrl });
+        if (nextUrl !== null) {
+          setResolved({ identity, url: nextUrl });
+          setFallback((current) => (current?.identity === identity ? null : current));
+        }
       })
       .catch(() => {
-        if (!cancelled && !cacheOnly) setFailed(true);
+        if (!cancelled && !cacheOnly) setFallback({ identity, mode: "direct" });
       });
     return () => {
       cancelled = true;
@@ -141,8 +151,8 @@ export function CachedPhotoImage({
 
   return (
     <span className="absolute inset-0" ref={hostRef}>
-      {resolvedUrl === null ? (
-        failed ? (
+      {displayUrl === null ? (
+        fallbackMode === "failed" ? (
           <span className="absolute inset-0 grid place-items-center text-xs text-white/70">
             图片加载失败，请重新打开重试
           </span>
@@ -153,14 +163,21 @@ export function CachedPhotoImage({
           className={className}
           draggable={draggable}
           fill
+          onError={() => {
+            if (cacheOnly) return;
+            setFallback({
+              identity,
+              mode: fallbackMode === "direct" ? "failed" : "direct",
+            });
+          }}
           onLoad={() => {
-            markDerivedImageDecoded(cacheRequest);
+            if (fallbackMode !== "direct") markDerivedImageDecoded(cacheRequest);
             onLoad?.();
           }}
           priority={priority}
           sizes={sizes}
-          src={resolvedUrl}
-          style={warmDecoded ? { filter: "none", opacity: 1 } : undefined}
+          src={displayUrl}
+          style={fallbackMode !== "direct" && warmDecoded ? { filter: "none", opacity: 1 } : undefined}
           unoptimized
         />
       )}
