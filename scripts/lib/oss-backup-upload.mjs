@@ -53,7 +53,8 @@ export async function uploadPrivateBackup(options) {
   if (!/^[a-f0-9]{64}$/u.test(options.sha256)) throw new Error("Backup SHA-256 is invalid");
 
   const file = await stat(options.filePath);
-  if (!file.isFile() || file.size <= 0) throw new Error("Backup upload input must be a non-empty file");
+  if (!file.isFile() || file.size <= 0)
+    throw new Error("Backup upload input must be a non-empty file");
   const date = (options.now ?? new Date()).toUTCString();
   const headers = {
     "Content-Type": options.contentType ?? "application/octet-stream",
