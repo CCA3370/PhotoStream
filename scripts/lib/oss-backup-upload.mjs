@@ -10,8 +10,9 @@ const objectKeyPattern = /^[A-Za-z0-9._/-]{1,512}$/u;
 const unescapedUriCharacters = /[!'()*]/gu;
 
 function uriEncode(value) {
-  return encodeURIComponent(value).replace(unescapedUriCharacters, (character) =>
-    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  return encodeURIComponent(value).replace(
+    unescapedUriCharacters,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 
@@ -23,8 +24,12 @@ function uriEncodePath(value) {
 }
 
 function ossTimestamp(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) throw new Error("OSS signing date is invalid");
-  return date.toISOString().replace(/[-:]/gu, "").replace(/\.\d{3}Z$/u, "Z");
+  if (!(date instanceof Date) || Number.isNaN(date.getTime()))
+    throw new Error("OSS signing date is invalid");
+  return date
+    .toISOString()
+    .replace(/[-:]/gu, "")
+    .replace(/\.\d{3}Z$/u, "Z");
 }
 
 function normalizedHeaders(headers) {
@@ -83,7 +88,8 @@ export function createOssAuthorization(options) {
   const dateRegionServiceKey = hmac(dateRegionKey, "oss");
   const signingKey = hmac(dateRegionServiceKey, "aliyun_v4_request");
   const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
-  const additional = additionalHeaderValue === "" ? "" : `,AdditionalHeaders=${additionalHeaderValue}`;
+  const additional =
+    additionalHeaderValue === "" ? "" : `,AdditionalHeaders=${additionalHeaderValue}`;
 
   return {
     authorization: `OSS4-HMAC-SHA256 Credential=${options.accessKeyId}/${scope}${additional},Signature=${signature}`,
