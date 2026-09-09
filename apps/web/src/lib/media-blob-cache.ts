@@ -12,6 +12,7 @@ export interface MediaBlobIdentity {
 export interface MediaBlobRequest extends MediaBlobIdentity {
   readonly sourceUrl: string;
   readonly refreshUrl?: () => Promise<string>;
+  readonly signal?: AbortSignal;
 }
 
 export class ImageFetchError extends Error {
@@ -67,7 +68,14 @@ export function recordMediaCacheDiagnostic(
   recordMediaDeliveryMetric(telemetryScope, event, bytes);
 }
 
-const inFlight = new Map<string, Promise<Blob>>();
+interface SharedRequest {
+  readonly controller: AbortController;
+  readonly promise: Promise<Blob>;
+  consumers: number;
+  settled: boolean;
+}
+
+const inFlight = new Map<string, SharedRequest>();
 const memory = new Map<string, { blob: Blob; cacheName: string }>();
 const writes = new Map<string, Promise<void>>();
 const mib = 1024 * 1024;
@@ -77,6 +85,43 @@ const fallbackDiskBudget = (name: string) => (name.includes("original") ? 128 : 
 
 function identity(request: MediaBlobIdentity): string {
   return `${request.cacheName}\u0000${request.key}\u0000${request.expectedBytes}`;
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+}
+
+function consumeSharedRequest(entry: SharedRequest, signal?: AbortSignal): Promise<Blob> {
+  if (signal?.aborted) return Promise.reject(abortReason(signal));
+  entry.consumers += 1;
+
+  return new Promise<Blob>((resolve, reject) => {
+    let finished = false;
+    const release = () => {
+      if (finished) return;
+      finished = true;
+      signal?.removeEventListener("abort", onAbort);
+      entry.consumers = Math.max(0, entry.consumers - 1);
+      if (entry.consumers === 0 && !entry.settled) entry.controller.abort();
+    };
+    const onAbort = () => {
+      release();
+      reject(signal === undefined ? new DOMException("The operation was aborted.", "AbortError") : abortReason(signal));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    entry.promise.then(
+      (blob) => {
+        if (finished) return;
+        release();
+        resolve(blob);
+      },
+      (error: unknown) => {
+        if (finished) return;
+        release();
+        reject(error);
+      },
+    );
+  });
 }
 
 function remember(request: MediaBlobIdentity, blob: Blob): void {
@@ -268,24 +313,36 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
   if (writes.get(request.cacheName) === task) writes.delete(request.cacheName);
 }
 
-export async function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
+export function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
+  if (request.signal?.aborted) return Promise.reject(abortReason(request.signal));
   const key = identity(request);
   const pendingRequest = inFlight.get(key);
   if (pendingRequest !== undefined) {
     recordMediaCacheDiagnostic("joined", request.telemetryScope);
-    return pendingRequest;
+    return consumeSharedRequest(pendingRequest, request.signal);
   }
+
+  const controller = new AbortController();
   const task = (async () => {
     const cached = await readMediaBlob(request);
     if (cached !== null) return cached;
+    controller.signal.throwIfAborted();
     const get = (url: string) => {
+      controller.signal.throwIfAborted();
       recordMediaCacheDiagnostic("network", request.telemetryScope);
-      return fetch(url, { cache: "default", credentials: "omit", mode: "cors" });
+      return fetch(url, {
+        cache: "default",
+        credentials: "omit",
+        mode: "cors",
+        signal: controller.signal,
+      });
     };
     let response = await get(request.sourceUrl);
     if ((response.status === 401 || response.status === 403) && request.refreshUrl !== undefined) {
       await response.body?.cancel();
+      controller.signal.throwIfAborted();
       const freshUrl = await request.refreshUrl();
+      controller.signal.throwIfAborted();
       recordMediaCacheDiagnostic("refreshed", request.telemetryScope);
       response = await get(freshUrl);
     }
@@ -301,10 +358,17 @@ export async function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
     await writeMediaBlob(request, blob);
     return blob;
   })();
-  inFlight.set(key, task);
-  try {
-    return await task;
-  } finally {
-    if (inFlight.get(key) === task) inFlight.delete(key);
-  }
+  const entry: SharedRequest = { controller, promise: task, consumers: 0, settled: false };
+  inFlight.set(key, entry);
+  void task.then(
+    () => {
+      entry.settled = true;
+      if (inFlight.get(key) === entry) inFlight.delete(key);
+    },
+    () => {
+      entry.settled = true;
+      if (inFlight.get(key) === entry) inFlight.delete(key);
+    },
+  );
+  return consumeSharedRequest(entry, request.signal);
 }
