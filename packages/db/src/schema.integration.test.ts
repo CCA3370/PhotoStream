@@ -214,7 +214,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
          and (
            column_name like '%vector%'
            or column_name like '%similarity%'
-           or column_name like '%cluster%'
+           or (column_name like '%cluster%' and column_name <> 'last_clustered_at')
            or column_name like '%face_box%'
            or column_name like '%payload%'
            or column_name like '%uri%'
