@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  derivedCacheSegment,
-  derivedSegmentBudget,
-  mediaCacheBudget,
-} from "./media-cache-policy";
+import { derivedCacheSegment, derivedSegmentBudget, mediaCacheBudget } from "./media-cache-policy";
 
 const mib = 1024 * 1024;
 
