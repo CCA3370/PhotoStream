@@ -7,7 +7,7 @@ import { requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import { AppError } from "../errors.js";
-import { runtimeJobNames, type RuntimeMetrics } from "../observability/runtime-metrics.js";
+import type { RuntimeMetrics } from "../observability/runtime-metrics.js";
 
 const nullableTimestamp = z.iso.datetime().nullable();
 const jobSchema = z
@@ -65,10 +65,16 @@ const runtimeResponseSchema = z
         waitingRequests: z.number().int().min(0),
       })
       .strict(),
-    live: z
-      .object({ subscribers: z.number().int().min(0) })
+    live: z.object({ subscribers: z.number().int().min(0) }).strict(),
+    jobs: z
+      .object({
+        deletion: jobSchema,
+        analyticsCleanup: jobSchema,
+        bibMaintenance: jobSchema,
+        faceMaintenance: jobSchema,
+        bibCleanup: jobSchema,
+      })
       .strict(),
-    jobs: z.object(Object.fromEntries(runtimeJobNames.map((name) => [name, jobSchema]))).strict(),
   })
   .strict();
 
