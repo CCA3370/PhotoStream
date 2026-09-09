@@ -2,12 +2,17 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { clientGet } from "@/lib/client-api";
 
 import {
   type DerivedPhotoVariantKind,
   getWarmDerivedImageUrl,
   isWarmDerivedImageDecoded,
   loadDerivedImage,
+  markDerivedImageDecoded,
+  readCachedDerivedImage,
+  retainDerivedImage,
+  subscribeDerivedImages,
 } from "@/lib/derived-image-cache";
 
 interface ResolvedImage {
@@ -19,6 +24,7 @@ export function CachedPhotoImage({
   alt,
   bytes,
   className,
+  cacheOnly = false,
   draggable,
   kind,
   mediaId,
@@ -31,6 +37,7 @@ export function CachedPhotoImage({
   alt: string;
   bytes: number;
   className?: string;
+  cacheOnly?: boolean;
   draggable?: boolean;
   kind: DerivedPhotoVariantKind;
   mediaId: string;
@@ -41,6 +48,8 @@ export function CachedPhotoImage({
   sourceUrl: string;
 }>) {
   const hostRef = useRef<HTMLSpanElement>(null);
+  const [, setCacheRevision] = useState(0);
+  const [failed, setFailed] = useState(false);
   const [active, setActive] = useState(priority);
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
@@ -51,7 +60,7 @@ export function CachedPhotoImage({
     warmUrl ?? (resolved !== null && resolved.identity === identity ? resolved.url : null);
 
   useEffect(() => {
-    if (priority || active) return;
+    if (cacheOnly || priority || active) return;
     const host = hostRef.current;
     if (host === null) return;
     if (!("IntersectionObserver" in window)) {
@@ -68,27 +77,56 @@ export function CachedPhotoImage({
     );
     observer.observe(host);
     return () => observer.disconnect();
-  }, [active, priority]);
+  }, [active, cacheOnly, priority]);
+
+  useEffect(
+    () =>
+      subscribeDerivedImages(() => setCacheRevision((value) => value + 1), {
+        scope,
+        mediaId,
+        kind,
+        bytes,
+      }),
+    [scope, mediaId, kind, bytes],
+  );
+
+  useEffect(
+    () => retainDerivedImage({ scope, mediaId, kind, bytes }),
+    [scope, mediaId, kind, bytes],
+  );
 
   useEffect(() => {
-    if (!active || warmUrl !== null) return;
+    if ((!active && !priority && !cacheOnly) || warmUrl !== null) return;
     let cancelled = false;
+    setFailed(false);
     setResolved((current) => (current?.identity === identity ? current : null));
-
-    void loadDerivedImage({ scope, mediaId, kind, bytes, sourceUrl })
+    const request = { scope, mediaId, kind, bytes };
+    const work = cacheOnly
+      ? readCachedDerivedImage(request)
+      : loadDerivedImage({
+          ...request,
+          sourceUrl,
+          refreshUrl: async () => {
+            const path =
+              scope === "public-media"
+                ? `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${kind}`
+                : `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/variants/${kind}`;
+            return (await clientGet<{ url: string }>(path)).url;
+          },
+        });
+    void work
       .then(() => {
         if (cancelled) return;
-        const nextUrl = getWarmDerivedImageUrl({ scope, mediaId, kind, bytes });
-        setResolved({ identity, url: nextUrl ?? sourceUrl });
+        const nextUrl = getWarmDerivedImageUrl(request);
+        if (nextUrl !== null) setResolved({ identity, url: nextUrl });
       })
       .catch(() => {
-        if (!cancelled) setResolved({ identity, url: sourceUrl });
+        if (!cancelled && !cacheOnly) setFailed(true);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [active, bytes, identity, kind, mediaId, scope, sourceUrl, warmUrl]);
+  }, [active, priority, cacheOnly, bytes, identity, kind, mediaId, scope, sourceUrl, warmUrl]);
 
   useEffect(() => {
     if (!warmDecoded || onLoad === undefined) return;
@@ -103,13 +141,22 @@ export function CachedPhotoImage({
 
   return (
     <span className="absolute inset-0" ref={hostRef}>
-      {resolvedUrl === null ? null : (
+      {resolvedUrl === null ? (
+        failed ? (
+          <span className="absolute inset-0 grid place-items-center text-xs text-white/70">
+            图片加载失败，请重新打开重试
+          </span>
+        ) : null
+      ) : (
         <Image
           alt={alt}
           className={className}
           draggable={draggable}
           fill
-          onLoad={onLoad}
+          onLoad={() => {
+            markDerivedImageDecoded(cacheRequest);
+            onLoad?.();
+          }}
           priority={priority}
           sizes={sizes}
           src={resolvedUrl}

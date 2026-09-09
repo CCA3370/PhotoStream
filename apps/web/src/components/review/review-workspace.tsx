@@ -18,10 +18,9 @@ import {
   StarIcon,
   Trash2Icon,
 } from "lucide-react";
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
+import { InternalCachedImage } from "@/components/media/internal-cached-image";
 import {
   ReviewLightbox,
   type ReviewLightboxItem,
@@ -369,6 +368,7 @@ export function ReviewWorkspace({
       lightboxSourceItems.map((item) => ({
         key: item.key,
         src: item.viewerUrl,
+        variants: item.source === "remote" ? item.remote.variants : [],
         fallbackSrc: item.viewerFallbackUrl,
         originalSrc: item.remoteOriginalUrl,
         localPreferred: item.localPreferred,
@@ -745,12 +745,20 @@ export function ReviewWorkspace({
                     type="button"
                   >
                     {item.previewUrl === null ? null : (
-                      <Image
+                      <InternalCachedImage
                         alt="审核图片"
                         className="object-cover"
                         fill
                         sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
                         src={item.previewUrl}
+                        mediaId={item.source === "remote" ? item.remote.id : null}
+                        variantKind={
+                          item.source === "remote"
+                            ? item.remote.variants.find(
+                                (variant) => variant.url === item.previewUrl,
+                              )?.kind
+                            : undefined
+                        }
                         unoptimized
                       />
                     )}

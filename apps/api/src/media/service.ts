@@ -3,6 +3,7 @@ import {
   type AlbumView,
   type CreateAlbumRequest,
   type CreatePhotoUploadRequest,
+  type DerivedPhotoVariantKind,
   hasPermission,
   type PhotoVariantKind,
   type PublicMediaView,
@@ -41,6 +42,7 @@ import {
 import { type CdnInvalidator, LocalCdnInvalidator } from "./cdn-invalidator.js";
 import { liveEventChannel } from "./live-event-broker.js";
 import type { ObjectStorage } from "./object-storage.js";
+import { previewExpiresAt } from "./preview-expiry.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type DbExecutor = Database | Transaction;
@@ -1249,6 +1251,82 @@ export class PhotoService {
     });
   }
 
+  async refreshPublicVariant(options: {
+    readonly slug: string;
+    readonly visitorToken: string | undefined;
+    readonly mediaId: string;
+    readonly kind: DerivedPhotoVariantKind;
+  }) {
+    const album = await this.#publicAlbumBySlug(options.slug);
+    if (!(await this.#isVisitorAuthorized(album, options.visitorToken)))
+      throw this.#albumNotFound();
+    const [media] = await this.#database
+      .select()
+      .from(schema.media)
+      .where(
+        and(
+          eq(schema.media.id, options.mediaId),
+          eq(schema.media.albumId, album.id),
+          eq(schema.media.publicationStatus, "published"),
+          isNotNull(schema.media.publishSequence),
+        ),
+      )
+      .limit(1);
+    if (media === undefined) throw this.#albumNotFound();
+    return this.#refreshVariant(media.id, options.kind, 2 * 60 * 60 * 1_000);
+  }
+
+  async refreshInternalVariant(
+    actor: { readonly id: string; readonly role: UserRole },
+    options: {
+      readonly mediaId: string;
+      readonly kind: DerivedPhotoVariantKind;
+    },
+  ) {
+    requirePermission(actor.role, "album:read");
+    const [media] = await this.#database
+      .select()
+      .from(schema.media)
+      .where(
+        and(
+          eq(schema.media.id, options.mediaId),
+          ...(actor.role === "uploader" ? [eq(schema.media.uploaderId, actor.id)] : []),
+        ),
+      )
+      .limit(1);
+    if (media === undefined || media.publicationStatus === "deleted") throw this.#albumNotFound();
+    if ((await this.#albumById(this.#database, media.albumId)) === null)
+      throw this.#albumNotFound();
+    return this.#refreshVariant(media.id, options.kind, 15 * 60 * 1_000);
+  }
+
+  async #refreshVariant(mediaId: string, kind: DerivedPhotoVariantKind, ttlMilliseconds: number) {
+    if (!publicVariantKinds.has(kind)) throw this.#albumNotFound();
+    const [variant] = await this.#database
+      .select()
+      .from(schema.mediaVariants)
+      .where(
+        and(
+          eq(schema.mediaVariants.mediaId, mediaId),
+          eq(schema.mediaVariants.kind, kind),
+          eq(schema.mediaVariants.verified, true),
+          isNotNull(schema.mediaVariants.bytes),
+        ),
+      )
+      .limit(1);
+    if (variant === undefined || variant.bytes === null) throw this.#albumNotFound();
+    const expiresAt = previewExpiresAt(ttlMilliseconds);
+    return {
+      url: this.#storage.signRead({
+        key: variant.objectKey,
+        expiresAt,
+        stable: variant.kind !== "photo_original",
+      }),
+      expiresAt: expiresAt.toISOString(),
+      bytes: variant.bytes,
+    };
+  }
+
   async listInternalMedia(
     actor: InternalActor,
     options: {
@@ -1397,7 +1475,7 @@ export class PhotoService {
       byMedia.set(variant.mediaId, current);
     }
     const deletionByMedia = new Map(deletionTasks.map((task) => [task.mediaId, task]));
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
+    const expiresAt = previewExpiresAt(15 * 60 * 1_000);
     const items = page.map((media) => {
       const deletion = deletionByMedia.get(media.id) ?? null;
       return {
@@ -1417,7 +1495,11 @@ export class PhotoService {
           .filter((variant) => photoVariantKinds.includes(variant.kind as PhotoVariantKind))
           .map((variant) => ({
             kind: variant.kind as PhotoVariantKind,
-            url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+            url: this.#storage.signRead({
+              key: variant.objectKey,
+              expiresAt,
+              stable: variant.kind !== "photo_original",
+            }),
             width: variant.width,
             height: variant.height,
             bytes: variant.bytes as number,
@@ -1668,7 +1750,7 @@ export class PhotoService {
       current.push(variant);
       byMedia.set(variant.mediaId, current);
     }
-    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1_000);
+    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
     const items: PublicMediaView[] = page.map((media) => {
       if (media.publishSequence === null || media.publishedAt === null) {
         throw new Error("Published media lacks publication metadata");
@@ -1685,7 +1767,11 @@ export class PhotoService {
             if (variant.bytes === null) throw new Error("Verified variant lacks size");
             return {
               kind: variant.kind as PhotoVariantKind,
-              url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+              url: this.#storage.signRead({
+                key: variant.objectKey,
+                expiresAt,
+                stable: variant.kind !== "photo_original",
+              }),
               width: variant.width,
               height: variant.height,
               bytes: variant.bytes,

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   signLocalMultipartAbortUrl,
   signLocalMultipartCompleteUrl,
@@ -28,7 +28,11 @@ export interface ObjectStorage {
     readonly bytes: number;
     readonly expiresAt: Date;
   }): SignedPut | Promise<SignedPut>;
-  signRead(options: { readonly key: string; readonly expiresAt: Date }): string;
+  signRead(options: {
+    readonly key: string;
+    readonly expiresAt: Date;
+    readonly stable?: boolean;
+  }): string;
   createMultipartUpload?(options: {
     readonly key: string;
     readonly contentType: string;
@@ -87,7 +91,11 @@ export class LocalObjectStorage implements ObjectStorage {
     return options.clientUploadId;
   }
 
-  signRead(options: { readonly key: string; readonly expiresAt: Date }): string {
+  signRead(options: {
+    readonly key: string;
+    readonly expiresAt: Date;
+    readonly stable?: boolean;
+  }): string {
     return signLocalObjectUrl({
       baseUrl: this.#baseUrl,
       key: options.key,
@@ -306,8 +314,20 @@ export class AliyunObjectStorage implements ObjectStorage {
     };
   }
 
-  signRead(options: { readonly key: string; readonly expiresAt: Date }): string {
+  signRead(options: {
+    readonly key: string;
+    readonly expiresAt: Date;
+    readonly stable?: boolean;
+  }): string {
     return signAliyunCdnUrl({
+      ...(options.stable === true
+        ? {
+            nonce: createHmac("sha256", this.#cdnAuthKey)
+              .update(`${options.key}:${options.expiresAt.getTime()}`)
+              .digest("hex")
+              .slice(0, 32),
+          }
+        : {}),
       authKey: this.#cdnAuthKey,
       authValiditySeconds: this.#cdnAuthValiditySeconds,
       baseUrl: this.#mediaBaseUrl,

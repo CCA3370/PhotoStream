@@ -9,6 +9,9 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 
+import { loadDerivedImage } from "@/lib/derived-image-cache";
+import { loadOriginalImage } from "@/lib/original-image-cache";
+
 interface SignedDownload {
   readonly url: string;
   readonly filename: string;
@@ -110,14 +113,21 @@ export function DownloadButton({
         `/api/v1/public/albums/${slug}/downloads/${mediaId}/${kind}`,
         { idempotencyKey: crypto.randomUUID() },
       );
-      const response = await fetch(signed.url, {
-        cache: "no-store",
-        credentials: "omit",
-        mode: "cors",
-      });
-      if (!response.ok) throw new Error("图片下载失败，请稍后重试。");
-
-      const sourceBlob = await response.blob();
+      const sourceBlob =
+        kind === "preview"
+          ? await loadDerivedImage({
+              scope: slug,
+              mediaId,
+              kind: "photo_1920",
+              bytes: signed.bytes,
+              sourceUrl: signed.url,
+            })
+          : await loadOriginalImage({
+              slug,
+              mediaId,
+              expectedBytes: signed.bytes,
+              sourceUrl: signed.url,
+            });
       let downloadBlob = sourceBlob;
       let filename = signed.filename;
       let converted = false;

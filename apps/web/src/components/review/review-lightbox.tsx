@@ -16,7 +16,6 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import Image from "next/image";
 import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
@@ -25,12 +24,12 @@ import {
   useRef,
   useState,
 } from "react";
-
 import {
   BibReviewDialog,
   BibReviewEditor,
   isBibReviewConfirmed,
 } from "@/components/bib/bib-review-editor";
+import { InternalCachedImage } from "@/components/media/internal-cached-image";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -51,6 +50,7 @@ export type ReviewPendingAction = "delete" | "featured" | "state";
 
 export interface ReviewLightboxItem {
   readonly key: string;
+  readonly variants?: readonly { readonly url: string; readonly kind: string }[];
   readonly src: string | null;
   readonly fallbackSrc: string | null;
   readonly originalSrc: string | null;
@@ -227,17 +227,6 @@ export function ReviewLightbox({
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
-
-  useEffect(() => {
-    if (selectedIndex < 0 || items.length < 2) return;
-    for (const offset of [-1, 1]) {
-      const item = items[(selectedIndex + offset + items.length) % items.length];
-      if (item?.src !== null && item?.src !== undefined) {
-        const image = document.createElement("img");
-        image.src = item.src;
-      }
-    }
-  }, [items, selectedIndex]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -475,7 +464,7 @@ export function ReviewLightbox({
                     className="absolute inset-0 origin-center will-change-transform"
                     style={{ transform: imageTransform }}
                   >
-                    <Image
+                    <InternalCachedImage
                       alt="审核图片"
                       className={cn(
                         "object-contain transition-opacity duration-150",
@@ -489,9 +478,13 @@ export function ReviewLightbox({
                         setLoaded(true);
                         setLoadFailed(false);
                       }}
-                      priority
+                      loading="eager"
                       sizes="100vw"
                       src={displaySrc}
+                      mediaId={selected.mediaId}
+                      variantKind={
+                        selected.variants?.find((variant) => variant.url === displaySrc)?.kind
+                      }
                       unoptimized
                     />
                   </div>

@@ -11,6 +11,7 @@ import { loadConfig } from "../config.js";
 import type { CdnInvalidator } from "./cdn-invalidator.js";
 import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
 import { OperationsService } from "./operations-service.js";
+import { PhotoService } from "./service.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (databaseUrl !== undefined && new URL(databaseUrl).pathname !== "/photostream_test") {
@@ -615,6 +616,61 @@ maybeDescribe("stage 3 operations", () => {
     });
     expect(issued.url).toContain("expires=");
     expect(issued.url).not.toContain("photo_original");
+    await database.insert(schema.mediaVariants).values({
+      mediaId: media.id,
+      kind: "photo_original",
+      objectKey: "media/download/original.jpg",
+      format: "jpeg",
+      contentType: "image/jpeg",
+      width: 100,
+      height: 100,
+      expectedBytes: 500,
+      bytes: 500,
+      verified: true,
+    });
+    const viewRequest = {
+      slug: "operations-album-one",
+      visitorToken: undefined,
+      mediaId: media.id,
+    };
+    await expect(service.issueOriginalView(viewRequest)).rejects.toMatchObject({
+      code: "DOWNLOAD_DISABLED",
+    });
+    await database
+      .update(schema.albums)
+      .set({ originalDownloadEnabled: true })
+      .where(eq(schema.albums.id, albumId));
+    const beforeView = Date.now();
+    const view = await service.issueOriginalView(viewRequest);
+    expect(view.bytes).toBe(500);
+    expect(new Date(view.expiresAt).getTime()).toBeGreaterThanOrEqual(beforeView + 299_000);
+    expect(new Date(view.expiresAt).getTime()).toBeLessThanOrEqual(Date.now() + 300_000);
+    expect((await database.select().from(schema.analyticsEvents)).length).toBe(1);
+    const photos = new PhotoService({ database, storage, passwordHasher: fakeHasher, config });
+    const refreshRequest = { ...viewRequest, kind: "photo_1920" as const };
+    expect((await photos.refreshPublicVariant(refreshRequest)).bytes).toBe(200);
+    await expect(
+      photos.refreshPublicVariant({ ...refreshRequest, slug: "operations-album-two" }),
+    ).rejects.toBeDefined();
+    await database
+      .update(schema.media)
+      .set({ publicationStatus: "hidden" })
+      .where(eq(schema.media.id, media.id));
+    await expect(photos.refreshPublicVariant(refreshRequest)).rejects.toBeDefined();
+    await expect(service.issueOriginalView(viewRequest)).rejects.toBeDefined();
+    // Replaying a previously authorized download must still check current visibility.
+    await expect(
+      service.issueDownload({
+        ...viewRequest,
+        kind: "preview",
+        visitorId: "raw-visitor-token",
+        idempotencyKey: "download-success-key",
+      }),
+    ).rejects.toBeDefined();
+    await database
+      .update(schema.media)
+      .set({ publicationStatus: "published" })
+      .where(eq(schema.media.id, media.id));
     await service.recordOpen({
       slug: "operations-album-one",
       visitorToken: undefined,

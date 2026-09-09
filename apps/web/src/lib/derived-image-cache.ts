@@ -1,3 +1,5 @@
+import { loadMediaBlob, readMediaBlob } from "./media-blob-cache";
+
 const derivedImageCacheName = "photostream-derived-images-v1";
 const maxWarmImages = 18;
 
@@ -9,6 +11,7 @@ interface DerivedImageRequest {
   readonly kind: DerivedPhotoVariantKind;
   readonly bytes: number;
   readonly sourceUrl: string;
+  readonly refreshUrl?: () => Promise<string>;
 }
 
 interface WarmImage {
@@ -17,19 +20,28 @@ interface WarmImage {
   decoded: boolean;
 }
 
-type IdleSchedulerWindow = Window & {
-  requestIdleCallback?: (
-    callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
-    options?: { timeout: number },
-  ) => number;
-};
-
-const inFlight = new Map<string, Promise<Blob>>();
-const warmImages = new Map<string, WarmImage>();
-
-function supportsCacheStorage(): boolean {
-  return typeof window !== "undefined" && "caches" in window;
+const listeners = new Map<() => void, string | undefined>();
+const retained = new Map<string, number>();
+export function subscribeDerivedImages(
+  listener: () => void,
+  request?: Omit<DerivedImageRequest, "sourceUrl">,
+): () => void {
+  listeners.set(listener, request === undefined ? undefined : imageIdentity(request));
+  return () => {
+    listeners.delete(listener);
+  };
 }
+export function retainDerivedImage(request: Omit<DerivedImageRequest, "sourceUrl">): () => void {
+  const key = imageIdentity(request);
+  retained.set(key, (retained.get(key) ?? 0) + 1);
+  return () => {
+    const count = (retained.get(key) ?? 1) - 1;
+    if (count === 0) retained.delete(key);
+    else retained.set(key, count);
+    trimWarmImages();
+  };
+}
+const warmImages = new Map<string, WarmImage>();
 
 function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl">): string {
   return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}`;
@@ -44,59 +56,26 @@ function cacheUrl(request: Omit<DerivedImageRequest, "sourceUrl">): string {
   return url.toString();
 }
 
-function cacheKey(request: Omit<DerivedImageRequest, "sourceUrl">): Request {
-  return new Request(cacheUrl(request), {
-    method: "GET",
-    credentials: "same-origin",
-  });
-}
-
 function touchWarmImage(identity: string, image: WarmImage): WarmImage {
   warmImages.delete(identity);
   warmImages.set(identity, image);
   return image;
 }
 
-function trimWarmImages(): void {
-  while (warmImages.size > maxWarmImages) {
-    const oldest = warmImages.entries().next().value as [string, WarmImage] | undefined;
-    if (oldest === undefined) return;
-    warmImages.delete(oldest[0]);
-    if (oldest[1].objectUrl !== null) URL.revokeObjectURL(oldest[1].objectUrl);
+function trimWarmImages(protectedKey?: string): void {
+  let bytes = [...warmImages.values()].reduce((sum, image) => sum + image.blob.size, 0);
+  for (const [key, image] of warmImages) {
+    if (warmImages.size <= maxWarmImages && bytes <= 24 * 1024 * 1024) break;
+    if (key === protectedKey || retained.has(key)) continue;
+    warmImages.delete(key);
+    bytes -= image.blob.size;
+    if (image.objectUrl !== null) URL.revokeObjectURL(image.objectUrl);
   }
 }
 
-function scheduleLowPriority(task: () => void): void {
-  if (typeof window === "undefined") return;
-  const scheduler = window as IdleSchedulerWindow;
-  if (scheduler.requestIdleCallback !== undefined) {
-    scheduler.requestIdleCallback(() => task(), { timeout: 1_000 });
-    return;
-  }
-  window.setTimeout(task, 80);
-}
-
-function beginDecode(image: WarmImage): void {
-  if (image.objectUrl === null || image.decoded || typeof window === "undefined") return;
-  const objectUrl = image.objectUrl;
-  scheduleLowPriority(() => {
-    if (image.decoded) return;
-    const decoder = new window.Image();
-    decoder.decoding = "async";
-    decoder.src = objectUrl;
-    if (typeof decoder.decode !== "function") {
-      decoder.onload = () => {
-        image.decoded = true;
-      };
-      return;
-    }
-    void decoder
-      .decode()
-      .then(() => {
-        image.decoded = true;
-      })
-      .catch(() => undefined);
-  });
+export function markDerivedImageDecoded(request: Omit<DerivedImageRequest, "sourceUrl">): void {
+  const image = warmImages.get(imageIdentity(request));
+  if (image !== undefined) image.decoded = true;
 }
 
 function rememberWarmImage(request: Omit<DerivedImageRequest, "sourceUrl">, blob: Blob): WarmImage {
@@ -113,8 +92,8 @@ function rememberWarmImage(request: Omit<DerivedImageRequest, "sourceUrl">, blob
     decoded: false,
   };
   touchWarmImage(identity, image);
-  trimWarmImages();
-  beginDecode(image);
+  trimWarmImages(identity);
+  for (const [listener, key] of listeners) if (key === undefined || key === identity) listener();
   return image;
 }
 
@@ -139,73 +118,29 @@ export function isWarmDerivedImageDecoded(
   return image.decoded;
 }
 
-async function readCached(request: Omit<DerivedImageRequest, "sourceUrl">): Promise<Blob | null> {
-  if (!supportsCacheStorage()) return null;
-  try {
-    const cache = await caches.open(derivedImageCacheName);
-    const key = cacheKey(request);
-    const response = await cache.match(key);
-    if (response === undefined) return null;
-    const blob = await response.blob();
-    if (blob.size !== request.bytes) {
-      await cache.delete(key);
-      return null;
-    }
-    return blob;
-  } catch {
-    return null;
-  }
+function blobIdentity(request: Omit<DerivedImageRequest, "sourceUrl">) {
+  return { cacheName: derivedImageCacheName, key: cacheUrl(request), expectedBytes: request.bytes };
 }
 
-async function writeCached(
+export async function readCachedDerivedImage(
   request: Omit<DerivedImageRequest, "sourceUrl">,
-  blob: Blob,
-): Promise<void> {
-  if (!supportsCacheStorage()) return;
-  try {
-    const cache = await caches.open(derivedImageCacheName);
-    const headers = new Headers();
-    if (blob.type !== "") headers.set("Content-Type", blob.type);
-    headers.set("Content-Length", String(blob.size));
-    await cache.put(cacheKey(request), new Response(blob, { headers }));
-  } catch {
-    // Cache Storage is best-effort; the caller can still display the fetched image.
-  }
+): Promise<Blob | null> {
+  if (typeof window === "undefined") return null;
+  const warm = warmImages.get(imageIdentity(request));
+  if (warm !== undefined) return touchWarmImage(imageIdentity(request), warm).blob;
+  const blob = await readMediaBlob(blobIdentity(request));
+  if (blob !== null) rememberWarmImage(request, blob);
+  return blob;
 }
 
 export async function loadDerivedImage(request: DerivedImageRequest): Promise<Blob> {
-  const identity = imageIdentity(request);
-  const warm = warmImages.get(identity);
-  if (warm !== undefined) return touchWarmImage(identity, warm).blob;
-
-  const existing = inFlight.get(identity);
-  if (existing !== undefined) return existing;
-
-  const task = (async () => {
-    const cached = await readCached(request);
-    if (cached !== null) {
-      rememberWarmImage(request, cached);
-      return cached;
-    }
-
-    const response = await fetch(request.sourceUrl, {
-      cache: "no-store",
-      credentials: "omit",
-      mode: "cors",
-    });
-    if (!response.ok) throw new Error(`图片加载失败（${response.status}）`);
-    const blob = await response.blob();
-    if (blob.size === 0) throw new Error("图片内容为空");
-    rememberWarmImage(request, blob);
-    if (blob.size !== request.bytes) return blob;
-    await writeCached(request, blob);
-    return blob;
-  })();
-
-  inFlight.set(identity, task);
-  try {
-    return await task;
-  } finally {
-    if (inFlight.get(identity) === task) inFlight.delete(identity);
-  }
+  const warm = warmImages.get(imageIdentity(request));
+  if (warm !== undefined) return touchWarmImage(imageIdentity(request), warm).blob;
+  const blob = await loadMediaBlob({
+    ...blobIdentity(request),
+    sourceUrl: request.sourceUrl,
+    ...(request.refreshUrl === undefined ? {} : { refreshUrl: request.refreshUrl }),
+  });
+  rememberWarmImage(request, blob);
+  return blob;
 }

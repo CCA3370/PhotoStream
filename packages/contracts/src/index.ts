@@ -758,3 +758,14 @@ export const albumStatisticsSchema = z
   })
   .strict();
 export type AlbumStatistics = z.infer<typeof albumStatisticsSchema>;
+
+export const derivedPhotoVariantKindSchema = z.enum(["photo_480", "photo_960", "photo_1920"]);
+export type DerivedPhotoVariantKind = z.infer<typeof derivedPhotoVariantKindSchema>;
+export const refreshedPhotoVariantSchema = z
+  .object({
+    url: z.string().url(),
+    expiresAt: z.string().datetime(),
+    bytes: z.number().int().positive(),
+  })
+  .strict();
+export type RefreshedPhotoVariant = z.infer<typeof refreshedPhotoVariantSchema>;

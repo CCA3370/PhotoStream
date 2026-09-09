@@ -580,6 +580,20 @@ export class OperationsService {
     });
   }
 
+  async issueOriginalView(options: {
+    readonly slug: string;
+    readonly visitorToken: string | undefined;
+    readonly mediaId: string;
+  }) {
+    return this.#issueMediaAccess({
+      ...options,
+      kind: "original",
+      intent: "view",
+      visitorId: "",
+      idempotencyKey: undefined,
+    });
+  }
+
   async issueDownload(options: {
     readonly slug: string;
     readonly visitorToken: string | undefined;
@@ -588,9 +602,22 @@ export class OperationsService {
     readonly visitorId: string;
     readonly idempotencyKey: string | undefined;
   }) {
+    return this.#issueMediaAccess({ ...options, intent: "download" });
+  }
+
+  async #issueMediaAccess(options: {
+    readonly slug: string;
+    readonly visitorToken: string | undefined;
+    readonly mediaId: string;
+    readonly kind: DownloadKind;
+    readonly visitorId: string;
+    readonly idempotencyKey: string | undefined;
+    readonly intent: "download" | "view";
+  }) {
     const album = await this.#publicAlbum(options.slug);
     if (!(await this.#authorized(album, options.visitorToken))) throw this.#publicNotFound();
-    const idempotencyKey = requireIdempotency(options.idempotencyKey);
+    const idempotencyKey =
+      options.intent === "download" ? requireIdempotency(options.idempotencyKey) : "view";
     const actorScope = `visitor:${createHmac("sha256", this.#config.ANALYTICS_HMAC_SECRET)
       .update(options.visitorId, "utf8")
       .digest("hex")}`;
@@ -600,18 +627,6 @@ export class OperationsService {
       mediaId: options.mediaId,
       kind: options.kind,
     });
-    const retried = await this.#database.transaction(async (transaction) => {
-      await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
-      return findOperationRequest(transaction, {
-        actorScope,
-        operation,
-        idempotencyKey,
-        requestHash,
-      });
-    });
-    if (retried !== null) {
-      return this.#signedDownloadFromRecord(retried);
-    }
     const [media] = await this.#database
       .select()
       .from(schema.media)
@@ -663,6 +678,26 @@ export class OperationsService {
       bytes: variant.bytes,
       expiresAt: expiresAt.toISOString(),
     };
+    if (options.intent === "view") {
+      return {
+        url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+        filename,
+        bytes: variant.bytes,
+        expiresAt: expiresAt.toISOString(),
+      };
+    }
+    const retried = await this.#database.transaction(async (transaction) => {
+      await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
+      return findOperationRequest(transaction, {
+        actorScope,
+        operation,
+        idempotencyKey,
+        requestHash,
+      });
+    });
+    if (retried !== null) {
+      return this.#signedDownloadFromRecord(retried);
+    }
     const won = await this.#database.transaction(async (transaction) => {
       await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
       const concurrent = await findOperationRequest(transaction, {

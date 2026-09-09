@@ -301,6 +301,27 @@ export async function registerOperationsRoutes(
   );
 
   typed.post(
+    "/api/v1/public/albums/:slug/originals/:mediaId/view",
+    {
+      config: { rateLimit: { max: 60, timeWindow: "10 minutes" } },
+      schema: {
+        operationId: "issueOriginalView",
+        tags: ["public"],
+        params: downloadParamsSchema.omit({ kind: true }),
+        response: { 200: signedDownloadSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      return options.operationsService.issueOriginalView({
+        slug: request.params.slug,
+        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        mediaId: request.params.mediaId,
+      });
+    },
+  );
+
+  typed.post(
     "/api/v1/public/albums/:slug/downloads/:mediaId/:kind",
     {
       config: { rateLimit: { max: 30, timeWindow: "10 minutes" } },
@@ -312,6 +333,7 @@ export async function registerOperationsRoutes(
       },
     },
     async (request, reply) => {
+      void reply.header("cache-control", "no-store");
       const visitorId = anonymousVisitorId(request, reply, options.config);
       return options.operationsService.issueDownload({
         slug: request.params.slug,

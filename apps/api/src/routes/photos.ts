@@ -11,6 +11,7 @@ import {
   createAlbumResponseSchema,
   createCategoryRequestSchema,
   createPhotoUploadRequestSchema,
+  derivedPhotoVariantKindSchema,
   ingestStatusSchema,
   internalMediaListSchema,
   liveEventViewSchema,
@@ -19,6 +20,7 @@ import {
   publicAlbumViewSchema,
   publicationStatusSchema,
   publicMediaListSchema,
+  refreshedPhotoVariantSchema,
   signedUploadSchema,
   unlockAlbumRequestSchema,
   unlockAlbumResponseSchema,
@@ -117,6 +119,52 @@ export async function registerPhotoRoutes(
     429: apiErrorSchema,
     500: apiErrorSchema,
   };
+
+  typed.get(
+    "/api/v1/public/albums/:slug/media/:mediaId/variants/:kind",
+    {
+      config: { rateLimit: { max: 120, timeWindow: "1 minute" } },
+      schema: {
+        operationId: "refreshPublicPhotoVariant",
+        tags: ["public"],
+        params: z
+          .object({
+            slug: z.string().min(12).max(32),
+            mediaId: z.string().uuid(),
+            kind: derivedPhotoVariantKindSchema,
+          })
+          .strict(),
+        response: { 200: refreshedPhotoVariantSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      return options.photoService.refreshPublicVariant({
+        ...request.params,
+        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+      });
+    },
+  );
+
+  typed.get(
+    "/api/v1/media/:id/variants/:kind",
+    {
+      schema: {
+        operationId: "refreshInternalPhotoVariant",
+        tags: ["media"],
+        params: z.object({ id: z.string().uuid(), kind: derivedPhotoVariantKindSchema }).strict(),
+        response: { 200: refreshedPhotoVariantSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return options.photoService.refreshInternalVariant(actorFrom(session), {
+        mediaId: request.params.id,
+        kind: request.params.kind,
+      });
+    },
+  );
 
   typed.get(
     "/api/v1/albums",

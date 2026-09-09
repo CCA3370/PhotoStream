@@ -12,13 +12,12 @@ import {
   RefreshCwIcon,
   UsersIcon,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-
 import { CdnMetricsPanel } from "@/components/dashboard/cdn-metrics-panel";
 import { AnalyticsTrendChart } from "@/components/dashboard/dashboard-charts";
 import { SearchUsageChart } from "@/components/dashboard/search-usage-chart";
+import { InternalCachedImage } from "@/components/media/internal-cached-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -249,11 +248,13 @@ function RankingList({
                 <ImagesIcon aria-hidden="true" className="size-4" />
               </div>
             ) : (
-              <Image
+              <InternalCachedImage
                 alt={`${photo.albumTitle} 照片 #${photo.publishSequence}`}
                 fill
                 sizes="64px"
                 src={photo.thumbnailUrl}
+                mediaId={photo.mediaId}
+                variantKind="photo_480"
                 style={{ objectFit: "cover" }}
                 unoptimized
               />
