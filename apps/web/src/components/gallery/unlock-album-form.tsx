@@ -5,6 +5,7 @@ import {
   ArrowRightIcon,
   EyeIcon,
   EyeOffIcon,
+  KeyRoundIcon,
   LoaderCircleIcon,
   LockKeyholeIcon,
   ShieldCheckIcon,
@@ -54,43 +55,48 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
   }
 
   return (
-    <form action={submit} className="mx-auto w-full max-w-md py-2 sm:py-4">
-      <Card className="overflow-hidden rounded-2xl border-border/70 bg-card/95 shadow-sm">
-        <CardHeader className="gap-0 pb-3">
-          <div className="flex items-start gap-3.5">
-            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-              <LockKeyholeIcon aria-hidden="true" className="size-5" />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <CardTitle className="text-base sm:text-lg">此相册需要访问口令</CardTitle>
-              <CardDescription className="text-sm leading-5">
-                输入活动组织方提供的相册口令后即可继续浏览照片。
-              </CardDescription>
-            </div>
+    <form action={submit} className="mx-auto w-full max-w-md py-1 sm:py-4">
+      <Card className="overflow-hidden rounded-[1.75rem] border-border/60 bg-card/96 shadow-lg shadow-foreground/5">
+        <CardHeader className="items-center gap-4 px-5 pt-7 pb-5 text-center sm:px-7 sm:pt-8">
+          <div className="grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
+            <LockKeyholeIcon aria-hidden="true" className="size-6" />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground">访问受限</p>
+            <CardTitle className="text-xl tracking-tight sm:text-2xl">输入口令进入相册</CardTitle>
+            <CardDescription className="mx-auto max-w-sm text-sm leading-6">
+              此相册仅向持有活动口令的访客开放，请输入活动组织方提供的访问口令。
+            </CardDescription>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-5 pb-5 sm:px-7 sm:pb-7">
           <Field data-invalid={error === null ? undefined : true}>
-            <FieldLabel htmlFor="album-password">相册口令</FieldLabel>
-            <InputGroup className="min-h-12 rounded-xl bg-background">
-              <InputGroupAddon aria-hidden="true">
-                <LockKeyholeIcon />
+            <FieldLabel className="text-sm" htmlFor="album-password">
+              相册口令
+            </FieldLabel>
+            <InputGroup className="min-h-14 rounded-2xl bg-background shadow-xs">
+              <InputGroupAddon aria-hidden="true" className="pl-4 text-muted-foreground">
+                <KeyRoundIcon className="size-4.5" />
               </InputGroupAddon>
               <InputGroupInput
                 aria-describedby="album-password-hint"
                 aria-invalid={error === null ? undefined : true}
+                autoCapitalize="none"
                 autoComplete="off"
-                autoFocus
+                autoCorrect="off"
+                className="text-base"
                 disabled={pending}
                 enterKeyHint="go"
                 id="album-password"
                 name="password"
                 placeholder="请输入相册口令"
+                spellCheck={false}
                 style={{ boxShadow: "none", outline: "none" }}
                 type={showPassword ? "text" : "password"}
               />
-              <InputGroupAddon align="inline-end">
+              <InputGroupAddon align="inline-end" className="pr-2">
                 <InputGroupButton
                   aria-label={showPassword ? "隐藏口令" : "显示口令"}
                   disabled={pending}
@@ -108,14 +114,14 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
             </InputGroup>
             {error === null ? (
               <FieldDescription id="album-password-hint">
-                口令仅用于验证当前相册的访问权限。
+                不知道口令时，请向活动组织方获取。
               </FieldDescription>
             ) : (
               <FieldError id="album-password-hint">{error}</FieldError>
             )}
           </Field>
 
-          <Button className="min-h-12 w-full rounded-xl" disabled={pending} type="submit">
+          <Button className="min-h-13 w-full rounded-2xl text-sm" disabled={pending} type="submit">
             {pending ? (
               <>
                 <LoaderCircleIcon
@@ -133,7 +139,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
             )}
           </Button>
 
-          <div className="flex items-start gap-2 border-t pt-4 text-xs leading-5 text-muted-foreground">
+          <div className="flex items-start gap-2.5 rounded-2xl bg-muted/45 px-3.5 py-3 text-xs leading-5 text-muted-foreground">
             <ShieldCheckIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
             <p>为保护相册内容，请勿将访问口令公开分享给无关人员。</p>
           </div>
