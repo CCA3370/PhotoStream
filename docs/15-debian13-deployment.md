@@ -4,7 +4,7 @@
 
 适用版本：PhotoStream `main` 分支，Debian 13，Docker Compose 蓝绿部署
 
-最后更新：2026-09-02
+最后更新：2026-09-10
 
 ## 1. 文档目标与边界
 
@@ -18,7 +18,7 @@
 
 脚本会安装或复用 Docker Engine/Compose、自动生成应用内部密钥、生成运行环境文件、构建镜像、迁移数据库并启动服务。操作人员不需要也不应手工编辑 `.env`。
 
-脚本不会替用户创建或修改 DNS、安全组、OSS、CDN、RAM、IMM、EventBridge、学校账号审批或生产备份调度。执行任何云端或生产操作前，必须有明确授权并记录目标、执行人、时间和回滚点。
+脚本不会替用户创建或修改 DNS、安全组、OSS、CDN、RAM、IMM、EventBridge 或学校账号审批。PhotoStream 当前也不提供应用层数据库备份、恢复或备份调度。执行任何云端或生产操作前，必须有明确授权并记录目标、执行人、时间和回滚点。
 
 ## 2. 部署拓扑与资源预算
 
@@ -61,7 +61,6 @@ Caddy ── 当前活动路由 ──► Web blue/green (Next.js :3000)
 - 当前 DNS/CDN 配置截图或导出、预期回滚值；
 - 首次云端冒烟允许使用的测试相册、测试对象和最大流量；
 - 费用提醒和安全事件联系人；
-- 数据库加密备份、主机快照和恢复演练负责人；
 - 学校隐私说明、未成年人影像授权、删除与投诉流程。
 
 完整组织输入见[部署前待提供信息](deployment-inputs.md)。未获得人脸处理、云资源、跨境评估和授权样本批准时，首次部署必须选择关闭人脸候选找图。
@@ -74,7 +73,7 @@ Caddy ── 当前活动路由 ──► Web blue/green (Next.js :3000)
 | 架构 | `amd64` 或 `arm64` |
 | CPU | 至少 2 vCPU |
 | 内存 | `/proc/meminfo` 至少约 1.8 GiB，目标为 2 GiB |
-| 磁盘 | 仓库所在文件系统至少 8 GiB 可用；生产还需为数据库、镜像、日志和备份预留增长空间 |
+| 磁盘 | 仓库所在文件系统至少 8 GiB 可用；生产还需为数据库、镜像和日志预留增长空间 |
 | 权限 | 可通过 `sudo` 获得 root；SSH 私钥不放进仓库 |
 | 时间 | NTP 正常；服务器建议使用 UTC，业务显示由应用处理 |
 | 入站 | 22/TCP 仅允许受控来源；80/TCP、443/TCP、443/UDP 公网可达 |
@@ -152,7 +151,7 @@ dig +short AAAA photos.example.edu
 
 - 媒体 Bucket 指定前缀的单对象 PUT、multipart 初始化/分片/完成/终止、HEAD 和 DELETE；
 - 对应 CDN 文件刷新 API；
-- 不允许修改 Bucket ACL/Policy、删除 Bucket、列举无关前缀或访问备份 Bucket；
+- 不允许修改 Bucket ACL/Policy、删除 Bucket 或列举无关前缀；
 - 浏览器永远只得到单对象预签名 URL，不得到 RAM/STS 凭证。
 
 部署时需要输入 AccessKey ID 和 Secret。它们只进入 `/etc/photostream/settings.sh` 与 API 专用运行环境文件，不进入 Web/Caddy 容器。
@@ -248,7 +247,7 @@ sudo bash /tmp/photostream-deploy.sh install
 - 号码数据密钥、搜索密钥及版本；
 - EventBridge signature token。
 
-不要为了“方便备份”把这些值复制到 Git、聊天或共享文档。必须通过受控主机秘密备份保存 `/etc/photostream/`。
+不要把这些值复制到 Git、聊天或共享文档。`/etc/photostream/` 应作为 root-only 敏感配置目录保护。
 
 ### 4.4 脚本执行顺序
 
@@ -265,7 +264,7 @@ sudo bash /tmp/photostream-deploy.sh install
 9. 启动 Caddy、申请证书并执行公网 HTTPS ready 冒烟；
 10. 创建首位管理员并只显示一次临时密码。
 
-构建和证书签发可能持续数分钟。不要在另一个 SSH 会话重复启动部署脚本；脚本使用 `/run/lock/photostream-deploy.lock` 防止并发部署。
+不要在另一个 SSH 会话重复启动部署脚本；脚本使用 `/run/lock/photostream-deploy.lock` 防止并发部署。
 
 ### 4.5 首位管理员
 
@@ -308,7 +307,7 @@ sudo bash /opt/photostream/deploy/deploy.sh configure
 
 输入界面会显示已有非秘密默认值；秘密项回车保留，备用 CDN Key 输入 `-` 才会清空。配置完成后会用同一提交创建新的带时间戳镜像标签，经蓝绿流程发布。
 
-读取秘密文件前必须有明确故障处理需要，避免使用 `cat`、`set -x`、`env` 或会进入 shell history 的命令打印内容。不要把 `/etc/photostream` 直接上传到媒体 OSS Bucket。
+读取秘密文件前必须有明确故障处理需要，避免使用 `cat`、`set -x`、`env` 或会进入 shell history 的命令打印内容。不要把 `/etc/photostream` 上传到媒体 OSS Bucket。
 
 ## 6. 部署后技术验收
 
@@ -408,7 +407,7 @@ sudo docker compose \
 8. 删除测试照片后确认 OSS 对象清理与 CDN 刷新；
 9. 检查账单只出现批准的 OSS/CDN 项，不出现图片处理、DCDN、函数计算、MNS 或实时日志。
 
-真实 OSS/CDN 冒烟的完整检查表见[阿里云配置第 10 节](08-aliyun-cdn-oss.md#10-小流量验收)。基础照片闭环稳定前不要启用人脸功能。
+真实 OSS/CDN 冒烟的完整检查表见[阿里云配置第 9 节](08-aliyun-cdn-oss.md#9-小流量验收)。基础照片闭环稳定前不要启用人脸功能。
 
 ## 7. 日常更新到最新提交
 
@@ -417,13 +416,12 @@ sudo docker compose \
 选择低风险时段并确认：
 
 - `git -C /opt/photostream status --short` 无输出；
-- 最近一次加密数据库备份成功且可追溯；
 - 当前 `status`、ready、磁盘、内存正常；
 - 目标提交已经通过评审和仓库检查；
 - 数据库迁移遵守“扩展后收缩”，旧、新 API 能短暂共享升级后的数据库；
 - 有上一槽和外部 DNS/CDN 配置回滚记录。
 
-部署脚本本身不创建数据库备份。没有完成[运维手册](13-operations-runbook.md)中的加密备份调度和恢复演练，不应把系统标记为正式生产就绪。
+PhotoStream 当前没有应用层数据库备份/恢复工具，部署脚本也不会创建或要求备份资源。
 
 ### 7.2 执行更新
 
@@ -467,7 +465,7 @@ ADR-013 以前的部署记忆配置版本为 2，代表杭州 OSS/IMM/EventBridg
 
 只有获得独立云端、数据迁移和生产切换授权后，才按以下顺序执行：
 
-1. 暂停新上传和人脸搜索，记录杭州媒体/备份/参考照 Bucket、CDN 源站、IMM Project/Dataset 和 EventBridge 规则的可回滚快照；
+1. 暂停新上传和人脸搜索，记录杭州媒体/参考照 Bucket、CDN 源站、IMM Project/Dataset 和 EventBridge 规则的可回滚快照；
 2. 在华北 2（北京）创建符合第 3 节的全新私有 Bucket；复制对象后按对象数、key、大小、ETag/独立哈希和抽样读取核对，CORS、生命周期、ACL、RAM 与 CDN 私有回源配置不能依赖复制自动带入；
 3. 人脸功能保持关闭，在北京重建 IMM Project、每相册 Dataset 和 EventBridge 云服务专用总线规则；旧杭州人脸索引不能当作已迁移，必须从北京媒体 Bucket 的已发布 `photo_1920` 重新建立并通过独立 PoC；
 4. 把 CDN 源站切到北京媒体 Bucket，在专用小流量对象上验证回源、鉴权、缓存和删除刷新；公网稳定前保留杭州只读回滚窗口，不删除任何旧资源；
@@ -494,7 +492,7 @@ sudo bash /opt/photostream/deploy/deploy.sh rollback
 - 上一槽已被后续第二次更新覆盖；
 - PostgreSQL 数据本身损坏。
 
-遇到这些情况先停止扩大影响，保留数据库和日志，按评审过的灾难恢复计划处理。不要执行 `docker compose down -v`、删除 named volume、手改迁移表或清空数据库。
+遇到这些情况先停止扩大影响，保留数据库和日志，按单独评审的故障处置方案处理。不要执行 `docker compose down -v`、删除 named volume、手改迁移表或清空数据库。
 
 ### 8.2 外部配置回滚
 
@@ -513,7 +511,6 @@ sudo bash /opt/photostream/deploy/deploy.sh rollback
 - `sudo bash /opt/photostream/deploy/deploy.sh status`；
 - 主站 live/ready 和 HTTPS 证书；
 - 容器重启次数、错误日志、磁盘、内存、swap；
-- PostgreSQL 加密备份结果、文件大小、SHA-256 和异地/备份 Bucket 上传结果；
 - 上传清理、删除任务和异常积压；
 - OSS/CDN 403、5xx、回源和费用异常。
 
@@ -522,14 +519,13 @@ sudo bash /opt/photostream/deploy/deploy.sh rollback
 - 检查 Git 安全更新和待发布提交，不自动追随未知分支；
 - `docker system df`，评估旧镜像占用，但不要在更新/回滚窗口盲目 prune；
 - 检查 Caddy 证书、系统更新和 NTP；
-- 对比 OSS/CDN 用量与批准预算；
-- 检查主机快照和备份保留：14 个日备份、8 个周备份。
+- 对比 OSS/CDN 用量与批准预算。
 
 ### 每次活动前后
 
 - 活动前验证上传者/审核员账号、相册默认口令和下载关闭状态；
 - 活动中观察 API ready、SSE 重连、上传失败和主机资源；
-- 活动后确认相册状态、删除/投诉流程、账单和备份；
+- 活动后确认相册状态、删除/投诉流程和账单；
 - 不把真实学生媒体、号码、签名 URL 或 Cookie 复制到运维证据。
 
 ## 10. 常见故障排查
@@ -554,7 +550,7 @@ sudo bash /opt/photostream/deploy/deploy.sh rollback
 | CDN 403 | Type A Key/有效期、签名 URL 时间 | 控制台有效期必须与脚本输入一致；核对主/备 Key |
 | CDN 能访问但不缓存 | `Age`、Cache Key、回源日志 | 鉴权后剥离 `auth_key`，对象不可覆盖；不要关闭鉴权测试缓存 |
 | 更新目标槽失败 | `status` 和目标槽日志 | 旧活动槽仍服务；修复后重跑 `update` |
-| 回滚提示没有上一槽 | `status` | 首次部署或上一槽已覆盖；改走评审后的恢复流程 |
+| 回滚提示没有上一槽 | `status` | 首次部署或上一槽已覆盖；改走评审后的故障处置流程 |
 | 管理员未创建 | 更新输出、API/数据库日志 | 修复后重跑 `update`，脚本会补做初始化 |
 
 查看特定服务最近日志的通用格式：
@@ -568,20 +564,13 @@ sudo docker compose \
 
 不要使用 `docker inspect` 导出完整容器环境到工单，因为其中可能包含秘密。
 
-## 11. 备份、恢复与主机迁移
+## 11. PostgreSQL 数据与主机迁移边界
 
-部署脚本只负责应用和数据库容器，不自动创建备份 Bucket、不上传备份、不安装定时任务。正式试运行前必须按[运维、备份与事件响应手册](13-operations-runbook.md)完成：
+PhotoStream 当前不提供应用层 PostgreSQL 备份、恢复、异地副本或自动调度工具，部署脚本也不会创建相应 Bucket、密钥或定时任务。
 
-1. 在离线受控位置生成至少 3072 位 RSA 私钥/公钥；生产主机只持有公钥；
-2. 每日生成流式 AES-256-GCM + RSA-OAEP-SHA256 加密逻辑备份；
-3. 只把 `.pstrbk` 密文上传到独立私有备份 Bucket，不绑定 CDN；
-4. 保留 14 个日备份和 8 个周备份；
-5. 至少完成一次不连接生产 OSS/CDN 的隔离恢复演练；
-6. 备份 `/etc/photostream/`、部署状态和必要的云配置责任记录；Caddy 证书卷可备份，但不能泄露私钥。
+如果未来需要跨主机迁移 PostgreSQL 数据或处理数据库损坏，应作为独立运维变更设计并审批，明确数据复制方式、停写窗口、完整性验证、应用秘密、Git 版本以及 DNS/CDN 切换；本手册不提供隐式的生产恢复命令。不要把 `docker compose down -v`、删除 named volume 或直接清空数据库当作迁移手段。
 
-新主机恢复时不要只复制 Docker 镜像：必须恢复数据库、应用秘密、Git 版本和云端配置映射。没有 `/etc/photostream/settings.sh` 时，原会话、号码密文和搜索索引可能无法正确读取。
-
-灾难恢复禁止直接把隔离恢复命令改成生产库名。先保留故障主机和卷，确定恢复点、数据差异、DNS/CDN 切换和责任人，再执行单独评审的生产恢复方案。
+没有 `/etc/photostream/settings.sh` 时，原会话、号码密文和搜索索引可能无法正确读取，因此迁移敏感配置同样必须采用单独受控流程。
 
 ## 12. 安全操作禁令
 
@@ -605,7 +594,6 @@ sudo docker compose \
 开始/结束时间：
 旧提交/槽：
 新提交/槽：
-数据库备份标识与 SHA-256：
 数据库迁移结果：
 容器 health 结果：
 主站 live/ready/HTTPS 结果：
@@ -619,7 +607,7 @@ CDN 有效/篡改/过期/缓存结果：
 最终结论：通过 / 回滚 / 暂停
 ```
 
-任何未实际执行的项目必须写 **Unverified**，不能用本地单元测试、Chromium 或代码阅读替代真实 Debian 13、云端、微信/Safari、校园网络和恢复演练证据。
+任何未实际执行的项目必须写 **Unverified**，不能用本地单元测试、Chromium 或代码阅读替代真实 Debian 13、云端、微信/Safari 和校园网络证据。
 
 ## 14. 命令速查
 
@@ -651,4 +639,4 @@ bash -n deploy/deploy.sh deploy/deploy.test.sh
 bash deploy/deploy.test.sh
 ```
 
-目标主机完成实际 Docker/Compose/Caddy、DNS/ACME、OSS/CDN、备份恢复和小流量试运行前，部署状态仍为 **Partial/Unverified**，不得直接扩大到真实活动。
+目标主机完成实际 Docker/Compose/Caddy、DNS/ACME、OSS/CDN 和小流量试运行前，部署状态仍为 **Partial/Unverified**，不得直接扩大到真实活动。
