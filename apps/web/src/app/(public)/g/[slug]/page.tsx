@@ -2,6 +2,7 @@ import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostr
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
+import { FaceSearchPromo } from "@/components/gallery/face-search-promo";
 import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
@@ -85,24 +86,27 @@ export default async function GalleryPage({
 
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {searchAvailable && !featuredOnly ? (
-          <BibSearchPanel
-            attributeFilterEnabled={album.bibAttributeFilterEnabled}
-            attributeOptions={album.bibAttributeOptions}
-            attributePairs={album.bibAttributePairs}
-            bibSearchEnabled={album.bibSearchEnabled}
-            numberLengths={album.bibNumberLengths}
-            {...(category === undefined ? {} : { categoryId: category.id })}
-            {...(faceSearch === undefined ? {} : { faceSearch })}
-            slug={slug}
-          >
-            <PaginatedMediaGrid
+          <>
+            {faceSearch === undefined ? null : <FaceSearchPromo />}
+            <BibSearchPanel
+              attributeFilterEnabled={album.bibAttributeFilterEnabled}
+              attributeOptions={album.bibAttributeOptions}
+              attributePairs={album.bibAttributePairs}
+              bibSearchEnabled={album.bibSearchEnabled}
+              numberLengths={album.bibNumberLengths}
               {...(category === undefined ? {} : { categoryId: category.id })}
-              initialFeaturedIds={featured.mediaIds}
-              initialPage={media}
-              key={category?.id ?? "all"}
+              {...(faceSearch === undefined ? {} : { faceSearch })}
               slug={slug}
-            />
-          </BibSearchPanel>
+            >
+              <PaginatedMediaGrid
+                {...(category === undefined ? {} : { categoryId: category.id })}
+                initialFeaturedIds={featured.mediaIds}
+                initialPage={media}
+                key={category?.id ?? "all"}
+                slug={slug}
+              />
+            </BibSearchPanel>
+          </>
         ) : (
           <>
             <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
