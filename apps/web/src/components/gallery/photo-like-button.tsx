@@ -130,7 +130,7 @@ export function PhotoLikeButton({
         aria-pressed={liked}
         className={cn(
           mode === "thumbnail"
-            ? "h-7 touch-manipulation gap-1 rounded-full border-0 bg-transparent px-1.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white"
+            ? "relative top-0.5 h-7 touch-manipulation gap-1 rounded-full border-0 bg-transparent px-1.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white"
             : "h-11 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white sm:h-9",
           "active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] transition-[transform,background-color,border-color] duration-150 motion-reduce:transform-none motion-reduce:transition-none",
           className,
