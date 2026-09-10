@@ -87,7 +87,7 @@ export default async function GalleryPage({
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {searchAvailable && !featuredOnly ? (
           <>
-            {faceSearch === undefined ? null : <FaceSearchPromo />}
+            {faceSearch === undefined ? null : <FaceSearchPromo slug={slug} />}
             <BibSearchPanel
               attributeFilterEnabled={album.bibAttributeFilterEnabled}
               attributeOptions={album.bibAttributeOptions}
