@@ -17,5 +17,6 @@ ADR 用于保存已经批准的重要决定、被拒绝方案和重审条件。�
 | [ADR-012](012-consent-gated-face-photo-search.md) | 阿里云 IMM 人脸候选找图；地域由 ADR-013、启用/访问/生命周期策略由 ADR-014 修订 | Accepted, Amended |
 | [ADR-013](013-beijing-aliyun-data-plane.md) | OSS、IMM 与 EventBridge 数据面统一到北京 | Accepted |
 | [ADR-014](014-switch-controlled-face-search.md) | 相册级开关是人脸找图唯一产品启停来源；运行时状态不得充当第二门禁 | Accepted |
+| [ADR-015](015-remove-application-managed-database-backups.md) | 移除应用层 PostgreSQL 备份/恢复、备份 OSS、保留策略和定时调度 | Accepted |
 
 每个 ADR 的重审触发条件只代表“允许重新讨论”，不自动改变当前决定。

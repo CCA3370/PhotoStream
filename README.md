@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1–5 的本地实现，包括浏览器照片派生与直传、口令公共相册、SSE/轮询、PWA 离线壳与恢复队列、批量审核与筛选、两类下载策略、成员与审计、持久删除/孤立上传清理、结构化号码规则、本地 OCR、人工确认、精确号码/年级班级筛选、strict CSP、号码密钥轮换和加密备份/隔离恢复。产品边界现已收缩为仅照片，其他媒体类型不进入契约、数据库或路线图。
+阶段 0 文档基线已经提交。用户于 2026-08-27 明确授权进入编码阶段；当前已完成阶段 1–5 的本地实现，包括浏览器照片派生与直传、口令公共相册、SSE/轮询、PWA 离线壳与恢复队列、批量审核与筛选、两类下载策略、成员与审计、持久删除/孤立上传清理、结构化号码规则、本地 OCR、人工确认、精确号码/年级班级筛选、strict CSP 和号码密钥轮换。产品边界现已收缩为仅照片，其他媒体类型不进入契约、数据库或路线图。
 
 自动号码候选当前明确保持 **experimental**：用户已提供 813 张 Git 外本地测试照片，但尚无逐号码/四边形真值标注，也没有 Safari/移动设备召回率与性能门禁证据；手工标签和精确搜索闭环不依赖自动候选资格。项目仍未部署或修改任何 DNS、OSS、CDN 和香港主机。真实微信 WebView、Safari、VoiceOver/NVDA、学校隐私流程与目标 2C2G 主机检查均为 **Unverified**；详见[阶段 1 验证记录](docs/verification/phase-1-engineering-foundation.md)、[阶段 2 验证记录](docs/verification/phase-2-photo-vertical-slice.md)、[阶段 3 验证记录](docs/verification/phase-3-review-and-operations.md)、[阶段 4 验证记录](docs/verification/phase-4-bib-recognition.md)、[纯照片边界退役验证](docs/verification/photo-only-retirement.md)和[阶段 5 验证记录](docs/verification/phase-5-security-performance.md)。
 
@@ -29,8 +29,6 @@
 - `TEST_DATABASE_URL=postgresql://photostream:local-development-only@127.0.0.1:5432/photostream_test pnpm --filter @photostream/api test:capacity`：运行 5,000 项与 500 SSE 独立容量门禁。
 - `node scripts/check-bib-ocr-assets.mjs`：校验自托管 OCR 模型、Worker/WASM 哈希、远程回退和每设备 gzip 预算。
 - `pnpm photos:audit-local`：只读审计 Git 忽略的 `test_photos/`，仅输出尺寸、体积、EXIF/GPS 与结构错误聚合。
-- `pnpm db:backup -- --output /仓库外/backup.pstrbk`：使用仓库外 RSA 公钥创建认证加密备份。
-- `pnpm db:restore -- --input /仓库外/backup.pstrbk`：只向空白 `photostream_restore_*` 隔离库执行单事务恢复。
 
 运行 API 前从 `.env.example` 提供本地值；号码功能还需要独立 `BIB_DATA_KEY`、`BIB_SEARCH_KEY` 与密钥版本，并通过 `BIB_OCR_AUTOMATION_STATUS` 保持当前资格状态。示例中的本地数据库口令不用于任何部署，秘密变量必须自行生成且不得提交。
 
@@ -61,7 +59,7 @@
 11. [号码牌识别与筛选](docs/12-bib-recognition.md)
 12. [人脸候选找图](docs/14-face-search.md)
 13. [部署前待提供信息](docs/deployment-inputs.md)
-14. [运维、备份与事件响应手册](docs/13-operations-runbook.md)
+14. [运维与事件响应手册](docs/13-operations-runbook.md)
 15. [Debian 13 完整部署操作手册](docs/15-debian13-deployment.md)
 16. [参考资料](docs/references.md)
 17. [架构决策记录](docs/adr/README.md)
