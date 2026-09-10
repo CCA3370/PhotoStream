@@ -12,7 +12,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton } from "@/components/gallery/download-button";
@@ -98,7 +98,7 @@ export function PhotoLightbox({
   const viewerOpenRef = useRef(false);
   const originalObjectUrlRef = useRef<string | null>(null);
   const originalRequestRef = useRef(0);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedDerivedIdentity, setLoadedDerivedIdentity] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -193,6 +193,28 @@ export function PhotoLightbox({
   });
 
   const large = selected === null ? null : selectDisplayVariant(selected, stageWidth, stageHeight);
+  const largeIdentity =
+    selected === null || large === null
+      ? null
+      : `${selected.id}\u0000${large.kind}\u0000${large.bytes}`;
+  const loaded = largeIdentity !== null && loadedDerivedIdentity === largeIdentity;
+
+  useLayoutEffect(() => {
+    if (selected === null || large === null || largeIdentity === null) {
+      setLoadedDerivedIdentity(null);
+      return;
+    }
+    setLoadedDerivedIdentity(
+      isWarmDerivedImageDecoded({
+        scope: slug ?? "public-media",
+        mediaId: selected.id,
+        kind: large.kind === "photo_1920" ? "photo_1920" : "photo_960",
+        bytes: large.bytes,
+      })
+        ? largeIdentity
+        : null,
+    );
+  }, [large, largeIdentity, selected, slug]);
 
   const clearControlsHideTimer = useCallback(() => {
     if (controlsHideTimerRef.current === null) return;
@@ -255,20 +277,12 @@ export function PhotoLightbox({
       URL.revokeObjectURL(originalObjectUrlRef.current);
       originalObjectUrlRef.current = null;
     }
-    setLoaded(
-      isWarmDerivedImageDecoded({
-        scope: slug ?? "public-media",
-        mediaId: selected.id,
-        kind: large.kind === "photo_1920" ? "photo_1920" : "photo_960",
-        bytes: large.bytes,
-      }),
-    );
     setDownloadMenuOpen(false);
     setOriginalImage(null);
     setOriginalPending(false);
     setOriginalCacheChecking(false);
     resetInteraction();
-  }, [large, resetInteraction, selected, selectedId, slug]);
+  }, [large, resetInteraction, selected, selectedId]);
 
   useEffect(() => {
     if (slug === undefined || selected === null || !selected.downloads.original) return;
@@ -291,7 +305,6 @@ export function PhotoLightbox({
         }
         originalObjectUrlRef.current = objectUrl;
         setOriginalImage({ mediaId, url: objectUrl });
-        setLoaded(true);
       })
       .finally(() => {
         if (!cancelled) {
@@ -418,7 +431,6 @@ export function PhotoLightbox({
       }
       originalObjectUrlRef.current = objectUrl;
       setOriginalImage({ mediaId, url: objectUrl });
-      setLoaded(true);
       resetView();
     } catch (caught) {
       if (originalRequestRef.current !== requestId) return;
@@ -527,7 +539,7 @@ export function PhotoLightbox({
                     width: fittedImageWidth(selected),
                   }}
                 >
-                  {originalUrl === null && !loaded ? (
+                  {originalUrl === null ? (
                     <LightboxNeighborSlide
                       media={selected}
                       offset={0}
@@ -556,7 +568,9 @@ export function PhotoLightbox({
                       draggable={false}
                       kind={large.kind === "photo_1920" ? "photo_1920" : "photo_960"}
                       mediaId={selected.id}
-                      onLoad={() => setLoaded(true)}
+                      onLoad={() => {
+                        if (largeIdentity !== null) setLoadedDerivedIdentity(largeIdentity);
+                      }}
                       priority
                       scope={slug ?? "public-media"}
                       sizes="100vw"
