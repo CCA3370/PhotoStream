@@ -53,13 +53,13 @@ export function ViewerServiceNotice() {
           </div>
           <DialogTitle>请及时保存需要的照片</DialogTitle>
           <DialogDescription>
-            本网站由学生个人开发、维护，仅用于活动期间及结束后短期提供照片浏览与下载服务。
+            本网站由学生个人开发、维护，仅用于活动期间及结束后短期提供照片浏览与下载，不作为长期照片存储或备份服务。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            出于服务器与存储成本、隐私保护等方面的考虑，相关活动结束后的数周内，照片服务将陆续停止。
+            出于服务器与存储成本、隐私保护等方面的考虑，相关活动的照片服务将在活动结束后的数周内停止。
           </p>
           <p>
             服务停止后，该活动相册及其中的照片将无法继续访问、查看或下载。若有需要长期保留的照片，请尽早下载并自行妥善保存。
