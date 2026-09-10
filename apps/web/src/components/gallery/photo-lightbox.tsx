@@ -12,101 +12,35 @@ import {
   XIcon,
 } from "lucide-react";
 import Image from "next/image";
-import {
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton } from "@/components/gallery/download-button";
+import {
+  fittedImageWidth,
+  LightboxNeighborSlide,
+  lightboxSlideScale,
+  lightboxVariant,
+  selectDisplayVariant,
+} from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
+import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
-import { selectLightboxVariantKind } from "@/lib/lightbox-image-policy";
 import { loadOriginalImage, readCachedOriginalImage } from "@/lib/original-image-cache";
-import { swipeIntentDirection } from "@/lib/photo-swipe-intent";
 import { cn } from "@/lib/utils";
 
-const minZoom = 1;
-const maxZoom = 5;
-const swipeSettleMs = 180;
-const neighborScale = 0.93;
 const toolbarButtonClass =
   "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
-
-type Point = { x: number; y: number };
-type Gesture =
-  | { mode: "idle" }
-  | { mode: "pan"; start: Point; origin: Point }
-  | { mode: "swipe"; start: Point; requested?: -1 | 1 }
-  | { mode: "pinch"; distance: number; zoom: number };
 
 interface SignedOriginal {
   readonly url: string;
   readonly filename: string;
   readonly bytes: number;
   readonly expiresAt: string;
-}
-
-interface NetworkInformationLike {
-  readonly saveData?: boolean;
-  readonly effectiveType?: string;
-}
-
-function variant(media: PublicMediaView, kind: "photo_960" | "photo_1920") {
-  return media.variants.find((candidate) => candidate.kind === kind) ?? null;
-}
-
-function displayVariant(media: PublicMediaView, viewportWidth = 0, viewportHeight = 0) {
-  const has960 = variant(media, "photo_960") !== null;
-  const has1920 = variant(media, "photo_1920") !== null;
-  const connection =
-    typeof navigator === "undefined"
-      ? undefined
-      : (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
-  const preferred = selectLightboxVariantKind({
-    mediaWidth: media.width,
-    mediaHeight: media.height,
-    viewportWidth,
-    viewportHeight,
-    devicePixelRatio: typeof window === "undefined" ? 1 : window.devicePixelRatio,
-    saveData: connection?.saveData,
-    effectiveType: connection?.effectiveType,
-    has960,
-    has1920,
-  });
-  if (preferred === null) return null;
-  return (
-    variant(media, preferred) ??
-    variant(media, preferred === "photo_1920" ? "photo_960" : "photo_1920")
-  );
-}
-
-function distance(points: readonly Point[]): number {
-  const [first, second] = points;
-  if (first === undefined || second === undefined) return 0;
-  return Math.hypot(first.x - second.x, first.y - second.y);
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function fittedImageWidth(media: PublicMediaView): string {
-  return `min(100%, calc(100dvh * ${media.width / media.height}))`;
-}
-
-function slideScale(side: -1 | 0 | 1, offset: number, width: number): number {
-  if (width <= 0) return side === 0 ? 1 : neighborScale;
-  const centerDistance = Math.min(1, Math.abs(side * width + offset) / width);
-  return 1 - (1 - neighborScale) * centerDistance;
 }
 
 async function decodeObjectUrl(url: string): Promise<void> {
@@ -122,71 +56,6 @@ async function decodeObjectUrl(url: string): Promise<void> {
     decoder.onload = () => resolve();
     decoder.onerror = () => resolve();
   });
-}
-
-function NeighborSlide({
-  media,
-  offset,
-  scale,
-  settling,
-  slug,
-  viewportHeight,
-  viewportWidth,
-}: Readonly<{
-  media: PublicMediaView | null;
-  offset: number;
-  scale: number;
-  settling: boolean;
-  slug?: string | undefined;
-  viewportHeight: number;
-  viewportWidth: number;
-}>) {
-  if (media === null) return null;
-  const source = displayVariant(media, viewportWidth, viewportHeight);
-  if (source === null) return null;
-
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "pointer-events-none absolute inset-0 will-change-transform",
-        settling && "transition-transform duration-180 ease-out motion-reduce:transition-none",
-      )}
-      data-swipe-slide
-      style={{ transform: `translate3d(${offset}px, 0, 0) scale(${scale})` }}
-    >
-      <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-        style={{ aspectRatio: `${media.width} / ${media.height}`, width: fittedImageWidth(media) }}
-      >
-        {media.variants.find((item) => item.kind === "photo_480") ? (
-          <CachedPhotoImage
-            alt=""
-            bytes={media.variants.find((item) => item.kind === "photo_480")?.bytes ?? 0}
-            className="object-contain"
-            cacheOnly
-            kind="photo_480"
-            mediaId={media.id}
-            scope={slug ?? "public-media"}
-            sizes="100vw"
-            sourceUrl=""
-          />
-        ) : null}
-        <CachedPhotoImage
-          cacheOnly
-          alt=""
-          bytes={source.bytes}
-          className="object-contain"
-          draggable={false}
-          kind={source.kind === "photo_1920" ? "photo_1920" : "photo_960"}
-          mediaId={media.id}
-          scope={slug ?? "public-media"}
-          sizes="100vw"
-          sourceUrl={source.url}
-        />
-      </div>
-    </div>
-  );
 }
 
 export function PhotoLightbox({
@@ -217,13 +86,9 @@ export function PhotoLightbox({
     selectedIndex < 0 || items.length < 2
       ? null
       : (items[(selectedIndex + 1) % items.length] ?? null);
-  const preview1920 = selected === null ? null : variant(selected, "photo_1920");
+  const preview1920 = selected === null ? null : lightboxVariant(selected, "photo_1920");
+  const canNavigate = items.length > 1 && selectedIndex >= 0;
   const viewerRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const stageResizeObserverRef = useRef<ResizeObserver | null>(null);
-  const pointersRef = useRef(new Map<number, Point>());
-  const gestureRef = useRef<Gesture>({ mode: "idle" });
-  const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const targetRequestRef = useRef<{
     readonly direction: -1 | 1;
     readonly controller: AbortController;
@@ -233,13 +98,6 @@ export function PhotoLightbox({
   const viewerOpenRef = useRef(false);
   const originalObjectUrlRef = useRef<string | null>(null);
   const originalRequestRef = useRef(0);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  const [swipeSettling, setSwipeSettling] = useState(false);
-  const [stageWidth, setStageWidth] = useState(0);
-  const [stageHeight, setStageHeight] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -253,92 +111,9 @@ export function PhotoLightbox({
   const [originalCheckedId, setOriginalCheckedId] = useState<string | null>(null);
   const [originalPending, setOriginalPending] = useState(false);
   const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
-  const large = selected === null ? null : displayVariant(selected, stageWidth, stageHeight);
-
-  const setStageElement = useCallback((node: HTMLDivElement | null) => {
-    stageResizeObserverRef.current?.disconnect();
-    stageResizeObserverRef.current = null;
-    stageRef.current = node;
-    if (node === null) {
-      setStageWidth(0);
-      setStageHeight(0);
-      return;
-    }
-    const measure = () => {
-      setStageWidth(node.clientWidth);
-      setStageHeight(node.clientHeight);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    stageResizeObserverRef.current = observer;
-  }, []);
-
-  const clearControlsHideTimer = useCallback(() => {
-    if (controlsHideTimerRef.current === null) return;
-    clearTimeout(controlsHideTimerRef.current);
-    controlsHideTimerRef.current = null;
-  }, []);
-
-  const scheduleControlsHide = useCallback(() => {
-    clearControlsHideTimer();
-    if (!fullscreen || downloadMenuOpen) return;
-    controlsHideTimerRef.current = setTimeout(() => {
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && active.closest("[data-lightbox-controls]")) {
-        controlsHideTimerRef.current = null;
-        return;
-      }
-      setControlsVisible(false);
-      controlsHideTimerRef.current = null;
-    }, 2_500);
-  }, [clearControlsHideTimer, downloadMenuOpen, fullscreen]);
-
-  const revealControls = useCallback(() => {
-    setControlsVisible(true);
-    scheduleControlsHide();
-  }, [scheduleControlsHide]);
-
-  const clampPan = useCallback(
-    (value: Point, nextZoom: number): Point => {
-      const stage = stageRef.current;
-      if (stage === null || selected === null || nextZoom <= 1) return { x: 0, y: 0 };
-      const rect = stage.getBoundingClientRect();
-      const fit = Math.min(rect.width / selected.width, rect.height / selected.height);
-      const renderedWidth = selected.width * fit * nextZoom;
-      const renderedHeight = selected.height * fit * nextZoom;
-      return {
-        x: clamp(
-          value.x,
-          -Math.max(0, (renderedWidth - rect.width) / 2),
-          Math.max(0, (renderedWidth - rect.width) / 2),
-        ),
-        y: clamp(
-          value.y,
-          -Math.max(0, (renderedHeight - rect.height) / 2),
-          Math.max(0, (renderedHeight - rect.height) / 2),
-        ),
-      };
-    },
-    [selected],
-  );
-
-  const changeZoom = useCallback(
-    (value: number) => {
-      const nextZoom = clamp(value, minZoom, maxZoom);
-      setZoom(nextZoom);
-      setPan((current) => clampPan(current, nextZoom));
-    },
-    [clampPan],
-  );
-
-  const resetView = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, []);
 
   const commitOffset = useCallback(
-    (offset: number) => {
+    (offset: -1 | 1) => {
       if (items.length < 2 || selectedIndex < 0) return;
       const index = (selectedIndex + offset + items.length) % items.length;
       const item = items[index];
@@ -355,7 +130,7 @@ export function PhotoLightbox({
   }, []);
 
   const requestTarget = useCallback(
-    (offset: -1 | 1) => {
+    (offset: -1 | 1, viewportWidth: number, viewportHeight: number) => {
       const active = targetRequestRef.current;
       if (active?.direction === offset && !active.controller.signal.aborted) return;
       if (active !== null) active.controller.abort();
@@ -363,7 +138,7 @@ export function PhotoLightbox({
 
       const item = offset === -1 ? previous : next;
       if (item === null) return;
-      const source = displayVariant(item, stageWidth, stageHeight);
+      const source = selectDisplayVariant(item, viewportWidth, viewportHeight);
       if (source === null) return;
       const controller = new AbortController();
       targetRequestRef.current = { direction: offset, controller };
@@ -389,27 +164,60 @@ export function PhotoLightbox({
           if (targetRequestRef.current?.controller === controller) targetRequestRef.current = null;
         });
     },
-    [previous, next, slug, stageHeight, stageWidth],
+    [next, previous, slug],
   );
 
-  const animateOffset = useCallback(
-    (offset: -1 | 1) => {
-      if (items.length < 2 || selectedIndex < 0 || swipeSettling) return;
-      requestTarget(offset);
-      const width = stageRef.current?.clientWidth ?? stageWidth;
-      if (width <= 0) return;
-      setSwipeSettling(true);
-      setSwipeOffset(offset > 0 ? -width : width);
-      if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
-      swipeTimerRef.current = setTimeout(() => {
-        swipeTimerRef.current = null;
-        setSwipeSettling(false);
-        setSwipeOffset(0);
-        commitOffset(offset);
-      }, swipeSettleMs);
-    },
-    [commitOffset, items.length, selectedIndex, stageWidth, swipeSettling, requestTarget],
-  );
+  const {
+    animateOffset,
+    changeZoom,
+    dragging,
+    finishPointer,
+    onPointerDown,
+    onPointerMove,
+    onWheel,
+    pan,
+    resetInteraction,
+    resetView,
+    setStageElement,
+    stageHeight,
+    stageWidth,
+    swipeOffset,
+    swipeSettling,
+    zoom,
+  } = usePhotoLightboxGestures({
+    canNavigate,
+    cancelTargetRequest,
+    commitOffset,
+    requestTarget,
+    selected,
+  });
+
+  const large = selected === null ? null : selectDisplayVariant(selected, stageWidth, stageHeight);
+
+  const clearControlsHideTimer = useCallback(() => {
+    if (controlsHideTimerRef.current === null) return;
+    clearTimeout(controlsHideTimerRef.current);
+    controlsHideTimerRef.current = null;
+  }, []);
+
+  const scheduleControlsHide = useCallback(() => {
+    clearControlsHideTimer();
+    if (!fullscreen || downloadMenuOpen) return;
+    controlsHideTimerRef.current = setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest("[data-lightbox-controls]")) {
+        controlsHideTimerRef.current = null;
+        return;
+      }
+      setControlsVisible(false);
+      controlsHideTimerRef.current = null;
+    }, 2_500);
+  }, [clearControlsHideTimer, downloadMenuOpen, fullscreen]);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    scheduleControlsHide();
+  }, [scheduleControlsHide]);
 
   const toggleFullscreen = useCallback(async () => {
     const viewer = viewerRef.current;
@@ -459,16 +267,8 @@ export function PhotoLightbox({
     setOriginalImage(null);
     setOriginalPending(false);
     setOriginalCacheChecking(false);
-    resetView();
-    pointersRef.current.clear();
-    gestureRef.current = { mode: "idle" };
-    if (swipeTimerRef.current !== null) {
-      clearTimeout(swipeTimerRef.current);
-      swipeTimerRef.current = null;
-    }
-    setSwipeSettling(false);
-    setSwipeOffset(0);
-  }, [large, resetView, selected, selectedId, slug]);
+    resetInteraction();
+  }, [large, resetInteraction, selected, selectedId, slug]);
 
   useEffect(() => {
     if (slug === undefined || selected === null || !selected.downloads.original) return;
@@ -508,10 +308,8 @@ export function PhotoLightbox({
   useEffect(
     () => () => {
       cancelTargetRequest();
-      if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
       if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
       clearControlsHideTimer();
-      stageResizeObserverRef.current?.disconnect();
       if (originalObjectUrlRef.current !== null) {
         URL.revokeObjectURL(originalObjectUrlRef.current);
         originalObjectUrlRef.current = null;
@@ -583,104 +381,6 @@ export function PhotoLightbox({
     zoom,
   ]);
 
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
-    if (swipeSettling) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const point = { x: event.clientX, y: event.clientY };
-    pointersRef.current.set(event.pointerId, point);
-    const points = [...pointersRef.current.values()];
-    if (points.length >= 2) {
-      cancelTargetRequest();
-      gestureRef.current = { mode: "pinch", distance: distance(points), zoom };
-      setDragging(false);
-      setSwipeOffset(0);
-      return;
-    }
-    if (zoom > 1) {
-      gestureRef.current = { mode: "pan", start: point, origin: pan };
-      setDragging(true);
-    } else {
-      gestureRef.current = { mode: "swipe", start: point };
-    }
-  }
-
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
-    if (!pointersRef.current.has(event.pointerId)) return;
-    const point = { x: event.clientX, y: event.clientY };
-    pointersRef.current.set(event.pointerId, point);
-    const gesture = gestureRef.current;
-    const points = [...pointersRef.current.values()];
-    if (gesture.mode === "pinch" && points.length >= 2 && gesture.distance > 0) {
-      const nextZoom = clamp(
-        gesture.zoom * (distance(points) / gesture.distance),
-        minZoom,
-        maxZoom,
-      );
-      setZoom(nextZoom);
-      setPan((current) => clampPan(current, nextZoom));
-      return;
-    }
-    if (gesture.mode === "pan") {
-      setPan(
-        clampPan(
-          {
-            x: gesture.origin.x + point.x - gesture.start.x,
-            y: gesture.origin.y + point.y - gesture.start.y,
-          },
-          zoom,
-        ),
-      );
-      return;
-    }
-    if (gesture.mode === "swipe" && points.length === 1) {
-      const width = stageRef.current?.clientWidth ?? stageWidth;
-      if (width <= 0) return;
-      const deltaX = point.x - gesture.start.x;
-      const direction = swipeIntentDirection(deltaX, point.y - gesture.start.y);
-      if (direction !== null && gesture.requested !== direction) {
-        gesture.requested = direction;
-        requestTarget(direction);
-      }
-      setSwipeOffset(clamp(deltaX, -width, width));
-    }
-  }
-
-  function finishPointer(event: ReactPointerEvent<HTMLDivElement>): void {
-    const point = { x: event.clientX, y: event.clientY };
-    const gesture = gestureRef.current;
-    if (gesture.mode === "swipe") {
-      const deltaX = point.x - gesture.start.x;
-      const deltaY = point.y - gesture.start.y;
-      const shouldNavigate =
-        event.type !== "pointercancel" &&
-        Math.abs(deltaX) >= 52 &&
-        Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
-      if (shouldNavigate) {
-        animateOffset(deltaX < 0 ? 1 : -1);
-      } else {
-        cancelTargetRequest();
-        setSwipeSettling(true);
-        setSwipeOffset(0);
-        if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
-        swipeTimerRef.current = setTimeout(() => {
-          setSwipeSettling(false);
-          swipeTimerRef.current = null;
-        }, swipeSettleMs);
-      }
-    }
-    pointersRef.current.delete(event.pointerId);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setDragging(false);
-    if (pointersRef.current.size === 0) gestureRef.current = { mode: "idle" };
-  }
-
-  function onWheel(event: ReactWheelEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    changeZoom(zoom + (event.deltaY < 0 ? 0.35 : -0.35));
-  }
-
   async function loadOriginal(): Promise<void> {
     if (
       slug === undefined ||
@@ -735,7 +435,6 @@ export function PhotoLightbox({
 
   if (selected === null || large === null) return null;
 
-  const canNavigate = items.length > 1;
   const canDownloadPreview =
     slug !== undefined && selected.downloads.preview && preview1920 !== null;
   const canDownloadOriginal =
@@ -746,9 +445,9 @@ export function PhotoLightbox({
   const previousOffset = -stageWidth + swipeOffset;
   const currentOffset = swipeOffset;
   const nextOffset = stageWidth + swipeOffset;
-  const previousScale = slideScale(-1, swipeOffset, stageWidth);
-  const currentScale = slideScale(0, swipeOffset, stageWidth);
-  const nextScale = slideScale(1, swipeOffset, stageWidth);
+  const previousScale = lightboxSlideScale(-1, swipeOffset, stageWidth);
+  const currentScale = lightboxSlideScale(0, swipeOffset, stageWidth);
+  const nextScale = lightboxSlideScale(1, swipeOffset, stageWidth);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -797,7 +496,7 @@ export function PhotoLightbox({
               </div>
             ) : null}
 
-            <NeighborSlide
+            <LightboxNeighborSlide
               media={stageWidth > 0 ? previous : null}
               offset={previousOffset}
               scale={previousScale}
@@ -829,7 +528,7 @@ export function PhotoLightbox({
                   }}
                 >
                   {originalUrl === null && !loaded ? (
-                    <NeighborSlide
+                    <LightboxNeighborSlide
                       media={selected}
                       offset={0}
                       scale={1}
@@ -880,7 +579,7 @@ export function PhotoLightbox({
               </div>
             </div>
 
-            <NeighborSlide
+            <LightboxNeighborSlide
               media={stageWidth > 0 ? next : null}
               offset={nextOffset}
               scale={nextScale}
