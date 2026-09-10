@@ -3,6 +3,8 @@
 日期：2026-09-02
 范围：OSS/IMM/EventBridge 地域契约、API 适配、Web 上传 Origin/CSP、Debian 部署配置、ADR 与运维文档；不含真实云资源、数据迁移或部署
 
+> 2026-09-10 更新：数据库备份相关设计已由 ADR-015 废止。本记录保留 2026-09-02 当时的验证证据，但下方“剩余门禁”已按当前基线移除备份 Bucket 要求。
+
 ## 结论
 
 PhotoStream 的当前本地契约已从杭州统一改为华北 2（北京）：OSS V4 签名地域固定为 `oss-cn-beijing`，公网 Endpoint 固定为 `https://oss-cn-beijing.aliyuncs.com`，IMM/EventBridge 地域固定为 `cn-beijing`。媒体与人脸参考照上传 Origin、IMM 请求、EventBridge 证书主机/事件地域和 CDN 客户端地域均使用同一北京基线。
@@ -52,7 +54,7 @@ PhotoStream 的当前本地契约已从杭州统一改为华北 2（北京）：
 
 ## 剩余门禁
 
-1. 获得独立云端与生产变更授权后，创建或确认全新的北京媒体、备份和参考照私有 Bucket；现有 Bucket 地域不能原地修改。
+1. 获得独立云端与生产变更授权后，创建或确认全新的北京媒体和参考照私有 Bucket；现有 Bucket 地域不能原地修改。数据库备份 Bucket 已由 ADR-015 从当前设计移除。
 2. 若存在杭州数据，按部署手册完成冻结、复制、对象核对、CORS/生命周期/RAM 重建、CDN 切源和可回滚窗口；不得由部署脚本自动删除旧资源。
 3. 在北京重建 IMM Project/Dataset 与 EventBridge 规则，人脸功能保持关闭直至授权样本 PoC、删除读回、费用和学校门禁全部通过。
 4. 真实 Debian 13、OSS V4、CDN、IMM、EventBridge、微信/Safari/辅助技术和生产资源继续分别记录，不得从本地 `pnpm check` 推断为通过。
