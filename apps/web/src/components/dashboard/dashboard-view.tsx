@@ -1,6 +1,5 @@
 "use client";
 
-import type { AlbumSummaryView } from "@photostream/contracts";
 import {
   ArrowUpRightIcon,
   CalendarRangeIcon,
@@ -8,7 +7,6 @@ import {
   EyeIcon,
   HeartIcon,
   ImagesIcon,
-  RadioIcon,
   RefreshCwIcon,
   UsersIcon,
 } from "lucide-react";
@@ -111,6 +109,7 @@ export interface DashboardStatistics {
 }
 
 type PresetKey = "30d" | "7d" | "1d" | "5h" | "1h" | "30m" | "custom";
+type RankingMode = "downloads" | "likes";
 
 interface RankingItem {
   readonly mediaId: string;
@@ -289,7 +288,7 @@ async function fetchDashboard(from: Date, to: Date): Promise<DashboardStatistics
   const query = new URLSearchParams({
     from: from.toISOString(),
     to: to.toISOString(),
-    limit: "8",
+    limit: "20",
   });
   const response = await fetch(`/api/v1/dashboard?${query.toString()}`, { cache: "no-store" });
   if (!response.ok) {
@@ -306,10 +305,8 @@ async function fetchDashboard(from: Date, to: Date): Promise<DashboardStatistics
 }
 
 export function DashboardView({
-  albums,
   initialData,
 }: Readonly<{
-  albums: readonly AlbumSummaryView[];
   initialData: DashboardStatistics;
 }>) {
   const [data, setData] = useState(initialData);
@@ -317,14 +314,12 @@ export function DashboardView({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
+  const [rankingMode, setRankingMode] = useState<RankingMode>("downloads");
+  const [rankingOpen, setRankingOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState(() => localInputValue(new Date(initialData.from)));
   const [customTo, setCustomTo] = useState(() => localInputValue(new Date(initialData.to)));
   const points = useMemo(() => fillPoints(data), [data]);
   const searchUsagePoints = useMemo(() => fillSearchUsagePoints(data), [data]);
-  const liveAlbums = useMemo(
-    () => albums.filter((album) => album.state === "live").slice(0, 5),
-    [albums],
-  );
   const downloadRanking = useMemo<RankingItem[]>(
     () => data.topPhotos.map((photo) => ({ ...photo, count: photo.downloads })),
     [data.topPhotos],
@@ -333,6 +328,8 @@ export function DashboardView({
     () => data.topLikedPhotos.map((photo) => ({ ...photo, count: photo.likes })),
     [data.topLikedPhotos],
   );
+  const activeRanking = rankingMode === "downloads" ? downloadRanking : likeRanking;
+  const activeRankingUnit = rankingMode === "downloads" ? "次" : "赞";
 
   async function loadRange(from: Date, to: Date, preset: PresetKey): Promise<boolean> {
     setPending(true);
@@ -545,13 +542,19 @@ export function DashboardView({
         <CdnMetricsPanel data={data.cdn} />
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.7fr)]">
-        <Card
-          className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}
+      <Card
+        className={cn("overflow-hidden shadow-none transition-opacity", pending && "opacity-60")}
+      >
+        <Tabs
+          className="gap-0"
+          onValueChange={(value) => {
+            if (value === "downloads" || value === "likes") setRankingMode(value);
+          }}
+          value={rankingMode}
         >
-          <Tabs className="gap-0" defaultValue="downloads">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
-              <CardTitle>照片排行</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
+            <CardTitle>照片排行</CardTitle>
+            <div className="flex items-center gap-2">
               <TabsList className="gap-1 p-1">
                 <TabsTrigger className="px-2.5" value="downloads">
                   <DownloadIcon aria-hidden="true" />
@@ -562,62 +565,37 @@ export function DashboardView({
                   点赞
                 </TabsTrigger>
               </TabsList>
-            </CardHeader>
-            <CardContent className="p-0">
-              <TabsContent value="downloads">
-                <RankingList items={downloadRanking} unit="次" />
-              </TabsContent>
-              <TabsContent value="likes">
-                <RankingList items={likeRanking} unit="赞" />
-              </TabsContent>
-            </CardContent>
-          </Tabs>
-        </Card>
-
-        <Card className="overflow-hidden shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b py-3.5">
-            <CardTitle className="flex items-center gap-2">
-              <RadioIcon aria-hidden="true" className="size-4 text-success" />
-              正在直播
-            </CardTitle>
-            <span className="text-xs tabular-nums text-muted-foreground">{liveAlbums.length}</span>
+              {activeRanking.length > 5 ? (
+                <Button onClick={() => setRankingOpen(true)} size="sm" variant="ghost">
+                  查看更多
+                </Button>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            {liveAlbums.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-9 text-center">
-                <p className="text-sm text-muted-foreground">暂无直播活动</p>
-                <Link
-                  className="text-xs font-medium text-foreground hover:underline"
-                  href="/studio/albums"
-                >
-                  查看活动
-                </Link>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {liveAlbums.map((album) => (
-                  <Link
-                    className="group flex items-center justify-between gap-3 px-3 py-3 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/40"
-                    href={`/studio/albums/${album.id}`}
-                    key={album.id}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{album.title}</p>
-                      <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                        {album.mediaCount} 张
-                      </p>
-                    </div>
-                    <ArrowUpRightIcon
-                      aria-hidden="true"
-                      className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                    />
-                  </Link>
-                ))}
-              </div>
-            )}
+            <TabsContent value="downloads">
+              <RankingList items={downloadRanking.slice(0, 5)} unit="次" />
+            </TabsContent>
+            <TabsContent value="likes">
+              <RankingList items={likeRanking.slice(0, 5)} unit="赞" />
+            </TabsContent>
           </CardContent>
-        </Card>
-      </div>
+        </Tabs>
+      </Card>
+
+      <Dialog open={rankingOpen} onOpenChange={setRankingOpen}>
+        <DialogContent className="max-h-[85dvh] overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="px-5 pt-5 pb-4 pr-12">
+            <DialogTitle>{rankingMode === "downloads" ? "下载排行" : "点赞排行"}</DialogTitle>
+            <DialogDescription>
+              当前统计范围：{rangeText(data)}。显示最多 20 张照片。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 overflow-y-auto border-t overscroll-contain">
+            <RankingList items={activeRanking} unit={activeRankingUnit} />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
         <DialogContent className="sm:max-w-lg">
