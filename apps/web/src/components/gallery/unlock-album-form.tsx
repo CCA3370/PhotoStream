@@ -98,7 +98,11 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
                   size="icon-sm"
                   type="button"
                 >
-                  {showPassword ? <EyeOffIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}
+                  {showPassword ? (
+                    <EyeOffIcon aria-hidden="true" />
+                  ) : (
+                    <EyeIcon aria-hidden="true" />
+                  )}
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
@@ -114,7 +118,11 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           <Button className="min-h-12 w-full rounded-xl" disabled={pending} type="submit">
             {pending ? (
               <>
-                <LoaderCircleIcon aria-hidden="true" className="animate-spin" data-icon="inline-start" />
+                <LoaderCircleIcon
+                  aria-hidden="true"
+                  className="animate-spin"
+                  data-icon="inline-start"
+                />
                 正在验证…
               </>
             ) : (
