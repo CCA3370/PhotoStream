@@ -66,7 +66,9 @@ export function ViewerServiceNotice() {
           </p>
           <div className="flex items-start gap-2.5 rounded-xl border bg-muted/25 px-3.5 py-3 text-foreground">
             <DownloadIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            <p className="text-sm font-medium leading-5">建议在活动结束后尽快完成所需照片的下载。</p>
+            <p className="text-sm font-medium leading-5">
+              建议在活动结束后尽快完成所需照片的下载。
+            </p>
           </div>
         </div>
 
