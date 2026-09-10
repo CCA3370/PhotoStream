@@ -42,7 +42,7 @@ export function GalleryFilterNav({
   return (
     <nav
       aria-label="相册筛选"
-      className="sticky top-1.5 z-20 mb-2 flex gap-0.5 overflow-x-auto rounded-xl border bg-background/94 p-1 shadow-sm supports-backdrop-filter:backdrop-blur-xl sm:mb-3 sm:gap-1"
+      className="sticky top-1.5 z-30 mb-2 flex gap-0.5 overflow-x-auto rounded-xl border bg-background/94 p-1 shadow-sm supports-backdrop-filter:backdrop-blur-xl sm:mb-3 sm:gap-1"
     >
       {items.map((item) => {
         const active = selectedKey === item.key;
