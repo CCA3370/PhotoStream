@@ -282,7 +282,7 @@ export function PhotoLightbox({
     setOriginalPending(false);
     setOriginalCacheChecking(false);
     resetInteraction();
-  }, [large, resetInteraction, selected, selectedId, slug]);
+  }, [large, resetInteraction, selected, selectedId]);
 
   useEffect(() => {
     if (slug === undefined || selected === null || !selected.downloads.original) return;
