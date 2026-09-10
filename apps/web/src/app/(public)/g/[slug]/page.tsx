@@ -6,6 +6,7 @@ import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
+import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { serverApi } from "@/lib/api";
 
@@ -78,6 +79,7 @@ export default async function GalleryPage({
       status={album.state === "live" ? "直播中" : "已结束"}
     >
       <AlbumOpenTracker slug={slug} />
+      <ViewerServiceNotice />
 
       <GalleryFilterNav categories={album.categories} selectedKey={selectedFilterKey} slug={slug} />
 
