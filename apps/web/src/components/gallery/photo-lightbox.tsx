@@ -18,9 +18,9 @@ import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton } from "@/components/gallery/download-button";
 import {
   fittedImageWidth,
+  LightboxNeighborSlide,
   lightboxSlideScale,
   lightboxVariant,
-  LightboxNeighborSlide,
   selectDisplayVariant,
 } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";

@@ -144,14 +144,7 @@ export function usePhotoLightboxGestures({
         commitOffset(offset);
       }, swipeSettleMs);
     },
-    [
-      canNavigate,
-      commitOffset,
-      requestTarget,
-      stageHeight,
-      stageWidth,
-      swipeSettling,
-    ],
+    [canNavigate, commitOffset, requestTarget, stageHeight, stageWidth, swipeSettling],
   );
 
   const onPointerDown = useCallback(
