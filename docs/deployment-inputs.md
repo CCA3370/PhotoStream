@@ -1,7 +1,7 @@
 # 部署前待提供信息
 
 状态：待用户/学校补充外部值；人脸找图输入未完成
-更新日期：2026-09-02
+更新日期：2026-09-10
 
 本清单只记录标识、责任和准备状态。不得把密码、AccessKey Secret、Cookie 密钥、CDN 鉴权 key、私钥或真实相册口令写入本文件或 Git。
 
@@ -59,7 +59,7 @@
 | CPU/内存 | 已知 | 2 vCPU / 2GB RAM |
 | 操作系统与版本 | 部署前 | 必须为 Debian 13 |
 | CPU 架构 | 部署前 | 待提供 |
-| 数据盘可用空间 | 部署前 | 待提供；需满足 PostgreSQL、日志和恢复临时空间 |
+| 数据盘可用空间 | 部署前 | 待提供；需满足 PostgreSQL 与日志空间 |
 | Docker/Compose 版本 | 部署前 | 脚本检查并安装/复用 Docker 官方 Debian 13 包和 Compose 插件 |
 | SSH 运维方式 | 部署前 | 待提供；不得提交私钥 |
 | Git 仓库地址/分支 | 部署前 | 待提供；脚本自动克隆到 `/opt/photostream` 并记忆，通常为 `main` |
@@ -67,7 +67,6 @@
 | 防火墙/安全组 | 部署前 | 只开放 22（受限）、80、443；数据库不公网开放 |
 | Swap | 部署前 | 待检查；2GB 主机建议配置受控 swap 作为 OOM 兜底 |
 | 时间同步/时区 | 部署前 | NTP 正常；系统 UTC，业务展示 Asia/Shanghai |
-| 主机快照/备份 | 部署前 | 待确认云厂商基础能力；数据库另有 OSS 加密逻辑备份 |
 | 出站访问 | 部署前 | 需能访问 Git remote、Docker apt/镜像仓库、北京 OSS、阿里云控制 API 和证书服务；未来人脸阶段还需访问北京 IMM 与 EventBridge 官方证书地址 |
 | EventBridge 入站 | 人脸找图阶段前 | 现有 `APP_ORIGIN` 的 HTTPS API 可被 EventBridge 访问；不使用境内无备案 4C4G IP 作为浏览器/API 入口 |
 
@@ -78,7 +77,6 @@
 | 阿里云账号 UID | 部署前 | 待提供标识，不提供主账号密码 |
 | OSS 地域/Endpoint | 已确定 | 华北 2（北京）；`oss-cn-beijing` / `https://oss-cn-beijing.aliyuncs.com`，不可改回杭州或填写任意 Endpoint |
 | 媒体 Bucket 名 | 部署前 | 待创建/提供；必须北京、标准、私有 |
-| 备份 Bucket 名 | 部署前 | 待创建/提供；必须北京、标准、私有且不绑定 CDN |
 | 人脸参考照 Bucket 名 | 人脸找图阶段前 | 待另行批准创建；必须北京、标准、私有、不绑定 CDN、全对象 1 天生命周期 |
 | Bucket 所属账号 | 部署前 | 应与 CDN 同账号；待确认 |
 | CORS 主站 Origin | 部署前 | 由最终 `APP_ORIGIN` 派生 |
@@ -137,7 +135,6 @@
 - `ALIYUN_OSS_ENDPOINT`（固定北京公网 Endpoint，不作为自由部署选择）
 - `ALIYUN_OSS_REGION`
 - `ALIYUN_OSS_MEDIA_BUCKET`
-- `ALIYUN_OSS_BACKUP_BUCKET`
 - `ALIYUN_OSS_FACE_REFERENCE_BUCKET`
 - `ALIYUN_ACCESS_KEY_ID`
 - `ALIYUN_ACCESS_KEY_SECRET`
@@ -151,8 +148,6 @@
 - `FACE_SEARCH_THRESHOLD_VERSION`
 - `ALIYUN_CDN_AUTH_KEY_CURRENT`
 - `ALIYUN_CDN_AUTH_KEY_PREVIOUS`
-- `BACKUP_ENCRYPTION_PUBLIC_KEY_FILE`
-- `BACKUP_DECRYPTION_PRIVATE_KEY_FILE`（仅隔离恢复时临时提供）
 - `BOOTSTRAP_ADMIN_TOKEN`
 - `BIB_DATA_KEY`
 - `BIB_DATA_KEY_PREVIOUS`

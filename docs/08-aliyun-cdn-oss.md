@@ -1,7 +1,7 @@
 # 阿里云 OSS/CDN/IMM/EventBridge 配置
 
 状态：已批准的目标配置；人脸资源为未来阶段；尚未在云端执行
-更新日期：2026-09-02
+更新日期：2026-09-10
 
 本文件定义未来部署时的控制台配置与验收步骤。本文件和本地代码不授权创建、修改或删除任何阿里云资源。
 
@@ -10,12 +10,11 @@
 基础照片功能只允许使用原 OSS/CDN 边界。未来人脸找图另行获得云端授权后，只允许增加以下明确资源：
 
 1. 北京地域私有 OSS 媒体 Bucket；
-2. 北京地域私有 OSS 数据库备份 Bucket；
-3. 北京地域私有 OSS 临时参考照 Bucket；
-4. 已存在的阿里云 CDN 加速域名 `cdn.cloverta.top`；
-5. 北京 IMM Project 与每相册独立 Dataset；
-6. EventBridge 云服务专用总线、精确 IMM 事件规则和一个香港 HTTPS 目标；
-7. 按职责拆分的 RAM 用户/角色与必要控制 API。
+2. 北京地域私有 OSS 临时参考照 Bucket；
+3. 已存在的阿里云 CDN 加速域名 `cdn.cloverta.top`；
+4. 北京 IMM Project 与每相册独立 Dataset；
+5. EventBridge 云服务专用总线、精确 IMM 事件规则和一个香港 HTTPS 目标；
+6. 按职责拆分的 RAM 用户/角色与必要控制 API。
 
 不得创建函数计算、RDS、Tair、MNS、RocketMQ、事件仓、日志服务、通用云端媒体处理、DCDN/ESA、KMS 或其他未列明服务。IMM/EventBridge 只服务 ADR-012 的人脸找图，不能扩展到号码 OCR、内容标签、人物画像或通用分析。
 
@@ -79,7 +78,7 @@ multipart 初始化、签名、完成和终止由香港 API 协调；浏览器�
 
 ## 3. OSS 临时参考照 Bucket（未来）
 
-参考照使用独立北京私有标准 Bucket，不绑定 CDN，也不与媒体/备份对象混放：
+参考照使用独立北京私有标准 Bucket，不绑定 CDN，也不与媒体对象混放：
 
 | 配置 | 目标值 |
 | --- | --- |
@@ -95,34 +94,19 @@ CORS 只允许确切 `APP_ORIGIN` 的 `PUT`，允许/暴露头与媒体单 PUT �
 
 IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每次只向 IMM 提交当前随机精确对象。删除任务必须覆盖正常完成、无人脸、多脸、质量不足、供应商失败、取消和超时；Bucket 生命周期只是异常兜底。
 
-## 4. OSS 备份 Bucket
+## 4. IMM 与 EventBridge（未来）
 
-备份使用独立私有 Bucket，不能作为 CDN 源站，防止通过 CDN 路径访问数据库备份。
-
-| 配置 | 目标值 |
-| --- | --- |
-| 地域/类型 | 北京、标准存储 |
-| ACL | 私有 |
-| CDN | 不绑定 |
-| 内容 | 客户端加密后的 PostgreSQL 逻辑备份 |
-| 保留 | 14 个日备份、8 个周备份 |
-| KMS/日志/复制 | 全部关闭 |
-
-备份加密在香港主机本地完成，OSS 只接收密文。恢复时下载到隔离目录，完成后安全清理临时明文。
-
-## 5. IMM 与 EventBridge（未来）
-
-### 5.1 IMM
+### 4.1 IMM
 
 - Project 固定在华北 2（北京），使用不可包含校名的部署标识；默认模板保持空，Dataset 明确使用 `Official:FaceManagement`。
-- Project 只绑定同地域媒体 Bucket 和临时参考照 Bucket；服务角色对媒体 Bucket 仅可读 `media/.../1920.*`，对临时 Bucket 仅可读 `face-search/`，不得访问备份、原图、480/960、品牌或静态资源前缀。
+- Project 只绑定同地域媒体 Bucket 和临时参考照 Bucket；服务角色对媒体 Bucket 仅可读 `media/.../1920.*`，对临时 Bucket 仅可读 `face-search/`，不得访问原图、480/960、品牌或静态资源前缀。
 - 每个相册创建独立、随机 Dataset；`CustomId` 只使用 PhotoStream 随机媒体 ID，不把相册标题、slug、姓名、学号或号码写入 IMM。
 - 只通过 `IndexFileMeta`/`BatchIndexFileMeta` 显式索引已经发布且验证完成的 `photo_1920`；不绑定 OSS 上传触发器，不自动索引 Bucket 其他对象。
 - 只允许索引、文件元数据删除、人物聚类、聚类查询、相似人脸搜索和 Dataset 生命周期 API。禁止标签、语义检索、故事、人物命名、视频、图片美化或其他算子。
 - 相册结束 30 天、改公开、管理员关闭或授权范围失效时，先分页 `BatchDeleteFileMeta` 清空文件元数据，再 `DeleteDataset` 并读回不存在；逐照片隐藏/删除/退出索引使用 `DeleteFileMeta`/批量等价接口并读回结果。
 - 应用只消费人脸数量/质量、聚类、URI、相似度和任务状态；年龄、性别、情绪、吸引力等额外字段不得持久化或输出。
 
-### 5.2 EventBridge
+### 4.2 EventBridge
 
 - 使用北京云服务专用总线接收阿里云官方 IMM 事件，不创建自定义总线、事件流或事件仓。
 - 规则只匹配确切账号、地域、Project 及 `imm:FileMeta:Index`、`imm:Task:FigureClustering`、`imm:Task:FacesSearching` 等实现所需事件；不得转发 ActionTrail 通用事件。
@@ -130,27 +114,26 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 - API 验证 EventBridge v2 RSA 签名、官方证书 URL、60 秒时间窗、账号/地域/Project/Dataset/TaskId 和事件 ID 幂等；失败返回非 2xx 触发受控重试。
 - 不开启事件追踪、事件仓、日志投递或跨地域复制。香港目标产生的少量跨地域流量和自定义目标事件必须单独对账。
 
-## 6. RAM 权限
+## 5. RAM 权限
 
-### 6.1 应用签名用户
+### 5.1 应用签名用户
 
 必须创建专用 RAM 用户或等效受限凭证，不能使用阿里云主账号 AccessKey。权限仅覆盖：
 
 - 媒体 Bucket 指定前缀上的 PutObject、InitiateMultipartUpload、UploadPart、CompleteMultipartUpload、AbortMultipartUpload、ListParts、Head/Get 元数据和删除操作；
-- 备份 Bucket 指定前缀上的备份 PUT、列举、读取和按保留策略删除；
 - 必要的 CDN URL 刷新/配置读取 API，若与上传密钥拆分更安全则使用第二个 RAM 用户。
 - 未来临时参考照 Bucket 精确前缀的 PUT 签名、HEAD 和 DELETE；不得与媒体删除权限混用。
 - 未来 IMM 指定 Project/Dataset 的最小索引、聚类、搜索和删除权限；EventBridge 配置身份与运行时 IMM 身份拆分。
 
 不得授予修改 Bucket ACL/Policy、删除 Bucket、跨区域复制、KMS、函数计算、通用云端媒体处理或账号级管理权限。浏览器永远不获得 RAM/STS 凭证，只获得单对象预签名 PUT。
 
-### 6.2 CDN 私有回源角色
+### 5.2 CDN 私有回源角色
 
-使用阿里云 CDN 访问私有 OSS 的官方服务角色，只给媒体 Bucket 只读权限。不得授予备份 Bucket 权限。
+使用阿里云 CDN 访问私有 OSS 的官方服务角色，只给媒体 Bucket 只读权限。
 
-## 7. CDN 域名
+## 6. CDN 域名
 
-### 7.1 基础
+### 6.1 基础
 
 | 配置 | 目标值 |
 | --- | --- |
@@ -167,7 +150,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 
 业务类型与当前控制台若不一致，部署前先记录现状并验证路径规则是否已支持，不得直接删除重建域名。照片是唯一媒体负载。
 
-### 7.2 路径规则
+### 6.2 路径规则
 
 | 路径 | 鉴权 | 边缘缓存 | 浏览器缓存 | 特殊规则 |
 | --- | --- | --- | --- | --- |
@@ -179,7 +162,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 
 对象路径不可覆盖，因此长缓存不会产生版本错乱。永久删除时通过 CDN 刷新 API 清除对应 URL；常规发布和隐藏不刷新。
 
-### 7.3 URL 鉴权与 Cache Key
+### 6.3 URL 鉴权与 Cache Key
 
 - 对 `/branding/` 和 `/media/` 使用阿里云 CDN URL 鉴权规则，首版采用查询参数型签名，主/备 key 均由秘密配置提供。
 - 普通预览 URL 有效 2 小时；下载 URL 有效 5 分钟。
@@ -187,7 +170,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 - 业务不使用其他功能性查询参数；自定义 Cache Key 删除未知参数，避免追踪参数或签名变化造成重复缓存。
 - 鉴权失败仍可能产生少量流量和 HTTPS 请求费用，必须配合配额、告警和对象不可枚举路径。
 
-### 7.4 明确关闭
+### 6.4 明确关闭
 
 - CDN 图片处理、自适应 WebP/AVIF、图片瘦身；
 - 号码牌或其他阿里云/第三方托管 OCR；ADR-012 以外的视觉识别、模型推理、人物画像或内容标签；
@@ -196,7 +179,7 @@ IMM 服务角色只可读取临时 Bucket 的 `face-search/` 前缀，应用每�
 - QUIC 和其他单独请求计费功能；
 - 自动预热整场媒体。
 
-## 8. 静态前端资源
+## 7. 静态前端资源
 
 Next.js 哈希构建资源在发布时上传到 `/assets/app/{releaseId}/`。HTML 引用固定 release ID，旧资源至少保留到所有旧容器实例退出和浏览器缓存窗口结束后再清理。
 
@@ -204,7 +187,7 @@ OCR Worker、OpenCV.js、ONNX Runtime WASM 和 PP-OCR 模型使用独立 `/asset
 
 Service Worker、动态 HTML、API 和 SSE 保持主站同源，不放 CDN。跨域脚本/样式需要正确 CORS 和 CSP；构建文件必须具有哈希名称和正确 MIME。
 
-## 9. DNS 与证书责任
+## 8. DNS 与证书责任
 
 `cdn.cloverta.top` 已绑定在用户可控的阿里云 CDN 账号，但根域 DNS 由朋友控制：
 
@@ -216,7 +199,7 @@ Service Worker、动态 HTML、API 和 SSE 保持主站同源，不放 CDN。跨
 
 不得假设朋友长期无条件提供域名；上线前需有明确授权与迁移预案。
 
-## 10. 小流量验收
+## 9. 小流量验收
 
 只允许上传一组专用测试对象：一张照片的三个派生图和原图、一个哈希静态文件，以及一组固定版本 OCR Worker/WASM/模型文件。测试照片只在浏览器本地推理。逐项验证：
 
