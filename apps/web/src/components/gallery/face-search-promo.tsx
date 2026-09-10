@@ -1,6 +1,25 @@
+"use client";
+
 import { ScanFaceIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+
+const promoStorageKey = "photostream:face-search-promo:v1";
 
 export function FaceSearchPromo() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(promoStorageKey) === "seen") return;
+      window.localStorage.setItem(promoStorageKey, "seen");
+      setVisible(true);
+    } catch {
+      setVisible(true);
+    }
+  }, []);
+
+  if (!visible) return null;
+
   return (
     <aside className="rounded-2xl border border-primary/20 bg-primary/[0.055] px-4 py-3.5 shadow-xs sm:px-4.5 sm:py-4">
       <div className="flex items-start gap-3">
