@@ -3,12 +3,11 @@
 import { ScanFaceIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const promoStorageKey = "photostream:face-search-promo:v1";
-
-export function FaceSearchPromo() {
+export function FaceSearchPromo({ slug }: Readonly<{ slug: string }>) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const promoStorageKey = `photostream:face-search-promo:v1:${slug}`;
     try {
       if (window.localStorage.getItem(promoStorageKey) === "seen") return;
       window.localStorage.setItem(promoStorageKey, "seen");
@@ -16,7 +15,7 @@ export function FaceSearchPromo() {
     } catch {
       setVisible(true);
     }
-  }, []);
+  }, [slug]);
 
   if (!visible) return null;
 
