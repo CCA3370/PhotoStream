@@ -7,6 +7,14 @@ import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientMutation } from "@/lib/client-api";
 
@@ -15,6 +23,7 @@ type AlbumAction = "archive" | "end" | "restore" | "start";
 export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [endConfirmOpen, setEndConfirmOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<AlbumAction | null>(null);
   const [refreshing, startTransition] = useTransition();
   const pending = pendingAction !== null || refreshing;
@@ -31,6 +40,11 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
     } finally {
       setPendingAction(null);
     }
+  }
+
+  async function confirmEnd(): Promise<void> {
+    setEndConfirmOpen(false);
+    await mutate("end");
   }
 
   function icon(action: AlbumAction, fallback: ReactNode): ReactNode {
@@ -51,7 +65,13 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
           </Button>
         ) : null}
         {album.state === "live" ? (
-          <Button disabled={pending} onClick={() => void mutate("end")} size="sm" variant="outline">
+          <Button
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={pending}
+            onClick={() => setEndConfirmOpen(true)}
+            size="sm"
+            variant="destructive"
+          >
             {icon("end", <StopCircleIcon data-icon="inline-start" />)}
             {pendingAction === "end" ? "正在结束…" : "结束直播"}
           </Button>
@@ -85,6 +105,31 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
           </Button>
         ) : null}
       </div>
+
+      <Dialog open={endConfirmOpen} onOpenChange={setEndConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认结束直播？</DialogTitle>
+            <DialogDescription>
+              结束后将停止向观众实时推送新照片，但现有相册仍可继续浏览。之后仍可恢复直播。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setEndConfirmOpen(false)} variant="outline">
+              取消
+            </Button>
+            <Button
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmEnd()}
+              variant="destructive"
+            >
+              <StopCircleIcon data-icon="inline-start" />
+              确认结束
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ErrorDialog message={error} onClose={() => setError(null)} title="操作失败" />
     </>
   );
