@@ -23,13 +23,19 @@ import {
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton } from "@/components/gallery/download-button";
+import {
+  fittedImageWidth,
+  lightboxSlideScale,
+  lightboxVariant,
+  LightboxNeighborSlide,
+  selectDisplayVariant,
+} from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
-import { selectLightboxVariantKind } from "@/lib/lightbox-image-policy";
 import { loadOriginalImage, readCachedOriginalImage } from "@/lib/original-image-cache";
 import { swipeIntentDirection } from "@/lib/photo-swipe-intent";
 import { cn } from "@/lib/utils";
@@ -37,7 +43,6 @@ import { cn } from "@/lib/utils";
 const minZoom = 1;
 const maxZoom = 5;
 const swipeSettleMs = 180;
-const neighborScale = 0.93;
 const toolbarButtonClass =
   "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
 
@@ -55,40 +60,6 @@ interface SignedOriginal {
   readonly expiresAt: string;
 }
 
-interface NetworkInformationLike {
-  readonly saveData?: boolean;
-  readonly effectiveType?: string;
-}
-
-function variant(media: PublicMediaView, kind: "photo_960" | "photo_1920") {
-  return media.variants.find((candidate) => candidate.kind === kind) ?? null;
-}
-
-function displayVariant(media: PublicMediaView, viewportWidth = 0, viewportHeight = 0) {
-  const has960 = variant(media, "photo_960") !== null;
-  const has1920 = variant(media, "photo_1920") !== null;
-  const connection =
-    typeof navigator === "undefined"
-      ? undefined
-      : (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
-  const preferred = selectLightboxVariantKind({
-    mediaWidth: media.width,
-    mediaHeight: media.height,
-    viewportWidth,
-    viewportHeight,
-    devicePixelRatio: typeof window === "undefined" ? 1 : window.devicePixelRatio,
-    saveData: connection?.saveData,
-    effectiveType: connection?.effectiveType,
-    has960,
-    has1920,
-  });
-  if (preferred === null) return null;
-  return (
-    variant(media, preferred) ??
-    variant(media, preferred === "photo_1920" ? "photo_960" : "photo_1920")
-  );
-}
-
 function distance(points: readonly Point[]): number {
   const [first, second] = points;
   if (first === undefined || second === undefined) return 0;
@@ -97,16 +68,6 @@ function distance(points: readonly Point[]): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function fittedImageWidth(media: PublicMediaView): string {
-  return `min(100%, calc(100dvh * ${media.width / media.height}))`;
-}
-
-function slideScale(side: -1 | 0 | 1, offset: number, width: number): number {
-  if (width <= 0) return side === 0 ? 1 : neighborScale;
-  const centerDistance = Math.min(1, Math.abs(side * width + offset) / width);
-  return 1 - (1 - neighborScale) * centerDistance;
 }
 
 async function decodeObjectUrl(url: string): Promise<void> {
@@ -122,71 +83,6 @@ async function decodeObjectUrl(url: string): Promise<void> {
     decoder.onload = () => resolve();
     decoder.onerror = () => resolve();
   });
-}
-
-function NeighborSlide({
-  media,
-  offset,
-  scale,
-  settling,
-  slug,
-  viewportHeight,
-  viewportWidth,
-}: Readonly<{
-  media: PublicMediaView | null;
-  offset: number;
-  scale: number;
-  settling: boolean;
-  slug?: string | undefined;
-  viewportHeight: number;
-  viewportWidth: number;
-}>) {
-  if (media === null) return null;
-  const source = displayVariant(media, viewportWidth, viewportHeight);
-  if (source === null) return null;
-
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "pointer-events-none absolute inset-0 will-change-transform",
-        settling && "transition-transform duration-180 ease-out motion-reduce:transition-none",
-      )}
-      data-swipe-slide
-      style={{ transform: `translate3d(${offset}px, 0, 0) scale(${scale})` }}
-    >
-      <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-        style={{ aspectRatio: `${media.width} / ${media.height}`, width: fittedImageWidth(media) }}
-      >
-        {media.variants.find((item) => item.kind === "photo_480") ? (
-          <CachedPhotoImage
-            alt=""
-            bytes={media.variants.find((item) => item.kind === "photo_480")?.bytes ?? 0}
-            className="object-contain"
-            cacheOnly
-            kind="photo_480"
-            mediaId={media.id}
-            scope={slug ?? "public-media"}
-            sizes="100vw"
-            sourceUrl=""
-          />
-        ) : null}
-        <CachedPhotoImage
-          cacheOnly
-          alt=""
-          bytes={source.bytes}
-          className="object-contain"
-          draggable={false}
-          kind={source.kind === "photo_1920" ? "photo_1920" : "photo_960"}
-          mediaId={media.id}
-          scope={slug ?? "public-media"}
-          sizes="100vw"
-          sourceUrl={source.url}
-        />
-      </div>
-    </div>
-  );
 }
 
 export function PhotoLightbox({
@@ -217,7 +113,7 @@ export function PhotoLightbox({
     selectedIndex < 0 || items.length < 2
       ? null
       : (items[(selectedIndex + 1) % items.length] ?? null);
-  const preview1920 = selected === null ? null : variant(selected, "photo_1920");
+  const preview1920 = selected === null ? null : lightboxVariant(selected, "photo_1920");
   const viewerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const stageResizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -253,7 +149,7 @@ export function PhotoLightbox({
   const [originalCheckedId, setOriginalCheckedId] = useState<string | null>(null);
   const [originalPending, setOriginalPending] = useState(false);
   const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
-  const large = selected === null ? null : displayVariant(selected, stageWidth, stageHeight);
+  const large = selected === null ? null : selectDisplayVariant(selected, stageWidth, stageHeight);
 
   const setStageElement = useCallback((node: HTMLDivElement | null) => {
     stageResizeObserverRef.current?.disconnect();
@@ -363,7 +259,7 @@ export function PhotoLightbox({
 
       const item = offset === -1 ? previous : next;
       if (item === null) return;
-      const source = displayVariant(item, stageWidth, stageHeight);
+      const source = selectDisplayVariant(item, stageWidth, stageHeight);
       if (source === null) return;
       const controller = new AbortController();
       targetRequestRef.current = { direction: offset, controller };
@@ -746,9 +642,9 @@ export function PhotoLightbox({
   const previousOffset = -stageWidth + swipeOffset;
   const currentOffset = swipeOffset;
   const nextOffset = stageWidth + swipeOffset;
-  const previousScale = slideScale(-1, swipeOffset, stageWidth);
-  const currentScale = slideScale(0, swipeOffset, stageWidth);
-  const nextScale = slideScale(1, swipeOffset, stageWidth);
+  const previousScale = lightboxSlideScale(-1, swipeOffset, stageWidth);
+  const currentScale = lightboxSlideScale(0, swipeOffset, stageWidth);
+  const nextScale = lightboxSlideScale(1, swipeOffset, stageWidth);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -797,7 +693,7 @@ export function PhotoLightbox({
               </div>
             ) : null}
 
-            <NeighborSlide
+            <LightboxNeighborSlide
               media={stageWidth > 0 ? previous : null}
               offset={previousOffset}
               scale={previousScale}
@@ -829,7 +725,7 @@ export function PhotoLightbox({
                   }}
                 >
                   {originalUrl === null && !loaded ? (
-                    <NeighborSlide
+                    <LightboxNeighborSlide
                       media={selected}
                       offset={0}
                       scale={1}
@@ -880,7 +776,7 @@ export function PhotoLightbox({
               </div>
             </div>
 
-            <NeighborSlide
+            <LightboxNeighborSlide
               media={stageWidth > 0 ? next : null}
               offset={nextOffset}
               scale={nextScale}
