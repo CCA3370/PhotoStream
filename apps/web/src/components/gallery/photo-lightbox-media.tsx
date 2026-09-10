@@ -79,8 +79,7 @@ export function LightboxNeighborSlide({
   const source = selectDisplayVariant(media, viewportWidth, viewportHeight);
   if (source === null) return null;
   const thumbnail = media.variants.find((item) => item.kind === "photo_480");
-  const intermediate =
-    source.kind === "photo_1920" ? lightboxVariant(media, "photo_960") : null;
+  const intermediate = source.kind === "photo_1920" ? lightboxVariant(media, "photo_960") : null;
 
   return (
     <div
