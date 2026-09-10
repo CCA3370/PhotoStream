@@ -79,6 +79,8 @@ export function LightboxNeighborSlide({
   const source = selectDisplayVariant(media, viewportWidth, viewportHeight);
   if (source === null) return null;
   const thumbnail = media.variants.find((item) => item.kind === "photo_480");
+  const intermediate =
+    source.kind === "photo_1920" ? lightboxVariant(media, "photo_960") : null;
 
   return (
     <div
@@ -105,6 +107,20 @@ export function LightboxNeighborSlide({
             scope={slug ?? "public-media"}
             sizes="100vw"
             sourceUrl=""
+          />
+        ) : null}
+        {intermediate ? (
+          <CachedPhotoImage
+            alt=""
+            bytes={intermediate.bytes}
+            cacheOnly
+            className="object-contain"
+            draggable={false}
+            kind="photo_960"
+            mediaId={media.id}
+            scope={slug ?? "public-media"}
+            sizes="100vw"
+            sourceUrl={intermediate.url}
           />
         ) : null}
         <CachedPhotoImage
