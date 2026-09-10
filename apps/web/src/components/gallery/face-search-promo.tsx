@@ -10,7 +10,9 @@ export function FaceSearchPromo() {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-foreground sm:text-[15px]">推荐使用人脸找照片</p>
+            <p className="text-sm font-semibold text-foreground sm:text-[15px]">
+              推荐使用人脸找照片
+            </p>
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
               推荐
             </span>
