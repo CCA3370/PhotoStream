@@ -1,5 +1,7 @@
 import type { ApiError, AuthSession } from "@photostream/contracts";
 
+import { apiErrorMessage, httpErrorMessage } from "@/lib/user-facing-error";
+
 export class ClientApiError extends Error {
   readonly response: ApiError | null;
 
@@ -13,9 +15,9 @@ export class ClientApiError extends Error {
 async function errorFrom(response: Response): Promise<ClientApiError> {
   try {
     const error = (await response.json()) as ApiError;
-    return new ClientApiError(error.message, error);
+    return new ClientApiError(apiErrorMessage(error), error);
   } catch {
-    return new ClientApiError(`请求失败（${response.status}）`);
+    return new ClientApiError(httpErrorMessage(response.status));
   }
 }
 
