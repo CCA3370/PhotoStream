@@ -4,6 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { fieldErrorMessage } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
@@ -179,17 +180,20 @@ function FieldError({
       return null;
     }
 
-    const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()];
+    const messages = errors
+      .map((error) => fieldErrorMessage(error?.message))
+      .filter((message): message is string => message !== null);
+    const uniqueMessages = [...new Set(messages)];
 
-    if (uniqueErrors?.length === 1) {
-      return uniqueErrors[0]?.message;
+    if (uniqueMessages.length === 1) {
+      return uniqueMessages[0];
     }
 
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map(
-          (error) => error?.message && <li key={error.message}>{error.message}</li>,
-        )}
+        {uniqueMessages.map((message) => (
+          <li key={message}>{message}</li>
+        ))}
       </ul>
     );
   }, [children, errors]);
