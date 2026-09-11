@@ -117,7 +117,11 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
             )}
           </Field>
 
-          <Button className="h-12 w-full rounded-xl text-sm font-medium" disabled={pending} type="submit">
+          <Button
+            className="h-12 w-full rounded-xl text-sm font-medium"
+            disabled={pending}
+            type="submit"
+          >
             {pending ? (
               <>
                 <LoaderCircleIcon
