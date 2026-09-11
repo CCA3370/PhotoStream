@@ -1,6 +1,5 @@
 "use client";
 
-import type { ApiError } from "@photostream/contracts";
 import {
   ArrowRightIcon,
   EyeIcon,
@@ -21,6 +20,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { responseErrorMessage } from "@/lib/user-facing-error";
 
 export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
   const router = useRouter();
@@ -32,22 +32,26 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
 
   async function submit(formData: FormData): Promise<void> {
     if (submitting) return;
+    const password = String(formData.get("password") ?? "");
+    if (password.trim().length === 0) {
+      setError("请输入相册口令。");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const response = await fetch(`/api/v1/public/albums/${slug}/unlock`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: String(formData.get("password") ?? "") }),
+        body: JSON.stringify({ password }),
       });
       if (!response.ok) {
-        const result = (await response.json()) as ApiError;
-        setError(result.message);
+        setError(await responseErrorMessage(response));
         return;
       }
       startTransition(() => router.refresh());
     } catch {
-      setError("网络不可用，请稍后重试");
+      setError("网络连接异常，请检查网络后重试。");
     } finally {
       setSubmitting(false);
     }
