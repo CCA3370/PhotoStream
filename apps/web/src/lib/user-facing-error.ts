@@ -1,8 +1,4 @@
-import {
-  type ApiError,
-  type ApiErrorCode,
-  apiErrorSchema,
-} from "@photostream/contracts";
+import { type ApiError, type ApiErrorCode, apiErrorSchema } from "@photostream/contracts";
 
 const apiErrorMessages = {
   BAD_REQUEST: "提交的内容不完整或格式不正确，请检查后重试。",
