@@ -6,7 +6,7 @@
   position: fixed;
   top: calc(var(--public-gallery-header-height) + 0.25rem);
   right: 0.875rem;
-  z-index: 55;
+  z-index: 35;
   width: auto;
   padding: 0.25rem;
   border: 1px solid var(--border);
