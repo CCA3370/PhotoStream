@@ -1,6 +1,6 @@
 import { type ApiError, type AuthSession, apiErrorSchema } from "@photostream/contracts";
 
-import { apiErrorMessage, httpErrorMessage } from "@/lib/user-facing-error";
+import { apiErrorMessage, httpErrorMessage } from "./user-facing-error";
 
 export class ClientApiError extends Error {
   readonly response: ApiError | null;
