@@ -50,7 +50,7 @@ export function PublicGalleryShell({
           跳到主要内容
         </a>
 
-        <header className="sticky top-0 z-[60] h-[var(--public-gallery-header-height)] border-b bg-background">
+        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] border-b bg-background">
           <div className="mx-auto flex h-full max-w-[1560px] items-center px-3.5 sm:px-5 lg:px-7">
             <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
