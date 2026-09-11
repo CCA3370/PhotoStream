@@ -55,6 +55,9 @@ const apiErrorMessages = {
   FACE_EVENT_SIGNATURE_INVALID: "相关照片处理未能完成，请稍后重试。",
 } satisfies Record<ApiErrorCode, string>;
 
+const technicalValidationPattern =
+  /(?:too small|too big|invalid input|invalid type|expected |received |unrecognized key|required$)/iu;
+
 export function apiErrorMessage(error: Pick<ApiError, "code">): string {
   return apiErrorMessages[error.code];
 }
@@ -85,6 +88,13 @@ export async function responseErrorMessage(response: Response): Promise<string> 
     // Fall back to the HTTP status without exposing response internals.
   }
   return httpErrorMessage(response.status);
+}
+
+export function fieldErrorMessage(message: string | undefined): string | null {
+  if (message === undefined || message.length === 0) return null;
+  return technicalValidationPattern.test(message)
+    ? "请检查填写内容是否完整、格式是否正确。"
+    : message;
 }
 
 export function userFacingErrorMessage(
