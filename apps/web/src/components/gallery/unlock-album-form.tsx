@@ -14,7 +14,6 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
@@ -55,30 +54,26 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
   }
 
   return (
-    <form action={submit} className="mx-auto w-full max-w-md py-1 sm:py-4">
-      <Card className="overflow-hidden rounded-[1.75rem] border-border/60 bg-card/96 shadow-lg shadow-foreground/5">
-        <CardHeader className="items-center gap-4 px-5 pt-7 pb-5 text-center sm:px-7 sm:pt-8">
-          <div className="grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
-            <LockKeyholeIcon aria-hidden="true" className="size-6" />
+    <form action={submit} className="mx-auto w-full max-w-sm">
+      <div className="rounded-[1.6rem] border border-border/55 bg-card px-5 py-6 shadow-sm shadow-foreground/[0.035] sm:px-6 sm:py-7">
+        <div className="text-center">
+          <div className="mx-auto grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
+            <LockKeyholeIcon aria-hidden="true" className="size-5" />
           </div>
+          <h2 className="mt-4 text-xl font-semibold tracking-tight">请输入访问口令</h2>
+          <p className="mx-auto mt-1.5 max-w-xs text-sm leading-5 text-muted-foreground">
+            该相册已设置访问保护，请输入活动组织方提供的口令。
+          </p>
+        </div>
 
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground">访问受限</p>
-            <CardTitle className="text-xl tracking-tight sm:text-2xl">输入口令进入相册</CardTitle>
-            <CardDescription className="mx-auto max-w-sm text-sm leading-6">
-              此相册仅向持有活动口令的访客开放，请输入活动组织方提供的访问口令。
-            </CardDescription>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-4 px-5 pb-5 sm:px-7 sm:pb-7">
+        <div className="mt-6 space-y-4">
           <Field data-invalid={error === null ? undefined : true}>
-            <FieldLabel className="text-sm" htmlFor="album-password">
-              相册口令
+            <FieldLabel className="text-xs font-medium text-foreground/85" htmlFor="album-password">
+              访问口令
             </FieldLabel>
-            <InputGroup className="min-h-14 rounded-2xl bg-background shadow-xs">
-              <InputGroupAddon aria-hidden="true" className="pl-4 text-muted-foreground">
-                <KeyRoundIcon className="size-4.5" />
+            <InputGroup className="min-h-12 rounded-xl border-border/70 bg-background shadow-none transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10">
+              <InputGroupAddon aria-hidden="true" className="pl-3.5 text-muted-foreground">
+                <KeyRoundIcon className="size-4" />
               </InputGroupAddon>
               <InputGroupInput
                 aria-describedby="album-password-hint"
@@ -86,19 +81,20 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
                 autoCapitalize="none"
                 autoComplete="off"
                 autoCorrect="off"
-                className="text-base"
+                className="text-[15px]"
                 disabled={pending}
                 enterKeyHint="go"
                 id="album-password"
                 name="password"
-                placeholder="请输入相册口令"
+                placeholder="输入相册口令"
                 spellCheck={false}
                 style={{ boxShadow: "none", outline: "none" }}
                 type={showPassword ? "text" : "password"}
               />
-              <InputGroupAddon align="inline-end" className="pr-2">
+              <InputGroupAddon align="inline-end" className="pr-1.5">
                 <InputGroupButton
                   aria-label={showPassword ? "隐藏口令" : "显示口令"}
+                  className="rounded-lg text-muted-foreground hover:text-foreground"
                   disabled={pending}
                   onClick={() => setShowPassword((visible) => !visible)}
                   size="icon-sm"
@@ -113,15 +109,19 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
               </InputGroupAddon>
             </InputGroup>
             {error === null ? (
-              <FieldDescription id="album-password-hint">
-                不知道口令时，请向活动组织方获取。
+              <FieldDescription className="text-xs" id="album-password-hint">
+                没有口令？请向活动组织方获取。
               </FieldDescription>
             ) : (
               <FieldError id="album-password-hint">{error}</FieldError>
             )}
           </Field>
 
-          <Button className="min-h-13 w-full rounded-2xl text-sm" disabled={pending} type="submit">
+          <Button
+            className="h-12 w-full rounded-xl text-sm font-medium"
+            disabled={pending}
+            type="submit"
+          >
             {pending ? (
               <>
                 <LoaderCircleIcon
@@ -138,13 +138,13 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
               </>
             )}
           </Button>
+        </div>
 
-          <div className="flex items-start gap-2.5 rounded-2xl bg-muted/45 px-3.5 py-3 text-xs leading-5 text-muted-foreground">
-            <ShieldCheckIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            <p>为保护相册内容，请勿将访问口令公开分享给无关人员。</p>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="mt-4 flex items-start justify-center gap-2 border-t border-border/45 pt-4 text-[11px] leading-4.5 text-muted-foreground">
+          <ShieldCheckIcon aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+          <p>请勿将访问口令公开分享给无关人员。</p>
+        </div>
+      </div>
     </form>
   );
 }
