@@ -46,7 +46,7 @@ export default async function GalleryPage({
         albumTitle={album.title}
         status={album.state === "live" ? "直播中" : "已结束"}
       >
-        <div className="mx-auto max-w-md py-6 sm:py-10">
+        <div className="mx-auto max-w-sm py-4 sm:py-7">
           <UnlockAlbumForm slug={slug} />
         </div>
       </PublicGalleryShell>
