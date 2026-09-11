@@ -37,31 +37,31 @@ export function PublicGalleryShell({
 
       <div className="public-theme min-h-dvh bg-background pb-[calc(2rem+env(safe-area-inset-bottom))] text-foreground">
         <a
-          className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
+          className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70]"
           href="#gallery-main"
         >
           跳到主要内容
         </a>
 
-        <header className="border-b bg-background">
-          <div className="mx-auto max-w-[1560px] px-3.5 py-2 sm:px-5 sm:py-2.5 lg:px-7">
-            <div className="flex min-w-0 items-start justify-between gap-3">
+        <header className="sticky top-0 z-50 h-16 border-b bg-background">
+          <div className="mx-auto h-full max-w-[1560px] px-3.5 py-1.5 sm:px-5 lg:px-7">
+            <div className="flex h-full min-w-0 items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[10px] font-medium leading-4 text-muted-foreground sm:text-[11px]">
+                <p className="truncate text-[9px] font-medium leading-4 text-muted-foreground sm:text-[10px]">
                   北航实验学校中学部
                 </p>
-                <h1 className="truncate text-[17px] font-semibold leading-6 tracking-tight sm:text-lg lg:text-xl">
+                <h1 className="truncate text-base font-semibold leading-5 tracking-tight sm:text-[17px] lg:text-lg">
                   {albumTitle}
                 </h1>
                 {albumDescription ? (
-                  <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground sm:text-xs">
+                  <p className="line-clamp-1 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
                     {albumDescription}
                   </p>
                 ) : null}
               </div>
 
               <Badge
-                className="mt-0.5 h-6 shrink-0 gap-1 rounded-full px-2 text-[10px] sm:text-[11px]"
+                className="mt-1 h-6 shrink-0 gap-1 rounded-full px-2 text-[10px] sm:text-[11px]"
                 variant={status === "直播中" ? "default" : "secondary"}
               >
                 <RadioIcon aria-hidden="true" className="size-2.5" />
