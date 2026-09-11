@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  type ApiError,
   type AuthSession,
   type LoginRequest,
   loginRequestSchema,
@@ -16,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { responseErrorMessage } from "@/lib/user-facing-error";
 
 export function LoginForm() {
   const router = useRouter();
@@ -35,8 +35,7 @@ export function LoginForm() {
         body: JSON.stringify(values),
       });
       if (!response.ok) {
-        const error = (await response.json()) as ApiError;
-        setPageError(error.message);
+        setPageError(await responseErrorMessage(response));
         return;
       }
       const session = (await response.json()) as AuthSession;
