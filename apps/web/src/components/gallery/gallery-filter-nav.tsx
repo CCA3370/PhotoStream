@@ -45,7 +45,7 @@ export function GalleryFilterNav({
     <nav
       aria-label="相册筛选"
       className={cn(
-        "sticky top-[var(--public-gallery-header-height)] z-50 mb-2 flex min-h-10 gap-0.5 overflow-x-auto rounded-xl border bg-background p-1 sm:mb-3 sm:gap-1",
+        "sticky top-[var(--public-gallery-header-height)] z-30 mb-2 flex min-h-10 gap-0.5 overflow-x-auto rounded-xl border bg-background p-1 sm:mb-3 sm:gap-1",
         reserveSearchSpace && "pr-32",
       )}
     >
