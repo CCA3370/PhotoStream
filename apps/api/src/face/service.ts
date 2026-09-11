@@ -542,10 +542,10 @@ export class FaceService {
           ),
       ]);
       if (
-        (sessionRecent?.value ?? 0) >= 3 ||
-        (ipRecent?.value ?? 0) >= 3 ||
-        (sessionDaily?.value ?? 0) >= 10 ||
-        (ipDaily?.value ?? 0) >= 10
+        (sessionRecent?.value ?? 0) >= 5 ||
+        (ipRecent?.value ?? 0) >= 5 ||
+        (sessionDaily?.value ?? 0) >= 20 ||
+        (ipDaily?.value ?? 0) >= 20
       ) {
         throw new AppError({
           code: "FACE_RATE_LIMITED",
