@@ -91,10 +91,13 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
                 style={{ boxShadow: "none", outline: "none" }}
                 type={showPassword ? "text" : "password"}
               />
-              <InputGroupAddon align="inline-end" className="pr-1.5">
+              <InputGroupAddon
+                align="inline-end"
+                className="pr-2.5 has-[>button]:mr-0"
+              >
                 <InputGroupButton
                   aria-label={showPassword ? "隐藏口令" : "显示口令"}
-                  className="rounded-lg text-muted-foreground hover:text-foreground"
+                  className="rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   disabled={pending}
                   onClick={() => setShowPassword((visible) => !visible)}
                   size="icon-sm"
