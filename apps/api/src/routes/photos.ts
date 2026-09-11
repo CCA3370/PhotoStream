@@ -509,7 +509,7 @@ export async function registerPhotoRoutes(
   typed.post(
     "/api/v1/public/albums/:slug/unlock",
     {
-      config: { rateLimit: { max: 10, timeWindow: "10 minutes" } },
+      config: { rateLimit: { max: 30, timeWindow: "10 minutes" } },
       schema: {
         operationId: "unlockPublicAlbum",
         tags: ["public"],
