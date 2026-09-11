@@ -35,7 +35,7 @@ export function PublicGalleryShell({
         }
       `}</style>
 
-      <div className="public-theme min-h-dvh bg-background pb-[calc(2.5rem+env(safe-area-inset-bottom))] text-foreground">
+      <div className="public-theme min-h-dvh bg-background pb-[calc(2rem+env(safe-area-inset-bottom))] text-foreground">
         <a
           className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
           href="#gallery-main"
@@ -43,28 +43,28 @@ export function PublicGalleryShell({
           跳到主要内容
         </a>
 
-        <header className="border-b bg-background/96 supports-backdrop-filter:bg-background/88 supports-backdrop-filter:backdrop-blur-xl">
-          <div className="mx-auto max-w-[1560px] px-3.5 py-3 sm:px-5 sm:py-3.5 lg:px-7">
+        <header className="border-b bg-background">
+          <div className="mx-auto max-w-[1560px] px-3.5 py-2 sm:px-5 sm:py-2.5 lg:px-7">
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-medium text-muted-foreground sm:text-xs">
+                <p className="truncate text-[10px] font-medium leading-4 text-muted-foreground sm:text-[11px]">
                   北航实验学校中学部
                 </p>
-                <h1 className="mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-xl lg:text-2xl">
+                <h1 className="truncate text-[17px] font-semibold leading-6 tracking-tight sm:text-lg lg:text-xl">
                   {albumTitle}
                 </h1>
                 {albumDescription ? (
-                  <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-muted-foreground sm:text-sm">
+                  <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground sm:text-xs">
                     {albumDescription}
                   </p>
                 ) : null}
               </div>
 
               <Badge
-                className="mt-0.5 h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px] sm:text-xs"
+                className="mt-0.5 h-6 shrink-0 gap-1 rounded-full px-2 text-[10px] sm:text-[11px]"
                 variant={status === "直播中" ? "default" : "secondary"}
               >
-                <RadioIcon aria-hidden="true" className="size-3" />
+                <RadioIcon aria-hidden="true" className="size-2.5" />
                 {status}
               </Badge>
             </div>
@@ -72,14 +72,14 @@ export function PublicGalleryShell({
         </header>
 
         <main
-          className="mx-auto max-w-[1560px] px-2.5 py-3 sm:px-5 sm:py-4 lg:px-7 lg:py-5"
+          className="mx-auto max-w-[1560px] px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-7 lg:py-4"
           id="gallery-main"
         >
           {children}
         </main>
 
-        <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/94 pb-[env(safe-area-inset-bottom)] supports-backdrop-filter:backdrop-blur-xl">
-          <div className="mx-auto flex h-10 max-w-[1560px] items-center justify-center px-3 text-center text-[10px] leading-none text-muted-foreground sm:text-[11px]">
+        <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex h-8 max-w-[1560px] items-center justify-center px-3 text-center text-[9px] leading-none text-muted-foreground sm:text-[10px]">
             <p>© 2026 CCA3370 · Images © 2026 学生会电视台</p>
           </div>
         </footer>

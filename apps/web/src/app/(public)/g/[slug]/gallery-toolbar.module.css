@@ -1,0 +1,62 @@
+.searchToolbar {
+  position: relative;
+}
+
+.searchToolbar > section > div > div:first-child {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 40;
+  width: auto;
+  padding: 0 0 0 0.25rem;
+  border: 0;
+  background: var(--background);
+  box-shadow: -0.5rem 0 0.5rem var(--background);
+  backdrop-filter: none;
+}
+
+.searchToolbar > section > div > div:first-child > button:first-child {
+  height: 2rem;
+  min-width: 0;
+  flex: none;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border-radius: 0.5rem;
+}
+
+.searchToolbar > section > div > div:first-child > button:first-child > span:first-child {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0;
+  background: transparent;
+}
+
+.searchToolbar
+  > section
+  > div
+  > div:first-child
+  > button:first-child
+  > span:last-child
+  > span:first-child {
+  max-width: 5.75rem;
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchToolbar
+  > section
+  > div
+  > div:first-child
+  > button:first-child
+  > span:last-child
+  > span:last-child {
+  display: none;
+}
+
+.searchToolbar > section > div > div:first-child > button:not(:first-child) {
+  width: 2rem;
+  height: 2rem;
+}
