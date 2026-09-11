@@ -1,4 +1,4 @@
-import type { ApiError, AuthSession } from "@photostream/contracts";
+import { type ApiError, type AuthSession, apiErrorSchema } from "@photostream/contracts";
 
 import { apiErrorMessage, httpErrorMessage } from "@/lib/user-facing-error";
 
@@ -14,11 +14,14 @@ export class ClientApiError extends Error {
 
 async function errorFrom(response: Response): Promise<ClientApiError> {
   try {
-    const error = (await response.json()) as ApiError;
-    return new ClientApiError(apiErrorMessage(error), error);
+    const parsed = apiErrorSchema.safeParse(await response.json());
+    if (parsed.success) {
+      return new ClientApiError(apiErrorMessage(parsed.data), parsed.data);
+    }
   } catch {
-    return new ClientApiError(httpErrorMessage(response.status));
+    // Fall back to the HTTP status without exposing response internals.
   }
+  return new ClientApiError(httpErrorMessage(response.status));
 }
 
 export async function getClientSession(signal?: AbortSignal): Promise<AuthSession> {
