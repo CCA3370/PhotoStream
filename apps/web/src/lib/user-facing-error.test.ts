@@ -43,8 +43,8 @@ describe("user-facing errors", () => {
   });
 
   it("does not expose arbitrary exception messages", () => {
-    expect(userFacingErrorMessage(new Error("SQLSTATE 23505 duplicate key"), "保存失败，请重试。")).toBe(
-      "保存失败，请重试。",
-    );
+    expect(
+      userFacingErrorMessage(new Error("SQLSTATE 23505 duplicate key"), "保存失败，请重试。"),
+    ).toBe("保存失败，请重试。");
   });
 });
