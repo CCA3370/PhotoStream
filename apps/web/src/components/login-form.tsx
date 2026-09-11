@@ -1,11 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  type AuthSession,
-  type LoginRequest,
-  loginRequestSchema,
-} from "@photostream/contracts";
+import { type AuthSession, type LoginRequest, loginRequestSchema } from "@photostream/contracts";
 import { KeyRoundIcon, UserRoundIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
