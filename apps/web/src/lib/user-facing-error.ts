@@ -77,6 +77,16 @@ function extractApiError(value: unknown): ApiError | null {
   return nested.success ? nested.data : null;
 }
 
+export async function responseErrorMessage(response: Response): Promise<string> {
+  try {
+    const parsed = apiErrorSchema.safeParse(await response.json());
+    if (parsed.success) return apiErrorMessage(parsed.data);
+  } catch {
+    // Fall back to the HTTP status without exposing response internals.
+  }
+  return httpErrorMessage(response.status);
+}
+
 export function userFacingErrorMessage(
   error: unknown,
   fallback = "操作未能完成，请稍后重试。",
