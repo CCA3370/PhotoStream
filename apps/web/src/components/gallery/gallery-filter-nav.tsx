@@ -45,8 +45,8 @@ export function GalleryFilterNav({
     <nav
       aria-label="相册筛选"
       className={cn(
-        "mb-2 flex min-h-10 gap-0.5 overflow-x-auto rounded-xl border bg-background p-1 sm:mb-3 sm:gap-1",
-        reserveSearchSpace && "pr-28 sm:pr-32",
+        "sticky top-[var(--public-gallery-header-height)] z-30 mb-2 flex min-h-10 gap-0.5 overflow-x-auto rounded-xl border bg-background p-1 sm:mb-3 sm:gap-1",
+        reserveSearchSpace && "pr-32",
       )}
     >
       {items.map((item) => {
