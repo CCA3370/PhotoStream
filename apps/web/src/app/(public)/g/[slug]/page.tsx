@@ -2,7 +2,6 @@ import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostr
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
-import { FaceSearchPromo } from "@/components/gallery/face-search-promo";
 import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
@@ -10,6 +9,8 @@ import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { serverApi } from "@/lib/api";
+
+import styles from "./gallery-toolbar.module.css";
 
 interface MediaList {
   readonly items: readonly PublicMediaView[];
@@ -70,6 +71,7 @@ export default async function GalleryPage({
       }
     : undefined;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== undefined;
+  const inlineSearch = searchAvailable && !featuredOnly;
   const sectionTitle = featuredOnly ? "精选照片" : (category?.name ?? "全部照片");
   const selectedFilterKey = featuredOnly ? "featured" : (category?.id ?? "all");
 
@@ -82,12 +84,16 @@ export default async function GalleryPage({
       <AlbumOpenTracker slug={slug} />
       <ViewerServiceNotice />
 
-      <GalleryFilterNav categories={album.categories} selectedKey={selectedFilterKey} slug={slug} />
+      <div className={inlineSearch ? styles.searchToolbar : undefined}>
+        <GalleryFilterNav
+          categories={album.categories}
+          reserveSearchSpace={inlineSearch}
+          selectedKey={selectedFilterKey}
+          slug={slug}
+        />
 
-      <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
-        {searchAvailable && !featuredOnly ? (
-          <>
-            {faceSearch === undefined ? null : <FaceSearchPromo slug={slug} />}
+        <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
+          {inlineSearch ? (
             <BibSearchPanel
               attributeFilterEnabled={album.bibAttributeFilterEnabled}
               attributeOptions={album.bibAttributeOptions}
@@ -106,21 +112,22 @@ export default async function GalleryPage({
                 slug={slug}
               />
             </BibSearchPanel>
-          </>
-        ) : (
-          <>
-            <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
-            <PaginatedMediaGrid
-              {...(category === undefined ? {} : { categoryId: category.id })}
-              featuredOnly={featuredOnly}
-              initialFeaturedIds={featured.mediaIds}
-              initialPage={media}
-              key={featuredOnly ? "featured" : (category?.id ?? "all")}
-              slug={slug}
-            />
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
+              <PaginatedMediaGrid
+                {...(category === undefined ? {} : { categoryId: category.id })}
+                featuredOnly={featuredOnly}
+                initialFeaturedIds={featured.mediaIds}
+                initialPage={media}
+                key={featuredOnly ? "featured" : (category?.id ?? "all")}
+                slug={slug}
+              />
+            </>
+          )}
+        </section>
+      </div>
+
       {album.state === "live" ? (
         <LiveUpdates
           initialEventId={media.eventCursor}
