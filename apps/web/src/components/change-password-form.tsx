@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  type ApiError,
   type AuthSession,
   changePasswordRequestSchema,
   passwordSchema,
@@ -16,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { responseErrorMessage } from "@/lib/user-facing-error";
 
 const changePasswordFormSchema = changePasswordRequestSchema
   .safeExtend({ confirmPassword: passwordSchema })
@@ -76,8 +76,7 @@ export function ChangePasswordForm() {
         }),
       });
       if (!response.ok) {
-        const error = (await response.json()) as ApiError;
-        setPageError(error.message);
+        setPageError(await responseErrorMessage(response));
         return;
       }
       startTransition(() => {
