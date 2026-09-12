@@ -44,7 +44,7 @@ export function GalleryFilterNav({
     <nav
       aria-label="相册筛选"
       className={cn(
-        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 mb-2 flex h-11 items-stretch gap-0 overflow-x-auto border-b bg-background/92 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82 sm:-mx-5 sm:mb-3 sm:px-5 lg:-mx-7 lg:px-7",
+        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 -mt-2.5 mb-2 flex h-11 items-stretch gap-0 overflow-x-auto border-b bg-background/92 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82 sm:-mx-5 sm:-mt-3 sm:mb-3 sm:px-5 lg:-mx-7 lg:-mt-4 lg:px-7",
         reserveSearchSpace && "pr-28 sm:pr-30 lg:pr-32",
       )}
     >
