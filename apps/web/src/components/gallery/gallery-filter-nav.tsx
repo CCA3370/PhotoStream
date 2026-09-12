@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface GalleryCategory {
@@ -45,7 +44,7 @@ export function GalleryFilterNav({
     <nav
       aria-label="相册筛选"
       className={cn(
-        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 mb-2 flex min-h-10 gap-0.5 overflow-x-auto border-b bg-background/95 px-2.5 py-1 backdrop-blur-md supports-[backdrop-filter]:bg-background/88 sm:-mx-5 sm:mb-3 sm:gap-1 sm:px-5 lg:-mx-7 lg:px-7",
+        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 mb-2 flex h-11 items-stretch gap-0 overflow-x-auto border-b bg-background/92 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82 sm:-mx-5 sm:mb-3 sm:px-5 lg:-mx-7 lg:px-7",
         reserveSearchSpace && "pr-28 sm:pr-30 lg:pr-32",
       )}
     >
@@ -55,10 +54,8 @@ export function GalleryFilterNav({
           <Link
             aria-current={active ? "page" : undefined}
             className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 transition-colors duration-150 hover:bg-muted/55 sm:px-3",
-              active &&
-                "bg-primary text-primary-foreground shadow-xs hover:bg-primary hover:text-primary-foreground",
+              "relative flex h-full shrink-0 touch-manipulation items-center justify-center px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] sm:px-3.5",
+              active && "text-foreground after:bg-primary",
             )}
             href={item.href}
             key={item.key}
