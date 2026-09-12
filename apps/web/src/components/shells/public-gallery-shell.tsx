@@ -68,9 +68,8 @@ export function PublicGalleryShell({
 
           button[aria-label="上一张照片"]:active,
           button[aria-label="下一张照片"]:active {
-            scale: 1 !important;
-            --tw-scale-x: 1 !important;
-            --tw-scale-y: 1 !important;
+            translate: 0 -50% !important;
+            --tw-translate-y: -50% !important;
           }
         }
       `}</style>
