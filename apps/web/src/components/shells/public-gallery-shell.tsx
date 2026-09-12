@@ -50,7 +50,7 @@ export function PublicGalleryShell({
           跳到主要内容
         </a>
 
-        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] border-b bg-background/95 shadow-xs backdrop-blur-md supports-[backdrop-filter]:bg-background/88">
+        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] bg-background/92 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82">
           <div className="mx-auto flex h-full max-w-[1560px] items-center px-3.5 sm:px-5 lg:px-7">
             <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
               <div className="flex min-w-0 flex-1 flex-col justify-center">
