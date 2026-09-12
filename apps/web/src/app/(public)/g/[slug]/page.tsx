@@ -79,6 +79,7 @@ export default async function GalleryPage({
     <PublicGalleryShell
       albumDescription={album.description}
       albumTitle={album.title}
+      reserveSearchAction={inlineSearch}
       status={album.state === "live" ? "直播中" : "已结束"}
     >
       <AlbumOpenTracker slug={slug} />

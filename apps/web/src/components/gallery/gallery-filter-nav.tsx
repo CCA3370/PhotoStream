@@ -44,8 +44,8 @@ export function GalleryFilterNav({
     <nav
       aria-label="相册筛选"
       className={cn(
-        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 -mt-2.5 mb-2 flex h-11 items-stretch gap-0 overflow-x-auto border-b bg-background/92 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82 sm:-mx-5 sm:-mt-3 sm:mb-3 sm:px-5 lg:-mx-8 lg:-mt-5 lg:h-14 lg:px-8 xl:-mx-10 xl:px-10 2xl:-mx-12 2xl:px-12",
-        reserveSearchSpace && "pr-28 sm:pr-30 lg:pr-36 xl:pr-40",
+        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 -mt-2.5 mb-2 flex h-11 items-stretch gap-0 overflow-x-auto border-b bg-background/92 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82 sm:-mx-5 sm:-mt-3 sm:mb-3 sm:px-5 lg:-mx-8 lg:-mt-5 lg:h-14 lg:px-8 lg:bg-background/96 xl:-mx-10 xl:px-10 2xl:-mx-12 2xl:px-12",
+        reserveSearchSpace && "pr-28 sm:pr-30 lg:pr-8 xl:pr-10 2xl:pr-12",
       )}
     >
       {items.map((item) => {

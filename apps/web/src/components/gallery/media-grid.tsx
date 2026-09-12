@@ -99,7 +99,7 @@ function MediaTile({
         mediaId={media.id}
         onLoad={() => setImageLoaded(true)}
         scope={slug ?? "public-media"}
-        sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1279px) 17vw, 15vw"
+        sizes="(max-width: 479px) 50vw, (max-width: 639px) 33vw, (max-width: 767px) 25vw, (max-width: 1023px) 20vw, (max-width: 1799px) 16.7vw, 14.3vw"
         sourceUrl={preview.url}
       />
       <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 sm:group-hover:bg-black/[0.055] sm:group-focus-within:bg-black/[0.055] motion-reduce:transition-none" />
@@ -131,12 +131,12 @@ function gridLayout(width: number): { columns: number; gap: number } {
   if (width < 640) return { columns: 3, gap: 6 };
   if (width < 768) return { columns: 4, gap: 7 };
   if (width < 1_024) return { columns: 5, gap: 8 };
-  if (width < 1_280) return { columns: 6, gap: 9 };
-  return { columns: 7, gap: 10 };
+  if (width < 1_800) return { columns: 6, gap: 12 };
+  return { columns: 7, gap: 14 };
 }
 
 const staticGridClass =
-  "grid grid-cols-2 gap-[5px] min-[480px]:grid-cols-3 min-[480px]:gap-1.5 sm:grid-cols-4 sm:gap-[7px] md:grid-cols-5 md:gap-2 lg:grid-cols-6 lg:gap-[9px] xl:grid-cols-7 xl:gap-2.5";
+  "grid grid-cols-2 gap-[5px] min-[480px]:grid-cols-3 min-[480px]:gap-1.5 sm:grid-cols-4 sm:gap-[7px] md:grid-cols-5 md:gap-2 lg:grid-cols-6 lg:gap-3 min-[1800px]:grid-cols-7 min-[1800px]:gap-3.5";
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;

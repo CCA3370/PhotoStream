@@ -8,6 +8,7 @@ export interface PublicGalleryShellProps {
   readonly albumTitle: string;
   readonly albumDescription?: string;
   readonly children: ReactNode;
+  readonly reserveSearchAction?: boolean;
   readonly status?: "直播中" | "已结束";
 }
 
@@ -15,11 +16,12 @@ export function PublicGalleryShell({
   albumTitle,
   albumDescription = "",
   children,
+  reserveSearchAction = false,
   status = "直播中",
 }: PublicGalleryShellProps) {
   const headerHeightClass = albumDescription
-    ? "[--public-gallery-header-height:4rem] lg:[--public-gallery-header-height:5.5rem]"
-    : "[--public-gallery-header-height:3rem] lg:[--public-gallery-header-height:4.75rem]";
+    ? "[--public-gallery-header-height:4rem] lg:[--public-gallery-header-height:6.25rem]"
+    : "[--public-gallery-header-height:3rem] lg:[--public-gallery-header-height:5.5rem]";
 
   return (
     <Toaster>
@@ -84,28 +86,30 @@ export function PublicGalleryShell({
           跳到主要内容
         </a>
 
-        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] bg-background/92 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82">
+        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] border-b border-border/45 bg-background/94 backdrop-blur-xl supports-[backdrop-filter]:bg-background/84">
           <div className="mx-auto flex h-full max-w-[2080px] items-center px-3.5 sm:px-5 lg:px-8 xl:px-10 2xl:px-12">
             <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:gap-8">
               <div className="flex min-w-0 flex-1 flex-col justify-center">
-                <p className="truncate text-[10px] font-medium leading-4 text-muted-foreground sm:text-[11px] lg:text-xs lg:leading-5">
+                <p className="truncate text-[10px] font-medium leading-4 text-muted-foreground sm:text-[11px] lg:text-[13px] lg:leading-5">
                   北航实验学校中学部
                 </p>
-                <h1 className="truncate text-[17px] font-semibold leading-5 tracking-tight sm:text-lg sm:leading-6 lg:text-2xl lg:leading-8">
+                <h1 className="truncate text-[17px] font-semibold leading-5 tracking-tight sm:text-lg sm:leading-6 lg:text-[26px] lg:leading-8">
                   {albumTitle}
                 </h1>
                 {albumDescription ? (
-                  <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground sm:text-xs lg:text-sm lg:leading-5">
+                  <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground sm:text-xs lg:mt-0.5 lg:text-sm lg:leading-5">
                     {albumDescription}
                   </p>
                 ) : null}
               </div>
 
               <Badge
-                className="h-6 shrink-0 self-center gap-1 rounded-full px-2.5 text-[10px] shadow-xs sm:text-[11px] lg:h-8 lg:gap-1.5 lg:px-3.5 lg:text-xs"
+                className={`h-6 shrink-0 self-center gap-1 rounded-full px-2.5 text-[10px] shadow-xs sm:text-[11px] lg:h-9 lg:gap-1.5 lg:px-4 lg:text-[13px] ${
+                  reserveSearchAction ? "lg:mr-44" : ""
+                }`}
                 variant={status === "直播中" ? "default" : "secondary"}
               >
-                <RadioIcon aria-hidden="true" className="size-2.5 lg:size-3" />
+                <RadioIcon aria-hidden="true" className="size-2.5 lg:size-3.5" />
                 {status}
               </Badge>
             </div>
