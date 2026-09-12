@@ -45,8 +45,8 @@ export function GalleryFilterNav({
     <nav
       aria-label="相册筛选"
       className={cn(
-        "sticky top-[var(--public-gallery-header-height)] z-30 mb-2 flex min-h-10 gap-0.5 overflow-x-auto rounded-xl border bg-background p-1 sm:mb-3 sm:gap-1",
-        reserveSearchSpace && "pr-32",
+        "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 mb-2 flex min-h-10 gap-0.5 overflow-x-auto border-b bg-background/95 px-2.5 py-1 backdrop-blur-md supports-[backdrop-filter]:bg-background/88 sm:-mx-5 sm:mb-3 sm:gap-1 sm:px-5 lg:-mx-7 lg:px-7",
+        reserveSearchSpace && "pr-28 sm:pr-30 lg:pr-32",
       )}
     >
       {items.map((item) => {
@@ -58,7 +58,7 @@ export function GalleryFilterNav({
               buttonVariants({ variant: "ghost", size: "sm" }),
               "h-8 shrink-0 touch-manipulation rounded-lg px-2.5 transition-colors duration-150 hover:bg-muted/55 sm:px-3",
               active &&
-                "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                "bg-primary text-primary-foreground shadow-xs hover:bg-primary hover:text-primary-foreground",
             )}
             href={item.href}
             key={item.key}
