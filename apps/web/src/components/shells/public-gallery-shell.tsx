@@ -50,14 +50,14 @@ export function PublicGalleryShell({
           跳到主要内容
         </a>
 
-        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] border-b bg-background">
+        <header className="sticky top-0 z-40 h-[var(--public-gallery-header-height)] border-b bg-background/95 shadow-xs backdrop-blur-md supports-[backdrop-filter]:bg-background/88">
           <div className="mx-auto flex h-full max-w-[1560px] items-center px-3.5 sm:px-5 lg:px-7">
-            <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-1 flex-col justify-center">
                 <p className="truncate text-[10px] font-medium leading-4 text-muted-foreground sm:text-[11px]">
                   北航实验学校中学部
                 </p>
-                <h1 className="truncate text-[17px] font-semibold leading-6 tracking-tight sm:text-lg lg:text-xl">
+                <h1 className="truncate text-[17px] font-semibold leading-5 tracking-tight sm:text-lg sm:leading-6 lg:text-xl">
                   {albumTitle}
                 </h1>
                 {albumDescription ? (
@@ -68,7 +68,7 @@ export function PublicGalleryShell({
               </div>
 
               <Badge
-                className="mt-0.5 h-6 shrink-0 gap-1 rounded-full px-2 text-[10px] sm:text-[11px]"
+                className="h-6 shrink-0 self-center gap-1 rounded-full px-2.5 text-[10px] shadow-xs sm:text-[11px]"
                 variant={status === "直播中" ? "default" : "secondary"}
               >
                 <RadioIcon aria-hidden="true" className="size-2.5" />
