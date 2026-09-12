@@ -147,6 +147,39 @@ export function usePhotoLightboxGestures({
     [canNavigate, commitOffset, requestTarget, stageHeight, stageWidth, swipeSettling],
   );
 
+  useEffect(() => {
+    if (selected === null || !canNavigate) return;
+
+    const onKeyDownCapture = (event: KeyboardEvent): void => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      animateOffset(event.key === "ArrowLeft" ? -1 : 1);
+    };
+
+    window.addEventListener("keydown", onKeyDownCapture, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDownCapture, { capture: true });
+  }, [animateOffset, canNavigate, selected]);
+
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): void => {
       if (swipeSettling) return;

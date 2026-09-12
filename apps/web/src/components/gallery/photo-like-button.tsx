@@ -115,7 +115,7 @@ export function PhotoLikeButton({
     >
       <HeartIcon
         className={cn(
-          mode === "thumbnail" ? "size-3.5" : "size-4",
+          mode === "thumbnail" ? "size-3.5" : "size-4 lg:size-[18px]",
           "transition-[color,fill] duration-150 motion-reduce:transition-none",
           liked && "fill-rose-500 text-rose-500",
         )}
@@ -131,7 +131,7 @@ export function PhotoLikeButton({
         className={cn(
           mode === "thumbnail"
             ? "relative top-0.5 h-7 touch-manipulation gap-1 rounded-full border-0 bg-transparent px-1.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white"
-            : "h-11 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white sm:h-9",
+            : "h-11 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white lg:h-12 lg:gap-2 lg:px-4 lg:text-sm",
           "active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] transition-[transform,background-color,border-color] duration-150 motion-reduce:transform-none motion-reduce:transition-none",
           className,
         )}
@@ -144,8 +144,8 @@ export function PhotoLikeButton({
         {heart}
         <span
           className={cn(
-            "relative inline-grid h-[1em] min-w-2 overflow-hidden font-semibold tracking-tight tabular-nums",
-            mode === "thumbnail" ? "text-[10px] leading-none" : "text-xs",
+            "relative inline-grid min-w-2 place-items-center overflow-hidden font-semibold leading-none tracking-tight tabular-nums",
+            mode === "thumbnail" ? "h-3 text-[10px]" : "h-4 text-xs lg:h-5 lg:text-sm",
           )}
         >
           {countMotion === null ? (
@@ -158,7 +158,7 @@ export function PhotoLikeButton({
             <>
               <span
                 aria-hidden="true"
-                className="col-start-1 row-start-1 transition-[transform,opacity] duration-180 ease-out motion-reduce:transition-none"
+                className="col-start-1 row-start-1 flex h-full items-center justify-center leading-none transition-[transform,opacity] duration-180 ease-out motion-reduce:transition-none"
                 style={{
                   opacity: countMotion.settled ? 0 : 1,
                   transform: countMotion.settled
@@ -169,7 +169,7 @@ export function PhotoLikeButton({
                 {countMotion.from}
               </span>
               <span
-                className="col-start-1 row-start-1 transition-[transform,opacity] duration-180 ease-out motion-reduce:transition-none"
+                className="col-start-1 row-start-1 flex h-full items-center justify-center leading-none transition-[transform,opacity] duration-180 ease-out motion-reduce:transition-none"
                 style={{
                   opacity: countMotion.settled ? 1 : 0,
                   transform: countMotion.settled
