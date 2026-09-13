@@ -7,7 +7,6 @@ import {
   ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
-  ImageIcon,
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -134,9 +133,6 @@ export function ReviewLightbox({
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
-  const [sourceFailed, setSourceFailed] = useState(false);
-  const [showingOriginal, setShowingOriginal] = useState(false);
-  const [originalFailed, setOriginalFailed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
@@ -196,23 +192,10 @@ export function ReviewLightbox({
     else await document.exitFullscreen();
   }, []);
 
-  const loadRemoteOriginal = useCallback(() => {
-    if (selected?.originalSrc === null || selected?.originalSrc === undefined) return;
-    setDisplaySrc(selected.originalSrc);
-    setShowingOriginal(true);
-    setOriginalFailed(false);
-    setLoaded(false);
-    setLoadFailed(false);
-    resetView();
-  }, [resetView, selected]);
-
   useEffect(() => {
     setDisplaySrc(selected?.src ?? null);
     setLoaded(false);
     setLoadFailed(false);
-    setSourceFailed(false);
-    setShowingOriginal(false);
-    setOriginalFailed(false);
     setBibDialogOpen(false);
     resetView();
     pointersRef.current.clear();
@@ -373,18 +356,6 @@ export function ReviewLightbox({
   function onImageError(): void {
     if (selected === null) return;
     setLoaded(false);
-    if (showingOriginal) {
-      setOriginalFailed(true);
-      setShowingOriginal(false);
-      if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
-        setDisplaySrc(selected.fallbackSrc);
-        setLoadFailed(false);
-        return;
-      }
-      setLoadFailed(true);
-      return;
-    }
-    if (selected.localPreferred) setSourceFailed(true);
     if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
       setDisplaySrc(selected.fallbackSrc);
       setLoadFailed(false);
@@ -408,11 +379,6 @@ export function ReviewLightbox({
           confirmNoNumber: () => onLocalBibConfirmNoNumber(selected.key),
         }
       : undefined;
-  const canLoadOriginal =
-    selected.originalSrc !== null &&
-    displaySrc !== selected.originalSrc &&
-    !originalFailed &&
-    (!selected.localPreferred || sourceFailed);
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
   return (
@@ -452,7 +418,7 @@ export function ReviewLightbox({
                 <>
                   {!loaded && !loadFailed ? (
                     <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                      {showingOriginal ? "正在加载原图…" : "正在加载图片…"}
+                      正在加载图片…
                     </div>
                   ) : null}
                   {loadFailed ? (
@@ -580,21 +546,6 @@ export function ReviewLightbox({
                 </div>
 
                 <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl">
-                  {canLoadOriginal ? (
-                    <Button
-                      aria-label="查看原图"
-                      className={cn(toolbarButtonClass, "h-8 px-2.5")}
-                      onClick={loadRemoteOriginal}
-                      size="sm"
-                      title="从 CDN 加载原图"
-                      type="button"
-                      variant="outline"
-                    >
-                      <ImageIcon />
-                      查看原图
-                    </Button>
-                  ) : null}
-
                   <div className="mx-0.5 h-5 w-px bg-white/10" />
 
                   {bibConfirmed ? (
