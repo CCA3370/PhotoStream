@@ -87,6 +87,7 @@ export function DownloadButton({
   label,
   mediaId,
   onSuccess,
+  shareId,
   showBytes = true,
   showIcon = true,
   slug,
@@ -97,6 +98,7 @@ export function DownloadButton({
   label: string;
   mediaId: string;
   onSuccess?: () => void;
+  shareId?: string;
   showBytes?: boolean;
   showIcon?: boolean;
   slug: string;
@@ -109,10 +111,13 @@ export function DownloadButton({
     setPending(true);
     setError(null);
     try {
-      const signed = await publicMutation<SignedDownload>(
-        `/api/v1/public/albums/${slug}/downloads/${mediaId}/${kind}`,
-        { idempotencyKey: crypto.randomUUID() },
-      );
+      const endpoint =
+        shareId === undefined
+          ? `/api/v1/public/albums/${encodeURIComponent(slug)}/downloads/${encodeURIComponent(mediaId)}/${kind}`
+          : `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(mediaId)}/downloads/${kind}?share=${encodeURIComponent(shareId)}`;
+      const signed = await publicMutation<SignedDownload>(endpoint, {
+        idempotencyKey: crypto.randomUUID(),
+      });
       const sourceBlob =
         kind === "preview"
           ? await loadDerivedImage({
