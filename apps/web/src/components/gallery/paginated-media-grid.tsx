@@ -64,12 +64,14 @@ export function PaginatedMediaGrid({
   featuredOnly = false,
   initialFeaturedIds,
   initialPage,
+  initialSelectedId,
   slug,
 }: Readonly<{
   categoryId?: string;
   featuredOnly?: boolean;
   initialFeaturedIds: readonly string[];
   initialPage: MediaPage;
+  initialSelectedId?: string;
   slug: string;
 }>) {
   const [items, setItems] = useState<readonly PublicMediaView[]>(initialPage.items);
@@ -218,7 +220,11 @@ export function PaginatedMediaGrid({
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      <MediaGrid items={visibleItems} slug={slug} />
+      <MediaGrid
+        {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
+        items={visibleItems}
+        slug={slug}
+      />
       {featuredOnly && cursor !== null ? (
         <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
           <LoaderCircleIcon className="size-4 animate-spin" />
