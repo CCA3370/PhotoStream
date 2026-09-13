@@ -340,6 +340,28 @@ export async function writeMediaBlob(request: MediaBlobIdentity, blob: Blob): Pr
   if (writes.get(request.cacheName) === task) writes.delete(request.cacheName);
 }
 
+const transientMediaRetryDelays = [250, 750, 1_750] as const;
+
+function isTransientMediaStatus(status: number): boolean {
+  return status === 404 || status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function waitForMediaRetry(delay: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delay);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      reject(abortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
   if (request.signal?.aborted) return Promise.reject(abortReason(request.signal));
   const key = identity(request);
@@ -354,24 +376,50 @@ export function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
     const cached = await readMediaBlob(request);
     if (cached !== null) return cached;
     controller.signal.throwIfAborted();
-    const get = (url: string) => {
+    const get = (url: string, bypassBrowserCache = false) => {
       controller.signal.throwIfAborted();
       recordMediaCacheDiagnostic("network", request.telemetryScope);
       return fetch(url, {
-        cache: "default",
+        cache: bypassBrowserCache ? "no-store" : "default",
         credentials: "omit",
         mode: "cors",
         signal: controller.signal,
       });
     };
-    let response = await get(request.sourceUrl);
-    if ((response.status === 401 || response.status === 403) && request.refreshUrl !== undefined) {
-      await response.body?.cancel();
+    const refresh = async (): Promise<string> => {
+      if (request.refreshUrl === undefined) throw new Error("图片地址无法刷新，请稍后重试。");
       controller.signal.throwIfAborted();
       const freshUrl = await request.refreshUrl();
       controller.signal.throwIfAborted();
       recordMediaCacheDiagnostic("refreshed", request.telemetryScope);
-      response = await get(freshUrl);
+      return freshUrl;
+    };
+
+    let response = await get(request.sourceUrl);
+    let authorizationRefreshed = false;
+    if ((response.status === 401 || response.status === 403) && request.refreshUrl !== undefined) {
+      await response.body?.cancel();
+      response = await get(await refresh(), true);
+      authorizationRefreshed = true;
+    }
+
+    if (request.refreshUrl !== undefined) {
+      for (const delay of transientMediaRetryDelays) {
+        if (response.ok || !isTransientMediaStatus(response.status)) break;
+        await response.body?.cancel();
+        await waitForMediaRetry(delay, controller.signal);
+        response = await get(await refresh(), true);
+      }
+    }
+
+    if (
+      !response.ok &&
+      !authorizationRefreshed &&
+      (response.status === 401 || response.status === 403) &&
+      request.refreshUrl !== undefined
+    ) {
+      await response.body?.cancel();
+      response = await get(await refresh(), true);
     }
     if (!response.ok) throw new ImageFetchError(response.status);
     const blob = await response.blob();
