@@ -5,7 +5,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
-  ImageIcon,
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -15,7 +14,10 @@ import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
-import { DownloadButton } from "@/components/gallery/download-button";
+import {
+  DownloadButton,
+  type WeChatDownloadSource,
+} from "@/components/gallery/download-button";
 import {
   fittedImageWidth,
   LightboxNeighborSlide,
@@ -29,20 +31,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
-import { clientGet, publicMutation } from "@/lib/client-api";
+import { clientGet } from "@/lib/client-api";
 import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
-import { loadOriginalImage, readCachedOriginalImage } from "@/lib/original-image-cache";
+import { loadOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const toolbarButtonClass =
   "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
-
-interface SignedOriginal {
-  readonly url: string;
-  readonly filename: string;
-  readonly bytes: number;
-  readonly expiresAt: string;
-}
 
 async function decodeObjectUrl(url: string): Promise<void> {
   if (typeof window === "undefined") return;
@@ -99,21 +94,19 @@ export function PhotoLightbox({
   const controlsEntranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewerOpenRef = useRef(false);
-  const originalObjectUrlRef = useRef<string | null>(null);
-  const originalRequestRef = useRef(0);
+  const preparedObjectUrlRef = useRef<string | null>(null);
+  const preparedRequestRef = useRef(0);
   const [loadedDerivedIdentity, setLoadedDerivedIdentity] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
-  const [originalImage, setOriginalImage] = useState<{
-    mediaId: string | null;
+  const [preparedImage, setPreparedImage] = useState<{
+    mediaId: string;
+    kind: "preview" | "original";
     url: string;
   } | null>(null);
-  const originalUrl = originalImage?.mediaId === selectedId ? originalImage.url : null;
-  const [originalCheckedId, setOriginalCheckedId] = useState<string | null>(null);
-  const [originalPending, setOriginalPending] = useState(false);
-  const [originalCacheChecking, setOriginalCacheChecking] = useState(false);
+  const activePreparedImage = preparedImage?.mediaId === selectedId ? preparedImage : null;
 
   const commitOffset = useCallback(
     (offset: -1 | 1) => {
@@ -275,68 +268,24 @@ export function PhotoLightbox({
   }, [cancelTargetRequest, clearControlsHideTimer, selectedId]);
 
   useEffect(() => {
-    if (selectedId === null || selected === null || large === null) return;
-    originalRequestRef.current += 1;
-    if (originalObjectUrlRef.current !== null) {
-      URL.revokeObjectURL(originalObjectUrlRef.current);
-      originalObjectUrlRef.current = null;
+    preparedRequestRef.current += 1;
+    if (preparedObjectUrlRef.current !== null) {
+      URL.revokeObjectURL(preparedObjectUrlRef.current);
+      preparedObjectUrlRef.current = null;
     }
     setDownloadMenuOpen(false);
-    setOriginalImage(null);
-    setOriginalPending(false);
-    setOriginalCacheChecking(false);
+    setPreparedImage(null);
     resetInteraction();
-  }, [large, resetInteraction, selected, selectedId]);
-
-  useEffect(() => {
-    if (
-      slug === undefined ||
-      shareId !== undefined ||
-      selected === null ||
-      !selected.downloads.original
-    ) {
-      return;
-    }
-    let cancelled = false;
-    const mediaId = selected.id;
-    const expectedBytes = selected.downloads.originalBytes;
-    setOriginalCacheChecking(true);
-
-    void readCachedOriginalImage(slug, mediaId, expectedBytes)
-      .then(async (blob) => {
-        if (cancelled || blob === null) return;
-        const objectUrl = URL.createObjectURL(blob);
-        await decodeObjectUrl(objectUrl);
-        if (cancelled) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        if (originalObjectUrlRef.current !== null) {
-          URL.revokeObjectURL(originalObjectUrlRef.current);
-        }
-        originalObjectUrlRef.current = objectUrl;
-        setOriginalImage({ mediaId, url: objectUrl });
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setOriginalCacheChecking(false);
-          setOriginalCheckedId(mediaId);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selected, shareId, slug]);
+  }, [resetInteraction, selectedId]);
 
   useEffect(
     () => () => {
       cancelTargetRequest();
       if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
       clearControlsHideTimer();
-      if (originalObjectUrlRef.current !== null) {
-        URL.revokeObjectURL(originalObjectUrlRef.current);
-        originalObjectUrlRef.current = null;
+      if (preparedObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(preparedObjectUrlRef.current);
+        preparedObjectUrlRef.current = null;
       }
     },
     [cancelTargetRequest, clearControlsHideTimer],
@@ -406,57 +355,78 @@ export function PhotoLightbox({
     zoom,
   ]);
 
-  async function loadOriginal(): Promise<void> {
-    if (
-      slug === undefined ||
-      shareId !== undefined ||
-      selected === null ||
-      !selected.downloads.original ||
-      originalPending ||
-      originalCacheChecking ||
-      originalUrl !== null
-    ) {
-      return;
-    }
+  const showSaveHint = useCallback(() => {
+    setDownloadMenuOpen(false);
+    toast.add({
+      title: "图片已准备好",
+      description: "长按当前图片，选择“保存到相册”。",
+      type: "success",
+      timeout: 5_000,
+    });
+  }, []);
 
-    const mediaId = selected.id;
-    const expectedBytes = selected.downloads.originalBytes;
-    const requestId = originalRequestRef.current + 1;
-    originalRequestRef.current = requestId;
-    setOriginalPending(true);
-
-    try {
-      const signed = await publicMutation<SignedOriginal>(
-        `/api/v1/public/albums/${slug}/originals/${mediaId}/view`,
-        { idempotencyKey: crypto.randomUUID() },
-      );
-      const blob = await loadOriginalImage({ slug, mediaId, expectedBytes, sourceUrl: signed.url });
-      if (originalRequestRef.current !== requestId) return;
-
+  const replacePreparedImage = useCallback(
+    async (kind: "preview" | "original", blob: Blob) => {
+      if (selected === null) return;
+      const mediaId = selected.id;
+      const requestId = preparedRequestRef.current + 1;
+      preparedRequestRef.current = requestId;
       const objectUrl = URL.createObjectURL(blob);
       await decodeObjectUrl(objectUrl);
-      if (originalRequestRef.current !== requestId) {
+      if (preparedRequestRef.current !== requestId || selectedId !== mediaId) {
         URL.revokeObjectURL(objectUrl);
         return;
       }
-      if (originalObjectUrlRef.current !== null) {
-        URL.revokeObjectURL(originalObjectUrlRef.current);
+      if (preparedObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(preparedObjectUrlRef.current);
       }
-      originalObjectUrlRef.current = objectUrl;
-      setOriginalImage({ mediaId, url: objectUrl });
+      preparedObjectUrlRef.current = objectUrl;
+      setPreparedImage({ mediaId, kind, url: objectUrl });
       resetView();
-    } catch (caught) {
-      if (originalRequestRef.current !== requestId) return;
-      toast.add({
-        title: "原图加载失败",
-        description: caught instanceof Error ? caught.message : "暂时无法加载原图，请稍后重试。",
-        type: "error",
-        timeout: 4_000,
+      showSaveHint();
+    },
+    [resetView, selected, selectedId, showSaveHint],
+  );
+
+  const preparePreviewForWeChat = useCallback(
+    async (source: WeChatDownloadSource) => {
+      if (selected === null || large === null) return;
+      if (
+        activePreparedImage?.kind === "preview" ||
+        (activePreparedImage === null && large.kind === "photo_1920" && loaded)
+      ) {
+        showSaveHint();
+        return;
+      }
+      const blob = await loadDerivedImage({
+        scope: slug ?? "public-media",
+        mediaId: selected.id,
+        kind: "photo_1920",
+        bytes: source.bytes,
+        sourceUrl: source.url,
       });
-    } finally {
-      if (originalRequestRef.current === requestId) setOriginalPending(false);
-    }
-  }
+      await replacePreparedImage("preview", blob);
+    },
+    [activePreparedImage, large, loaded, replacePreparedImage, selected, showSaveHint, slug],
+  );
+
+  const prepareOriginalForWeChat = useCallback(
+    async (source: WeChatDownloadSource) => {
+      if (selected === null || slug === undefined) return;
+      if (activePreparedImage?.kind === "original") {
+        showSaveHint();
+        return;
+      }
+      const blob = await loadOriginalImage({
+        slug,
+        mediaId: selected.id,
+        expectedBytes: source.bytes,
+        sourceUrl: source.url,
+      });
+      await replacePreparedImage("original", blob);
+    },
+    [activePreparedImage, replacePreparedImage, selected, showSaveHint, slug],
+  );
 
   if (selected === null || large === null) return null;
 
@@ -515,7 +485,7 @@ export function PhotoLightbox({
             ref={setStageElement}
             role="application"
           >
-            {!loaded && originalUrl === null ? (
+            {!loaded && activePreparedImage === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
                   <LoaderCircleIcon
@@ -558,7 +528,7 @@ export function PhotoLightbox({
                     width: fittedImageWidth(selected),
                   }}
                 >
-                  {originalUrl === null && shareId === undefined ? (
+                  {activePreparedImage === null && shareId === undefined ? (
                     <LightboxNeighborSlide
                       media={selected}
                       offset={0}
@@ -569,18 +539,11 @@ export function PhotoLightbox({
                       viewportWidth={stageWidth}
                     />
                   ) : null}
-                  {originalUrl === null ? (
+                  {activePreparedImage === null ? (
                     <CachedPhotoImage
                       alt="活动照片"
                       bytes={large.bytes}
-                      cacheOnly={
-                        stageWidth <= 0 ||
-                        stageHeight <= 0 ||
-                        (slug !== undefined &&
-                          shareId === undefined &&
-                          selected.downloads.original &&
-                          originalCheckedId !== selected.id)
-                      }
+                      cacheOnly={stageWidth <= 0 || stageHeight <= 0}
                       className={cn(
                         "object-contain transition-[opacity,filter] duration-160 ease-out motion-reduce:transition-none",
                         loaded ? "opacity-100 blur-0" : "opacity-0 blur-[1px]",
@@ -608,14 +571,14 @@ export function PhotoLightbox({
                     />
                   ) : (
                     <Image
-                      alt="活动照片"
+                      alt={activePreparedImage.kind === "original" ? "活动照片原图" : "活动照片"}
                       className="object-contain"
                       draggable={false}
                       fill
-                      key={originalUrl}
+                      key={activePreparedImage.url}
                       priority
                       sizes="100vw"
-                      src={originalUrl}
+                      src={activePreparedImage.url}
                       unoptimized
                     />
                   )}
@@ -737,7 +700,7 @@ export function PhotoLightbox({
             <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
               <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
                 {selected.width} × {selected.height} · {Math.round(zoom * 100)}%
-                {originalUrl === null ? null : " · 原图"}
+                {activePreparedImage?.kind === "original" ? " · 原图" : null}
               </div>
 
               <div className="ml-auto grid w-full min-w-0 items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:w-auto sm:max-w-full">
@@ -771,36 +734,6 @@ export function PhotoLightbox({
                         slug={slug}
                       />
                     )}
-
-                    {canDownloadOriginal ? (
-                      <Button
-                        className={cn(
-                          toolbarButtonClass,
-                          "min-w-0 flex-1 px-2.5 text-xs sm:flex-none sm:px-3 sm:text-sm",
-                        )}
-                        disabled={originalPending || originalCacheChecking || originalUrl !== null}
-                        onClick={() => void loadOriginal()}
-                        type="button"
-                        variant="outline"
-                      >
-                        {originalPending ? (
-                          <LoaderCircleIcon
-                            aria-hidden="true"
-                            className="animate-spin motion-reduce:animate-none"
-                            data-icon="inline-start"
-                          />
-                        ) : (
-                          <ImageIcon data-icon="inline-start" />
-                        )}
-                        <span className="truncate">
-                          {originalPending
-                            ? "加载中…"
-                            : originalUrl === null
-                              ? "查看原图"
-                              : "已加载原图"}
-                        </span>
-                      </Button>
-                    ) : null}
 
                     {canDownload ? (
                       <Button
@@ -838,6 +771,9 @@ export function PhotoLightbox({
                           kind="preview"
                           label="普通图"
                           mediaId={selected.id}
+                          onSuccess={() => setDownloadMenuOpen(false)}
+                          onWeChatSave={preparePreviewForWeChat}
+                          showBytes={false}
                           showIcon={false}
                           slug={slug}
                         />
@@ -854,6 +790,9 @@ export function PhotoLightbox({
                           kind="original"
                           label="原图"
                           mediaId={selected.id}
+                          onSuccess={() => setDownloadMenuOpen(false)}
+                          onWeChatSave={prepareOriginalForWeChat}
+                          showBytes={false}
                           showIcon={false}
                           slug={slug}
                         />
