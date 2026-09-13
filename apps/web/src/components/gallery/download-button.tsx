@@ -1,8 +1,9 @@
 "use client";
 
 import type { DownloadKind } from "@photostream/contracts";
-import { DownloadIcon } from "lucide-react";
-import { useState } from "react";
+import { DownloadIcon, XIcon } from "lucide-react";
+import Image from "next/image";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
@@ -17,6 +18,10 @@ interface SignedDownload {
   readonly filename: string;
   readonly bytes: number;
   readonly expiresAt: string;
+}
+
+interface WeixinJsBridgeLike {
+  invoke: (method: string, params: Record<string, unknown>) => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -34,6 +39,22 @@ function downloadErrorMessage(caught: unknown): string {
 function jpegFilename(filename: string): string {
   const base = filename.replace(/\.[^./\\]+$/u, "").trim();
   return `${base || "photo"}.jpg`;
+}
+
+function isWeChatBrowser(): boolean {
+  return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
+}
+
+function openWeChatImagePreview(url: string): boolean {
+  if (typeof window === "undefined") return false;
+  const bridge = (window as typeof window & { WeixinJSBridge?: WeixinJsBridgeLike }).WeixinJSBridge;
+  if (bridge === undefined) return false;
+  try {
+    bridge.invoke("imagePreview", { current: url, urls: [url] });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function convertImageToJpeg(blob: Blob): Promise<Blob> {
@@ -105,6 +126,12 @@ export function DownloadButton({
 }>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [weChat, setWeChat] = useState(false);
+  const [savePreviewUrl, setSavePreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setWeChat(isWeChatBrowser());
+  }, []);
 
   async function download(): Promise<void> {
     if (pending) return;
@@ -118,6 +145,15 @@ export function DownloadButton({
       const signed = await publicMutation<SignedDownload>(endpoint, {
         idempotencyKey: crypto.randomUUID(),
       });
+
+      if (weChat) {
+        if (!openWeChatImagePreview(signed.url)) {
+          setSavePreviewUrl(signed.url);
+        }
+        onSuccess?.();
+        return;
+      }
+
       const sourceBlob =
         kind === "preview"
           ? await loadDerivedImage({
@@ -165,6 +201,8 @@ export function DownloadButton({
     }
   }
 
+  const actionLabel = weChat ? (kind === "original" ? "保存到相册" : "保存图片") : label;
+
   return (
     <>
       <Button
@@ -175,9 +213,40 @@ export function DownloadButton({
         variant="outline"
       >
         {showIcon ? <DownloadIcon data-icon="inline-start" /> : null}
-        {pending ? "正在准备…" : showBytes ? `${label}（${formatBytes(bytes)}）` : label}
+        {pending
+          ? "正在准备…"
+          : showBytes
+            ? `${actionLabel}（${formatBytes(bytes)}）`
+            : actionLabel}
       </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="下载失败" />
+
+      {savePreviewUrl === null ? null : (
+        <div className="fixed inset-0 z-[100] bg-black text-white">
+          <Image
+            alt="待保存照片"
+            className="object-contain"
+            fill
+            priority
+            sizes="100vw"
+            src={savePreviewUrl}
+            unoptimized
+          />
+          <Button
+            aria-label="关闭保存预览"
+            className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 z-10 size-11 rounded-full border-white/15 bg-black/45 text-white backdrop-blur-md hover:bg-black/60 hover:text-white"
+            onClick={() => setSavePreviewUrl(null)}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            <XIcon />
+          </Button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 to-transparent px-4 pt-16 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-sm font-medium">
+            长按图片，选择“保存到相册”
+          </div>
+        </div>
+      )}
     </>
   );
 }
