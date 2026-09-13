@@ -15,11 +15,13 @@ interface ShareResponse {
 export function PhotoShareButton({
   className,
   mediaId,
+  requiresShareToken = false,
   shareId,
   slug,
 }: Readonly<{
   className?: string;
   mediaId: string;
+  requiresShareToken?: boolean;
   shareId?: string;
   slug: string;
 }>) {
@@ -31,14 +33,16 @@ export function PhotoShareButton({
     try {
       const resolvedShareId =
         shareId ??
-        (
-          await publicMutation<ShareResponse>(
-            `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
-          )
-        ).shareId;
+        (requiresShareToken
+          ? (
+              await publicMutation<ShareResponse>(
+                `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
+              )
+            ).shareId
+          : undefined);
       const url = new URL(`/g/${encodeURIComponent(slug)}`, window.location.origin);
       url.searchParams.set("photo", mediaId);
-      url.searchParams.set("share", resolvedShareId);
+      if (resolvedShareId !== undefined) url.searchParams.set("share", resolvedShareId);
       const shareUrl = url.toString();
 
       if (typeof navigator.share === "function") {
@@ -57,7 +61,10 @@ export function PhotoShareButton({
       await navigator.clipboard.writeText(shareUrl);
       toast.add({
         title: "分享链接已复制",
-        description: "对方打开链接即可直接查看这张照片，无需输入相册口令。",
+        description:
+          resolvedShareId === undefined
+            ? "对方打开链接即可直达这张照片。"
+            : "对方打开链接即可直接查看这张照片，无需输入相册口令。",
         type: "success",
         timeout: 3_000,
       });
