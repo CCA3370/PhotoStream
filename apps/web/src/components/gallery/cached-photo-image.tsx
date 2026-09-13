@@ -36,6 +36,7 @@ export function CachedPhotoImage({
   mediaId,
   onLoad,
   priority = false,
+  refreshUrl,
   scope,
   sizes,
   sourceUrl,
@@ -49,6 +50,7 @@ export function CachedPhotoImage({
   mediaId: string;
   onLoad?: () => void;
   priority?: boolean;
+  refreshUrl?: () => Promise<string>;
   scope: string;
   sizes: string;
   sourceUrl: string;
@@ -115,13 +117,15 @@ export function CachedPhotoImage({
       : loadDerivedImage({
           ...request,
           sourceUrl,
-          refreshUrl: async () => {
-            const path =
-              scope === "public-media"
-                ? `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${kind}`
-                : `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/variants/${kind}`;
-            return (await clientGet<{ url: string }>(path)).url;
-          },
+          refreshUrl:
+            refreshUrl ??
+            (async () => {
+              const path =
+                scope === "public-media"
+                  ? `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${kind}`
+                  : `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/variants/${kind}`;
+              return (await clientGet<{ url: string }>(path)).url;
+            }),
         });
     void work
       .then(() => {
@@ -149,6 +153,7 @@ export function CachedPhotoImage({
     identity,
     kind,
     mediaId,
+    refreshUrl,
     scope,
     sourceUrl,
     telemetryScope,
