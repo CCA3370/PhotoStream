@@ -1,0 +1,100 @@
+name: Apply WeChat long-press save fix
+
+on:
+  push:
+    branches:
+      - fix/wechat-long-press-save-http-url
+    paths:
+      - .github/workflows/apply-wechat-longpress-save-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/wechat-long-press-save-http-url
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Patch WeChat lightbox save URLs
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise RuntimeError(f"missing replacement target: {label}")
+              return text.replace(old, new, 1)
+
+          # Main gallery lightbox
+          path = Path("apps/web/src/components/gallery/photo-lightbox.tsx")
+          text = path.read_text()
+
+          old = '''  const replacePreparedImage = useCallback(\n    async (kind: "preview" | "original", blob: Blob) => {\n      if (selected === null) return;\n      const mediaId = selected.id;\n      const requestId = preparedRequestRef.current + 1;\n      preparedRequestRef.current = requestId;\n      const objectUrl = URL.createObjectURL(blob);\n      await decodeObjectUrl(objectUrl);\n      if (preparedRequestRef.current !== requestId || selectedId !== mediaId) {\n        URL.revokeObjectURL(objectUrl);\n        return;\n      }\n      if (preparedObjectUrlRef.current !== null) {\n        URL.revokeObjectURL(preparedObjectUrlRef.current);\n      }\n      preparedObjectUrlRef.current = objectUrl;\n      setPreparedImage({ mediaId, kind, url: objectUrl });\n      resetView();\n      showSaveHint(kind);\n    },\n    [resetView, selected, selectedId, showSaveHint],\n  );\n'''
+          new = '''  const replacePreparedImage = useCallback(\n    async (kind: "preview" | "original", url: string) => {\n      if (selected === null) return;\n      const mediaId = selected.id;\n      const requestId = preparedRequestRef.current + 1;\n      preparedRequestRef.current = requestId;\n      const saveableUrl = new URL(url, window.location.href);\n      if (saveableUrl.protocol !== "http:" && saveableUrl.protocol !== "https:") {\n        throw new Error("当前图片地址无法由微信保存，请重新下载后重试。");\n      }\n      const resolvedUrl = saveableUrl.toString();\n      await decodeImageUrl(resolvedUrl);\n      if (preparedRequestRef.current !== requestId || selectedId !== mediaId) return;\n      setPreparedImage({ mediaId, kind, url: resolvedUrl });\n      resetView();\n      showSaveHint(kind);\n    },\n    [resetView, selected, selectedId, showSaveHint],\n  );\n'''
+          text = replace_once(text, old, new, "main replacePreparedImage")
+          text = replace_once(text, "async function decodeObjectUrl(url: string): Promise<void> {", "async function decodeImageUrl(url: string): Promise<void> {", "main decode helper")
+          text = replace_once(text, "  const preparedObjectUrlRef = useRef<string | null>(null);\n", "", "main object URL ref")
+          cleanup = '''    if (preparedObjectUrlRef.current !== null) {\n      URL.revokeObjectURL(preparedObjectUrlRef.current);\n      preparedObjectUrlRef.current = null;\n    }\n'''
+          if text.count(cleanup) != 2:
+              raise RuntimeError(f"expected two main object URL cleanup blocks, found {text.count(cleanup)}")
+          text = text.replace(cleanup, "")
+
+          old = '''      if (\n        activePreparedImage?.kind === "preview" ||\n        (activePreparedImage === null && large.kind === "photo_1920" && loaded)\n      ) {\n        showSaveHint("preview");\n        return;\n      }\n      setWeChatDownload({ kind: "preview", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "preview" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("preview", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));\n      }\n'''
+          new = '''      if (activePreparedImage?.kind === "preview") {\n        showSaveHint("preview");\n        return;\n      }\n      if (activePreparedImage === null && large.kind === "photo_1920" && loaded) {\n        await replacePreparedImage("preview", large.url);\n        return;\n      }\n      setWeChatDownload({ kind: "preview", progress: 0 });\n      try {\n        await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "preview" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("preview", source.url);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "main preview save flow")
+
+          old = '''      setWeChatDownload({ kind: "original", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "original" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("original", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "original" ? null : current));\n      }\n'''
+          new = '''      setWeChatDownload({ kind: "original", progress: 0 });\n      try {\n        await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "original" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("original", source.url);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "original" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "main original save flow")
+          path.write_text(text)
+
+          # Shared-photo lightbox
+          path = Path("apps/web/src/components/gallery/shared-photo-viewer.tsx")
+          text = path.read_text()
+          text = replace_once(
+              text,
+              'import { useCallback, useEffect, useMemo, useRef, useState } from "react";\n',
+              'import { useCallback, useEffect, useMemo, useState } from "react";\n',
+              "shared useRef import",
+          )
+          text = replace_once(text, "async function decodeObjectUrl(url: string): Promise<void> {", "async function decodeImageUrl(url: string): Promise<void> {", "shared decode helper")
+          text = replace_once(text, "  const preparedObjectUrlRef = useRef<string | null>(null);\n", "", "shared object URL ref")
+          cleanup_effect = '''  useEffect(\n    () => () => {\n      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);\n    },\n    [],\n  );\n\n'''
+          text = replace_once(text, cleanup_effect, "", "shared object URL cleanup")
+
+          old = '''  const replacePreparedImage = useCallback(\n    async (kind: "preview" | "original", blob: Blob) => {\n      const objectUrl = URL.createObjectURL(blob);\n      await decodeObjectUrl(objectUrl);\n      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);\n      preparedObjectUrlRef.current = objectUrl;\n      setPreparedImage({ kind, url: objectUrl });\n      resetView();\n      showSaveHint(kind);\n    },\n    [resetView, showSaveHint],\n  );\n'''
+          new = '''  const replacePreparedImage = useCallback(\n    async (kind: "preview" | "original", url: string) => {\n      const saveableUrl = new URL(url, window.location.href);\n      if (saveableUrl.protocol !== "http:" && saveableUrl.protocol !== "https:") {\n        throw new Error("当前图片地址无法由微信保存，请重新下载后重试。");\n      }\n      const resolvedUrl = saveableUrl.toString();\n      await decodeImageUrl(resolvedUrl);\n      setPreparedImage({ kind, url: resolvedUrl });\n      resetView();\n      showSaveHint(kind);\n    },\n    [resetView, showSaveHint],\n  );\n'''
+          text = replace_once(text, old, new, "shared replacePreparedImage")
+
+          old = '''      if (\n        preparedImage?.kind === "preview" ||\n        (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)\n      ) {\n        showSaveHint("preview");\n        return;\n      }\n      setWeChatDownload({ kind: "preview", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "preview" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("preview", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));\n      }\n'''
+          new = '''      if (preparedImage?.kind === "preview") {\n        showSaveHint("preview");\n        return;\n      }\n      if (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded) {\n        await replacePreparedImage("preview", preview.url);\n        return;\n      }\n      setWeChatDownload({ kind: "preview", progress: 0 });\n      try {\n        await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "preview" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("preview", source.url);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "shared preview save flow")
+
+          old = '''      setWeChatDownload({ kind: "original", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "original" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("original", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "original" ? null : current));\n      }\n'''
+          new = '''      setWeChatDownload({ kind: "original", progress: 0 });\n      try {\n        await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "original" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("original", source.url);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "original" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "shared original save flow")
+          path.write_text(text)
+          PY
+      - name: Format and validate
+        run: |
+          pnpm exec biome check --write apps/web/src/components/gallery/photo-lightbox.tsx apps/web/src/components/gallery/shared-photo-viewer.tsx
+          pnpm --filter @photostream/web typecheck
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-wechat-longpress-save-fix.yml
+          git add apps/web/src/components/gallery/photo-lightbox.tsx apps/web/src/components/gallery/shared-photo-viewer.tsx
+          git commit -m "Fix WeChat long-press image saving"
+          git push origin HEAD:fix/wechat-long-press-save-http-url
