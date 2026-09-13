@@ -6,10 +6,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
-import {
-  DownloadButton,
-  type WeChatDownloadSource,
-} from "@/components/gallery/download-button";
+import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";
 import { fittedImageWidth } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
@@ -134,7 +131,10 @@ export function SharedPhotoViewer({
 
   const preparePreviewForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
-      if (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded) {
+      if (
+        preparedImage?.kind === "preview" ||
+        (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)
+      ) {
         showSaveHint();
         return;
       }
@@ -147,11 +147,23 @@ export function SharedPhotoViewer({
       });
       await replacePreparedImage("preview", blob);
     },
-    [media.id, preparedImage, preview?.kind, previewLoaded, replacePreparedImage, showSaveHint, slug],
+    [
+      media.id,
+      preparedImage,
+      preview?.kind,
+      previewLoaded,
+      replacePreparedImage,
+      showSaveHint,
+      slug,
+    ],
   );
 
   const prepareOriginalForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
+      if (preparedImage?.kind === "original") {
+        showSaveHint();
+        return;
+      }
       const blob = await loadOriginalImage({
         slug,
         mediaId: media.id,
@@ -160,14 +172,13 @@ export function SharedPhotoViewer({
       });
       await replacePreparedImage("original", blob);
     },
-    [media.id, replacePreparedImage, slug],
+    [media.id, preparedImage?.kind, replacePreparedImage, showSaveHint, slug],
   );
 
   if (preview === null) return null;
 
   const canDownloadPreview = media.downloads.preview;
-  const canDownloadOriginal =
-    media.downloads.original && media.downloads.originalBytes !== null;
+  const canDownloadOriginal = media.downloads.original && media.downloads.originalBytes !== null;
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
@@ -305,10 +316,14 @@ export function SharedPhotoViewer({
                   {canDownloadPreview ? (
                     <DownloadButton
                       bytes={preview.bytes}
-                      className={cn(toolbarButtonClass, "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs")}
+                      className={cn(
+                        toolbarButtonClass,
+                        "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs",
+                      )}
                       kind="preview"
                       label="普通图"
                       mediaId={media.id}
+                      onSuccess={() => setDownloadMenuOpen(false)}
                       onWeChatSave={preparePreviewForWeChat}
                       shareId={shareId}
                       showBytes={false}
@@ -319,10 +334,14 @@ export function SharedPhotoViewer({
                   {canDownloadOriginal && media.downloads.originalBytes !== null ? (
                     <DownloadButton
                       bytes={media.downloads.originalBytes}
-                      className={cn(toolbarButtonClass, "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs")}
+                      className={cn(
+                        toolbarButtonClass,
+                        "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs",
+                      )}
                       kind="original"
                       label="原图"
                       mediaId={media.id}
+                      onSuccess={() => setDownloadMenuOpen(false)}
                       onWeChatSave={prepareOriginalForWeChat}
                       shareId={shareId}
                       showBytes={false}
