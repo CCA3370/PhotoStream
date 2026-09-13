@@ -60,7 +60,8 @@ function currentWeixinJSBridge(): WeixinJSBridge | undefined {
 async function waitForWeixinJSBridge(): Promise<WeixinJSBridge> {
   const existing = currentWeixinJSBridge();
   if (existing !== undefined) return existing;
-  if (typeof document === "undefined") throw new Error("当前环境无法调用微信图片预览。请在微信中重试。");
+  if (typeof document === "undefined")
+    throw new Error("当前环境无法调用微信图片预览。请在微信中重试。");
 
   return await new Promise<WeixinJSBridge>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
