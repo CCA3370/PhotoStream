@@ -1,0 +1,143 @@
+name: Apply WeChat download progress
+
+on:
+  push:
+    branches:
+      - fix/wechat-lightbox-save-flow
+    paths:
+      - .github/workflows/apply-wechat-progress.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/wechat-lightbox-save-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Patch lightboxes and E2E expectation
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise RuntimeError(f"missing replacement target: {label}")
+              return text.replace(old, new, 1)
+
+          path = Path("apps/web/src/components/gallery/photo-lightbox.tsx")
+          text = path.read_text()
+          text = replace_once(
+              text,
+              'import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";\n',
+              'import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";\nimport { ImageDownloadProgress } from "@/components/gallery/image-download-progress";\n',
+              "photo progress component import",
+          )
+          text = replace_once(
+              text,
+              'import { loadOriginalImage } from "@/lib/original-image-cache";\n',
+              'import { fetchImageWithProgress } from "@/lib/image-download-progress";\n',
+              "photo progress helper import",
+          )
+          text = replace_once(
+              text,
+              '  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);\n',
+              '  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);\n  const [wechatDownload, setWeChatDownload] = useState<{\n    kind: "preview" | "original";\n    progress: number;\n  } | null>(null);\n',
+              "photo progress state",
+          )
+          text = replace_once(
+              text,
+              '    setDownloadMenuOpen(false);\n    setPreparedImage(null);\n    if (selectedId !== null) resetInteraction();\n',
+              '    setDownloadMenuOpen(false);\n    setWechatDownload(null);\n    setPreparedImage(null);\n    if (selectedId !== null) resetInteraction();\n',
+              "photo selection reset",
+          )
+          old = '''  const showSaveHint = useCallback(() => {\n    setDownloadMenuOpen(false);\n    toast.add({\n      title: "图片已准备好",\n      description: "长按当前图片，选择“保存到相册”。",\n      type: "success",\n      timeout: 5_000,\n    });\n  }, []);\n'''
+          new = '''  const showSaveHint = useCallback((kind: "preview" | "original") => {\n    setDownloadMenuOpen(false);\n    toast.add({\n      title:\n        kind === "original"\n          ? "原图已加载完成，请长按图片并选择“保存到手机”"\n          : "普通图已加载完成，请长按图片并选择“保存到手机”",\n      type: "success",\n      timeout: 5_000,\n    });\n  }, []);\n'''
+          text = replace_once(text, old, new, "photo save hint")
+          text = replace_once(text, '      showSaveHint();\n', '      showSaveHint(kind);\n', "photo prepared save hint")
+          old = '''      if (\n        activePreparedImage?.kind === "preview" ||\n        (activePreparedImage === null && large.kind === "photo_1920" && loaded)\n      ) {\n        showSaveHint();\n        return;\n      }\n      const blob = await loadDerivedImage({\n        scope: slug ?? "public-media",\n        mediaId: selected.id,\n        kind: "photo_1920",\n        bytes: source.bytes,\n        sourceUrl: source.url,\n      });\n      await replacePreparedImage("preview", blob);\n'''
+          new = '''      if (\n        activePreparedImage?.kind === "preview" ||\n        (activePreparedImage === null && large.kind === "photo_1920" && loaded)\n      ) {\n        showSaveHint("preview");\n        return;\n      }\n      setWeChatDownload({ kind: "preview", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "preview" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("preview", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "photo preview streamed download")
+          old = '''      if (activePreparedImage?.kind === "original") {\n        showSaveHint();\n        return;\n      }\n      const blob = await loadOriginalImage({\n        slug,\n        mediaId: selected.id,\n        expectedBytes: source.bytes,\n        sourceUrl: source.url,\n      });\n      await replacePreparedImage("original", blob);\n'''
+          new = '''      if (activePreparedImage?.kind === "original") {\n        showSaveHint("original");\n        return;\n      }\n      setWeChatDownload({ kind: "original", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "original" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("original", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "original" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "photo original streamed download")
+          text = replace_once(
+              text,
+              '        <div\n          className="relative h-full w-full overflow-hidden bg-black"\n',
+              '        <div\n          className="relative h-full w-full overflow-hidden bg-black"\n',
+              "photo viewer anchor",
+          )
+          anchor = '''        >\n          <div\n            aria-label="照片画布"\n'''
+          insertion = '''        >\n          {wechatDownload === null ? null : (\n            <ImageDownloadProgress kind={wechatDownload.kind} progress={wechatDownload.progress} />\n          )}\n          <div\n            aria-label="照片画布"\n'''
+          text = replace_once(text, anchor, insertion, "photo central progress")
+          path.write_text(text)
+
+          path = Path("apps/web/src/components/gallery/shared-photo-viewer.tsx")
+          text = path.read_text()
+          text = replace_once(
+              text,
+              'import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";\n',
+              'import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";\nimport { ImageDownloadProgress } from "@/components/gallery/image-download-progress";\n',
+              "shared progress component import",
+          )
+          text = replace_once(
+              text,
+              'import { loadDerivedImage } from "@/lib/derived-image-cache";\nimport { loadOriginalImage } from "@/lib/original-image-cache";\n',
+              'import { fetchImageWithProgress } from "@/lib/image-download-progress";\n',
+              "shared progress helper import",
+          )
+          text = replace_once(
+              text,
+              '  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);\n',
+              '  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);\n  const [wechatDownload, setWeChatDownload] = useState<{\n    kind: "preview" | "original";\n    progress: number;\n  } | null>(null);\n',
+              "shared progress state",
+          )
+          text = replace_once(text, old := '''  const showSaveHint = useCallback(() => {\n    setDownloadMenuOpen(false);\n    toast.add({\n      title: "图片已准备好",\n      description: "长按当前图片，选择“保存到相册”。",\n      type: "success",\n      timeout: 5_000,\n    });\n  }, []);\n''', new := '''  const showSaveHint = useCallback((kind: "preview" | "original") => {\n    setDownloadMenuOpen(false);\n    toast.add({\n      title:\n        kind === "original"\n          ? "原图已加载完成，请长按图片并选择“保存到手机”"\n          : "普通图已加载完成，请长按图片并选择“保存到手机”",\n      type: "success",\n      timeout: 5_000,\n    });\n  }, []);\n''', "shared save hint")
+          text = replace_once(text, '      showSaveHint();\n', '      showSaveHint(kind);\n', "shared prepared save hint")
+          old = '''      if (\n        preparedImage?.kind === "preview" ||\n        (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)\n      ) {\n        showSaveHint();\n        return;\n      }\n      const blob = await loadDerivedImage({\n        scope: slug,\n        mediaId: media.id,\n        kind: "photo_1920",\n        bytes: source.bytes,\n        sourceUrl: source.url,\n      });\n      await replacePreparedImage("preview", blob);\n'''
+          new = '''      if (\n        preparedImage?.kind === "preview" ||\n        (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)\n      ) {\n        showSaveHint("preview");\n        return;\n      }\n      setWeChatDownload({ kind: "preview", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "preview" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("preview", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "shared preview streamed download")
+          old = '''      if (preparedImage?.kind === "original") {\n        showSaveHint();\n        return;\n      }\n      const blob = await loadOriginalImage({\n        slug,\n        mediaId: media.id,\n        expectedBytes: source.bytes,\n        sourceUrl: source.url,\n      });\n      await replacePreparedImage("original", blob);\n'''
+          new = '''      if (preparedImage?.kind === "original") {\n        showSaveHint("original");\n        return;\n      }\n      setWeChatDownload({ kind: "original", progress: 0 });\n      try {\n        const blob = await fetchImageWithProgress({\n          url: source.url,\n          expectedBytes: source.bytes,\n          onProgress: (progress) =>\n            setWeChatDownload((current) =>\n              current?.kind === "original" ? { ...current, progress } : current,\n            ),\n        });\n        await replacePreparedImage("original", blob);\n      } finally {\n        setWeChatDownload((current) => (current?.kind === "original" ? null : current));\n      }\n'''
+          text = replace_once(text, old, new, "shared original streamed download")
+          text = replace_once(
+              text,
+              '  return (\n    <div className="dark public-theme fixed inset-0 z-50 h-dvh w-screen overflow-hidden bg-black text-white">\n',
+              '  return (\n    <div className="dark public-theme fixed inset-0 z-50 h-dvh w-screen overflow-hidden bg-black text-white">\n      {wechatDownload === null ? null : (\n        <ImageDownloadProgress kind={wechatDownload.kind} progress={wechatDownload.progress} />\n      )}\n',
+              "shared central progress",
+          )
+          path.write_text(text)
+
+          path = Path("apps/web/tests/e2e/operations.spec.ts")
+          text = path.read_text()
+          old = '''    await viewerPage.getByRole("button", { name: "打开活动照片" }).click();\n    await expect(viewerPage.getByRole("button", { name: /下载普通图/u })).toBeVisible();\n    await expect(viewerPage.getByRole("button", { name: /下载原图/u })).toBeVisible();\n'''
+          new = '''    await viewerPage.getByRole("button", { name: "打开活动照片" }).click();\n    const downloadMenu = viewerPage.getByRole("button", { name: "下载", exact: true });\n    await expect(downloadMenu).toBeVisible();\n    await downloadMenu.click();\n    await expect(viewerPage.getByRole("button", { name: "普通图", exact: true })).toBeVisible();\n    await expect(viewerPage.getByRole("button", { name: "原图", exact: true })).toBeVisible();\n'''
+          text = replace_once(text, old, new, "E2E download menu expectation")
+          path.write_text(text)
+          PY
+      - name: Format and validate changed files
+        run: >-
+          pnpm exec biome check --write
+          apps/web/src/components/gallery/photo-lightbox.tsx
+          apps/web/src/components/gallery/shared-photo-viewer.tsx
+          apps/web/src/components/gallery/image-download-progress.tsx
+          apps/web/src/lib/image-download-progress.ts
+          apps/web/tests/e2e/operations.spec.ts
+      - name: Commit progress UX
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/gallery/photo-lightbox.tsx apps/web/src/components/gallery/shared-photo-viewer.tsx apps/web/src/components/gallery/image-download-progress.tsx apps/web/src/lib/image-download-progress.ts apps/web/tests/e2e/operations.spec.ts
+          git commit -m "Improve WeChat image download progress UX"
+          git push origin HEAD:fix/wechat-lightbox-save-flow
