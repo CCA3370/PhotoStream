@@ -14,10 +14,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
-import {
-  DownloadButton,
-  type WeChatDownloadSource,
-} from "@/components/gallery/download-button";
+import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";
 import {
   fittedImageWidth,
   LightboxNeighborSlide,
@@ -275,7 +272,7 @@ export function PhotoLightbox({
     }
     setDownloadMenuOpen(false);
     setPreparedImage(null);
-    resetInteraction();
+    if (selectedId !== null) resetInteraction();
   }, [resetInteraction, selectedId]);
 
   useEffect(
