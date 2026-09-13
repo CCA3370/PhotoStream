@@ -276,7 +276,7 @@ export function PhotoLightbox({
       preparedObjectUrlRef.current = null;
     }
     setDownloadMenuOpen(false);
-    setWechatDownload(null);
+    setWeChatDownload(null);
     setPreparedImage(null);
     if (selectedId !== null) resetInteraction();
   }, [resetInteraction, selectedId]);
