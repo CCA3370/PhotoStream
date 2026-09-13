@@ -15,6 +15,8 @@ interface MediaPage {
   readonly eventCursor: number;
 }
 
+const publicMediaVisibilityDelayMs = 15_000;
+
 function mergeMedia(
   current: readonly PublicMediaView[],
   incoming: readonly PublicMediaView[],
@@ -59,12 +61,18 @@ function distributeFeatured(
   return result;
 }
 
+function visibleAt(item: PublicMediaView): number | null {
+  const publishedAt = Date.parse(item.publishedAt);
+  return Number.isFinite(publishedAt) ? publishedAt + publicMediaVisibilityDelayMs : null;
+}
+
 export function PaginatedMediaGrid({
   categoryId,
   featuredOnly = false,
   initialFeaturedIds,
   initialPage,
   initialSelectedId,
+  initialVisibilityNow = Date.now(),
   slug,
 }: Readonly<{
   categoryId?: string;
@@ -72,6 +80,7 @@ export function PaginatedMediaGrid({
   initialFeaturedIds: readonly string[];
   initialPage: MediaPage;
   initialSelectedId?: string;
+  initialVisibilityNow?: number;
   slug: string;
 }>) {
   const [items, setItems] = useState<readonly PublicMediaView[]>(initialPage.items);
@@ -82,6 +91,7 @@ export function PaginatedMediaGrid({
   const [loading, setLoading] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [visibilityNow, setVisibilityNow] = useState(initialVisibilityNow);
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
 
@@ -101,6 +111,19 @@ export function PaginatedMediaGrid({
     const next = new Set(initialFeaturedIds);
     setFeaturedIds((current) => (sameStringSet(current, next) ? current : next));
   }, [initialFeaturedIds]);
+
+  useEffect(() => {
+    let nextVisibleAt: number | null = null;
+    for (const item of items) {
+      const deadline = visibleAt(item);
+      if (deadline === null || deadline <= visibilityNow) continue;
+      nextVisibleAt = nextVisibleAt === null ? deadline : Math.min(nextVisibleAt, deadline);
+    }
+    if (nextVisibleAt === null) return;
+    const delay = Math.max(0, nextVisibleAt - Date.now()) + 50;
+    const timer = window.setTimeout(() => setVisibilityNow(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [items, visibilityNow]);
 
   useEffect(() => {
     void refreshFeatured().catch(() => undefined);
@@ -210,12 +233,20 @@ export function PaginatedMediaGrid({
     return () => observer.disconnect();
   }, [cursor, featuredOnly, loadMore, loadMoreError]);
 
+  const eligibleItems = useMemo(
+    () =>
+      items.filter((item) => {
+        const deadline = visibleAt(item);
+        return deadline === null || deadline <= visibilityNow;
+      }),
+    [items, visibilityNow],
+  );
   const visibleItems = useMemo(
     () =>
       featuredOnly
-        ? items.filter((item) => featuredIds.has(item.id))
-        : distributeFeatured(items, featuredIds),
-    [featuredIds, featuredOnly, items],
+        ? eligibleItems.filter((item) => featuredIds.has(item.id))
+        : distributeFeatured(eligibleItems, featuredIds),
+    [eligibleItems, featuredIds, featuredOnly],
   );
 
   return (
