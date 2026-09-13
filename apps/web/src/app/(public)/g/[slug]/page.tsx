@@ -9,6 +9,7 @@ import { SharedPhotoViewer } from "@/components/gallery/shared-photo-viewer";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
+import { Toaster } from "@/components/ui/toast";
 import { serverApi } from "@/lib/api";
 
 import styles from "./gallery-toolbar.module.css";
@@ -45,23 +46,19 @@ export default async function GalleryPage({
   const query = await searchParams;
   const requestedCategory = query.category;
   const featuredOnly = query.featured === "1";
-  const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
 
   if (query.photo !== undefined && query.share !== undefined) {
     const shared = await serverApi<PublicMediaView>(
       `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(query.photo)}?share=${encodeURIComponent(query.share)}`,
     );
     return (
-      <PublicGalleryShell
-        albumDescription={album.description}
-        albumTitle={album.title}
-        status={album.state === "live" ? "直播中" : "已结束"}
-      >
-        <ViewerServiceNotice />
+      <Toaster>
         <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
-      </PublicGalleryShell>
+      </Toaster>
     );
   }
+
+  const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
 
   if (album.accessRequired) {
     return (
