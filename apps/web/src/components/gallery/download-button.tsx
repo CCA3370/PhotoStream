@@ -18,7 +18,7 @@ export interface WeChatDownloadSource {
   readonly expiresAt: string;
 }
 
-interface SignedDownload extends WeChatDownloadSource {}
+type SignedDownload = WeChatDownloadSource;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KiB`;
