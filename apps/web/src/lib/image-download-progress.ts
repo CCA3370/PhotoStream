@@ -38,12 +38,14 @@ export async function fetchImageWithProgress(request: ImageDownloadProgressReque
   }
 
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const chunks: ArrayBuffer[] = [];
   let loadedBytes = 0;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value);
+    const copy = new Uint8Array(value.byteLength);
+    copy.set(value);
+    chunks.push(copy.buffer);
     loadedBytes += value.byteLength;
     if (totalBytes !== null) {
       request.onProgress(clampProgress(Math.min(0.99, loadedBytes / totalBytes)));
