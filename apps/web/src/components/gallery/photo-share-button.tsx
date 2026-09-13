@@ -1,11 +1,12 @@
 "use client";
 
+import type { PublicAlbumView } from "@photostream/contracts";
 import { LoaderCircleIcon, Share2Icon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { publicMutation } from "@/lib/client-api";
+import { clientGet, publicMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
 interface ShareResponse {
@@ -15,13 +16,11 @@ interface ShareResponse {
 export function PhotoShareButton({
   className,
   mediaId,
-  requiresShareToken = false,
   shareId,
   slug,
 }: Readonly<{
   className?: string;
   mediaId: string;
-  requiresShareToken?: boolean;
   shareId?: string;
   slug: string;
 }>) {
@@ -31,15 +30,20 @@ export function PhotoShareButton({
     if (pending) return;
     setPending(true);
     try {
-      const resolvedShareId =
-        shareId ??
-        (requiresShareToken
-          ? (
-              await publicMutation<ShareResponse>(
-                `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
-              )
-            ).shareId
-          : undefined);
+      let resolvedShareId = shareId;
+      if (resolvedShareId === undefined) {
+        const album = await clientGet<PublicAlbumView>(
+          `/api/v1/public/albums/${encodeURIComponent(slug)}`,
+        );
+        if (album.access === "password") {
+          resolvedShareId = (
+            await publicMutation<ShareResponse>(
+              `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
+            )
+          ).shareId;
+        }
+      }
+
       const url = new URL(`/g/${encodeURIComponent(slug)}`, window.location.origin);
       url.searchParams.set("photo", mediaId);
       if (resolvedShareId !== undefined) url.searchParams.set("share", resolvedShareId);
