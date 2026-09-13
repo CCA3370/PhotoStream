@@ -26,6 +26,7 @@ export function PhotoLikeButton({
   mediaId,
   mode,
   onChange,
+  shareId,
   slug,
   state,
 }: Readonly<{
@@ -33,6 +34,7 @@ export function PhotoLikeButton({
   mediaId: string;
   mode: "thumbnail" | "toolbar";
   onChange: (state: PhotoLikeState) => void;
+  shareId?: string;
   slug: string;
   state: PhotoLikeState | null;
 }>) {
@@ -91,8 +93,12 @@ export function PhotoLikeButton({
     setPending(true);
     setError(null);
     try {
+      const endpoint =
+        shareId === undefined
+          ? `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/like`
+          : `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(mediaId)}/like?share=${encodeURIComponent(shareId)}`;
       const result = await publicMutation<PhotoLikeState>(
-        `/api/v1/public/albums/${slug}/media/${mediaId}/like`,
+        endpoint,
         nextLiked ? {} : { method: "DELETE" },
       );
       onChange(result);
