@@ -12,11 +12,7 @@ import { z } from "zod";
 
 import type { AppConfig } from "../config.js";
 import type { PhotoShareService } from "../media/share-service.js";
-import {
-  anonymousVisitorId,
-  likeVisitorId,
-  visitorSessionToken,
-} from "../media/visitor-http.js";
+import { anonymousVisitorId, likeVisitorId, visitorSessionToken } from "../media/visitor-http.js";
 
 const paramsSchema = z
   .object({
