@@ -1,0 +1,40 @@
+name: Fix WeChat progress typecheck
+
+on:
+  push:
+    branches:
+      - fix/wechat-lightbox-save-flow
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/wechat-lightbox-save-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Patch setter spelling
+        run: |
+          sed -i 's/setWechatDownload/setWeChatDownload/g' apps/web/src/components/gallery/photo-lightbox.tsx
+          git diff --check
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate web typecheck
+        run: pnpm --filter @photostream/web typecheck
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/gallery/photo-lightbox.tsx
+          git commit -m "Fix WeChat download progress typecheck"
+          git push origin HEAD:fix/wechat-lightbox-save-flow
