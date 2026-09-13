@@ -4,8 +4,8 @@ import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
 import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
 import { LiveUpdates } from "@/components/gallery/live-updates";
-import { MediaGrid } from "@/components/gallery/media-grid";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
+import { SharedPhotoViewer } from "@/components/gallery/shared-photo-viewer";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
@@ -58,12 +58,7 @@ export default async function GalleryPage({
         status={album.state === "live" ? "直播中" : "已结束"}
       >
         <ViewerServiceNotice />
-        <MediaGrid
-          initialSelectedId={shared.id}
-          items={[shared]}
-          shareId={query.share}
-          slug={slug}
-        />
+        <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
       </PublicGalleryShell>
     );
   }
