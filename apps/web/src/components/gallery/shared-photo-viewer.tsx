@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";
+import { ImageDownloadProgress } from "@/components/gallery/image-download-progress";
 import { fittedImageWidth } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
@@ -14,8 +15,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet } from "@/lib/client-api";
-import { loadDerivedImage } from "@/lib/derived-image-cache";
-import { loadOriginalImage } from "@/lib/original-image-cache";
+import { fetchImageWithProgress } from "@/lib/image-download-progress";
 import { cn } from "@/lib/utils";
 
 const toolbarButtonClass =
@@ -57,6 +57,10 @@ export function SharedPhotoViewer({
   const preview = useMemo(() => bestPreview(media), [media]);
   const [likeState, setLikeState] = useState<PhotoLikeState | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [wechatDownload, setWeChatDownload] = useState<{
+    kind: "preview" | "original";
+    progress: number;
+  } | null>(null);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [preparedImage, setPreparedImage] = useState<{
     kind: "preview" | "original";
@@ -106,11 +110,13 @@ export function SharedPhotoViewer({
     [],
   );
 
-  const showSaveHint = useCallback(() => {
+  const showSaveHint = useCallback((kind: "preview" | "original") => {
     setDownloadMenuOpen(false);
     toast.add({
-      title: "图片已准备好",
-      description: "长按当前图片，选择“保存到相册”。",
+      title:
+        kind === "original"
+          ? "原图已加载完成，请长按图片并选择“保存到手机”"
+          : "普通图已加载完成，请长按图片并选择“保存到手机”",
       type: "success",
       timeout: 5_000,
     });
@@ -124,7 +130,7 @@ export function SharedPhotoViewer({
       preparedObjectUrlRef.current = objectUrl;
       setPreparedImage({ kind, url: objectUrl });
       resetView();
-      showSaveHint();
+      showSaveHint(kind);
     },
     [resetView, showSaveHint],
   );
@@ -135,44 +141,49 @@ export function SharedPhotoViewer({
         preparedImage?.kind === "preview" ||
         (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)
       ) {
-        showSaveHint();
+        showSaveHint("preview");
         return;
       }
-      const blob = await loadDerivedImage({
-        scope: slug,
-        mediaId: media.id,
-        kind: "photo_1920",
-        bytes: source.bytes,
-        sourceUrl: source.url,
-      });
-      await replacePreparedImage("preview", blob);
+      setWeChatDownload({ kind: "preview", progress: 0 });
+      try {
+        const blob = await fetchImageWithProgress({
+          url: source.url,
+          expectedBytes: source.bytes,
+          onProgress: (progress) =>
+            setWeChatDownload((current) =>
+              current?.kind === "preview" ? { ...current, progress } : current,
+            ),
+        });
+        await replacePreparedImage("preview", blob);
+      } finally {
+        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
+      }
     },
-    [
-      media.id,
-      preparedImage,
-      preview?.kind,
-      previewLoaded,
-      replacePreparedImage,
-      showSaveHint,
-      slug,
-    ],
+    [preparedImage, preview?.kind, previewLoaded, replacePreparedImage, showSaveHint],
   );
 
   const prepareOriginalForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
       if (preparedImage?.kind === "original") {
-        showSaveHint();
+        showSaveHint("original");
         return;
       }
-      const blob = await loadOriginalImage({
-        slug,
-        mediaId: media.id,
-        expectedBytes: source.bytes,
-        sourceUrl: source.url,
-      });
-      await replacePreparedImage("original", blob);
+      setWeChatDownload({ kind: "original", progress: 0 });
+      try {
+        const blob = await fetchImageWithProgress({
+          url: source.url,
+          expectedBytes: source.bytes,
+          onProgress: (progress) =>
+            setWeChatDownload((current) =>
+              current?.kind === "original" ? { ...current, progress } : current,
+            ),
+        });
+        await replacePreparedImage("original", blob);
+      } finally {
+        setWeChatDownload((current) => (current?.kind === "original" ? null : current));
+      }
     },
-    [media.id, preparedImage?.kind, replacePreparedImage, showSaveHint, slug],
+    [preparedImage?.kind, replacePreparedImage, showSaveHint],
   );
 
   if (preview === null) return null;
@@ -184,6 +195,9 @@ export function SharedPhotoViewer({
 
   return (
     <div className="dark public-theme fixed inset-0 z-50 h-dvh w-screen overflow-hidden bg-black text-white">
+      {wechatDownload === null ? null : (
+        <ImageDownloadProgress kind={wechatDownload.kind} progress={wechatDownload.progress} />
+      )}
       <div
         aria-label="照片画布"
         className={cn(

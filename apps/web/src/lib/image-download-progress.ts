@@ -9,9 +9,7 @@ function clampProgress(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-export async function fetchImageWithProgress(
-  request: ImageDownloadProgressRequest,
-): Promise<Blob> {
+export async function fetchImageWithProgress(request: ImageDownloadProgressRequest): Promise<Blob> {
   request.onProgress(0);
   const response = await fetch(request.url, {
     cache: "default",
