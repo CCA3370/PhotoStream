@@ -1,5 +1,6 @@
 import type {
   DerivedPhotoVariantKind,
+  DownloadKind,
   PhotoVariantKind,
   PublicMediaView,
 } from "@photostream/contracts";
@@ -8,7 +9,9 @@ import { schema } from "@photostream/db";
 import { and, eq, isNotNull, or } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
+import type { MediaLikeService, MediaLikeState } from "./like-service.js";
 import type { ObjectStorage } from "./object-storage.js";
+import type { OperationsService } from "./operations-service.js";
 import { previewExpiresAt } from "./preview-expiry.js";
 import type { PhotoService } from "./service.js";
 
@@ -18,19 +21,34 @@ function iso(value: Date): string {
   return value.toISOString();
 }
 
+function safeFilenamePart(value: string): string {
+  const normalized = value
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}._-]+/gu, "_")
+    .replace(/^_+|_+$/gu, "")
+    .slice(0, 60);
+  return normalized || "album";
+}
+
 export class PhotoShareService {
   readonly #database: Database;
   readonly #storage: ObjectStorage;
   readonly #photoService: PhotoService;
+  readonly #likeService: MediaLikeService | undefined;
+  readonly #operationsService: OperationsService | undefined;
 
   constructor(options: {
     readonly database: Database;
     readonly storage: ObjectStorage;
     readonly photoService: PhotoService;
+    readonly likeService?: MediaLikeService;
+    readonly operationsService?: OperationsService;
   }) {
     this.#database = options.database;
     this.#storage = options.storage;
     this.#photoService = options.photoService;
+    this.#likeService = options.likeService;
+    this.#operationsService = options.operationsService;
   }
 
   async createShare(options: {
@@ -75,9 +93,58 @@ export class PhotoShareService {
     readonly mediaId: string;
     readonly shareId: string;
   }): Promise<PublicMediaView> {
-    const album = await this.#publicAlbum(options.slug);
-    await this.#assertShare({ ...options, albumId: album.id, accessVersion: album.accessVersion });
-    return this.#mediaView(album.id, options.mediaId, { preview: false, original: false });
+    const context = await this.#sharedContext(options);
+    return this.#mediaView(context.album.id, options.mediaId, { preview: true, original: true });
+  }
+
+  async getSharedLikeState(options: {
+    readonly slug: string;
+    readonly mediaId: string;
+    readonly shareId: string;
+    readonly viewerId: string;
+  }): Promise<MediaLikeState> {
+    const context = await this.#sharedContext(options);
+    const likeService = this.#requireLikeService();
+    const [state] = await likeService.listStates({
+      albumId: context.album.id,
+      mediaIds: [options.mediaId],
+      viewerId: options.viewerId,
+    });
+    return state ?? { mediaId: options.mediaId, count: 0, likedByViewer: false };
+  }
+
+  async setSharedLike(options: {
+    readonly slug: string;
+    readonly mediaId: string;
+    readonly shareId: string;
+    readonly viewerId: string;
+    readonly liked: boolean;
+  }): Promise<MediaLikeState> {
+    const context = await this.#sharedContext(options);
+    return this.#requireLikeService().setLike({
+      albumId: context.album.id,
+      mediaId: options.mediaId,
+      viewerId: options.viewerId,
+      liked: options.liked,
+    });
+  }
+
+  async issueSharedOriginalView(options: {
+    readonly slug: string;
+    readonly mediaId: string;
+    readonly shareId: string;
+  }) {
+    return this.#issueSharedMediaAccess({ ...options, kind: "original", intent: "view" });
+  }
+
+  async issueSharedDownload(options: {
+    readonly slug: string;
+    readonly mediaId: string;
+    readonly shareId: string;
+    readonly kind: DownloadKind;
+    readonly visitorId: string;
+  }) {
+    return this.#issueSharedMediaAccess({ ...options, intent: "download" });
   }
 
   async refreshSharedVariant(options: {
@@ -87,15 +154,13 @@ export class PhotoShareService {
     readonly kind: DerivedPhotoVariantKind;
   }) {
     if (!publicVariantKinds.has(options.kind)) throw this.#notFound();
-    const album = await this.#publicAlbum(options.slug);
-    await this.#assertShare({ ...options, albumId: album.id, accessVersion: album.accessVersion });
-    await this.#publishedMedia(album.id, options.mediaId);
+    const context = await this.#sharedContext(options);
     const [variant] = await this.#database
       .select()
       .from(schema.mediaVariants)
       .where(
         and(
-          eq(schema.mediaVariants.mediaId, options.mediaId),
+          eq(schema.mediaVariants.mediaId, context.media.id),
           eq(schema.mediaVariants.kind, options.kind),
           eq(schema.mediaVariants.verified, true),
           isNotNull(schema.mediaVariants.bytes),
@@ -109,6 +174,67 @@ export class PhotoShareService {
       expiresAt: expiresAt.toISOString(),
       bytes: variant.bytes,
     };
+  }
+
+  async #issueSharedMediaAccess(options: {
+    readonly slug: string;
+    readonly mediaId: string;
+    readonly shareId: string;
+    readonly kind: DownloadKind;
+    readonly intent: "download" | "view";
+    readonly visitorId?: string;
+  }) {
+    const context = await this.#sharedContext(options);
+    const variantKind = options.kind === "preview" ? "photo_1920" : "photo_original";
+    const [variant] = await this.#database
+      .select()
+      .from(schema.mediaVariants)
+      .where(
+        and(
+          eq(schema.mediaVariants.mediaId, context.media.id),
+          eq(schema.mediaVariants.kind, variantKind),
+          eq(schema.mediaVariants.verified, true),
+          isNotNull(schema.mediaVariants.bytes),
+        ),
+      )
+      .limit(1);
+    if (variant === undefined || variant.bytes === null) {
+      throw new AppError({
+        code: "DOWNLOAD_NOT_READY",
+        message: "该文件尚未上传完成",
+        statusCode: 409,
+        retryable: true,
+      });
+    }
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1_000);
+    const filename = `${safeFilenamePart(context.album.title)}-${context.media.id.slice(0, 8)}-${options.kind}.${variant.format === "jpeg" ? "jpg" : variant.format}`;
+    if (options.intent === "download" && options.visitorId !== undefined) {
+      await this.#operationsService?.recordAnalytics({
+        albumId: context.album.id,
+        visitorId: options.visitorId,
+        eventType: "download",
+        mediaId: context.media.id,
+        variantKind,
+      });
+    }
+    return {
+      url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+      filename,
+      bytes: variant.bytes,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  async #sharedContext(options: {
+    readonly slug: string;
+    readonly mediaId: string;
+    readonly shareId: string;
+  }) {
+    const album = await this.#publicAlbum(options.slug);
+    await this.#assertShare({ ...options, albumId: album.id, accessVersion: album.accessVersion });
+    const media = await this.#publishedMedia(album.id, options.mediaId);
+    return { album, media };
   }
 
   async #publicAlbum(slug: string) {
@@ -214,6 +340,11 @@ export class PhotoShareService {
       )
       .limit(1);
     if (share === undefined) throw this.#notFound();
+  }
+
+  #requireLikeService(): MediaLikeService {
+    if (this.#likeService === undefined) throw new Error("Photo share likes are not configured");
+    return this.#likeService;
   }
 
   #notFound(): AppError {
