@@ -1,28 +1,25 @@
 "use client";
 
 import type { PublicMediaView } from "@photostream/contracts";
-import { ImageIcon, LoaderCircleIcon } from "lucide-react";
+import { DownloadIcon, XIcon } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
-import { DownloadButton } from "@/components/gallery/download-button";
+import {
+  DownloadButton,
+  type WeChatDownloadSource,
+} from "@/components/gallery/download-button";
 import { fittedImageWidth } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
-import { clientGet, publicMutation } from "@/lib/client-api";
+import { clientGet } from "@/lib/client-api";
+import { loadDerivedImage } from "@/lib/derived-image-cache";
 import { loadOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
-
-interface SignedOriginal {
-  readonly url: string;
-  readonly filename: string;
-  readonly bytes: number;
-  readonly expiresAt: string;
-}
 
 const toolbarButtonClass =
   "h-11 rounded-xl border-white/10 bg-white/[0.07] px-2.5 text-xs text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:scale-[0.97] sm:px-3 sm:text-sm motion-reduce:transform-none motion-reduce:transition-none";
@@ -36,6 +33,21 @@ function bestPreview(media: PublicMediaView) {
   );
 }
 
+async function decodeObjectUrl(url: string): Promise<void> {
+  if (typeof window === "undefined") return;
+  const decoder = new window.Image();
+  decoder.decoding = "async";
+  decoder.src = url;
+  if (typeof decoder.decode === "function") {
+    await decoder.decode().catch(() => undefined);
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    decoder.onload = () => resolve();
+    decoder.onerror = () => resolve();
+  });
+}
+
 export function SharedPhotoViewer({
   media,
   shareId,
@@ -47,9 +59,13 @@ export function SharedPhotoViewer({
 }>) {
   const preview = useMemo(() => bestPreview(media), [media]);
   const [likeState, setLikeState] = useState<PhotoLikeState | null>(null);
-  const [originalPending, setOriginalPending] = useState(false);
-  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
-  const originalObjectUrlRef = useRef<string | null>(null);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [preparedImage, setPreparedImage] = useState<{
+    kind: "preview" | "original";
+    url: string;
+  } | null>(null);
+  const preparedObjectUrlRef = useRef<string | null>(null);
   const ignoreNavigation = useCallback(() => undefined, []);
   const {
     changeZoom,
@@ -88,50 +104,71 @@ export function SharedPhotoViewer({
 
   useEffect(
     () => () => {
-      if (originalObjectUrlRef.current !== null) URL.revokeObjectURL(originalObjectUrlRef.current);
+      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);
     },
     [],
   );
 
-  async function loadOriginal(): Promise<void> {
-    if (
-      originalPending ||
-      originalUrl !== null ||
-      !media.downloads.original ||
-      media.downloads.originalBytes === null
-    ) {
-      return;
-    }
-    setOriginalPending(true);
-    try {
-      const signed = await publicMutation<SignedOriginal>(
-        `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(media.id)}/original/view?share=${encodeURIComponent(shareId)}`,
-      );
+  const showSaveHint = useCallback(() => {
+    setDownloadMenuOpen(false);
+    toast.add({
+      title: "图片已准备好",
+      description: "长按当前图片，选择“保存到相册”。",
+      type: "success",
+      timeout: 5_000,
+    });
+  }, []);
+
+  const replacePreparedImage = useCallback(
+    async (kind: "preview" | "original", blob: Blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      await decodeObjectUrl(objectUrl);
+      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);
+      preparedObjectUrlRef.current = objectUrl;
+      setPreparedImage({ kind, url: objectUrl });
+      resetView();
+      showSaveHint();
+    },
+    [resetView, showSaveHint],
+  );
+
+  const preparePreviewForWeChat = useCallback(
+    async (source: WeChatDownloadSource) => {
+      if (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded) {
+        showSaveHint();
+        return;
+      }
+      const blob = await loadDerivedImage({
+        scope: slug,
+        mediaId: media.id,
+        kind: "photo_1920",
+        bytes: source.bytes,
+        sourceUrl: source.url,
+      });
+      await replacePreparedImage("preview", blob);
+    },
+    [media.id, preparedImage, preview?.kind, previewLoaded, replacePreparedImage, showSaveHint, slug],
+  );
+
+  const prepareOriginalForWeChat = useCallback(
+    async (source: WeChatDownloadSource) => {
       const blob = await loadOriginalImage({
         slug,
         mediaId: media.id,
-        expectedBytes: signed.bytes,
-        sourceUrl: signed.url,
+        expectedBytes: source.bytes,
+        sourceUrl: source.url,
       });
-      const objectUrl = URL.createObjectURL(blob);
-      if (originalObjectUrlRef.current !== null) URL.revokeObjectURL(originalObjectUrlRef.current);
-      originalObjectUrlRef.current = objectUrl;
-      setOriginalUrl(objectUrl);
-      resetView();
-    } catch (caught) {
-      toast.add({
-        title: "原图加载失败",
-        description: caught instanceof Error ? caught.message : "暂时无法加载原图，请稍后重试。",
-        type: "error",
-        timeout: 4_000,
-      });
-    } finally {
-      setOriginalPending(false);
-    }
-  }
+      await replacePreparedImage("original", blob);
+    },
+    [media.id, replacePreparedImage, slug],
+  );
 
   if (preview === null) return null;
 
+  const canDownloadPreview = media.downloads.preview;
+  const canDownloadOriginal =
+    media.downloads.original && media.downloads.originalBytes !== null;
+  const canDownload = canDownloadPreview || canDownloadOriginal;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
 
   return (
@@ -162,7 +199,7 @@ export function SharedPhotoViewer({
               width: fittedImageWidth(media),
             }}
           >
-            {originalUrl === null ? (
+            {preparedImage === null ? (
               <CachedPhotoImage
                 alt="活动照片"
                 bytes={preview.bytes}
@@ -176,6 +213,7 @@ export function SharedPhotoViewer({
                       : "photo_480"
                 }
                 mediaId={media.id}
+                onLoad={() => setPreviewLoaded(true)}
                 priority
                 refreshUrl={async () =>
                   (
@@ -190,13 +228,13 @@ export function SharedPhotoViewer({
               />
             ) : (
               <Image
-                alt="活动照片原图"
+                alt={preparedImage.kind === "original" ? "活动照片原图" : "活动照片"}
                 className="object-contain"
                 draggable={false}
                 fill
                 priority
                 sizes="100vw"
-                src={originalUrl}
+                src={preparedImage.url}
                 unoptimized
               />
             )}
@@ -208,61 +246,103 @@ export function SharedPhotoViewer({
         <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
           <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
             {media.width} × {media.height} · {Math.round(zoom * 100)}%
-            {originalUrl === null ? null : " · 原图"}
+            {preparedImage?.kind === "original" ? " · 原图" : null}
           </div>
 
-          <div className="ml-auto flex w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:w-auto sm:max-w-full">
-            <PhotoLikeButton
-              className="shrink-0 px-2.5"
-              mediaId={media.id}
-              mode="toolbar"
-              onChange={setLikeState}
-              shareId={shareId}
-              slug={slug}
-              state={likeState}
-            />
+          <div className="ml-auto grid w-full min-w-0 items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:w-auto sm:max-w-full">
+            <div
+              aria-hidden={downloadMenuOpen}
+              inert={downloadMenuOpen}
+              className={cn(
+                "col-start-1 row-start-1 flex w-full items-center gap-1.5 transition-[opacity,transform] ease-out sm:w-auto",
+                downloadMenuOpen
+                  ? "pointer-events-none -translate-x-1 opacity-0 duration-100"
+                  : "translate-x-0 opacity-100 duration-150 delay-[70ms]",
+              )}
+            >
+              <PhotoLikeButton
+                className="shrink-0 px-2.5"
+                mediaId={media.id}
+                mode="toolbar"
+                onChange={setLikeState}
+                shareId={shareId}
+                slug={slug}
+                state={likeState}
+              />
 
-            <PhotoShareButton
-              className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
-              mediaId={media.id}
-              shareId={shareId}
-              slug={slug}
-            />
-
-            {media.downloads.original && media.downloads.originalBytes !== null ? (
-              <Button
+              <PhotoShareButton
                 className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
-                disabled={originalPending || originalUrl !== null}
-                onClick={() => void loadOriginal()}
-                type="button"
-                variant="outline"
-              >
-                {originalPending ? (
-                  <LoaderCircleIcon
-                    aria-hidden="true"
-                    className="animate-spin motion-reduce:animate-none"
-                    data-icon="inline-start"
-                  />
-                ) : (
-                  <ImageIcon data-icon="inline-start" />
-                )}
-                <span className="truncate">
-                  {originalPending ? "加载中…" : originalUrl === null ? "查看原图" : "已加载"}
-                </span>
-              </Button>
-            ) : null}
-
-            {media.downloads.original && media.downloads.originalBytes !== null ? (
-              <DownloadButton
-                bytes={media.downloads.originalBytes}
-                className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
-                kind="original"
-                label="下载原图"
                 mediaId={media.id}
                 shareId={shareId}
-                showBytes={false}
                 slug={slug}
               />
+
+              {canDownload ? (
+                <Button
+                  className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
+                  onClick={() => setDownloadMenuOpen(true)}
+                  type="button"
+                  variant="outline"
+                >
+                  <DownloadIcon data-icon="inline-start" />
+                  下载
+                </Button>
+              ) : null}
+            </div>
+
+            {canDownload ? (
+              <div
+                aria-hidden={!downloadMenuOpen}
+                inert={!downloadMenuOpen}
+                className={cn(
+                  "col-start-1 row-start-1 flex w-full items-center justify-self-end transition-[opacity,transform] ease-out sm:w-auto",
+                  downloadMenuOpen
+                    ? "translate-x-0 opacity-100 duration-180 delay-[70ms]"
+                    : "pointer-events-none translate-x-1 opacity-0 duration-100",
+                )}
+              >
+                <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.75rem] items-center gap-1.5 sm:flex sm:w-auto">
+                  {canDownloadPreview ? (
+                    <DownloadButton
+                      bytes={preview.bytes}
+                      className={cn(toolbarButtonClass, "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs")}
+                      kind="preview"
+                      label="普通图"
+                      mediaId={media.id}
+                      onWeChatSave={preparePreviewForWeChat}
+                      shareId={shareId}
+                      showBytes={false}
+                      showIcon={false}
+                      slug={slug}
+                    />
+                  ) : null}
+                  {canDownloadOriginal && media.downloads.originalBytes !== null ? (
+                    <DownloadButton
+                      bytes={media.downloads.originalBytes}
+                      className={cn(toolbarButtonClass, "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs")}
+                      kind="original"
+                      label="原图"
+                      mediaId={media.id}
+                      onWeChatSave={prepareOriginalForWeChat}
+                      shareId={shareId}
+                      showBytes={false}
+                      showIcon={false}
+                      slug={slug}
+                    />
+                  ) : null}
+                  <Button
+                    aria-label="收起下载选项"
+                    className="size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,background-color] duration-150 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none"
+                    onClick={() => setDownloadMenuOpen(false)}
+                    size="icon"
+                    title="关闭下载选项"
+                    type="button"
+                    variant="outline"
+                  >
+                    <XIcon />
+                  </Button>
+                </div>
+              </div>
             ) : null}
           </div>
         </div>
