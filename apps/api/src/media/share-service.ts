@@ -5,7 +5,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, or } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import type { ObjectStorage } from "./object-storage.js";
@@ -75,7 +75,7 @@ export class PhotoShareService {
     readonly mediaId: string;
     readonly shareId: string;
   }): Promise<PublicMediaView> {
-    const { album } = await this.#photoService.getPublicAlbum(options.slug);
+    const album = await this.#publicAlbum(options.slug);
     await this.#assertShare({ ...options, albumId: album.id, accessVersion: album.accessVersion });
     return this.#mediaView(album.id, options.mediaId, { preview: false, original: false });
   }
@@ -87,7 +87,7 @@ export class PhotoShareService {
     readonly kind: DerivedPhotoVariantKind;
   }) {
     if (!publicVariantKinds.has(options.kind)) throw this.#notFound();
-    const { album } = await this.#photoService.getPublicAlbum(options.slug);
+    const album = await this.#publicAlbum(options.slug);
     await this.#assertShare({ ...options, albumId: album.id, accessVersion: album.accessVersion });
     await this.#publishedMedia(album.id, options.mediaId);
     const [variant] = await this.#database
@@ -109,6 +109,25 @@ export class PhotoShareService {
       expiresAt: expiresAt.toISOString(),
       bytes: variant.bytes,
     };
+  }
+
+  async #publicAlbum(slug: string) {
+    const [album] = await this.#database
+      .select()
+      .from(schema.albums)
+      .where(
+        and(
+          eq(schema.albums.slug, slug),
+          or(
+            eq(schema.albums.state, "live"),
+            eq(schema.albums.state, "ended"),
+            eq(schema.albums.state, "archived"),
+          ),
+        ),
+      )
+      .limit(1);
+    if (album === undefined) throw this.#notFound();
+    return album;
   }
 
   async #mediaView(
