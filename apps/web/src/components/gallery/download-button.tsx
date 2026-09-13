@@ -19,6 +19,17 @@ export interface WeChatDownloadSource {
 }
 
 type SignedDownload = WeChatDownloadSource;
+type WeixinJSBridge = {
+  invoke: (
+    method: string,
+    params: Record<string, unknown>,
+    callback?: (response: { err_msg?: string }) => void,
+  ) => void;
+};
+
+type WeChatWindow = Window & {
+  WeixinJSBridge?: WeixinJSBridge;
+};
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KiB`;
@@ -39,6 +50,48 @@ function jpegFilename(filename: string): string {
 
 function isWeChatBrowser(): boolean {
   return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
+}
+
+function currentWeixinJSBridge(): WeixinJSBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as WeChatWindow).WeixinJSBridge;
+}
+
+async function waitForWeixinJSBridge(): Promise<WeixinJSBridge> {
+  const existing = currentWeixinJSBridge();
+  if (existing !== undefined) return existing;
+  if (typeof document === "undefined") throw new Error("当前环境无法调用微信图片预览。请在微信中重试。");
+
+  return await new Promise<WeixinJSBridge>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      document.removeEventListener("WeixinJSBridgeReady", onReady);
+      reject(new Error("微信图片预览暂未就绪，请稍后重试。"));
+    }, 3_000);
+
+    function onReady(): void {
+      const bridge = currentWeixinJSBridge();
+      if (bridge === undefined) return;
+      window.clearTimeout(timeout);
+      document.removeEventListener("WeixinJSBridgeReady", onReady);
+      resolve(bridge);
+    }
+
+    document.addEventListener("WeixinJSBridgeReady", onReady);
+  });
+}
+
+async function openWeChatImagePreview(url: string): Promise<void> {
+  const resolvedUrl = new URL(url, window.location.href);
+  if (resolvedUrl.protocol !== "https:" && resolvedUrl.protocol !== "http:") {
+    throw new Error("当前图片地址无法由微信预览，请重新选择后重试。");
+  }
+
+  const bridge = await waitForWeixinJSBridge();
+  const imageUrl = resolvedUrl.toString();
+  bridge.invoke("imagePreview", {
+    current: imageUrl,
+    urls: [imageUrl],
+  });
 }
 
 async function convertImageToJpeg(blob: Blob): Promise<Blob> {
@@ -132,7 +185,15 @@ export function DownloadButton({
       });
 
       if (weChat && onWeChatSave !== undefined) {
-        await onWeChatSave(signed);
+        const qualityLabel = kind === "original" ? "原图" : "普通图";
+        toast.add({
+          title: `已选择${qualityLabel}`,
+          description: "即将打开微信图片预览，进入后长按图片并选择“保存到手机”。",
+          type: "success",
+          timeout: 2_500,
+        });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
+        await openWeChatImagePreview(signed.url);
         onSuccess?.();
         return;
       }
