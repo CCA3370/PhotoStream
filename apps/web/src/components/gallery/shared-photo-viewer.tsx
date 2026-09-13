@@ -3,7 +3,7 @@
 import type { PublicMediaView } from "@photostream/contracts";
 import { DownloadIcon, XIcon } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";
@@ -30,7 +30,7 @@ function bestPreview(media: PublicMediaView) {
   );
 }
 
-async function decodeObjectUrl(url: string): Promise<void> {
+async function decodeImageUrl(url: string): Promise<void> {
   if (typeof window === "undefined") return;
   const decoder = new window.Image();
   decoder.decoding = "async";
@@ -66,7 +66,6 @@ export function SharedPhotoViewer({
     kind: "preview" | "original";
     url: string;
   } | null>(null);
-  const preparedObjectUrlRef = useRef<string | null>(null);
   const ignoreNavigation = useCallback(() => undefined, []);
   const {
     changeZoom,
@@ -103,13 +102,6 @@ export function SharedPhotoViewer({
     };
   }, [media.id, shareId, slug]);
 
-  useEffect(
-    () => () => {
-      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);
-    },
-    [],
-  );
-
   const showSaveHint = useCallback((kind: "preview" | "original") => {
     setDownloadMenuOpen(false);
     toast.add({
@@ -123,12 +115,14 @@ export function SharedPhotoViewer({
   }, []);
 
   const replacePreparedImage = useCallback(
-    async (kind: "preview" | "original", blob: Blob) => {
-      const objectUrl = URL.createObjectURL(blob);
-      await decodeObjectUrl(objectUrl);
-      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);
-      preparedObjectUrlRef.current = objectUrl;
-      setPreparedImage({ kind, url: objectUrl });
+    async (kind: "preview" | "original", url: string) => {
+      const saveableUrl = new URL(url, window.location.href);
+      if (saveableUrl.protocol !== "http:" && saveableUrl.protocol !== "https:") {
+        throw new Error("当前图片地址无法由微信保存，请重新下载后重试。");
+      }
+      const resolvedUrl = saveableUrl.toString();
+      await decodeImageUrl(resolvedUrl);
+      setPreparedImage({ kind, url: resolvedUrl });
       resetView();
       showSaveHint(kind);
     },
@@ -137,16 +131,17 @@ export function SharedPhotoViewer({
 
   const preparePreviewForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
-      if (
-        preparedImage?.kind === "preview" ||
-        (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)
-      ) {
+      if (preparedImage?.kind === "preview") {
         showSaveHint("preview");
+        return;
+      }
+      if (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded) {
+        await replacePreparedImage("preview", preview.url);
         return;
       }
       setWeChatDownload({ kind: "preview", progress: 0 });
       try {
-        const blob = await fetchImageWithProgress({
+        await fetchImageWithProgress({
           url: source.url,
           expectedBytes: source.bytes,
           onProgress: (progress) =>
@@ -154,12 +149,12 @@ export function SharedPhotoViewer({
               current?.kind === "preview" ? { ...current, progress } : current,
             ),
         });
-        await replacePreparedImage("preview", blob);
+        await replacePreparedImage("preview", source.url);
       } finally {
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
     },
-    [preparedImage, preview?.kind, previewLoaded, replacePreparedImage, showSaveHint],
+    [preparedImage, preview?.kind, preview?.url, previewLoaded, replacePreparedImage, showSaveHint],
   );
 
   const prepareOriginalForWeChat = useCallback(
@@ -170,7 +165,7 @@ export function SharedPhotoViewer({
       }
       setWeChatDownload({ kind: "original", progress: 0 });
       try {
-        const blob = await fetchImageWithProgress({
+        await fetchImageWithProgress({
           url: source.url,
           expectedBytes: source.bytes,
           onProgress: (progress) =>
@@ -178,7 +173,7 @@ export function SharedPhotoViewer({
               current?.kind === "original" ? { ...current, progress } : current,
             ),
         });
-        await replacePreparedImage("original", blob);
+        await replacePreparedImage("original", source.url);
       } finally {
         setWeChatDownload((current) => (current?.kind === "original" ? null : current));
       }
