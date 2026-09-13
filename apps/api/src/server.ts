@@ -82,10 +82,17 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
-const photoShareService = new PhotoShareService({ database, storage, photoService });
 const likeService = new MediaLikeService({
   database,
   secret: config.VISITOR_SESSION_SECRET,
+});
+const operationsService = new OperationsService({ database, storage, config, cdnInvalidator });
+const photoShareService = new PhotoShareService({
+  database,
+  storage,
+  photoService,
+  likeService,
+  operationsService,
 });
 const featuredService = new FeaturedService({ database });
 const userAdminService = new UserAdminService({
@@ -93,7 +100,6 @@ const userAdminService = new UserAdminService({
   passwordHasher: argon2PasswordHasher,
   config,
 });
-const operationsService = new OperationsService({ database, storage, config, cdnInvalidator });
 const dashboardService = new DashboardService({ database, storage, cdnMetrics });
 const bibService = new BibService({ database, config, photoService });
 
