@@ -38,7 +38,7 @@ jobs:
           PY
       - name: Format changed files
         run: >-
-          pnpm exec biome check --write
+          pnpm exec biome check --write --unsafe
           apps/web/src/components/gallery/photo-lightbox.tsx
           apps/web/src/components/gallery/shared-photo-viewer.tsx
           apps/web/src/components/gallery/image-download-progress.tsx
