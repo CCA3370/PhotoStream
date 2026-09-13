@@ -1,7 +1,7 @@
-import {
-  type DerivedPhotoVariantKind,
-  type PhotoVariantKind,
-  type PublicMediaView,
+import type {
+  DerivedPhotoVariantKind,
+  PhotoVariantKind,
+  PublicMediaView,
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
@@ -140,10 +140,7 @@ export class PhotoShareService {
       .select()
       .from(schema.mediaVariants)
       .where(
-        and(
-          eq(schema.mediaVariants.mediaId, media.id),
-          eq(schema.mediaVariants.verified, true),
-        ),
+        and(eq(schema.mediaVariants.mediaId, media.id), eq(schema.mediaVariants.verified, true)),
       );
     if (media.publishSequence === null || media.publishedAt === null) throw this.#notFound();
     const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
