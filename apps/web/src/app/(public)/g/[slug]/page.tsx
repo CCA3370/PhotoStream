@@ -97,6 +97,7 @@ export default async function GalleryPage({
     }
   }
   const initialPage: MediaList = { ...media, items: initialItems };
+  const initialVisibilityNow = Date.now();
   const initialSelectedId =
     query.photo !== undefined && initialItems.some((item) => item.id === query.photo)
       ? query.photo
@@ -148,6 +149,7 @@ export default async function GalleryPage({
                 initialFeaturedIds={featured.mediaIds}
                 initialPage={initialPage}
                 {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
+                initialVisibilityNow={initialVisibilityNow}
                 key={category?.id ?? "all"}
                 slug={slug}
               />
@@ -161,6 +163,7 @@ export default async function GalleryPage({
                 initialFeaturedIds={featured.mediaIds}
                 initialPage={initialPage}
                 {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
+                initialVisibilityNow={initialVisibilityNow}
                 key={featuredOnly ? "featured" : (category?.id ?? "all")}
                 slug={slug}
               />
