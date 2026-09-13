@@ -1,0 +1,53 @@
+name: Run WeChat progress patch
+
+on:
+  push:
+    branches:
+      - fix/wechat-lightbox-save-flow
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/wechat-lightbox-save-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply embedded patch
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/apply-wechat-progress.yml').read_text()
+          marker = "python3 <<'PY'\n"
+          payload = workflow.split(marker, 1)[1].split("\n          PY", 1)[0]
+          exec(textwrap.dedent(payload), {})
+          PY
+      - name: Format changed files
+        run: >-
+          pnpm exec biome check --write
+          apps/web/src/components/gallery/photo-lightbox.tsx
+          apps/web/src/components/gallery/shared-photo-viewer.tsx
+          apps/web/src/components/gallery/image-download-progress.tsx
+          apps/web/src/lib/image-download-progress.ts
+          apps/web/tests/e2e/operations.spec.ts
+      - name: Commit progress UX
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/gallery/photo-lightbox.tsx apps/web/src/components/gallery/shared-photo-viewer.tsx apps/web/src/components/gallery/image-download-progress.tsx apps/web/src/lib/image-download-progress.ts apps/web/tests/e2e/operations.spec.ts
+          git commit -m "Improve WeChat image download progress UX"
+          git push origin HEAD:fix/wechat-lightbox-save-flow
