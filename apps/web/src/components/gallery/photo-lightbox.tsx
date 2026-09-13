@@ -24,6 +24,7 @@ import {
   selectDisplayVariant,
 } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
+import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
@@ -62,6 +63,7 @@ export function PhotoLightbox({
   items,
   likeStates,
   selectedId,
+  shareId,
   slug,
   onClose,
   onLikeChange,
@@ -70,6 +72,7 @@ export function PhotoLightbox({
   items: readonly PublicMediaView[];
   likeStates: ReadonlyMap<string, PhotoLikeState>;
   selectedId: string | null;
+  shareId?: string;
   slug?: string;
   onClose: () => void;
   onLikeChange: (state: PhotoLikeState) => void;
@@ -87,7 +90,7 @@ export function PhotoLightbox({
       ? null
       : (items[(selectedIndex + 1) % items.length] ?? null);
   const preview1920 = selected === null ? null : lightboxVariant(selected, "photo_1920");
-  const canNavigate = items.length > 1 && selectedIndex >= 0;
+  const canNavigate = items.length > 1 && selectedIndex >= 0 && shareId === undefined;
   const viewerRef = useRef<HTMLDivElement>(null);
   const targetRequestRef = useRef<{
     readonly direction: -1 | 1;
@@ -114,12 +117,12 @@ export function PhotoLightbox({
 
   const commitOffset = useCallback(
     (offset: -1 | 1) => {
-      if (items.length < 2 || selectedIndex < 0) return;
+      if (items.length < 2 || selectedIndex < 0 || shareId !== undefined) return;
       const index = (selectedIndex + offset + items.length) % items.length;
       const item = items[index];
       if (item !== undefined) onSelect(item.id);
     },
-    [items, onSelect, selectedIndex],
+    [items, onSelect, selectedIndex, shareId],
   );
 
   const cancelTargetRequest = useCallback(() => {
@@ -131,6 +134,7 @@ export function PhotoLightbox({
 
   const requestTarget = useCallback(
     (offset: -1 | 1, viewportWidth: number, viewportHeight: number) => {
+      if (shareId !== undefined) return;
       const active = targetRequestRef.current;
       if (active?.direction === offset && !active.controller.signal.aborted) return;
       if (active !== null) active.controller.abort();
@@ -164,7 +168,7 @@ export function PhotoLightbox({
           if (targetRequestRef.current?.controller === controller) targetRequestRef.current = null;
         });
     },
-    [next, previous, slug],
+    [next, previous, shareId, slug],
   );
 
   const {
@@ -285,7 +289,14 @@ export function PhotoLightbox({
   }, [large, resetInteraction, selected, selectedId]);
 
   useEffect(() => {
-    if (slug === undefined || selected === null || !selected.downloads.original) return;
+    if (
+      slug === undefined ||
+      shareId !== undefined ||
+      selected === null ||
+      !selected.downloads.original
+    ) {
+      return;
+    }
     let cancelled = false;
     const mediaId = selected.id;
     const expectedBytes = selected.downloads.originalBytes;
@@ -316,7 +327,7 @@ export function PhotoLightbox({
     return () => {
       cancelled = true;
     };
-  }, [selected, slug]);
+  }, [selected, shareId, slug]);
 
   useEffect(
     () => () => {
@@ -361,10 +372,10 @@ export function PhotoLightbox({
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       revealControls();
-      if (event.key === "ArrowLeft") {
+      if (event.key === "ArrowLeft" && canNavigate) {
         event.preventDefault();
         animateOffset(-1);
-      } else if (event.key === "ArrowRight") {
+      } else if (event.key === "ArrowRight" && canNavigate) {
         event.preventDefault();
         animateOffset(1);
       } else if (event.key === "+" || event.key === "=") {
@@ -385,6 +396,7 @@ export function PhotoLightbox({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [
     animateOffset,
+    canNavigate,
     changeZoom,
     fullscreenSupported,
     resetView,
@@ -397,6 +409,7 @@ export function PhotoLightbox({
   async function loadOriginal(): Promise<void> {
     if (
       slug === undefined ||
+      shareId !== undefined ||
       selected === null ||
       !selected.downloads.original ||
       originalPending ||
@@ -448,9 +461,15 @@ export function PhotoLightbox({
   if (selected === null || large === null) return null;
 
   const canDownloadPreview =
-    slug !== undefined && selected.downloads.preview && preview1920 !== null;
+    shareId === undefined &&
+    slug !== undefined &&
+    selected.downloads.preview &&
+    preview1920 !== null;
   const canDownloadOriginal =
-    slug !== undefined && selected.downloads.original && selected.downloads.originalBytes !== null;
+    shareId === undefined &&
+    slug !== undefined &&
+    selected.downloads.original &&
+    selected.downloads.originalBytes !== null;
   const canDownload = canDownloadPreview || canDownloadOriginal;
   const selectedLikeState = likeStates.get(selected.id) ?? null;
   const imageTransform = `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
@@ -539,7 +558,7 @@ export function PhotoLightbox({
                     width: fittedImageWidth(selected),
                   }}
                 >
-                  {originalUrl === null ? (
+                  {originalUrl === null && shareId === undefined ? (
                     <LightboxNeighborSlide
                       media={selected}
                       offset={0}
@@ -558,6 +577,7 @@ export function PhotoLightbox({
                         stageWidth <= 0 ||
                         stageHeight <= 0 ||
                         (slug !== undefined &&
+                          shareId === undefined &&
                           selected.downloads.original &&
                           originalCheckedId !== selected.id)
                       }
@@ -572,6 +592,16 @@ export function PhotoLightbox({
                         if (largeIdentity !== null) setLoadedDerivedIdentity(largeIdentity);
                       }}
                       priority
+                      {...(shareId === undefined || slug === undefined
+                        ? {}
+                        : {
+                            refreshUrl: async () =>
+                              (
+                                await clientGet<{ url: string }>(
+                                  `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(selected.id)}/variants/${large.kind}?share=${encodeURIComponent(shareId)}`,
+                                )
+                              ).url,
+                          })}
                       scope={slug ?? "public-media"}
                       sizes="100vw"
                       sourceUrl={large.url}
@@ -722,7 +752,7 @@ export function PhotoLightbox({
                   )}
                 >
                   <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto">
-                    {slug === undefined ? null : (
+                    {slug === undefined || shareId !== undefined ? null : (
                       <PhotoLikeButton
                         className="shrink-0"
                         mediaId={selected.id}
@@ -730,6 +760,15 @@ export function PhotoLightbox({
                         onChange={onLikeChange}
                         slug={slug}
                         state={selectedLikeState}
+                      />
+                    )}
+
+                    {slug === undefined ? null : (
+                      <PhotoShareButton
+                        className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
+                        mediaId={selected.id}
+                        {...(shareId === undefined ? {} : { shareId })}
+                        slug={slug}
                       />
                     )}
 
