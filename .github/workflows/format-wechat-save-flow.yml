@@ -1,0 +1,55 @@
+name: Format WeChat save flow
+
+on:
+  push:
+    branches:
+      - fix/wechat-lightbox-save-flow
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/wechat-lightbox-save-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Preserve selected-photo reset semantics
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'apps/web/src/components/gallery/photo-lightbox.tsx';
+          let text = fs.readFileSync(path, 'utf8');
+          const before = `    setDownloadMenuOpen(false);\n    setPreparedImage(null);\n    resetInteraction();\n  }, [resetInteraction, selectedId]);`;
+          const after = `    setDownloadMenuOpen(false);\n    setPreparedImage(null);\n    if (selectedId !== null) resetInteraction();\n  }, [resetInteraction, selectedId]);`;
+          if (!text.includes(before)) throw new Error('Expected lightbox reset block was not found');
+          text = text.replace(before, after);
+          fs.writeFileSync(path, text);
+          NODE
+      - name: Format touched files
+        run: >-
+          pnpm exec biome check --write
+          apps/web/src/components/gallery/photo-lightbox.tsx
+          apps/web/src/components/gallery/shared-photo-viewer.tsx
+          apps/web/src/app/globals.css
+      - name: Commit formatter output
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/gallery/photo-lightbox.tsx apps/web/src/components/gallery/shared-photo-viewer.tsx apps/web/src/app/globals.css
+          if git diff --cached --quiet; then
+            echo "No formatting changes needed"
+            exit 0
+          fi
+          git commit -m "chore: format WeChat save flow"
+          git push origin HEAD:fix/wechat-lightbox-save-flow
