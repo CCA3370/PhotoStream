@@ -30,18 +30,16 @@ export function PhotoShareButton({
     if (pending) return;
     setPending(true);
     try {
+      const album = await clientGet<PublicAlbumView>(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}`,
+      );
       let resolvedShareId = shareId;
-      if (resolvedShareId === undefined) {
-        const album = await clientGet<PublicAlbumView>(
-          `/api/v1/public/albums/${encodeURIComponent(slug)}`,
-        );
-        if (album.access === "password") {
-          resolvedShareId = (
-            await publicMutation<ShareResponse>(
-              `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
-            )
-          ).shareId;
-        }
+      if (resolvedShareId === undefined && album.access === "password") {
+        resolvedShareId = (
+          await publicMutation<ShareResponse>(
+            `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
+          )
+        ).shareId;
       }
 
       const url = new URL(`/g/${encodeURIComponent(slug)}`, window.location.origin);
@@ -52,8 +50,8 @@ export function PhotoShareButton({
       if (typeof navigator.share === "function") {
         try {
           await navigator.share({
-            title: "分享照片",
-            text: "在 PhotoStream 中查看这张照片",
+            title: `${album.title} · PhotoStream`,
+            text: `查看「${album.title}」活动中的这张照片`,
             url: shareUrl,
           });
           return;
