@@ -42,6 +42,7 @@ function MediaTile({
   animateIn,
   animationIndex,
   likeState,
+  likesEnabled = true,
   media,
   onLikeChange,
   onOpen,
@@ -50,6 +51,7 @@ function MediaTile({
   animateIn?: boolean;
   animationIndex?: number | undefined;
   likeState: PhotoLikeState | null;
+  likesEnabled?: boolean;
   media: PublicMediaView;
   onLikeChange: (state: PhotoLikeState) => void;
   onOpen: (mediaId: string) => void;
@@ -111,7 +113,7 @@ function MediaTile({
       >
         <span className="sr-only">打开活动照片</span>
       </button>
-      {slug === undefined ? null : (
+      {slug === undefined || !likesEnabled ? null : (
         <div className="absolute bottom-1 left-1 z-20 transition-[transform,opacity] duration-200 sm:bottom-1.5 sm:left-1.5 sm:translate-y-0.5 sm:opacity-90 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 motion-reduce:transform-none motion-reduce:transition-none">
           <PhotoLikeButton
             mediaId={media.id}
@@ -183,6 +185,7 @@ function VirtualMediaGrid({
   freshIds,
   items,
   likeStates,
+  likesEnabled,
   onLikeChange,
   onOpen,
   slug,
@@ -190,6 +193,7 @@ function VirtualMediaGrid({
   freshIds: ReadonlySet<string>;
   items: readonly PublicMediaView[];
   likeStates: ReadonlyMap<string, PhotoLikeState>;
+  likesEnabled: boolean;
   onLikeChange: (state: PhotoLikeState) => void;
   onOpen: (mediaId: string) => void;
   slug?: string;
@@ -244,6 +248,7 @@ function VirtualMediaGrid({
               animationIndex={freshAnimationIndex(freshIds, media.id)}
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
+              likesEnabled={likesEnabled}
               media={media}
               onLikeChange={onLikeChange}
               onOpen={onOpen}
@@ -282,6 +287,7 @@ function VirtualMediaGrid({
                 animationIndex={freshAnimationIndex(freshIds, media.id)}
                 key={media.id}
                 likeState={likeStates.get(media.id) ?? null}
+                likesEnabled={likesEnabled}
                 media={media}
                 onLikeChange={onLikeChange}
                 onOpen={onOpen}
@@ -296,10 +302,17 @@ function VirtualMediaGrid({
 }
 
 export function MediaGrid({
+  initialSelectedId,
   items,
+  shareId,
   slug,
-}: Readonly<{ items: readonly PublicMediaView[]; slug?: string }>) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+}: Readonly<{
+  initialSelectedId?: string;
+  items: readonly PublicMediaView[];
+  shareId?: string;
+  slug?: string;
+}>) {
+  const [selectedId, setSelectedId] = useState<string | null>(() => initialSelectedId ?? null);
   const [likeStates, setLikeStates] = useState<ReadonlyMap<string, PhotoLikeState>>(new Map());
   const [likeError, setLikeError] = useState<string | null>(null);
   const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(new Set());
@@ -307,6 +320,26 @@ export function MediaGrid({
   const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionActiveRef = useRef(false);
   const mediaIds = useMemo(() => items.map((item) => item.id), [items]);
+  const likesEnabled = shareId === undefined;
+
+  const updatePhotoUrl = useCallback(
+    (mediaId: string | null, mode: "push" | "replace"): void => {
+      if (slug === undefined) return;
+      const url = new URL(window.location.href);
+      if (mediaId === null) {
+        url.searchParams.delete("photo");
+        url.searchParams.delete("share");
+      } else {
+        url.searchParams.set("photo", mediaId);
+        if (shareId === undefined) url.searchParams.delete("share");
+        else url.searchParams.set("share", shareId);
+      }
+      const href = `${url.pathname}${url.search}${url.hash}`;
+      if (mode === "push") window.history.pushState({ photostreamLightbox: true }, "", href);
+      else window.history.replaceState(window.history.state, "", href);
+    },
+    [shareId, slug],
+  );
 
   const updateLikeState = useCallback((state: PhotoLikeState) => {
     setLikeStates((current) => {
@@ -318,7 +351,7 @@ export function MediaGrid({
 
   const loadLikeStates = useCallback(
     async (ids: readonly string[]): Promise<void> => {
-      if (slug === undefined || ids.length === 0) return;
+      if (slug === undefined || shareId !== undefined || ids.length === 0) return;
       const chunks: string[][] = [];
       for (let index = 0; index < ids.length; index += 60) {
         chunks.push(ids.slice(index, index + 60));
@@ -339,15 +372,41 @@ export function MediaGrid({
         return next;
       });
     },
-    [slug],
+    [shareId, slug],
   );
 
-  const openMedia = useCallback((mediaId: string): void => {
-    setSelectedId(mediaId);
-  }, []);
+  const openMedia = useCallback(
+    (mediaId: string): void => {
+      setSelectedId(mediaId);
+      updatePhotoUrl(mediaId, "push");
+    },
+    [updatePhotoUrl],
+  );
+
+  const selectMedia = useCallback(
+    (mediaId: string): void => {
+      setSelectedId(mediaId);
+      updatePhotoUrl(mediaId, "replace");
+    },
+    [updatePhotoUrl],
+  );
 
   const closeMedia = useCallback((): void => {
     if (selectedId === null) return;
+    if (shareId !== undefined && slug !== undefined) {
+      window.location.assign(`/g/${encodeURIComponent(slug)}`);
+      return;
+    }
+    if (
+      typeof window.history.state === "object" &&
+      window.history.state !== null &&
+      (window.history.state as { photostreamLightbox?: boolean }).photostreamLightbox === true
+    ) {
+      window.history.back();
+    } else {
+      updatePhotoUrl(null, "replace");
+    }
+
     const documentWithTransition = document as ViewTransitionDocument;
     const source = lightboxTransitionElement();
     const target = thumbnailTransitionElement(selectedId);
@@ -395,7 +454,21 @@ export function MediaGrid({
       transitionActiveRef.current = false;
       setSelectedId(null);
     }
-  }, [selectedId]);
+  }, [selectedId, shareId, slug, updatePhotoUrl]);
+
+  useEffect(() => {
+    if (initialSelectedId === undefined) return;
+    if (items.some((item) => item.id === initialSelectedId)) setSelectedId(initialSelectedId);
+  }, [initialSelectedId, items]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const photo = new URL(window.location.href).searchParams.get("photo");
+      setSelectedId(photo !== null && items.some((item) => item.id === photo) ? photo : null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [items]);
 
   useEffect(() => {
     setSelectedId((current) =>
@@ -427,7 +500,7 @@ export function MediaGrid({
   );
 
   useEffect(() => {
-    if (slug === undefined || mediaIds.length === 0) return;
+    if (slug === undefined || shareId !== undefined || mediaIds.length === 0) return;
     let disposed = false;
     void loadLikeStates(mediaIds).catch((caught: unknown) => {
       if (!disposed) {
@@ -437,10 +510,10 @@ export function MediaGrid({
     return () => {
       disposed = true;
     };
-  }, [loadLikeStates, mediaIds, slug]);
+  }, [loadLikeStates, mediaIds, shareId, slug]);
 
   useEffect(() => {
-    if (slug === undefined) return;
+    if (slug === undefined || shareId !== undefined) return;
     const refresh = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string" || !mediaIds.includes(detail.mediaId)) return;
@@ -450,7 +523,7 @@ export function MediaGrid({
     };
     window.addEventListener("photostream:likes-updated", refresh);
     return () => window.removeEventListener("photostream:likes-updated", refresh);
-  }, [loadLikeStates, mediaIds, slug]);
+  }, [loadLikeStates, mediaIds, shareId, slug]);
 
   if (items.length === 0) {
     return (
@@ -469,6 +542,7 @@ export function MediaGrid({
           freshIds={freshIds}
           items={items}
           likeStates={likeStates}
+          likesEnabled={likesEnabled}
           onLikeChange={updateLikeState}
           onOpen={openMedia}
           {...(slug === undefined ? {} : { slug })}
@@ -481,6 +555,7 @@ export function MediaGrid({
               animationIndex={freshAnimationIndex(freshIds, media.id)}
               key={media.id}
               likeState={likeStates.get(media.id) ?? null}
+              likesEnabled={likesEnabled}
               media={media}
               onLikeChange={updateLikeState}
               onOpen={openMedia}
@@ -494,8 +569,9 @@ export function MediaGrid({
         likeStates={likeStates}
         onClose={closeMedia}
         onLikeChange={updateLikeState}
-        onSelect={setSelectedId}
+        onSelect={selectMedia}
         selectedId={selectedId}
+        {...(shareId === undefined ? {} : { shareId })}
         {...(slug === undefined ? {} : { slug })}
       />
       <ErrorDialog
