@@ -7,6 +7,7 @@ import * as featuredSchema from "./featured-schema.js";
 import * as likesSchema from "./likes-schema.js";
 import * as coreSchema from "./schema.js";
 import * as searchAnalyticsSchema from "./search-analytics-schema.js";
+import * as shareSchema from "./share-schema.js";
 
 export const schema = {
   ...coreSchema,
@@ -14,6 +15,7 @@ export const schema = {
   ...featuredSchema,
   ...faceDiagnosticsSchema,
   ...searchAnalyticsSchema,
+  ...shareSchema,
 };
 
 export type Database = ReturnType<typeof createDatabase>;
