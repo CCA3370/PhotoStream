@@ -26,6 +26,7 @@ import { LiveEventBroker } from "./media/live-event-broker.js";
 import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
 import { PhotoService } from "./media/service.js";
+import { PhotoShareService } from "./media/share-service.js";
 import { RuntimeMetrics } from "./observability/runtime-metrics.js";
 
 const config = loadConfig(process.env);
@@ -81,6 +82,7 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
+const photoShareService = new PhotoShareService({ database, storage, photoService });
 const likeService = new MediaLikeService({
   database,
   secret: config.VISITOR_SESSION_SECRET,
@@ -127,6 +129,7 @@ const app = await buildApp({
   config,
   authStore,
   photoService,
+  photoShareService,
   likeService,
   featuredService,
   broker,
