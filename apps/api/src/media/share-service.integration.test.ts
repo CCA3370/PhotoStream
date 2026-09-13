@@ -282,7 +282,10 @@ maybeDescribe("single-photo sharing", () => {
     });
     expect(download.bytes).toBe(4_000_000);
     const analytics = await database
-      .select({ eventType: schema.analyticsEvents.eventType, mediaId: schema.analyticsEvents.mediaId })
+      .select({
+        eventType: schema.analyticsEvents.eventType,
+        mediaId: schema.analyticsEvents.mediaId,
+      })
       .from(schema.analyticsEvents)
       .where(eq(schema.analyticsEvents.mediaId, media.id));
     expect(analytics).toContainEqual({ eventType: "download", mediaId: media.id });
