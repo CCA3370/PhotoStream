@@ -4,6 +4,7 @@ import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
 import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
 import { LiveUpdates } from "@/components/gallery/live-updates";
+import { MediaGrid } from "@/components/gallery/media-grid";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
@@ -33,13 +34,40 @@ export default async function GalleryPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ category?: string; featured?: string }>;
+  searchParams: Promise<{
+    category?: string;
+    featured?: string;
+    photo?: string;
+    share?: string;
+  }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
   const requestedCategory = query.category;
   const featuredOnly = query.featured === "1";
   const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
+
+  if (query.photo !== undefined && query.share !== undefined) {
+    const shared = await serverApi<PublicMediaView>(
+      `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(query.photo)}?share=${encodeURIComponent(query.share)}`,
+    );
+    return (
+      <PublicGalleryShell
+        albumDescription={album.description}
+        albumTitle={album.title}
+        status={album.state === "live" ? "直播中" : "已结束"}
+      >
+        <ViewerServiceNotice />
+        <MediaGrid
+          initialSelectedId={shared.id}
+          items={[shared]}
+          shareId={query.share}
+          slug={slug}
+        />
+      </PublicGalleryShell>
+    );
+  }
+
   if (album.accessRequired) {
     return (
       <PublicGalleryShell
@@ -64,6 +92,24 @@ export default async function GalleryPage({
     serverApi<FeaturedList>(`/api/v1/public/albums/${slug}/featured`),
     serverApi<FaceState>(`/api/v1/public/albums/${slug}/face-state`),
   ]);
+
+  let initialItems = media.items;
+  if (query.photo !== undefined && !initialItems.some((item) => item.id === query.photo)) {
+    try {
+      const linked = await serverApi<PublicMediaView>(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(query.photo)}`,
+      );
+      initialItems = [...initialItems, linked];
+    } catch {
+      // Ignore stale or invalid deep links and keep the album usable.
+    }
+  }
+  const initialPage: MediaList = { ...media, items: initialItems };
+  const initialSelectedId =
+    query.photo !== undefined && initialItems.some((item) => item.id === query.photo)
+      ? query.photo
+      : undefined;
+
   const faceSearch = faceState.enabled
     ? {
         noticeVersion: faceState.noticeVersion,
@@ -108,7 +154,8 @@ export default async function GalleryPage({
               <PaginatedMediaGrid
                 {...(category === undefined ? {} : { categoryId: category.id })}
                 initialFeaturedIds={featured.mediaIds}
-                initialPage={media}
+                initialPage={initialPage}
+                {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
                 key={category?.id ?? "all"}
                 slug={slug}
               />
@@ -120,7 +167,8 @@ export default async function GalleryPage({
                 {...(category === undefined ? {} : { categoryId: category.id })}
                 featuredOnly={featuredOnly}
                 initialFeaturedIds={featured.mediaIds}
-                initialPage={media}
+                initialPage={initialPage}
+                {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
                 key={featuredOnly ? "featured" : (category?.id ?? "all")}
                 slug={slug}
               />
@@ -132,7 +180,7 @@ export default async function GalleryPage({
       {album.state === "live" ? (
         <LiveUpdates
           initialEventId={media.eventCursor}
-          knownMediaIds={media.items.map((item) => item.id)}
+          knownMediaIds={initialItems.map((item) => item.id)}
           slug={slug}
         />
       ) : null}
