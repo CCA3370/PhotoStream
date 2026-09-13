@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", network);
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -93,15 +94,47 @@ describe("media body reuse", () => {
     expect(network).toHaveBeenCalledTimes(2);
   });
 
-  it("does not retry a missing resource or rejected authorization indefinitely", async () => {
+  it("recovers when a newly published photo briefly misses at the CDN edge", async () => {
+    vi.useFakeTimers();
+    network.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    const refreshUrl = vi.fn(async () => "https://cdn.test/fresh");
+    const { loadMediaBlob } = await import("./media-blob-cache");
+    const pending = loadMediaBlob({ ...photo, refreshUrl });
+    await vi.runAllTimersAsync();
+    const blob = await pending;
+    expect(await blob.text()).toBe("photo");
+    expect(refreshUrl).toHaveBeenCalledTimes(1);
+    expect(network).toHaveBeenCalledTimes(2);
+    expect(network.mock.calls[1]?.[1]).toMatchObject({ cache: "no-store" });
+  });
+
+  it("bounds retries for a persistently missing resource", async () => {
+    vi.useFakeTimers();
     network.mockResolvedValue(new Response(null, { status: 404 }));
     const refreshUrl = vi.fn(async () => "https://cdn.test/fresh");
     const { loadMediaBlob } = await import("./media-blob-cache");
-    await expect(loadMediaBlob({ ...photo, refreshUrl })).rejects.toMatchObject({ status: 404 });
-    expect(refreshUrl).not.toHaveBeenCalled();
+    const pending = loadMediaBlob({ ...photo, refreshUrl });
+    const rejected = expect(pending).rejects.toMatchObject({ status: 404 });
+    await vi.runAllTimersAsync();
+    await rejected;
+    expect(refreshUrl).toHaveBeenCalledTimes(3);
+    expect(network).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not retry a missing resource without a refresh path", async () => {
+    network.mockResolvedValue(new Response(null, { status: 404 }));
+    const { loadMediaBlob } = await import("./media-blob-cache");
+    await expect(loadMediaBlob(photo)).rejects.toMatchObject({ status: 404 });
+    expect(network).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes rejected authorization only once", async () => {
     network.mockResolvedValue(new Response(null, { status: 403 }));
+    const refreshUrl = vi.fn(async () => "https://cdn.test/fresh");
+    const { loadMediaBlob } = await import("./media-blob-cache");
     await expect(loadMediaBlob({ ...photo, refreshUrl })).rejects.toMatchObject({ status: 403 });
-    expect(network).toHaveBeenCalledTimes(3);
+    expect(refreshUrl).toHaveBeenCalledTimes(1);
+    expect(network).toHaveBeenCalledTimes(2);
   });
 
   it("rejects mismatched bytes instead of caching corrupted content", async () => {
