@@ -15,6 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";
+import { ImageDownloadProgress } from "@/components/gallery/image-download-progress";
 import {
   fittedImageWidth,
   LightboxNeighborSlide,
@@ -30,7 +31,7 @@ import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet } from "@/lib/client-api";
 import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
-import { loadOriginalImage } from "@/lib/original-image-cache";
+import { fetchImageWithProgress } from "@/lib/image-download-progress";
 import { cn } from "@/lib/utils";
 
 const toolbarButtonClass =
@@ -98,6 +99,10 @@ export function PhotoLightbox({
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [wechatDownload, setWeChatDownload] = useState<{
+    kind: "preview" | "original";
+    progress: number;
+  } | null>(null);
   const [preparedImage, setPreparedImage] = useState<{
     mediaId: string;
     kind: "preview" | "original";
@@ -271,6 +276,7 @@ export function PhotoLightbox({
       preparedObjectUrlRef.current = null;
     }
     setDownloadMenuOpen(false);
+    setWechatDownload(null);
     setPreparedImage(null);
     if (selectedId !== null) resetInteraction();
   }, [resetInteraction, selectedId]);
@@ -352,11 +358,13 @@ export function PhotoLightbox({
     zoom,
   ]);
 
-  const showSaveHint = useCallback(() => {
+  const showSaveHint = useCallback((kind: "preview" | "original") => {
     setDownloadMenuOpen(false);
     toast.add({
-      title: "图片已准备好",
-      description: "长按当前图片，选择“保存到相册”。",
+      title:
+        kind === "original"
+          ? "原图已加载完成，请长按图片并选择“保存到手机”"
+          : "普通图已加载完成，请长按图片并选择“保存到手机”",
       type: "success",
       timeout: 5_000,
     });
@@ -380,7 +388,7 @@ export function PhotoLightbox({
       preparedObjectUrlRef.current = objectUrl;
       setPreparedImage({ mediaId, kind, url: objectUrl });
       resetView();
-      showSaveHint();
+      showSaveHint(kind);
     },
     [resetView, selected, selectedId, showSaveHint],
   );
@@ -392,35 +400,48 @@ export function PhotoLightbox({
         activePreparedImage?.kind === "preview" ||
         (activePreparedImage === null && large.kind === "photo_1920" && loaded)
       ) {
-        showSaveHint();
+        showSaveHint("preview");
         return;
       }
-      const blob = await loadDerivedImage({
-        scope: slug ?? "public-media",
-        mediaId: selected.id,
-        kind: "photo_1920",
-        bytes: source.bytes,
-        sourceUrl: source.url,
-      });
-      await replacePreparedImage("preview", blob);
+      setWeChatDownload({ kind: "preview", progress: 0 });
+      try {
+        const blob = await fetchImageWithProgress({
+          url: source.url,
+          expectedBytes: source.bytes,
+          onProgress: (progress) =>
+            setWeChatDownload((current) =>
+              current?.kind === "preview" ? { ...current, progress } : current,
+            ),
+        });
+        await replacePreparedImage("preview", blob);
+      } finally {
+        setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
+      }
     },
-    [activePreparedImage, large, loaded, replacePreparedImage, selected, showSaveHint, slug],
+    [activePreparedImage, large, loaded, replacePreparedImage, selected, showSaveHint],
   );
 
   const prepareOriginalForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
       if (selected === null || slug === undefined) return;
       if (activePreparedImage?.kind === "original") {
-        showSaveHint();
+        showSaveHint("original");
         return;
       }
-      const blob = await loadOriginalImage({
-        slug,
-        mediaId: selected.id,
-        expectedBytes: source.bytes,
-        sourceUrl: source.url,
-      });
-      await replacePreparedImage("original", blob);
+      setWeChatDownload({ kind: "original", progress: 0 });
+      try {
+        const blob = await fetchImageWithProgress({
+          url: source.url,
+          expectedBytes: source.bytes,
+          onProgress: (progress) =>
+            setWeChatDownload((current) =>
+              current?.kind === "original" ? { ...current, progress } : current,
+            ),
+        });
+        await replacePreparedImage("original", blob);
+      } finally {
+        setWeChatDownload((current) => (current?.kind === "original" ? null : current));
+      }
     },
     [activePreparedImage, replacePreparedImage, selected, showSaveHint, slug],
   );
@@ -467,6 +488,9 @@ export function PhotoLightbox({
           }}
           ref={viewerRef}
         >
+          {wechatDownload === null ? null : (
+            <ImageDownloadProgress kind={wechatDownload.kind} progress={wechatDownload.progress} />
+          )}
           <div
             aria-label="照片画布"
             className={cn(

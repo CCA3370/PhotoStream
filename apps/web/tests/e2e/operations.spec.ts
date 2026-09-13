@@ -231,8 +231,11 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await expect(viewerPage.getByText("仅用于本次校内活动记录，请勿转发。")).toBeVisible();
     await expect(viewerPage.getByText("校内影像管理员")).toBeVisible();
     await viewerPage.getByRole("button", { name: "打开活动照片" }).click();
-    await expect(viewerPage.getByRole("button", { name: /下载普通图/u })).toBeVisible();
-    await expect(viewerPage.getByRole("button", { name: /下载原图/u })).toBeVisible();
+    const downloadMenu = viewerPage.getByRole("button", { name: "下载", exact: true });
+    await expect(downloadMenu).toBeVisible();
+    await downloadMenu.click();
+    await expect(viewerPage.getByRole("button", { name: "普通图", exact: true })).toBeVisible();
+    await expect(viewerPage.getByRole("button", { name: "原图", exact: true })).toBeVisible();
     await expect(viewerPage.getByText("原图可能包含相机元数据")).toBeVisible();
 
     const previewKey = crypto.randomUUID();
