@@ -1,7 +1,7 @@
 "use client";
 
 import type { PublicMediaView } from "@photostream/contracts";
-import { ImageIcon, LoaderCircleIcon, XIcon } from "lucide-react";
+import { ImageIcon, LoaderCircleIcon } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -156,20 +156,6 @@ export function SharedPhotoViewer({
             />
           )}
         </div>
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-16 sm:p-4 sm:pb-16">
-        <Button
-          aria-label="关闭照片查看器"
-          className="pointer-events-auto size-11 rounded-full border-white/10 bg-black/30 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:size-10"
-          onClick={() => window.location.assign(`/g/${encodeURIComponent(slug)}`)}
-          size="icon"
-          title="关闭"
-          type="button"
-          variant="outline"
-        >
-          <XIcon />
-        </Button>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2.5 pt-20 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-24">
