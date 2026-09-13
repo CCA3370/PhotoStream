@@ -7,7 +7,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { PasswordHasher } from "../auth/types.js";
 import { loadConfig } from "../config.js";
+import { MediaLikeService } from "./like-service.js";
 import { LocalObjectStorage } from "./object-storage.js";
+import { OperationsService } from "./operations-service.js";
 import { PhotoService } from "./service.js";
 import { PhotoShareService } from "./share-service.js";
 
@@ -57,7 +59,15 @@ maybeDescribe("single-photo sharing", () => {
     passwordHasher: fakeHasher,
     config,
   });
-  const shareService = new PhotoShareService({ database, storage, photoService });
+  const likeService = new MediaLikeService({ database, secret: config.VISITOR_SESSION_SECRET });
+  const operationsService = new OperationsService({ database, storage, config });
+  const shareService = new PhotoShareService({
+    database,
+    storage,
+    photoService,
+    likeService,
+    operationsService,
+  });
   let adminId = "";
 
   beforeAll(async () => {
@@ -76,6 +86,7 @@ maybeDescribe("single-photo sharing", () => {
     await database.delete(schema.mediaBatchRequests);
     await database.delete(schema.operationRequests);
     await database.delete(schema.photoShares);
+    await database.delete(schema.mediaLikes);
     await database.delete(schema.uploadParts);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);
@@ -104,7 +115,7 @@ maybeDescribe("single-photo sharing", () => {
 
   afterAll(async () => pool.end());
 
-  it("lets a capability open only its bound photo and invalidates it with accessVersion", async () => {
+  it("grants full single-photo interaction without unlocking the album", async () => {
     const [album] = await database
       .insert(schema.albums)
       .values({
@@ -214,9 +225,9 @@ maybeDescribe("single-photo sharing", () => {
       "photo_960",
     ]);
     expect(shared.downloads).toEqual({
-      preview: false,
-      original: false,
-      originalBytes: null,
+      preview: true,
+      original: true,
+      originalBytes: 4_000_000,
     });
     expect(JSON.stringify(shared)).not.toContain("photo_original");
 
@@ -228,6 +239,53 @@ maybeDescribe("single-photo sharing", () => {
     });
     expect(refreshed.bytes).toBe(400_000);
     expect(refreshed.url).toContain("http://127.0.0.1:3002");
+
+    const initialLike = await shareService.getSharedLikeState({
+      slug: album.slug,
+      mediaId: media.id,
+      shareId: share.shareId,
+      viewerId: "share-viewer-one",
+    });
+    expect(initialLike).toEqual({ mediaId: media.id, count: 0, likedByViewer: false });
+
+    const liked = await shareService.setSharedLike({
+      slug: album.slug,
+      mediaId: media.id,
+      shareId: share.shareId,
+      viewerId: "share-viewer-one",
+      liked: true,
+    });
+    expect(liked).toEqual({ mediaId: media.id, count: 1, likedByViewer: true });
+    expect(
+      await shareService.getSharedLikeState({
+        slug: album.slug,
+        mediaId: media.id,
+        shareId: share.shareId,
+        viewerId: "share-viewer-two",
+      }),
+    ).toEqual({ mediaId: media.id, count: 1, likedByViewer: false });
+
+    const original = await shareService.issueSharedOriginalView({
+      slug: album.slug,
+      mediaId: media.id,
+      shareId: share.shareId,
+    });
+    expect(original.bytes).toBe(4_000_000);
+    expect(original.filename).toMatch(/original\.jpg$/u);
+
+    const download = await shareService.issueSharedDownload({
+      slug: album.slug,
+      mediaId: media.id,
+      shareId: share.shareId,
+      kind: "original",
+      visitorId: "share-download-viewer",
+    });
+    expect(download.bytes).toBe(4_000_000);
+    const analytics = await database
+      .select({ eventType: schema.analyticsEvents.eventType, mediaId: schema.analyticsEvents.mediaId })
+      .from(schema.analyticsEvents)
+      .where(eq(schema.analyticsEvents.mediaId, media.id));
+    expect(analytics).toContainEqual({ eventType: "download", mediaId: media.id });
 
     await expect(
       photoService.listPublicMedia({
@@ -254,6 +312,13 @@ maybeDescribe("single-photo sharing", () => {
 
     await expect(
       shareService.getSharedMedia({
+        slug: album.slug,
+        mediaId: media.id,
+        shareId: share.shareId,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      shareService.issueSharedOriginalView({
         slug: album.slug,
         mediaId: media.id,
         shareId: share.shareId,
