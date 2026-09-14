@@ -9,7 +9,7 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -227,10 +227,6 @@ function ToastIcon({ type }: { type: string | undefined }) {
 
 function WeChatSaveHintToast({ toastItem }: { toastItem: ToastPrimitive.Root.Props["toast"] }) {
   const [dontRemindAgain, setDontRemindAgain] = useState(false);
-
-  useEffect(() => {
-    setDontRemindAgain(false);
-  }, [toastItem.updateKey]);
 
   return (
     <ToastPrimitive.Root
