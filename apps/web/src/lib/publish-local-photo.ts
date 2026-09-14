@@ -16,6 +16,10 @@ function signalOptions(signal?: AbortSignal): { readonly signal?: AbortSignal } 
   return signal === undefined ? {} : { signal };
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("上传已取消", "AbortError");
+}
+
 function uploadRequest(photo: LocalReviewPhoto): CreatePhotoUploadRequest {
   return {
     albumId: photo.albumId,
@@ -109,13 +113,13 @@ async function createMicroPreview(
   photo: LocalReviewPhoto,
   signal?: AbortSignal,
 ): Promise<{ readonly blob: Blob; readonly input: MicroPreviewUploadRequest }> {
-  if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+  throwIfAborted(signal);
   const source = photo.variants.find((variant) => variant.kind === "photo_480");
   if (source === undefined) throw new Error("本地队列缺少 photo_480");
 
   const bitmap = await createImageBitmap(source.blob);
   try {
-    if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+    throwIfAborted(signal);
     const size = microPreviewDimensions(photo.width, photo.height);
     const canvas = document.createElement("canvas");
     canvas.width = size.width;
@@ -129,7 +133,7 @@ async function createMicroPreview(
     context.drawImage(bitmap, 0, 0, size.width, size.height);
     const contentType = source.format === "webp" ? "image/webp" : "image/jpeg";
     const blob = await encodeCanvas(canvas, contentType, source.format === "webp" ? 0.58 : 0.62);
-    if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+    throwIfAborted(signal);
     return {
       blob,
       input: {
