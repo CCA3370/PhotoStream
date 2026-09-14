@@ -406,8 +406,7 @@ export function ViewerOnboarding({
         return;
       }
       const bounds = targetBounds(targetKind, current);
-      const padding =
-        targetKind === "gallery" ? 5 : targetKind.startsWith("lightbox") ? 10 : 8;
+      const padding = targetKind === "gallery" ? 5 : targetKind.startsWith("lightbox") ? 10 : 8;
       const left = Math.max(8, bounds.left - padding);
       const top = Math.max(8, bounds.top - padding);
       const right = Math.min(window.innerWidth - 8, bounds.right + padding);
@@ -509,7 +508,7 @@ export function ViewerOnboarding({
       resizeObserver.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [cardPosition, flow, spotlightRect]);
+  }, [flow, spotlightRect]);
 
   useEffect(() => {
     if (flow === null) return;
@@ -665,8 +664,20 @@ export function ViewerOnboarding({
               >
                 <path d="M 0 0 L 7 3.5 L 0 7 z" fill="rgb(255 255 255 / 0.96)" />
               </marker>
-              <filter id="viewer-onboarding-arrow-shadow" x="-30%" y="-30%" width="160%" height="160%">
-                <feDropShadow dx="0" dy="1" floodColor="black" floodOpacity="0.45" stdDeviation="2" />
+              <filter
+                id="viewer-onboarding-arrow-shadow"
+                x="-30%"
+                y="-30%"
+                width="160%"
+                height="160%"
+              >
+                <feDropShadow
+                  dx="0"
+                  dy="1"
+                  floodColor="black"
+                  floodOpacity="0.45"
+                  stdDeviation="2"
+                />
               </filter>
             </defs>
             <path
@@ -709,8 +720,7 @@ export function ViewerOnboarding({
               <h2 className="text-base font-semibold leading-6" id="viewer-onboarding-title">
                 {welcome
                   ? "欢迎使用北航实验学校中学部照片实时直播系统"
-                  : (currentMainStep?.title ??
-                    (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
+                  : (currentMainStep?.title ?? (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
               </h2>
             </div>
 
