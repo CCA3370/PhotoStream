@@ -40,6 +40,27 @@ export function PublicGalleryShell({
           }
         }
 
+        button[aria-label="重新查看使用引导"] {
+          width: 2rem;
+          min-width: 2rem;
+          max-width: 2rem;
+          height: 2rem;
+          padding: 0;
+          gap: 0;
+          aspect-ratio: 1;
+        }
+
+        button[aria-label="重新查看使用引导"] > span {
+          display: none;
+        }
+
+        body:has([aria-label="照片画布"])
+          #viewer-onboarding-description:has(+ div svg[data-icon="inline-end"])::after {
+          display: block;
+          margin-top: 0.5rem;
+          content: "网页中的图片清晰度受到限制，如需查看原图，请下载所需图片。";
+        }
+
         @media (min-width: 1024px) {
           [data-lightbox-controls] button {
             min-height: 3rem;
