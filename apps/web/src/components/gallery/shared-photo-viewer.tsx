@@ -3,7 +3,7 @@
 import type { PublicMediaView } from "@photostream/contracts";
 import { DownloadIcon, XIcon } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
 import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/download-button";
@@ -30,7 +30,7 @@ function bestPreview(media: PublicMediaView) {
   );
 }
 
-async function decodeObjectUrl(url: string): Promise<void> {
+async function decodeImageUrl(url: string): Promise<void> {
   if (typeof window === "undefined") return;
   const decoder = new window.Image();
   decoder.decoding = "async";
@@ -42,6 +42,21 @@ async function decodeObjectUrl(url: string): Promise<void> {
   await new Promise<void>((resolve) => {
     decoder.onload = () => resolve();
     decoder.onerror = () => resolve();
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("图片转换失败，请重试。"));
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("图片转换失败，请重试。"));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -66,7 +81,6 @@ export function SharedPhotoViewer({
     kind: "preview" | "original";
     url: string;
   } | null>(null);
-  const preparedObjectUrlRef = useRef<string | null>(null);
   const ignoreNavigation = useCallback(() => undefined, []);
   const {
     changeZoom,
@@ -103,13 +117,6 @@ export function SharedPhotoViewer({
     };
   }, [media.id, shareId, slug]);
 
-  useEffect(
-    () => () => {
-      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);
-    },
-    [],
-  );
-
   const showSaveHint = useCallback((kind: "preview" | "original") => {
     setDownloadMenuOpen(false);
     toast.add({
@@ -124,11 +131,9 @@ export function SharedPhotoViewer({
 
   const replacePreparedImage = useCallback(
     async (kind: "preview" | "original", blob: Blob) => {
-      const objectUrl = URL.createObjectURL(blob);
-      await decodeObjectUrl(objectUrl);
-      if (preparedObjectUrlRef.current !== null) URL.revokeObjectURL(preparedObjectUrlRef.current);
-      preparedObjectUrlRef.current = objectUrl;
-      setPreparedImage({ kind, url: objectUrl });
+      const dataUrl = await blobToDataUrl(blob);
+      await decodeImageUrl(dataUrl);
+      setPreparedImage({ kind, url: dataUrl });
       resetView();
       showSaveHint(kind);
     },
