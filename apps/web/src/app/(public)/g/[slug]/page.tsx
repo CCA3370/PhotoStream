@@ -66,10 +66,8 @@ export default async function GalleryPage({
     ]);
     return (
       <Toaster>
-        <>
-          <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
-          <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
-        </>
+        <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
+        <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
       </Toaster>
     );
   }

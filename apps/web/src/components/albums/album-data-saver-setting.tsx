@@ -26,10 +26,13 @@ export function AlbumDataSaverSetting({
     setPending(true);
     setError(null);
     try {
-      const next = await clientMutation<DataSaverSettingView>(`/api/v1/albums/${albumId}/data-saver`, {
-        method: "PATCH",
-        body: { enabled },
-      });
+      const next = await clientMutation<DataSaverSettingView>(
+        `/api/v1/albums/${albumId}/data-saver`,
+        {
+          method: "PATCH",
+          body: { enabled },
+        },
+      );
       setSetting(next);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新省流模式失败");
