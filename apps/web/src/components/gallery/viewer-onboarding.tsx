@@ -81,12 +81,7 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
 
   if (kind === "search") {
     const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("#gallery-main button"));
-    return (
-      buttons.find((button) => {
-        const label = button.textContent?.replace(/\s+/gu, "").trim() ?? "";
-        return label.startsWith("找照片") && button.querySelector("svg") !== null;
-      }) ?? null
-    );
+    return buttons.find((button) => button.querySelector("svg.lucide-search") !== null) ?? null;
   }
 
   if (kind === "gallery") {
@@ -111,6 +106,15 @@ function readLightboxActions(): string[] {
   if (text.includes("分享")) actions.push("分享");
   if (text.includes("下载")) actions.push("保存或下载");
   return actions;
+}
+
+function focusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (container === null) return [];
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => element.getAttribute("aria-hidden") !== "true");
 }
 
 export function ViewerOnboarding({
@@ -208,8 +212,7 @@ export function ViewerOnboarding({
       if (resolveTarget("lightbox-toolbar") === null) return;
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
-        const toolbar = resolveTarget("lightbox-toolbar");
-        if (toolbar === null) return;
+        if (resolveTarget("lightbox-toolbar") === null) return;
         setLightboxActions(readLightboxActions());
         setFlow({ kind: "lightbox", step: 0 });
       }, 180);
@@ -327,33 +330,35 @@ export function ViewerOnboarding({
   }, []);
 
   const next = useCallback(() => {
-    setFlow((current) => {
-      if (current === null) return current;
-      if (current.kind === "main") {
-        if (current.step < 0) return { kind: "main", step: 0 };
-        if (current.step >= mainSteps.length - 1) {
-          queueMicrotask(finishMain);
-          return current;
-        }
-        return { kind: "main", step: current.step + 1 };
+    if (flow === null) return;
+    if (flow.kind === "main") {
+      if (flow.step < 0) {
+        setFlow({ kind: "main", step: 0 });
+        return;
       }
-      if (current.step >= 1) {
-        queueMicrotask(finishLightbox);
-        return current;
+      if (flow.step >= mainSteps.length - 1) {
+        finishMain();
+        return;
       }
-      return { kind: "lightbox", step: current.step + 1 };
-    });
-  }, [finishLightbox, finishMain, mainSteps.length]);
+      setFlow({ kind: "main", step: flow.step + 1 });
+      return;
+    }
+
+    if (flow.step >= 1) {
+      finishLightbox();
+      return;
+    }
+    setFlow({ kind: "lightbox", step: flow.step + 1 });
+  }, [finishLightbox, finishMain, flow, mainSteps.length]);
 
   const previous = useCallback(() => {
-    setFlow((current) => {
-      if (current === null) return current;
-      if (current.kind === "main") {
-        return { kind: "main", step: Math.max(-1, current.step - 1) };
-      }
-      return { kind: "lightbox", step: Math.max(0, current.step - 1) };
-    });
-  }, []);
+    if (flow === null) return;
+    if (flow.kind === "main") {
+      setFlow({ kind: "main", step: Math.max(-1, flow.step - 1) });
+      return;
+    }
+    setFlow({ kind: "lightbox", step: Math.max(0, flow.step - 1) });
+  }, [flow]);
 
   const replayMain = useCallback(() => {
     setSpotlightRect(null);
@@ -361,7 +366,22 @@ export function ViewerOnboarding({
   }, []);
 
   const cardPosition = useMemo<CSSProperties>(() => {
-    if (spotlightRect === null || spotlightRect.viewportWidth < 640) {
+    if (spotlightRect === null) {
+      return {
+        left: "1rem",
+        right: "1rem",
+        bottom: "max(3.25rem, calc(2.5rem + env(safe-area-inset-bottom)))",
+      };
+    }
+
+    if (spotlightRect.viewportWidth < 640) {
+      if (spotlightRect.top > spotlightRect.viewportHeight * 0.58) {
+        return {
+          left: "1rem",
+          right: "1rem",
+          bottom: spotlightRect.viewportHeight - spotlightRect.top + 12,
+        };
+      }
       return {
         left: "1rem",
         right: "1rem",
@@ -406,6 +426,25 @@ export function ViewerOnboarding({
             event.preventDefault();
             if (flow.kind === "main") finishMain();
             else finishLightbox();
+            return;
+          }
+
+          if (event.key !== "Tab") return;
+          const focusable = focusableElements(cardRef.current);
+          if (focusable.length === 0) {
+            event.preventDefault();
+            cardRef.current?.focus();
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable.at(-1);
+          if (first === undefined || last === undefined) return;
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
           }
         }}
         role="presentation"
@@ -473,7 +512,7 @@ export function ViewerOnboarding({
                 </p>
               ) : null}
               {flow.kind === "lightbox" ? (
-                <p className="mb-1 text-xs font-medium text-white/65">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
                   大图查看 · {flow.step + 1} / 2
                 </p>
               ) : null}
