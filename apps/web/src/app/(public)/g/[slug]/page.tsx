@@ -7,6 +7,7 @@ import { LiveUpdates } from "@/components/gallery/live-updates";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { SharedPhotoViewer } from "@/components/gallery/shared-photo-viewer";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
+import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { Toaster } from "@/components/ui/toast";
@@ -163,6 +164,14 @@ export default async function GalleryPage({
     >
       <AlbumOpenTracker slug={slug} />
       <ViewerServiceNotice />
+      <ViewerOnboarding
+        attributeFilterEnabled={album.bibAttributeFilterEnabled}
+        bibSearchEnabled={album.bibSearchEnabled}
+        faceSearchEnabled={faceSearch !== undefined}
+        hasPhotos={initialItems.length > 0}
+        live={album.state === "live"}
+        searchAvailable={inlineSearch}
+      />
 
       <div className={inlineSearch ? styles.searchToolbar : undefined}>
         <GalleryFilterNav
