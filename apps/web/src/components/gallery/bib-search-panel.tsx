@@ -138,7 +138,7 @@ export function BibSearchPanel({
   slug: string;
 }>) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<SearchMode>(bibSearchEnabled ? "number" : "face");
+  const [mode, setMode] = useState<SearchMode>(faceSearch !== undefined ? "face" : "number");
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [number, setNumber] = useState("");
   const [gradeOptionId, setGradeOptionId] = useState<string | null>(null);
@@ -172,11 +172,11 @@ export function BibSearchPanel({
       ? "输入完整号码"
       : `输入号码（${numberLengths.map((length) => `${length} 位`).join("或")}）`;
   const searchModes: { label: string; value: SearchMode }[] = [];
+  if (faceSearch !== undefined) searchModes.push({ label: "人脸", value: "face" });
   if (bibSearchEnabled) searchModes.push({ label: "号码", value: "number" });
   if (bibSearchEnabled && attributeFilterEnabled) {
     searchModes.push({ label: "年级班级", value: "attributes" });
   }
-  if (faceSearch !== undefined) searchModes.push({ label: "人脸", value: "face" });
   const modeIndex = Math.max(
     0,
     searchModes.findIndex((item) => item.value === mode),
@@ -464,7 +464,7 @@ export function BibSearchPanel({
         : `face:${faceSearchId ?? ""}`;
   const resultSummary =
     resultMode === null ? (
-      "按号码、年级班级或人脸筛选"
+      `按${searchModes.map((item) => item.label).join("、")}筛选`
     ) : resultMode === "face" && faceStatus === "failed" ? (
       <>
         检索未完整完成 · 已找到{" "}
