@@ -8,6 +8,7 @@ import { MediaGrid } from "@/components/gallery/media-grid";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
+import { orderFeaturedMedia } from "@/lib/featured-order";
 
 interface MediaPage {
   readonly items: readonly PublicMediaView[];
@@ -27,57 +28,21 @@ function mergeMedia(
   return [...byId.values()].sort((left, right) => right.publishSequence - left.publishSequence);
 }
 
+function appendMediaPage(
+  current: readonly (readonly PublicMediaView[])[],
+  incoming: readonly PublicMediaView[],
+): readonly (readonly PublicMediaView[])[] {
+  const seen = new Set(current.flatMap((page) => page.map((item) => item.id)));
+  const nextPage = incoming.filter((item) => !seen.has(item.id));
+  return nextPage.length === 0 ? current : [...current, nextPage];
+}
+
 function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
   if (left.size !== right.size) return false;
   for (const value of right) {
     if (!left.has(value)) return false;
   }
   return true;
-}
-
-function distributeFeaturedPage(
-  source: readonly PublicMediaView[],
-  featuredIds: ReadonlySet<string>,
-): readonly PublicMediaView[] {
-  const featured = source.filter((item) => featuredIds.has(item.id));
-  const regular = source.filter((item) => !featuredIds.has(item.id));
-  if (featured.length === 0 || regular.length === 0) return source;
-
-  const result: PublicMediaView[] = [];
-  let featuredIndex = 0;
-  let regularIndex = 0;
-  while (featuredIndex < featured.length || regularIndex < regular.length) {
-    const slot = result.length;
-    const preferFeatured = slot % 4 === 1 && featuredIndex < featured.length;
-    if (preferFeatured || regularIndex >= regular.length) {
-      const item = featured[featuredIndex];
-      if (item !== undefined) result.push(item);
-      featuredIndex += 1;
-    } else {
-      const item = regular[regularIndex];
-      if (item !== undefined) result.push(item);
-      regularIndex += 1;
-    }
-  }
-  return result;
-}
-
-function distributeFeatured(
-  source: readonly PublicMediaView[],
-  featuredIds: ReadonlySet<string>,
-): readonly PublicMediaView[] {
-  if (source.length <= publicMediaPageSize) return distributeFeaturedPage(source, featuredIds);
-
-  // Keep each fetched page as a stable ordering boundary. Featured photos may be
-  // promoted inside their own page, but loading a later page must never pull one
-  // of its photos into an already-visible earlier page.
-  const result: PublicMediaView[] = [];
-  for (let start = 0; start < source.length; start += publicMediaPageSize) {
-    result.push(
-      ...distributeFeaturedPage(source.slice(start, start + publicMediaPageSize), featuredIds),
-    );
-  }
-  return result;
 }
 
 function visibleAt(item: PublicMediaView): number | null {
@@ -102,7 +67,7 @@ export function PaginatedMediaGrid({
   initialVisibilityNow?: number;
   slug: string;
 }>) {
-  const [items, setItems] = useState<readonly PublicMediaView[]>(initialPage.items);
+  const [pages, setPages] = useState<readonly (readonly PublicMediaView[])[]>(() => [initialPage.items]);
   const [featuredIds, setFeaturedIds] = useState<ReadonlySet<string>>(
     () => new Set(initialFeaturedIds),
   );
@@ -114,6 +79,8 @@ export function PaginatedMediaGrid({
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
 
+  const allItems = useMemo(() => pages.flat(), [pages]);
+
   const refreshFeatured = useCallback(async () => {
     const result = await clientGet<{ readonly mediaIds: readonly string[] }>(
       `/api/v1/public/albums/${slug}/featured`,
@@ -123,8 +90,12 @@ export function PaginatedMediaGrid({
   }, [slug]);
 
   useEffect(() => {
-    setItems((current) => mergeMedia(current, initialPage.items));
-  }, [initialPage.items]);
+    setPages((current) => {
+      const firstPage = current[0] ?? [];
+      return [mergeMedia(firstPage, initialPage.items), ...current.slice(1)];
+    });
+    setCursor(initialPage.nextCursor);
+  }, [initialPage.items, initialPage.nextCursor]);
 
   useEffect(() => {
     const next = new Set(initialFeaturedIds);
@@ -133,7 +104,7 @@ export function PaginatedMediaGrid({
 
   useEffect(() => {
     let nextVisibleAt: number | null = null;
-    for (const item of items) {
+    for (const item of allItems) {
       const deadline = visibleAt(item);
       if (deadline === null || deadline <= visibilityNow) continue;
       nextVisibleAt = nextVisibleAt === null ? deadline : Math.min(nextVisibleAt, deadline);
@@ -142,7 +113,7 @@ export function PaginatedMediaGrid({
     const delay = Math.max(0, nextVisibleAt - Date.now()) + 50;
     const timer = window.setTimeout(() => setVisibilityNow(Date.now()), delay);
     return () => window.clearTimeout(timer);
-  }, [items, visibilityNow]);
+  }, [allItems, visibilityNow]);
 
   useEffect(() => {
     void refreshFeatured().catch(() => undefined);
@@ -155,7 +126,11 @@ export function PaginatedMediaGrid({
     const remove = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string") return;
-      setItems((current) => current.filter((item) => item.id !== detail.mediaId));
+      setPages((current) =>
+        current
+          .map((page) => page.filter((item) => item.id !== detail.mediaId))
+          .filter((page) => page.length > 0),
+      );
       setFeaturedIds((current) => {
         const next = new Set(current);
         next.delete(detail.mediaId as string);
@@ -186,7 +161,10 @@ export function PaginatedMediaGrid({
             `/api/v1/public/albums/${slug}/media?${query.toString()}`,
           );
           if (!disposed) {
-            setItems((current) => mergeMedia(current, page.items));
+            setPages((current) => {
+              const firstPage = current[0] ?? [];
+              return [mergeMedia(firstPage, page.items), ...current.slice(1)];
+            });
             setLiveError(null);
             void refreshFeatured().catch(() => undefined);
           }
@@ -223,7 +201,7 @@ export function PaginatedMediaGrid({
       const page = await clientGet<MediaPage>(
         `/api/v1/public/albums/${slug}/media?${query.toString()}`,
       );
-      setItems((current) => mergeMedia(current, page.items));
+      setPages((current) => appendMediaPage(current, page.items));
       setCursor(page.nextCursor);
     } catch (caught) {
       setLoadMoreError(caught instanceof Error ? caught.message : "加载更多照片失败");
@@ -252,20 +230,22 @@ export function PaginatedMediaGrid({
     return () => observer.disconnect();
   }, [cursor, featuredOnly, loadMore, loadMoreError]);
 
-  const eligibleItems = useMemo(
+  const eligiblePages = useMemo(
     () =>
-      items.filter((item) => {
-        const deadline = visibleAt(item);
-        return deadline === null || deadline <= visibilityNow;
-      }),
-    [items, visibilityNow],
+      pages.map((page) =>
+        page.filter((item) => {
+          const deadline = visibleAt(item);
+          return deadline === null || deadline <= visibilityNow;
+        }),
+      ),
+    [pages, visibilityNow],
   );
   const visibleItems = useMemo(
     () =>
       featuredOnly
-        ? eligibleItems.filter((item) => featuredIds.has(item.id))
-        : distributeFeatured(eligibleItems, featuredIds),
-    [eligibleItems, featuredIds, featuredOnly],
+        ? eligiblePages.flat().filter((item) => featuredIds.has(item.id))
+        : eligiblePages.flatMap((page) => orderFeaturedMedia(page, featuredIds)),
+    [eligiblePages, featuredIds, featuredOnly],
   );
 
   return (
