@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "北航实验学校中学部｜影像直播",
+    name: "北航实验学校中学部暨北航实验学校分校｜影像直播",
     short_name: "中学部影像直播",
     description: "校内活动照片上传与受控直播工作台",
     start_url: "/login",
