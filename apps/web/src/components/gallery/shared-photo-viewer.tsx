@@ -15,7 +15,12 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet } from "@/lib/client-api";
+import { readCachedDerivedImage } from "@/lib/derived-image-cache";
 import { fetchImageWithProgress } from "@/lib/image-download-progress";
+import {
+  readCachedOriginalImage,
+  writeCachedOriginalImage,
+} from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const toolbarButtonClass =
@@ -76,7 +81,6 @@ export function SharedPhotoViewer({
     kind: "preview" | "original";
     progress: number;
   } | null>(null);
-  const [previewLoaded, setPreviewLoaded] = useState(false);
   const [preparedImage, setPreparedImage] = useState<{
     kind: "preview" | "original";
     url: string;
@@ -142,29 +146,48 @@ export function SharedPhotoViewer({
 
   const preparePreviewForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
-      if (
-        preparedImage?.kind === "preview" ||
-        (preparedImage === null && preview?.kind === "photo_1920" && previewLoaded)
-      ) {
+      if (preview === null) return;
+      if (preparedImage?.kind === "preview") {
         showSaveHint("preview");
         return;
       }
       setWeChatDownload({ kind: "preview", progress: 0 });
       try {
-        const blob = await fetchImageWithProgress({
-          url: source.url,
-          expectedBytes: source.bytes,
-          onProgress: (progress) =>
-            setWeChatDownload((current) =>
-              current?.kind === "preview" ? { ...current, progress } : current,
-            ),
-        });
+        const previewKind =
+          preview.kind === "photo_1920"
+            ? "photo_1920"
+            : preview.kind === "photo_960"
+              ? "photo_960"
+              : "photo_480";
+        let blob =
+          preview.bytes === source.bytes
+            ? await readCachedDerivedImage({
+                scope: slug,
+                mediaId: media.id,
+                kind: previewKind,
+                bytes: preview.bytes,
+              })
+            : null;
+        if (blob === null) {
+          blob = await fetchImageWithProgress({
+            url: source.url,
+            expectedBytes: source.bytes,
+            onProgress: (progress) =>
+              setWeChatDownload((current) =>
+                current?.kind === "preview" ? { ...current, progress } : current,
+              ),
+          });
+        } else {
+          setWeChatDownload((current) =>
+            current?.kind === "preview" ? { ...current, progress: 1 } : current,
+          );
+        }
         await replacePreparedImage("preview", blob);
       } finally {
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
     },
-    [preparedImage, preview?.kind, previewLoaded, replacePreparedImage, showSaveHint],
+    [media.id, preparedImage?.kind, preview, replacePreparedImage, showSaveHint, slug],
   );
 
   const prepareOriginalForWeChat = useCallback(
@@ -175,20 +198,28 @@ export function SharedPhotoViewer({
       }
       setWeChatDownload({ kind: "original", progress: 0 });
       try {
-        const blob = await fetchImageWithProgress({
-          url: source.url,
-          expectedBytes: source.bytes,
-          onProgress: (progress) =>
-            setWeChatDownload((current) =>
-              current?.kind === "original" ? { ...current, progress } : current,
-            ),
-        });
+        let blob = await readCachedOriginalImage(slug, media.id, source.bytes);
+        if (blob === null) {
+          blob = await fetchImageWithProgress({
+            url: source.url,
+            expectedBytes: source.bytes,
+            onProgress: (progress) =>
+              setWeChatDownload((current) =>
+                current?.kind === "original" ? { ...current, progress } : current,
+              ),
+          });
+          await writeCachedOriginalImage(slug, media.id, source.bytes, blob);
+        } else {
+          setWeChatDownload((current) =>
+            current?.kind === "original" ? { ...current, progress: 1 } : current,
+          );
+        }
         await replacePreparedImage("original", blob);
       } finally {
         setWeChatDownload((current) => (current?.kind === "original" ? null : current));
       }
     },
-    [preparedImage?.kind, replacePreparedImage, showSaveHint],
+    [media.id, preparedImage?.kind, replacePreparedImage, showSaveHint, slug],
   );
 
   if (preview === null) return null;
@@ -243,7 +274,6 @@ export function SharedPhotoViewer({
                       : "photo_480"
                 }
                 mediaId={media.id}
-                onLoad={() => setPreviewLoaded(true)}
                 priority
                 refreshUrl={async () =>
                   (
