@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CircleHelpIcon,
-  XIcon,
-} from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CircleHelpIcon, XIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -80,7 +75,9 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
   }
 
   if (kind === "search") {
-    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("#gallery-main button"));
+    const buttons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("#gallery-main button"),
+    );
     return buttons.find((button) => button.querySelector("svg.lucide-search") !== null) ?? null;
   }
 
@@ -89,9 +86,7 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
     return gallery?.querySelector<HTMLElement>("[data-media-id]") ?? gallery;
   }
 
-  const controls = Array.from(
-    document.querySelectorAll<HTMLElement>("[data-lightbox-controls]"),
-  );
+  const controls = Array.from(document.querySelectorAll<HTMLElement>("[data-lightbox-controls]"));
   return controls.at(-1) ?? null;
 }
 
@@ -104,7 +99,7 @@ function readLightboxActions(): string[] {
   }
   const text = toolbar.textContent ?? "";
   if (text.includes("分享")) actions.push("分享");
-  if (text.includes("下载")) actions.push("保存或下载");
+  if (text.includes("下载")) actions.push("下载");
   return actions;
 }
 
@@ -305,17 +300,6 @@ export function ViewerOnboarding({
     return () => cancelAnimationFrame(timer);
   }, [flow]);
 
-  useEffect(() => {
-    if (flow === null) return;
-    const intercept = (event: KeyboardEvent) => {
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.stopImmediatePropagation();
-      }
-    };
-    document.addEventListener("keydown", intercept, true);
-    return () => document.removeEventListener("keydown", intercept, true);
-  }, [flow]);
-
   const finishMain = useCallback(() => {
     markStorageSeen(viewerOnboardingStorageKey);
     setHasSeenMain(true);
@@ -328,6 +312,47 @@ export function ViewerOnboarding({
     setSpotlightRect(null);
     setFlow(null);
   }, []);
+
+  useEffect(() => {
+    if (flow === null) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (flow.kind === "main") finishMain();
+        else finishLightbox();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements(cardRef.current);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        cardRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (first === undefined || last === undefined) return;
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === cardRef.current)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [finishLightbox, finishMain, flow]);
 
   const next = useCallback(() => {
     if (flow === null) return;
@@ -418,45 +443,11 @@ export function ViewerOnboarding({
 
   const overlay =
     !mounted || flow === null ? null : (
-      <div
-        aria-label="使用引导"
-        className="fixed inset-0 z-[80]"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            if (flow.kind === "main") finishMain();
-            else finishLightbox();
-            return;
-          }
-
-          if (event.key !== "Tab") return;
-          const focusable = focusableElements(cardRef.current);
-          if (focusable.length === 0) {
-            event.preventDefault();
-            cardRef.current?.focus();
-            return;
-          }
-          const first = focusable[0];
-          const last = focusable.at(-1);
-          if (first === undefined || last === undefined) return;
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-          }
-        }}
-        role="presentation"
-      >
+      <div className="fixed inset-0 z-[80]">
         {spotlightRect === null ? (
           <div className="absolute inset-0 bg-black/58 backdrop-blur-[1px]" />
         ) : (
-          <svg
-            aria-hidden="true"
-            className="absolute inset-0 size-full"
-            preserveAspectRatio="none"
-          >
+          <svg aria-hidden="true" className="absolute inset-0 size-full" preserveAspectRatio="none">
             <defs>
               <mask id="viewer-onboarding-mask">
                 <rect fill="white" height="100%" width="100%" x="0" y="0" />
@@ -519,8 +510,8 @@ export function ViewerOnboarding({
               <h2 className="text-base font-semibold leading-6" id="viewer-onboarding-title">
                 {welcome
                   ? "欢迎使用北航实验学校中学部照片实时直播系统"
-                  : currentMainStep?.title ??
-                    (lightboxToolbar ? "更多照片操作" : "继续浏览照片")}
+                  : (currentMainStep?.title ??
+                    (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
               </h2>
             </div>
 
@@ -542,12 +533,12 @@ export function ViewerOnboarding({
           >
             {welcome
               ? "活动照片将持续更新，你可以实时浏览，也可以快速找到自己的照片。"
-              : currentMainStep?.description ??
+              : (currentMainStep?.description ??
                 (lightboxToolbar
                   ? lightboxActions.length > 0
                     ? `这里可以${joinChinese(lightboxActions)}这张照片。`
-                    : "这里可以对当前照片进行点赞、分享或保存等操作。"
-                  : "手机上左右滑动即可切换照片；电脑上也可以使用左右方向键或两侧按钮快速切换。")}
+                    : "这里可以对当前照片进行点赞、分享或下载等操作。"
+                  : "手机上左右滑动即可切换照片；电脑上也可以使用左右方向键或两侧按钮快速切换。"))}
           </p>
 
           <div className="mt-4 flex items-center justify-between gap-3">
