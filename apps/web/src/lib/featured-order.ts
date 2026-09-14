@@ -26,8 +26,7 @@ export function orderFeaturedMedia(
     .map((item, originalIndex) => ({
       item,
       originalIndex,
-      score:
-        item.publishSequence + (featuredIds.has(item.id) ? featuredPromotion(item.id) : 0),
+      score: item.publishSequence + (featuredIds.has(item.id) ? featuredPromotion(item.id) : 0),
     }))
     .sort(
       (left, right) =>
