@@ -16,7 +16,7 @@ export function ImageDownloadProgress({
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none absolute inset-0 z-40 grid place-items-center"
+      className="pointer-events-none fixed inset-0 z-[100] grid place-items-center"
     >
       <div className="flex min-w-36 flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/70 px-5 py-4 text-white shadow-2xl shadow-black/40 backdrop-blur-xl">
         <div
