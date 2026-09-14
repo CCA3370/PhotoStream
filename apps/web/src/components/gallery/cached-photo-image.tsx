@@ -2,9 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { clientGet } from "@/lib/client-api";
-
 import { isAlbumDataSaverActive } from "@/lib/album-data-saver";
+import { clientGet } from "@/lib/client-api";
 import {
   type DerivedPhotoVariantKind,
   getWarmDerivedImageUrl,
@@ -70,7 +69,7 @@ export function CachedPhotoImage({
   const [fallback, setFallback] = useState<FallbackState | null>(null);
   const [active, setActive] = useState(priority);
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
-  const [microFailed, setMicroFailed] = useState(false);
+  const [failedMicroUrl, setFailedMicroUrl] = useState<string | null>(null);
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
   const cacheRequest = { scope, mediaId, kind, bytes };
   const telemetryScope = scope === "public-media" ? undefined : scope;
@@ -83,10 +82,7 @@ export function CachedPhotoImage({
     fallbackMode === "direct" ? sourceUrl : fallbackMode === "failed" ? null : resolvedUrl;
   const deferredGridThumbnail = kind === "photo_480" && !cacheOnly && !priority;
   const microUrl = deferredGridThumbnail ? microThumbnailUrl(sourceUrl) : null;
-
-  useEffect(() => {
-    setMicroFailed(false);
-  }, [microUrl]);
+  const microFailed = microUrl !== null && failedMicroUrl === microUrl;
 
   useEffect(() => {
     if (cacheOnly || priority) return;
@@ -227,7 +223,7 @@ export function CachedPhotoImage({
           className="scale-[1.015] object-cover blur-[1px]"
           fill
           loading="eager"
-          onError={() => setMicroFailed(true)}
+          onError={() => setFailedMicroUrl(microUrl)}
           sizes={sizes}
           src={microUrl}
           unoptimized
