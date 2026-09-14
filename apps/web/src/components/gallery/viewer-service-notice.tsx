@@ -12,15 +12,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const noticeStorageKey = "photostream:viewer-service-notice:v1";
+import {
+  viewerServiceNoticeDismissedEvent,
+  viewerServiceNoticeStorageKey,
+} from "@/lib/viewer-onboarding";
 
 export function ViewerServiceNotice() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     try {
-      setOpen(window.localStorage.getItem(noticeStorageKey) !== "seen");
+      setOpen(window.localStorage.getItem(viewerServiceNoticeStorageKey) !== "seen");
     } catch {
       setOpen(true);
     }
@@ -28,11 +30,12 @@ export function ViewerServiceNotice() {
 
   function dismiss(): void {
     try {
-      window.localStorage.setItem(noticeStorageKey, "seen");
+      window.localStorage.setItem(viewerServiceNoticeStorageKey, "seen");
     } catch {
       // The notice still closes for this page view when storage is unavailable.
     }
     setOpen(false);
+    window.dispatchEvent(new Event(viewerServiceNoticeDismissedEvent));
   }
 
   return (
