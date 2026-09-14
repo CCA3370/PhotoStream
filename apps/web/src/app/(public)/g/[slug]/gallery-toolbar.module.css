@@ -144,3 +144,27 @@
     right: max(3rem, calc((100vw - 2080px) / 2 + 3rem));
   }
 }
+
+/* Keep the persistent viewer help entry as a true circular icon button. */
+:global(button[aria-label="重新查看使用引导"]) {
+  width: 2rem !important;
+  min-width: 2rem !important;
+  max-width: 2rem !important;
+  height: 2rem !important;
+  padding: 0 !important;
+  aspect-ratio: 1;
+}
+
+:global(button[aria-label="重新查看使用引导"] > span) {
+  display: none !important;
+}
+
+/* Explain that the in-page lightbox is intentionally bandwidth-limited. */
+:global(
+  body:has([aria-label="照片画布"])
+    #viewer-onboarding-description:has(+ div .lucide-chevron-right)
+)::after {
+  display: block;
+  margin-top: 0.5rem;
+  content: "网页中的图片清晰度受到限制，如需查看原图，请下载所需图片。";
+}
