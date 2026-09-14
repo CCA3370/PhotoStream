@@ -37,6 +37,34 @@ describe("lightbox image policy", () => {
     ).toBe("photo_1920");
   });
 
+  it("forces album data saver mode to 960 while keeping a 1920 fallback", () => {
+    expect(
+      selectLightboxVariantKind({
+        mediaWidth: 6_000,
+        mediaHeight: 4_000,
+        viewportWidth: 1_440,
+        viewportHeight: 1_000,
+        devicePixelRatio: 2,
+        effectiveType: "4g",
+        dataSaverEnabled: true,
+        has960: true,
+        has1920: true,
+      }),
+    ).toBe("photo_960");
+    expect(
+      selectLightboxVariantKind({
+        mediaWidth: 6_000,
+        mediaHeight: 4_000,
+        viewportWidth: 1_440,
+        viewportHeight: 1_000,
+        devicePixelRatio: 2,
+        dataSaverEnabled: true,
+        has960: false,
+        has1920: true,
+      }),
+    ).toBe("photo_1920");
+  });
+
   it("honors data saver and slow connections", () => {
     expect(effectiveLightboxDpr({ devicePixelRatio: 3, saveData: true, effectiveType: "4g" })).toBe(
       1,
