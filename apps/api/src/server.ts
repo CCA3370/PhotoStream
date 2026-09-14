@@ -19,6 +19,7 @@ import {
   UnavailableFaceReferenceStorage,
 } from "./face/reference-storage.js";
 import { FaceService } from "./face/service.js";
+import { AlbumDataSaverService } from "./media/album-data-saver-service.js";
 import { AliyunCdnInvalidator, LocalCdnInvalidator } from "./media/cdn-invalidator.js";
 import { FeaturedService } from "./media/featured-service.js";
 import { MediaLikeService } from "./media/like-service.js";
@@ -82,6 +83,7 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
+const dataSaverService = new AlbumDataSaverService({ database });
 const likeService = new MediaLikeService({
   database,
   secret: config.VISITOR_SESSION_SECRET,
@@ -136,6 +138,7 @@ const app = await buildApp({
   authStore,
   photoService,
   photoShareService,
+  dataSaverService,
   likeService,
   featuredService,
   broker,

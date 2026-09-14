@@ -23,6 +23,7 @@ import type { EventBridgeVerifier } from "./face/eventbridge-verifier.js";
 import type { FacePublicStateService } from "./face/public-state-service.js";
 import type { FaceService } from "./face/service.js";
 import { assertRequestOrigin, requestRouteForLog } from "./http/security.js";
+import type { AlbumDataSaverService } from "./media/album-data-saver-service.js";
 import type { FeaturedService } from "./media/featured-service.js";
 import type { MediaLikeService } from "./media/like-service.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
@@ -30,6 +31,7 @@ import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
 import type { PhotoShareService } from "./media/share-service.js";
 import type { RuntimeMetrics } from "./observability/runtime-metrics.js";
+import { registerAlbumDataSaverRoutes } from "./routes/album-data-saver.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBibRoutes } from "./routes/bib.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
@@ -48,6 +50,7 @@ export interface BuildAppOptions {
   readonly passwordHasher?: PasswordHasher;
   readonly photoService?: PhotoService;
   readonly photoShareService?: PhotoShareService;
+  readonly dataSaverService?: AlbumDataSaverService;
   readonly likeService?: MediaLikeService;
   readonly featuredService?: FeaturedService;
   readonly broker?: LiveEventBroker;
@@ -270,6 +273,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     await registerDashboardRoutes(app, {
       authService,
       dashboardService: options.dashboardService,
+      config: options.config,
+    });
+  }
+  if (options.dataSaverService !== undefined) {
+    await registerAlbumDataSaverRoutes(app, {
+      authService,
+      dataSaverService: options.dataSaverService,
       config: options.config,
     });
   }

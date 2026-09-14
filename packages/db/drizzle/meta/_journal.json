@@ -162,6 +162,13 @@
       "when": 1789056000000,
       "tag": "0022_photo_shares",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789398000000,
+      "tag": "0023_album_data_saver",
+      "breakpoints": true
     }
   ]
 }

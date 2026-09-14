@@ -8,6 +8,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./bandwidth": {
+      "types": "./src/bandwidth.ts",
+      "import": "./src/bandwidth.ts"
+    },
     "./bib": {
       "types": "./src/bib.ts",
       "import": "./src/bib.ts"
