@@ -17,10 +17,7 @@ import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet } from "@/lib/client-api";
 import { readCachedDerivedImage } from "@/lib/derived-image-cache";
 import { fetchImageWithProgress } from "@/lib/image-download-progress";
-import {
-  readCachedOriginalImage,
-  writeCachedOriginalImage,
-} from "@/lib/original-image-cache";
+import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const toolbarButtonClass =
