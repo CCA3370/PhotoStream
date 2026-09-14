@@ -314,13 +314,13 @@ button[title="隐藏 (Space)"]:hover {
   color: white;
 }
 
-/* Keep the fullscreen photo viewer above gallery chrome and search controls. */
+/* Keep the fullscreen photo viewer above gallery chrome but below onboarding. */
 [data-slot="dialog-content"]:has([data-lightbox-transition-image]) {
-  z-index: 90 !important;
+  z-index: 70 !important;
 }
 
 [data-slot="dialog-overlay"]:has(~ [data-slot="dialog-content"] [data-lightbox-transition-image]) {
-  z-index: 90 !important;
+  z-index: 70 !important;
 }
 
 /* Desktop photo-search entry: compact utility pill instead of a full-width card. */
