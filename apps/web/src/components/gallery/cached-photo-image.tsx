@@ -14,10 +14,7 @@ import {
   retainDerivedImage,
   subscribeDerivedImages,
 } from "@/lib/derived-image-cache";
-import {
-  gridThumbnailRootMargin,
-  gridThumbnailUpgradeDelayMs,
-} from "@/lib/grid-thumbnail-policy";
+import { gridThumbnailRootMargin, gridThumbnailUpgradeDelayMs } from "@/lib/grid-thumbnail-policy";
 import { recordMediaCacheDiagnostic } from "@/lib/media-blob-cache";
 
 interface ResolvedImage {

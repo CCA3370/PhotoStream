@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  gridThumbnailRootMargin,
-  gridThumbnailUpgradeDelayMs,
-} from "./grid-thumbnail-policy";
+import { gridThumbnailRootMargin, gridThumbnailUpgradeDelayMs } from "./grid-thumbnail-policy";
 
 describe("grid thumbnail policy", () => {
   it("keeps the 480px upgrade deliberately conservative", () => {

@@ -1,11 +1,7 @@
+import { hasPermission, type SignedUpload, type UserRole } from "@photostream/contracts";
 import {
-  hasPermission,
-  type SignedUpload,
-  type UserRole,
-} from "@photostream/contracts";
-import {
-  microPreviewDimensions,
   type MicroPreviewUploadRequest,
+  microPreviewDimensions,
 } from "@photostream/contracts/micro-preview";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
@@ -253,7 +249,11 @@ export class MicroPreviewService {
       throw new AppError({ code: "STATE_CONFLICT", message: "媒体已删除", statusCode: 409 });
     }
     if (actor.role !== "admin" && media.uploaderId !== actor.id) {
-      throw new AppError({ code: "FORBIDDEN", message: "不能修改其他上传者的媒体", statusCode: 403 });
+      throw new AppError({
+        code: "FORBIDDEN",
+        message: "不能修改其他上传者的媒体",
+        statusCode: 403,
+      });
     }
     return media;
   }

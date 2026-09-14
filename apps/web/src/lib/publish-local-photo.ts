@@ -5,8 +5,8 @@ import type {
   UploadIntentView,
 } from "@photostream/contracts";
 import {
-  microPreviewDimensions,
   type MicroPreviewUploadRequest,
+  microPreviewDimensions,
 } from "@photostream/contracts/micro-preview";
 
 import { ClientApiError, clientGet, clientMutation } from "@/lib/client-api";
