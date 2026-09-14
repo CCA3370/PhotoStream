@@ -11,6 +11,7 @@ import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice"
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { Toaster } from "@/components/ui/toast";
 import { serverApi } from "@/lib/api";
+import { orderFeaturedMedia } from "@/lib/featured-order";
 
 import styles from "./gallery-toolbar.module.css";
 
@@ -29,6 +30,10 @@ interface FaceState {
   readonly noticeVersion: string;
   readonly indexState: FaceIndexState;
 }
+
+const initialMediaPageSize = 60;
+const initialFeaturedTarget = 8;
+const initialPrefetchPageLimit = 3;
 
 export default async function GalleryPage({
   params,
@@ -77,7 +82,7 @@ export default async function GalleryPage({
   const category = featuredOnly
     ? undefined
     : album.categories.find((candidate) => candidate.id === requestedCategory);
-  const mediaPath = new URLSearchParams({ limit: "30" });
+  const mediaPath = new URLSearchParams({ limit: String(initialMediaPageSize) });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
   const [media, featured, faceState] = await Promise.all([
     serverApi<MediaList>(`/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`),
@@ -85,7 +90,35 @@ export default async function GalleryPage({
     serverApi<FaceState>(`/api/v1/public/albums/${slug}/face-state`),
   ]);
 
-  let initialItems = media.items;
+  const featuredIdSet = new Set(featured.mediaIds);
+  let prefetchedItems = [...media.items];
+  let nextCursor = media.nextCursor;
+  let eventCursor = media.eventCursor;
+
+  if (!featuredOnly && category === undefined) {
+    let fetchedPages = 1;
+    let featuredCount = prefetchedItems.filter((item) => featuredIdSet.has(item.id)).length;
+    while (
+      nextCursor !== null &&
+      fetchedPages < initialPrefetchPageLimit &&
+      featuredCount < initialFeaturedTarget
+    ) {
+      const lookaheadPath = new URLSearchParams({
+        cursor: nextCursor,
+        limit: String(initialMediaPageSize),
+      });
+      const lookahead = await serverApi<MediaList>(
+        `/api/v1/public/albums/${slug}/media?${lookaheadPath.toString()}`,
+      );
+      prefetchedItems.push(...lookahead.items);
+      nextCursor = lookahead.nextCursor;
+      eventCursor = Math.max(eventCursor, lookahead.eventCursor);
+      fetchedPages += 1;
+      featuredCount = prefetchedItems.filter((item) => featuredIdSet.has(item.id)).length;
+    }
+  }
+
+  let initialItems = prefetchedItems;
   if (query.photo !== undefined && !initialItems.some((item) => item.id === query.photo)) {
     try {
       const linked = await serverApi<PublicMediaView>(
@@ -96,7 +129,14 @@ export default async function GalleryPage({
       // Ignore stale or invalid deep links and keep the album usable.
     }
   }
-  const initialPage: MediaList = { ...media, items: initialItems };
+  if (!featuredOnly) initialItems = [...orderFeaturedMedia(initialItems, featuredIdSet)];
+
+  const initialPage: MediaList = {
+    ...media,
+    items: initialItems,
+    nextCursor,
+    eventCursor,
+  };
   const initialVisibilityNow = Date.now();
   const initialSelectedId =
     query.photo !== undefined && initialItems.some((item) => item.id === query.photo)
@@ -174,7 +214,7 @@ export default async function GalleryPage({
 
       {album.state === "live" ? (
         <LiveUpdates
-          initialEventId={media.eventCursor}
+          initialEventId={initialPage.eventCursor}
           knownMediaIds={initialItems.map((item) => item.id)}
           slug={slug}
         />
