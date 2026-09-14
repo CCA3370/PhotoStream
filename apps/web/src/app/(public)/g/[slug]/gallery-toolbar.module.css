@@ -107,7 +107,14 @@
     gap: 0.5rem;
     padding: 0 1rem;
     border-radius: 0.875rem;
-    box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 12%, transparent);
+    background: transparent;
+    color: var(--foreground);
+    box-shadow: none;
+  }
+
+  .searchToolbar > section > div > div:first-child > button:first-child:hover {
+    background: color-mix(in oklab, var(--accent) 72%, transparent);
+    color: var(--foreground);
   }
 
   .searchToolbar > section > div > div:first-child > button:first-child > span:first-child {
