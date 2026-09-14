@@ -1,4 +1,5 @@
 import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostream/contracts";
+import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
@@ -32,7 +33,8 @@ interface FaceState {
   readonly indexState: FaceIndexState;
 }
 
-const initialMediaPageSize = 60;
+const standardInitialMediaPageSize = 60;
+const dataSaverInitialMediaPageSize = 30;
 const initialFeaturedTarget = 8;
 const initialPrefetchPageLimit = 3;
 
@@ -54,12 +56,20 @@ export default async function GalleryPage({
   const featuredOnly = query.featured === "1";
 
   if (query.photo !== undefined && query.share !== undefined) {
-    const shared = await serverApi<PublicMediaView>(
-      `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(query.photo)}?share=${encodeURIComponent(query.share)}`,
-    );
+    const [shared, dataSaver] = await Promise.all([
+      serverApi<PublicMediaView>(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(query.photo)}?share=${encodeURIComponent(query.share)}`,
+      ),
+      serverApi<DataSaverSettingView>(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}/data-saver`,
+      ),
+    ]);
     return (
       <Toaster>
-        <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
+        <>
+          <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
+          <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
+        </>
       </Toaster>
     );
   }
@@ -80,6 +90,12 @@ export default async function GalleryPage({
     );
   }
 
+  const dataSaver = await serverApi<DataSaverSettingView>(
+    `/api/v1/public/albums/${encodeURIComponent(slug)}/data-saver`,
+  );
+  const initialMediaPageSize = dataSaver.enabled
+    ? dataSaverInitialMediaPageSize
+    : standardInitialMediaPageSize;
   const category = featuredOnly
     ? undefined
     : album.categories.find((candidate) => candidate.id === requestedCategory);
@@ -96,7 +112,7 @@ export default async function GalleryPage({
   let nextCursor = media.nextCursor;
   let eventCursor = media.eventCursor;
 
-  if (!featuredOnly && category === undefined) {
+  if (!dataSaver.enabled && !featuredOnly && category === undefined) {
     let fetchedPages = 1;
     let featuredCount = prefetchedItems.filter((item) => featuredIdSet.has(item.id)).length;
     while (
@@ -162,6 +178,7 @@ export default async function GalleryPage({
       reserveSearchAction={inlineSearch}
       status={album.state === "live" ? "直播中" : "已结束"}
     >
+      <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
       <AlbumOpenTracker slug={slug} />
       <ViewerServiceNotice />
       <ViewerOnboarding
@@ -195,6 +212,7 @@ export default async function GalleryPage({
             >
               <PaginatedMediaGrid
                 {...(category === undefined ? {} : { categoryId: category.id })}
+                dataSaverEnabled={dataSaver.enabled}
                 initialFeaturedIds={featured.mediaIds}
                 initialPage={initialPage}
                 {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
@@ -208,6 +226,7 @@ export default async function GalleryPage({
               <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
               <PaginatedMediaGrid
                 {...(category === undefined ? {} : { categoryId: category.id })}
+                dataSaverEnabled={dataSaver.enabled}
                 featuredOnly={featuredOnly}
                 initialFeaturedIds={featured.mediaIds}
                 initialPage={initialPage}

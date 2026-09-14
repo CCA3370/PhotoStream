@@ -17,6 +17,7 @@ interface MediaPage {
 }
 
 const publicMediaPageSize = 60;
+const dataSaverMediaPageSize = 30;
 const publicMediaVisibilityDelayMs = 15_000;
 
 function mergeMedia(
@@ -52,6 +53,7 @@ function visibleAt(item: PublicMediaView): number | null {
 
 export function PaginatedMediaGrid({
   categoryId,
+  dataSaverEnabled = false,
   featuredOnly = false,
   initialFeaturedIds,
   initialPage,
@@ -60,6 +62,7 @@ export function PaginatedMediaGrid({
   slug,
 }: Readonly<{
   categoryId?: string;
+  dataSaverEnabled?: boolean;
   featuredOnly?: boolean;
   initialFeaturedIds: readonly string[];
   initialPage: MediaPage;
@@ -80,6 +83,7 @@ export function PaginatedMediaGrid({
   const [visibilityNow, setVisibilityNow] = useState(initialVisibilityNow);
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
+  const pageSize = dataSaverEnabled ? dataSaverMediaPageSize : publicMediaPageSize;
 
   const allItems = useMemo(() => pages.flat(), [pages]);
 
@@ -118,11 +122,11 @@ export function PaginatedMediaGrid({
   }, [allItems, visibilityNow]);
 
   useEffect(() => {
-    void refreshFeatured().catch(() => undefined);
+    if (!dataSaverEnabled) void refreshFeatured().catch(() => undefined);
     const changed = () => void refreshFeatured().catch(() => undefined);
     window.addEventListener("photostream:featured-updated", changed);
     return () => window.removeEventListener("photostream:featured-updated", changed);
-  }, [refreshFeatured]);
+  }, [dataSaverEnabled, refreshFeatured]);
 
   useEffect(() => {
     const remove = (event: Event) => {
@@ -157,7 +161,7 @@ export function PaginatedMediaGrid({
       do {
         refreshQueued = false;
         try {
-          const query = new URLSearchParams({ limit: String(publicMediaPageSize) });
+          const query = new URLSearchParams({ limit: String(pageSize) });
           if (categoryId !== undefined) query.set("categoryId", categoryId);
           const page = await clientGet<MediaPage>(
             `/api/v1/public/albums/${slug}/media?${query.toString()}`,
@@ -190,7 +194,7 @@ export function PaginatedMediaGrid({
       disposed = true;
       window.removeEventListener("photostream:media-published", published);
     };
-  }, [categoryId, refreshFeatured, slug]);
+  }, [categoryId, pageSize, refreshFeatured, slug]);
 
   const loadMore = useCallback(async (): Promise<void> => {
     if (cursor === null || requestInFlight.current) return;
@@ -198,7 +202,7 @@ export function PaginatedMediaGrid({
     setLoading(true);
     setLoadMoreError(null);
     try {
-      const query = new URLSearchParams({ cursor, limit: String(publicMediaPageSize) });
+      const query = new URLSearchParams({ cursor, limit: String(pageSize) });
       if (categoryId !== undefined) query.set("categoryId", categoryId);
       const page = await clientGet<MediaPage>(
         `/api/v1/public/albums/${slug}/media?${query.toString()}`,
@@ -211,7 +215,7 @@ export function PaginatedMediaGrid({
       requestInFlight.current = false;
       setLoading(false);
     }
-  }, [categoryId, cursor, slug]);
+  }, [categoryId, cursor, pageSize, slug]);
 
   useEffect(() => {
     if (!featuredOnly || cursor === null || loading || loadMoreError !== null) return;
@@ -219,7 +223,7 @@ export function PaginatedMediaGrid({
   }, [cursor, featuredOnly, loadMore, loadMoreError, loading]);
 
   useEffect(() => {
-    if (featuredOnly) return;
+    if (featuredOnly || dataSaverEnabled) return;
     const button = loadMoreRef.current;
     if (button === null || cursor === null || loadMoreError !== null) return;
     const observer = new IntersectionObserver(
@@ -230,7 +234,7 @@ export function PaginatedMediaGrid({
     );
     observer.observe(button);
     return () => observer.disconnect();
-  }, [cursor, featuredOnly, loadMore, loadMoreError]);
+  }, [cursor, dataSaverEnabled, featuredOnly, loadMore, loadMoreError]);
 
   const eligiblePages = useMemo(
     () =>

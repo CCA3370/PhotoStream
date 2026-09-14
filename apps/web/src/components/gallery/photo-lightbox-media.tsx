@@ -3,6 +3,7 @@
 import type { PublicMediaView } from "@photostream/contracts";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
+import { isAlbumDataSaverActive } from "@/lib/album-data-saver";
 import { selectLightboxVariantKind } from "@/lib/lightbox-image-policy";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,7 @@ export function selectDisplayVariant(
     devicePixelRatio: typeof window === "undefined" ? 1 : window.devicePixelRatio,
     saveData: connection?.saveData,
     effectiveType: connection?.effectiveType,
+    dataSaverEnabled: isAlbumDataSaverActive(),
     has960,
     has1920,
   });

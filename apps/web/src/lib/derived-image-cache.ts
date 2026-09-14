@@ -1,3 +1,4 @@
+import { isAlbumDataSaverActive } from "./album-data-saver";
 import { loadMediaBlob, readMediaBlob } from "./media-blob-cache";
 
 const derivedImageCacheName = "photostream-derived-images-v1";
@@ -149,6 +150,17 @@ export async function readCachedDerivedImage(
 export async function loadDerivedImage(request: DerivedImageRequest): Promise<Blob> {
   const warm = warmImages.get(imageIdentity(request));
   if (warm !== undefined) return touchWarmImage(imageIdentity(request), warm).blob;
+
+  if (request.signal !== undefined && isAlbumDataSaverActive()) {
+    if (request.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const cached = await readMediaBlob(blobIdentity(request));
+    if (cached !== null) {
+      rememberWarmImage(request, cached);
+      return cached;
+    }
+    throw new Error("Data saver skipped derived-image prefetch");
+  }
+
   const blob = await loadMediaBlob({
     ...blobIdentity(request),
     sourceUrl: request.sourceUrl,

@@ -8,6 +8,7 @@ export interface LightboxImagePolicyInput {
   readonly devicePixelRatio: number;
   readonly saveData?: boolean | undefined;
   readonly effectiveType?: string | undefined;
+  readonly dataSaverEnabled?: boolean | undefined;
   readonly has960: boolean;
   readonly has1920: boolean;
 }
@@ -55,6 +56,7 @@ export function selectLightboxVariantKind(
   if (!options.has960 && !options.has1920) return null;
   if (!options.has960) return "photo_1920";
   if (!options.has1920) return "photo_960";
+  if (options.dataSaverEnabled) return "photo_960";
 
   const cssWidth = renderedLightboxWidth(options);
   if (cssWidth <= 0) return "photo_960";
