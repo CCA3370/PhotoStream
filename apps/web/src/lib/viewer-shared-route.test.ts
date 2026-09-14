@@ -21,8 +21,6 @@ describe("shared photo route isolation", () => {
   it("keeps both photo and share parameters required for the isolated shared view", () => {
     const source = readFileSync(galleryPagePath, "utf8");
 
-    expect(source).toContain(
-      "query.photo !== undefined && query.share !== undefined",
-    );
+    expect(source).toContain("query.photo !== undefined && query.share !== undefined");
   });
 });
