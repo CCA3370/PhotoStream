@@ -91,7 +91,7 @@ export default async function GalleryPage({
   ]);
 
   const featuredIdSet = new Set(featured.mediaIds);
-  let prefetchedItems = [...media.items];
+  const prefetchedItems = [...media.items];
   let nextCursor = media.nextCursor;
   let eventCursor = media.eventCursor;
 
