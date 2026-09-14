@@ -19,6 +19,10 @@
     "./face": {
       "types": "./src/face.ts",
       "import": "./src/face.ts"
+    },
+    "./micro-preview": {
+      "types": "./src/micro-preview.ts",
+      "import": "./src/micro-preview.ts"
     }
   },
   "files": [

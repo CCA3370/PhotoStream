@@ -27,6 +27,7 @@ import type { AlbumDataSaverService } from "./media/album-data-saver-service.js"
 import type { FeaturedService } from "./media/featured-service.js";
 import type { MediaLikeService } from "./media/like-service.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
+import type { MicroPreviewService } from "./media/micro-preview-service.js";
 import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
 import type { PhotoShareService } from "./media/share-service.js";
@@ -38,6 +39,7 @@ import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerFaceRoutes } from "./routes/face.js";
 import { registerFeaturedRoutes } from "./routes/featured.js";
 import { registerLikeRoutes } from "./routes/likes.js";
+import { registerMicroPreviewRoutes } from "./routes/micro-preview.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
 import { registerRuntimeRoutes } from "./routes/runtime.js";
@@ -51,6 +53,7 @@ export interface BuildAppOptions {
   readonly photoService?: PhotoService;
   readonly photoShareService?: PhotoShareService;
   readonly dataSaverService?: AlbumDataSaverService;
+  readonly microPreviewService?: MicroPreviewService;
   readonly likeService?: MediaLikeService;
   readonly featuredService?: FeaturedService;
   readonly broker?: LiveEventBroker;
@@ -280,6 +283,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     await registerAlbumDataSaverRoutes(app, {
       authService,
       dataSaverService: options.dataSaverService,
+      config: options.config,
+    });
+  }
+  if (options.microPreviewService !== undefined) {
+    await registerMicroPreviewRoutes(app, {
+      authService,
+      microPreviewService: options.microPreviewService,
       config: options.config,
     });
   }

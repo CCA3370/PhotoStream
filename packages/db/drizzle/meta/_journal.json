@@ -169,6 +169,13 @@
       "when": 1789398000000,
       "tag": "0023_album_data_saver",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789401000000,
+      "tag": "0024_media_micro_previews",
+      "breakpoints": true
     }
   ]
 }

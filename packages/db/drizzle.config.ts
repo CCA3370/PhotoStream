@@ -7,6 +7,7 @@ export default defineConfig({
     "./src/likes-schema.ts",
     "./src/face-diagnostics-schema.ts",
     "./src/data-saver-schema.ts",
+    "./src/micro-preview-schema.ts",
   ],
   out: "./drizzle",
   dbCredentials: {

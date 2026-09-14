@@ -24,6 +24,7 @@ import { AliyunCdnInvalidator, LocalCdnInvalidator } from "./media/cdn-invalidat
 import { FeaturedService } from "./media/featured-service.js";
 import { MediaLikeService } from "./media/like-service.js";
 import { LiveEventBroker } from "./media/live-event-broker.js";
+import { MicroPreviewService } from "./media/micro-preview-service.js";
 import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
 import { PhotoService } from "./media/service.js";
@@ -83,6 +84,7 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
+const microPreviewService = new MicroPreviewService({ database, storage, photoService });
 const dataSaverService = new AlbumDataSaverService({ database });
 const likeService = new MediaLikeService({
   database,
@@ -139,6 +141,7 @@ const app = await buildApp({
   photoService,
   photoShareService,
   dataSaverService,
+  microPreviewService,
   likeService,
   featuredService,
   broker,
@@ -157,6 +160,7 @@ const deletionPoll = setInterval(() => {
       await Promise.all([
         operationsService.processPendingDeletionTasks(),
         photoService.processExpiredUploadCleanups(),
+        microPreviewService.cleanupOrphans(),
       ]);
     })
     .catch((error: unknown) => {
