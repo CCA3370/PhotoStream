@@ -17,7 +17,6 @@ import {
 import {
   gridThumbnailRootMargin,
   gridThumbnailUpgradeDelayMs,
-  microThumbnailUrl,
 } from "@/lib/grid-thumbnail-policy";
 import { recordMediaCacheDiagnostic } from "@/lib/media-blob-cache";
 
@@ -81,7 +80,10 @@ export function CachedPhotoImage({
   const displayUrl =
     fallbackMode === "direct" ? sourceUrl : fallbackMode === "failed" ? null : resolvedUrl;
   const deferredGridThumbnail = kind === "photo_480" && !cacheOnly && !priority;
-  const microUrl = deferredGridThumbnail ? microThumbnailUrl(sourceUrl) : null;
+  const microUrl =
+    deferredGridThumbnail && scope !== "public-media"
+      ? `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/micro-preview`
+      : null;
   const microFailed = microUrl !== null && failedMicroUrl === microUrl;
 
   useEffect(() => {

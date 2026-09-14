@@ -4,6 +4,10 @@ import type {
   SignedUpload,
   UploadIntentView,
 } from "@photostream/contracts";
+import {
+  microPreviewDimensions,
+  type MicroPreviewUploadRequest,
+} from "@photostream/contracts/micro-preview";
 
 import { ClientApiError, clientGet, clientMutation } from "@/lib/client-api";
 import { type LocalReviewPhoto, patchLocalReviewPhoto } from "@/lib/local-review-queue";
@@ -79,6 +83,115 @@ async function putSigned(path: string, blob: Blob, signal?: AbortSignal): Promis
     }
   }
   throw lastError instanceof Error ? lastError : new Error("对象上传失败");
+}
+
+async function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  contentType: "image/webp" | "image/jpeg",
+  quality: number,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob === null || blob.size === 0 || blob.type !== contentType) {
+          reject(new Error("极小缩略图编码失败"));
+          return;
+        }
+        resolve(blob);
+      },
+      contentType,
+      quality,
+    );
+  });
+}
+
+async function createMicroPreview(
+  photo: LocalReviewPhoto,
+  signal?: AbortSignal,
+): Promise<{ readonly blob: Blob; readonly input: MicroPreviewUploadRequest }> {
+  if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+  const source = photo.variants.find((variant) => variant.kind === "photo_480");
+  if (source === undefined) throw new Error("本地队列缺少 photo_480");
+
+  const bitmap = await createImageBitmap(source.blob);
+  try {
+    if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+    const size = microPreviewDimensions(photo.width, photo.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const context = canvas.getContext("2d", { alpha: source.format === "webp" });
+    if (context === null) throw new Error("浏览器无法创建极小缩略图画布");
+    if (source.format === "jpeg") {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, size.width, size.height);
+    }
+    context.drawImage(bitmap, 0, 0, size.width, size.height);
+    const contentType = source.format === "webp" ? "image/webp" : "image/jpeg";
+    const blob = await encodeCanvas(canvas, contentType, source.format === "webp" ? 0.58 : 0.62);
+    if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+    return {
+      blob,
+      input: {
+        format: source.format,
+        contentType,
+        width: size.width,
+        height: size.height,
+        bytes: blob.size,
+      },
+    };
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function transferMicroPreview(
+  mediaId: string,
+  preview: { readonly blob: Blob; readonly input: MicroPreviewUploadRequest },
+  signal?: AbortSignal,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const signed = await clientMutation<SignedUpload>(
+        `/api/v1/media/${encodeURIComponent(mediaId)}/micro-preview/sign`,
+        {
+          body: preview.input,
+          ...signalOptions(signal),
+        },
+      );
+      const response = await fetch(signed.url, {
+        method: "PUT",
+        headers: signed.headers,
+        body: preview.blob,
+        ...(signal === undefined ? {} : { signal }),
+      });
+      if (!response.ok && response.status !== 409) {
+        if (
+          response.status < 500 &&
+          response.status !== 408 &&
+          response.status !== 425 &&
+          response.status !== 429
+        ) {
+          throw new Error(`极小缩略图上传失败（${response.status}）`);
+        }
+        throw new Error(`极小缩略图上传暂时失败（${response.status}）`);
+      }
+      await clientMutation<{ readonly ok: true }>(
+        `/api/v1/media/${encodeURIComponent(mediaId)}/micro-preview/complete`,
+        signalOptions(signal),
+      );
+      return;
+    } catch (error) {
+      if (signal?.aborted === true) throw new DOMException("上传已取消", "AbortError");
+      if (error instanceof ClientApiError && error.response?.retryable !== true) throw error;
+      lastError = error;
+    }
+    if (attempt < 2) {
+      await new Promise((resolve) => window.setTimeout(resolve, 350 * 2 ** attempt));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("极小缩略图上传失败");
 }
 
 async function createIntent(
@@ -173,6 +286,7 @@ export async function publishLocalReviewPhoto(
 ): Promise<{ readonly mediaId: string }> {
   await patchLocalReviewPhoto(photo.id, { uploadState: "uploading", error: null });
   try {
+    const microPreview = await createMicroPreview(photo, signal);
     let intent = await resolveIntent(photo, signal);
     const localBlobs = blobs(photo);
     for (const kind of ["photo_480", "photo_960", "photo_1920", "photo_original"] as const) {
@@ -180,6 +294,7 @@ export async function publishLocalReviewPhoto(
       if (blob === undefined) throw new Error(`本地队列缺少 ${kind}`);
       intent = await transferObject(intent, kind, blob, signal);
     }
+    await transferMicroPreview(intent.mediaId, microPreview, signal);
 
     await clientMutation<{ readonly ok: true }>(`/api/v1/media/${intent.mediaId}/publish`, {
       idempotencyKey: `local-publish-${photo.id}`,
