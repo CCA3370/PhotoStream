@@ -6,10 +6,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "北航实验学校中学部｜影像直播",
+    default: "北航实验学校中学部暨北航实验学校分校｜影像直播",
     template: "%s｜中学部影像直播",
   },
-  description: "北航实验学校中学部活动影像直播平台",
+  description: "北航实验学校中学部暨北航实验学校分校活动影像直播平台",
 };
 
 export const viewport: Viewport = {
