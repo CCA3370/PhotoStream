@@ -452,9 +452,7 @@ export function MediaGrid({
   useEffect(() => {
     const onPopState = () => {
       const mediaId = lightboxHistoryMediaId(window.history.state);
-      setSelectedId(
-        mediaId !== null && items.some((item) => item.id === mediaId) ? mediaId : null,
-      );
+      setSelectedId(mediaId !== null && items.some((item) => item.id === mediaId) ? mediaId : null);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
