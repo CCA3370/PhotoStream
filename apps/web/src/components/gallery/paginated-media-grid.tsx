@@ -38,26 +38,38 @@ function distributeFeatured(
   source: readonly PublicMediaView[],
   featuredIds: ReadonlySet<string>,
 ): readonly PublicMediaView[] {
-  const featured = source.filter((item) => featuredIds.has(item.id));
-  const regular = source.filter((item) => !featuredIds.has(item.id));
-  if (featured.length === 0 || regular.length === 0) return source;
+  if (source.length < 2 || featuredIds.size === 0) return source;
 
-  const result: PublicMediaView[] = [];
-  let featuredIndex = 0;
-  let regularIndex = 0;
-  while (featuredIndex < featured.length || regularIndex < regular.length) {
-    const slot = result.length;
-    const preferFeatured = slot % 4 === 1 && featuredIndex < featured.length;
-    if (preferFeatured || regularIndex >= regular.length) {
-      const item = featured[featuredIndex];
-      if (item !== undefined) result.push(item);
-      featuredIndex += 1;
-    } else {
-      const item = regular[regularIndex];
-      if (item !== undefined) result.push(item);
-      regularIndex += 1;
+  // Keep featured promotion local so loading another page cannot pull an older
+  // featured photo into the top of the already-visible list. Each four-photo
+  // window keeps its original recency neighborhood while preferring a featured
+  // photo in the second slot when that window contains one.
+  const result = [...source];
+  const windowSize = 4;
+  const featuredSlotOffset = 1;
+
+  for (let windowStart = 0; windowStart < result.length; windowStart += windowSize) {
+    const windowEnd = Math.min(windowStart + windowSize, result.length);
+    const targetIndex = windowStart + featuredSlotOffset;
+    if (targetIndex >= windowEnd) continue;
+
+    let featuredIndex = -1;
+    let hasRegular = false;
+    for (let index = windowStart; index < windowEnd; index += 1) {
+      const item = result[index];
+      if (item === undefined) continue;
+      if (featuredIds.has(item.id)) {
+        if (featuredIndex === -1) featuredIndex = index;
+      } else {
+        hasRegular = true;
+      }
     }
+
+    if (!hasRegular || featuredIndex === -1 || featuredIndex === targetIndex) continue;
+    const [featured] = result.splice(featuredIndex, 1);
+    if (featured !== undefined) result.splice(targetIndex, 0, featured);
   }
+
   return result;
 }
 
