@@ -91,7 +91,7 @@ export function PublicGalleryShell({
             <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:gap-8">
               <div className="flex min-w-0 flex-1 flex-col justify-center">
                 <p className="truncate text-[10px] font-medium leading-4 text-muted-foreground sm:text-[11px] lg:text-[13px] lg:leading-5">
-                  北航实验学校中学部
+                  北航实验学校中学部暨北航实验学校分校
                 </p>
                 <h1 className="truncate text-[17px] font-semibold leading-5 tracking-tight sm:text-lg sm:leading-6 lg:text-[26px] lg:leading-8">
                   {albumTitle}
@@ -125,7 +125,7 @@ export function PublicGalleryShell({
 
         <footer className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)]">
           <div className="mx-auto flex h-8 max-w-[2080px] items-center justify-center px-3 text-center text-[9px] leading-none text-muted-foreground sm:text-[10px]">
-            <p>© 2026 CCA3370 · Images © 2026 学生会电视台</p>
+            <p>© 2026 CCA3370 · Images © 2026 校团委学生会电视台</p>
           </div>
         </footer>
       </div>
