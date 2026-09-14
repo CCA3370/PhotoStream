@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   dataSaverSettingViewSchema,
   updateDataSaverSettingRequestSchema,
-} from "./bandwidth";
+} from "./bandwidth.js";
 
 describe("data saver contracts", () => {
   it("accepts strict boolean settings", () => {
