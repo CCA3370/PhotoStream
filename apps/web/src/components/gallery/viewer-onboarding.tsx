@@ -23,7 +23,7 @@ interface ViewerOnboardingProps {
 }
 
 type MainTarget = "filters" | "gallery" | "search";
-type TargetKind = MainTarget | "lightbox-toolbar";
+type TargetKind = MainTarget | "lightbox-navigation" | "lightbox-toolbar";
 
 interface MainStep {
   readonly description: string;
@@ -69,6 +69,32 @@ function joinChinese(items: readonly string[]): string {
   return `${items.slice(0, -1).join("、")}或${items.at(-1)}`;
 }
 
+function elementVisible(element: HTMLElement): boolean {
+  if (element.getAttribute("aria-hidden") === "true") return false;
+  const bounds = element.getBoundingClientRect();
+  return bounds.width > 0 && bounds.height > 0;
+}
+
+function lightboxOpen(): boolean {
+  return document.querySelector<HTMLElement>('[aria-label="照片画布"]') !== null;
+}
+
+function lightboxActionButtons(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>("button")).filter((button) => {
+    if (!elementVisible(button)) return false;
+    const label = button.getAttribute("aria-label") ?? "";
+    const text = button.textContent ?? "";
+    return (
+      label === "点赞" ||
+      label === "取消点赞" ||
+      label.includes("分享") ||
+      label.includes("下载") ||
+      text.includes("分享") ||
+      text.includes("下载")
+    );
+  });
+}
+
 function resolveTarget(kind: TargetKind): HTMLElement | null {
   if (kind === "filters") {
     return document.querySelector<HTMLElement>('nav[aria-label="相册筛选"]');
@@ -78,7 +104,11 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
     const buttons = Array.from(
       document.querySelectorAll<HTMLButtonElement>("#gallery-main button"),
     );
-    return buttons.find((button) => button.querySelector("svg.lucide-search") !== null) ?? null;
+    return (
+      buttons.find((button) => (button.textContent ?? "").includes("找照片")) ??
+      buttons.find((button) => button.querySelector("svg.lucide-search") !== null) ??
+      null
+    );
   }
 
   if (kind === "gallery") {
@@ -86,18 +116,66 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
     return gallery?.querySelector<HTMLElement>("[data-media-id]") ?? gallery;
   }
 
+  if (kind === "lightbox-navigation") {
+    const next = document.querySelector<HTMLElement>('button[aria-label="下一张照片"]');
+    if (next !== null && elementVisible(next)) return next;
+    return document.querySelector<HTMLElement>('[aria-label="照片画布"]');
+  }
+
   const controls = Array.from(document.querySelectorAll<HTMLElement>("[data-lightbox-controls]"));
-  return controls.at(-1) ?? null;
+  const visibleControls = controls.filter(elementVisible);
+  return (
+    visibleControls.find((control) => lightboxActionButtons(control).length > 0) ??
+    visibleControls.at(-1) ??
+    null
+  );
+}
+
+function unionBounds(elements: readonly HTMLElement[]): DOMRect | null {
+  const bounds = elements.map((element) => element.getBoundingClientRect());
+  if (bounds.length === 0) return null;
+  const left = Math.min(...bounds.map((item) => item.left));
+  const top = Math.min(...bounds.map((item) => item.top));
+  const right = Math.max(...bounds.map((item) => item.right));
+  const bottom = Math.max(...bounds.map((item) => item.bottom));
+  return new DOMRect(left, top, right - left, bottom - top);
+}
+
+function targetBounds(kind: TargetKind, target: HTMLElement): DOMRect {
+  if (kind === "lightbox-toolbar") {
+    const actionBounds = unionBounds(lightboxActionButtons(target));
+    if (actionBounds !== null) return actionBounds;
+  }
+
+  if (kind === "lightbox-navigation" && target.matches('[aria-label="照片画布"]')) {
+    const bounds = target.getBoundingClientRect();
+    const width = Math.min(bounds.width * 0.7, 420);
+    const height = Math.min(bounds.height * 0.36, 280);
+    return new DOMRect(
+      bounds.left + (bounds.width - width) / 2,
+      bounds.top + (bounds.height - height) / 2,
+      width,
+      height,
+    );
+  }
+
+  return target.getBoundingClientRect();
 }
 
 function readLightboxActions(): string[] {
   const toolbar = resolveTarget("lightbox-toolbar");
   if (toolbar === null) return [];
   const actions: string[] = [];
-  if (toolbar.querySelector('button[aria-label="点赞"], button[aria-label="取消点赞"]')) {
+  const buttons = lightboxActionButtons(toolbar);
+  if (
+    buttons.some((button) => {
+      const label = button.getAttribute("aria-label");
+      return label === "点赞" || label === "取消点赞";
+    })
+  ) {
     actions.push("点赞");
   }
-  const text = toolbar.textContent ?? "";
+  const text = buttons.map((button) => button.textContent ?? "").join(" ");
   if (text.includes("分享")) actions.push("分享");
   if (text.includes("下载")) actions.push("下载");
   return actions;
@@ -110,6 +188,42 @@ function focusableElements(container: HTMLElement | null): HTMLElement[] {
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ),
   ).filter((element) => element.getAttribute("aria-hidden") !== "true");
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function arrowPath(card: DOMRect, spotlight: SpotlightRect): string {
+  const targetX = spotlight.left + spotlight.width / 2;
+  const targetY = spotlight.top + spotlight.height / 2;
+  let startX = clamp(targetX, card.left + 28, card.right - 28);
+  let startY = card.bottom;
+  let endX = targetX;
+  let endY = spotlight.top - 7;
+
+  if (card.top >= spotlight.bottom) {
+    startY = card.top;
+    endY = spotlight.bottom + 7;
+  } else if (card.right <= spotlight.left) {
+    startX = card.right;
+    startY = clamp(targetY, card.top + 24, card.bottom - 24);
+    endX = spotlight.left - 7;
+    endY = targetY;
+  } else if (card.left >= spotlight.right) {
+    startX = card.left;
+    startY = clamp(targetY, card.top + 24, card.bottom - 24);
+    endX = spotlight.right + 7;
+    endY = targetY;
+  }
+
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const control1X = startX + dx * 0.18;
+  const control1Y = startY + dy * 0.42;
+  const control2X = startX + dx * 0.82;
+  const control2Y = startY + dy * 0.58;
+  return `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`;
 }
 
 export function ViewerOnboarding({
@@ -125,6 +239,7 @@ export function ViewerOnboarding({
   const [hasSeenMain, setHasSeenMain] = useState(false);
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
   const [lightboxActions, setLightboxActions] = useState<readonly string[]>([]);
+  const [pointerPath, setPointerPath] = useState<string | null>(null);
   const cardRef = useRef<HTMLElement>(null);
 
   const searchMethods = useMemo(() => {
@@ -172,6 +287,7 @@ export function ViewerOnboarding({
 
   const beginMain = useCallback(() => {
     setSpotlightRect(null);
+    setPointerPath(null);
     setFlow({ kind: "main", step: -1 });
   }, []);
 
@@ -203,18 +319,25 @@ export function ViewerOnboarding({
     if (storageSeen(viewerLightboxOnboardingStorageKey)) return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const maybeOpen = () => {
-      if (resolveTarget("lightbox-toolbar") === null) return;
-      if (timer !== null) clearTimeout(timer);
+
+    const schedule = () => {
+      if (!lightboxOpen()) {
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        return;
+      }
+      if (timer !== null) return;
+
       timer = setTimeout(() => {
-        if (resolveTarget("lightbox-toolbar") === null) return;
+        timer = null;
+        if (!lightboxOpen() || resolveTarget("lightbox-toolbar") === null) return;
         setLightboxActions(readLightboxActions());
         setFlow({ kind: "lightbox", step: 0 });
       }, 180);
     };
 
-    maybeOpen();
-    const observer = new MutationObserver(maybeOpen);
+    schedule();
+    const observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
@@ -222,30 +345,49 @@ export function ViewerOnboarding({
     };
   }, [flow, hasSeenMain, mounted]);
 
+  useEffect(() => {
+    if (flow?.kind !== "lightbox") return;
+
+    const closeIfViewerClosed = () => {
+      if (lightboxOpen()) return;
+      setSpotlightRect(null);
+      setPointerPath(null);
+      setFlow(null);
+    };
+
+    closeIfViewerClosed();
+    const observer = new MutationObserver(closeIfViewerClosed);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [flow?.kind]);
+
   const targetKind: TargetKind | null = useMemo(() => {
     if (flow?.kind === "main" && flow.step >= 0) {
       return mainSteps[flow.step]?.target ?? null;
     }
     if (flow?.kind === "lightbox" && flow.step === 0) return "lightbox-toolbar";
+    if (flow?.kind === "lightbox" && flow.step === 1) return "lightbox-navigation";
     return null;
   }, [flow, mainSteps]);
 
   useEffect(() => {
     if (flow === null || targetKind === null) {
       setSpotlightRect(null);
+      setPointerPath(null);
       return;
     }
 
     const target = resolveTarget(targetKind);
     if (target === null) {
       setSpotlightRect(null);
+      setPointerPath(null);
       return;
     }
 
-    if (targetKind !== "lightbox-toolbar") {
-      const bounds = target.getBoundingClientRect();
-      const obscuredTop = bounds.top < 120;
-      const obscuredBottom = bounds.bottom > window.innerHeight - 120;
+    if (targetKind === "filters" || targetKind === "search" || targetKind === "gallery") {
+      const bounds = targetBounds(targetKind, target);
+      const obscuredTop = bounds.top < 124;
+      const obscuredBottom = bounds.bottom > window.innerHeight - 160;
       if (obscuredTop || obscuredBottom) {
         target.scrollIntoView({
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -260,10 +402,12 @@ export function ViewerOnboarding({
       const current = resolveTarget(targetKind);
       if (current === null) {
         setSpotlightRect(null);
+        setPointerPath(null);
         return;
       }
-      const bounds = current.getBoundingClientRect();
-      const padding = targetKind === "gallery" ? 5 : 8;
+      const bounds = targetBounds(targetKind, current);
+      const padding =
+        targetKind === "gallery" ? 5 : targetKind.startsWith("lightbox") ? 10 : 8;
       const left = Math.max(8, bounds.left - padding);
       const top = Math.max(8, bounds.top - padding);
       const right = Math.min(window.innerWidth - 8, bounds.right + padding);
@@ -294,6 +438,79 @@ export function ViewerOnboarding({
     };
   }, [flow, targetKind]);
 
+  const cardPosition = useMemo<CSSProperties>(() => {
+    if (spotlightRect === null) {
+      return {
+        left: "1rem",
+        right: "1rem",
+        bottom: "max(3.25rem, calc(2.5rem + env(safe-area-inset-bottom)))",
+      };
+    }
+
+    if (spotlightRect.viewportWidth < 640) {
+      const spaceAbove = spotlightRect.top;
+      const spaceBelow = spotlightRect.viewportHeight - spotlightRect.bottom;
+      if (spaceAbove > spaceBelow && spaceAbove > 230) {
+        return {
+          left: "1rem",
+          right: "1rem",
+          bottom: spotlightRect.viewportHeight - spotlightRect.top + 18,
+        };
+      }
+      return {
+        left: "1rem",
+        right: "1rem",
+        top: spotlightRect.bottom + 18,
+      };
+    }
+
+    const cardHalfWidth = 208;
+    const center = Math.min(
+      spotlightRect.viewportWidth - cardHalfWidth - 16,
+      Math.max(cardHalfWidth + 16, spotlightRect.left + spotlightRect.width / 2),
+    );
+    const horizontal: CSSProperties = {
+      left: center,
+      transform: "translateX(-50%)",
+      width: "min(26rem, calc(100vw - 2rem))",
+    };
+
+    if (spotlightRect.top > spotlightRect.viewportHeight * 0.54) {
+      return {
+        ...horizontal,
+        bottom: spotlightRect.viewportHeight - spotlightRect.top + 20,
+      };
+    }
+
+    return { ...horizontal, top: spotlightRect.bottom + 20 };
+  }, [spotlightRect]);
+
+  useEffect(() => {
+    if (flow === null || spotlightRect === null || cardRef.current === null) {
+      setPointerPath(null);
+      return;
+    }
+
+    const update = () => {
+      const card = cardRef.current;
+      if (card === null) {
+        setPointerPath(null);
+        return;
+      }
+      setPointerPath(arrowPath(card.getBoundingClientRect(), spotlightRect));
+    };
+
+    const frame = requestAnimationFrame(update);
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(cardRef.current);
+    window.addEventListener("resize", update);
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [cardPosition, flow, spotlightRect]);
+
   useEffect(() => {
     if (flow === null) return;
     const timer = requestAnimationFrame(() => cardRef.current?.focus());
@@ -304,12 +521,14 @@ export function ViewerOnboarding({
     markStorageSeen(viewerOnboardingStorageKey);
     setHasSeenMain(true);
     setSpotlightRect(null);
+    setPointerPath(null);
     setFlow(null);
   }, []);
 
   const finishLightbox = useCallback(() => {
     markStorageSeen(viewerLightboxOnboardingStorageKey);
     setSpotlightRect(null);
+    setPointerPath(null);
     setFlow(null);
   }, []);
 
@@ -387,53 +606,9 @@ export function ViewerOnboarding({
 
   const replayMain = useCallback(() => {
     setSpotlightRect(null);
+    setPointerPath(null);
     setFlow({ kind: "main", step: -1 });
   }, []);
-
-  const cardPosition = useMemo<CSSProperties>(() => {
-    if (spotlightRect === null) {
-      return {
-        left: "1rem",
-        right: "1rem",
-        bottom: "max(3.25rem, calc(2.5rem + env(safe-area-inset-bottom)))",
-      };
-    }
-
-    if (spotlightRect.viewportWidth < 640) {
-      if (spotlightRect.top > spotlightRect.viewportHeight * 0.58) {
-        return {
-          left: "1rem",
-          right: "1rem",
-          bottom: spotlightRect.viewportHeight - spotlightRect.top + 12,
-        };
-      }
-      return {
-        left: "1rem",
-        right: "1rem",
-        bottom: "max(3.25rem, calc(2.5rem + env(safe-area-inset-bottom)))",
-      };
-    }
-
-    const cardHalfWidth = 208;
-    const center = Math.min(
-      spotlightRect.viewportWidth - cardHalfWidth - 16,
-      Math.max(cardHalfWidth + 16, spotlightRect.left + spotlightRect.width / 2),
-    );
-    const horizontal: CSSProperties = {
-      left: center,
-      transform: "translateX(-50%)",
-      width: "min(26rem, calc(100vw - 2rem))",
-    };
-
-    if (spotlightRect.top > spotlightRect.viewportHeight * 0.54) {
-      return {
-        ...horizontal,
-        bottom: spotlightRect.viewportHeight - spotlightRect.top + 16,
-      };
-    }
-
-    return { ...horizontal, top: spotlightRect.bottom + 16 };
-  }, [spotlightRect]);
 
   const currentMainStep =
     flow?.kind === "main" && flow.step >= 0 ? (mainSteps[flow.step] ?? null) : null;
@@ -443,41 +618,65 @@ export function ViewerOnboarding({
 
   const overlay =
     !mounted || flow === null ? null : (
-      <div className="fixed inset-0 z-[80]">
+      <div className="fixed inset-0 z-[80] overflow-hidden">
         {spotlightRect === null ? (
-          <div className="absolute inset-0 bg-black/58 backdrop-blur-[1px]" />
+          <div className="pointer-events-none absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
         ) : (
-          <svg aria-hidden="true" className="absolute inset-0 size-full" preserveAspectRatio="none">
-            <defs>
-              <mask id="viewer-onboarding-mask">
-                <rect fill="white" height="100%" width="100%" x="0" y="0" />
-                <rect
-                  fill="black"
-                  height={spotlightRect.height}
-                  rx="14"
-                  width={spotlightRect.width}
-                  x={spotlightRect.left}
-                  y={spotlightRect.top}
-                />
-              </mask>
-            </defs>
-            <rect
-              fill="rgb(0 0 0 / 0.58)"
-              height="100%"
-              mask="url(#viewer-onboarding-mask)"
-              width="100%"
-              x="0"
-              y="0"
+          <>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute rounded-[18px] border-2 border-white/95 transition-[left,top,width,height] duration-300 ease-out motion-reduce:transition-none"
+              style={{
+                left: spotlightRect.left,
+                top: spotlightRect.top,
+                width: spotlightRect.width,
+                height: spotlightRect.height,
+                boxShadow:
+                  "0 0 0 9999px rgb(0 0 0 / 0.64), 0 0 0 5px rgb(255 255 255 / 0.10), 0 0 34px rgb(255 255 255 / 0.28)",
+              }}
             />
-            <rect
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute rounded-[22px] border border-primary/90 opacity-90 animate-pulse motion-reduce:animate-none"
+              style={{
+                left: spotlightRect.left - 4,
+                top: spotlightRect.top - 4,
+                width: spotlightRect.width + 8,
+                height: spotlightRect.height + 8,
+              }}
+            />
+          </>
+        )}
+
+        {pointerPath === null ? null : (
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-[81] size-full"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <marker
+                id="viewer-onboarding-arrowhead"
+                markerHeight="7"
+                markerWidth="7"
+                orient="auto"
+                refX="5.5"
+                refY="3.5"
+              >
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="rgb(255 255 255 / 0.96)" />
+              </marker>
+              <filter id="viewer-onboarding-arrow-shadow" x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0" dy="1" floodColor="black" floodOpacity="0.45" stdDeviation="2" />
+              </filter>
+            </defs>
+            <path
+              d={pointerPath}
               fill="none"
-              height={spotlightRect.height}
-              rx="14"
-              stroke="rgb(255 255 255 / 0.9)"
-              strokeWidth="2"
-              width={spotlightRect.width}
-              x={spotlightRect.left}
-              y={spotlightRect.top}
+              filter="url(#viewer-onboarding-arrow-shadow)"
+              markerEnd="url(#viewer-onboarding-arrowhead)"
+              stroke="rgb(255 255 255 / 0.96)"
+              strokeLinecap="round"
+              strokeWidth="2.5"
             />
           </svg>
         )}
@@ -486,7 +685,7 @@ export function ViewerOnboarding({
           aria-describedby="viewer-onboarding-description"
           aria-labelledby="viewer-onboarding-title"
           aria-modal="true"
-          className="public-theme fixed z-[82] rounded-2xl border bg-background/98 p-4 text-foreground shadow-2xl shadow-black/30 backdrop-blur-xl outline-none sm:p-5"
+          className="public-theme fixed z-[82] rounded-2xl border border-border/80 bg-background/98 p-4 text-foreground shadow-2xl shadow-black/35 backdrop-blur-xl outline-none sm:p-5"
           ref={cardRef}
           role="dialog"
           style={cardPosition}
@@ -510,7 +709,8 @@ export function ViewerOnboarding({
               <h2 className="text-base font-semibold leading-6" id="viewer-onboarding-title">
                 {welcome
                   ? "欢迎使用北航实验学校中学部照片实时直播系统"
-                  : (currentMainStep?.title ?? (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
+                  : (currentMainStep?.title ??
+                    (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
               </h2>
             </div>
 
