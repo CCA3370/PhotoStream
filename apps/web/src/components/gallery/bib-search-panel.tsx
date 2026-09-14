@@ -185,18 +185,12 @@ export function BibSearchPanel({
   const completeFaceSearch = useCallback(() => {
     if (faceCompleteTimerRef.current !== null) clearTimeout(faceCompleteTimerRef.current);
     setFaceStage("complete");
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const finish = () => {
-      setResultMode("face");
+    setResultMode("face");
+    faceCompleteTimerRef.current = setTimeout(() => {
       setOpen(false);
       setFaceStage("choose");
       faceCompleteTimerRef.current = null;
-    };
-    if (reduceMotion) {
-      finish();
-      return;
-    }
-    faceCompleteTimerRef.current = setTimeout(finish, 760);
+    }, 1_000);
   }, []);
 
   useEffect(
@@ -785,53 +779,45 @@ export function BibSearchPanel({
                       </div>
                     ) : null}
 
-                    {faceWorking || faceCompleting ? (
+                    {faceWorking ? (
                       <div className="flex flex-col gap-3 rounded-2xl border bg-muted/15 p-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                         <Progress
                           className="[&_[data-slot=progress-indicator]]:duration-500 [&_[data-slot=progress-indicator]]:ease-out motion-reduce:[&_[data-slot=progress-indicator]]:duration-0"
                           value={faceProgress(faceStage, faceView)}
                         >
                           <ProgressLabel>
-                            {faceCompleting
-                              ? "查找完成"
-                              : faceStage === "preparing"
-                                ? "正在处理参考照片"
-                                : faceStage === "uploading"
-                                  ? "正在提交参考照片"
-                                  : faceItems.length > 0
-                                    ? `已找到 ${faceItems.length} 张候选，正在继续查找`
-                                    : "正在查找照片"}
+                            {faceStage === "preparing"
+                              ? "正在处理参考照片"
+                              : faceStage === "uploading"
+                                ? "正在提交参考照片"
+                                : faceItems.length > 0
+                                  ? `已找到 ${faceItems.length} 张候选，正在继续查找`
+                                  : "正在查找照片"}
                           </ProgressLabel>
                           <ProgressValue />
                         </Progress>
-                        {faceCompleting ? (
-                          <div className="flex items-center gap-2.5 text-xs text-muted-foreground animate-in fade-in-0 zoom-in-95 delay-150 duration-200 motion-reduce:animate-none">
-                            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                              <CheckIcon aria-hidden="true" className="size-4" />
-                            </span>
-                            <span>
-                              {faceItems.length === 0
-                                ? "检索已完成，正在整理结果"
-                                : `已找到 ${faceItems.length} 张照片，正在打开结果`}
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            <p
-                              aria-live="polite"
-                              className="text-xs leading-5 text-muted-foreground"
-                            >
-                              {faceItems.length === 0
-                                ? "当前还没有返回候选，请等待查找完成后再判断结果。"
-                                : "结果仍在更新，查找完成前数量可能变化。"}
-                            </p>
-                            {faceItems.length === 0 ? null : (
-                              <div className="max-h-52 overflow-y-auto rounded-xl overscroll-contain">
-                                <MediaGrid items={faceItems} slug={slug} />
-                              </div>
-                            )}
-                          </>
-                        )}
+                        <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
+                          {faceItems.length === 0
+                            ? "当前还没有返回候选，请等待查找完成后再判断结果。"
+                            : `已找到 ${faceItems.length} 张候选，完成后会直接在照片列表中筛选显示。`}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {faceCompleting ? (
+                      <div
+                        aria-live="polite"
+                        className="flex flex-col items-center gap-3 rounded-2xl border bg-muted/15 px-5 py-6 text-center animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none"
+                      >
+                        <span className="grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                          <CheckIcon aria-hidden="true" className="size-6" />
+                        </span>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-sm font-medium">搜索完成</p>
+                          <p className="text-xs text-muted-foreground">
+                            共找到 {faceItems.length} 张符合的照片
+                          </p>
+                        </div>
                       </div>
                     ) : null}
 
