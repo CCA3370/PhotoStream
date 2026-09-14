@@ -49,10 +49,7 @@ export function ViewerServiceNotice() {
         dismiss();
       }}
     >
-      <DialogContent
-        className="public-theme z-[100] sm:max-w-md"
-        overlayClassName="z-[90]"
-      >
+      <DialogContent className="public-theme z-[100] sm:max-w-md" overlayClassName="z-[90]">
         <DialogHeader>
           <div className="mb-1 grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
             <InfoIcon aria-hidden="true" className="size-5" />
