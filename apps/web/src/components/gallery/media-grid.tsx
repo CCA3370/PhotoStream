@@ -181,6 +181,20 @@ function createTransitionStyle(name: string): HTMLStyleElement {
   return style;
 }
 
+function lightboxHistoryMediaId(state: unknown): string | null {
+  if (typeof state !== "object" || state === null) return null;
+  const mediaId = (state as { readonly photostreamLightbox?: unknown }).photostreamLightbox;
+  return typeof mediaId === "string" ? mediaId : null;
+}
+
+function withLightboxHistoryState(mediaId: string): Record<string, unknown> {
+  const state = window.history.state;
+  return {
+    ...(typeof state === "object" && state !== null ? state : {}),
+    photostreamLightbox: mediaId,
+  };
+}
+
 function VirtualMediaGrid({
   freshIds,
   items,
@@ -322,25 +336,6 @@ export function MediaGrid({
   const mediaIds = useMemo(() => items.map((item) => item.id), [items]);
   const likesEnabled = shareId === undefined;
 
-  const updatePhotoUrl = useCallback(
-    (mediaId: string | null, mode: "push" | "replace"): void => {
-      if (slug === undefined) return;
-      const url = new URL(window.location.href);
-      if (mediaId === null) {
-        url.searchParams.delete("photo");
-        url.searchParams.delete("share");
-      } else {
-        url.searchParams.set("photo", mediaId);
-        if (shareId === undefined) url.searchParams.delete("share");
-        else url.searchParams.set("share", shareId);
-      }
-      const href = `${url.pathname}${url.search}${url.hash}`;
-      if (mode === "push") window.history.pushState({ photostreamLightbox: true }, "", href);
-      else window.history.replaceState(window.history.state, "", href);
-    },
-    [shareId, slug],
-  );
-
   const updateLikeState = useCallback((state: PhotoLikeState) => {
     setLikeStates((current) => {
       const next = new Map(current);
@@ -378,33 +373,26 @@ export function MediaGrid({
   const openMedia = useCallback(
     (mediaId: string): void => {
       setSelectedId(mediaId);
-      updatePhotoUrl(mediaId, "push");
+      if (slug === undefined) return;
+      // Keep the address unchanged so embedded browsers do not treat opening a photo as a new visit.
+      window.history.pushState(withLightboxHistoryState(mediaId), "");
     },
-    [updatePhotoUrl],
+    [slug],
   );
 
   const selectMedia = useCallback(
     (mediaId: string): void => {
       setSelectedId(mediaId);
-      updatePhotoUrl(mediaId, "replace");
+      if (slug === undefined || lightboxHistoryMediaId(window.history.state) === null) return;
+      window.history.replaceState(withLightboxHistoryState(mediaId), "");
     },
-    [updatePhotoUrl],
+    [slug],
   );
 
   const closeMedia = useCallback((): void => {
     if (selectedId === null) return;
-    if (shareId !== undefined && slug !== undefined) {
-      window.location.assign(`/g/${encodeURIComponent(slug)}`);
-      return;
-    }
-    if (
-      typeof window.history.state === "object" &&
-      window.history.state !== null &&
-      (window.history.state as { photostreamLightbox?: boolean }).photostreamLightbox === true
-    ) {
+    if (lightboxHistoryMediaId(window.history.state) !== null) {
       window.history.back();
-    } else {
-      updatePhotoUrl(null, "replace");
     }
 
     const documentWithTransition = document as ViewTransitionDocument;
@@ -454,7 +442,7 @@ export function MediaGrid({
       transitionActiveRef.current = false;
       setSelectedId(null);
     }
-  }, [selectedId, shareId, slug, updatePhotoUrl]);
+  }, [selectedId]);
 
   useEffect(() => {
     if (initialSelectedId === undefined) return;
@@ -463,8 +451,10 @@ export function MediaGrid({
 
   useEffect(() => {
     const onPopState = () => {
-      const photo = new URL(window.location.href).searchParams.get("photo");
-      setSelectedId(photo !== null && items.some((item) => item.id === photo) ? photo : null);
+      const mediaId = lightboxHistoryMediaId(window.history.state);
+      setSelectedId(
+        mediaId !== null && items.some((item) => item.id === mediaId) ? mediaId : null,
+      );
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
