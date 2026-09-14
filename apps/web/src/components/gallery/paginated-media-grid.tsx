@@ -67,7 +67,9 @@ export function PaginatedMediaGrid({
   initialVisibilityNow?: number;
   slug: string;
 }>) {
-  const [pages, setPages] = useState<readonly (readonly PublicMediaView[])[]>(() => [initialPage.items]);
+  const [pages, setPages] = useState<readonly (readonly PublicMediaView[])[]>(() => [
+    initialPage.items,
+  ]);
   const [featuredIds, setFeaturedIds] = useState<ReadonlySet<string>>(
     () => new Set(initialFeaturedIds),
   );
