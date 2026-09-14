@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { clientGet } from "@/lib/client-api";
 
+import { isAlbumDataSaverActive } from "@/lib/album-data-saver";
 import {
   type DerivedPhotoVariantKind,
   getWarmDerivedImageUrl,
@@ -14,6 +15,11 @@ import {
   retainDerivedImage,
   subscribeDerivedImages,
 } from "@/lib/derived-image-cache";
+import {
+  gridThumbnailRootMargin,
+  gridThumbnailUpgradeDelayMs,
+  microThumbnailUrl,
+} from "@/lib/grid-thumbnail-policy";
 import { recordMediaCacheDiagnostic } from "@/lib/media-blob-cache";
 
 interface ResolvedImage {
@@ -24,6 +30,10 @@ interface ResolvedImage {
 interface FallbackState {
   readonly identity: string;
   readonly mode: "direct" | "failed";
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 export function CachedPhotoImage({
@@ -60,6 +70,7 @@ export function CachedPhotoImage({
   const [fallback, setFallback] = useState<FallbackState | null>(null);
   const [active, setActive] = useState(priority);
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
+  const [microFailed, setMicroFailed] = useState(false);
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
   const cacheRequest = { scope, mediaId, kind, bytes };
   const telemetryScope = scope === "public-media" ? undefined : scope;
@@ -70,26 +81,56 @@ export function CachedPhotoImage({
   const fallbackMode = fallback?.identity === identity ? fallback.mode : null;
   const displayUrl =
     fallbackMode === "direct" ? sourceUrl : fallbackMode === "failed" ? null : resolvedUrl;
+  const deferredGridThumbnail = kind === "photo_480" && !cacheOnly && !priority;
+  const microUrl = deferredGridThumbnail ? microThumbnailUrl(sourceUrl) : null;
 
   useEffect(() => {
-    if (cacheOnly || priority || active) return;
+    setMicroFailed(false);
+  }, [microUrl]);
+
+  useEffect(() => {
+    if (cacheOnly || priority) return;
     const host = hostRef.current;
     if (host === null) return;
     if (!("IntersectionObserver" in window)) {
       setActive(true);
       return;
     }
+
+    let timer: number | null = null;
+    const clearTimer = () => {
+      if (timer === null) return;
+      window.clearTimeout(timer);
+      timer = null;
+    };
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
+        const intersecting = entries.some((entry) => entry.isIntersecting);
+        if (deferredGridThumbnail) {
+          if (!intersecting) {
+            clearTimer();
+            setActive(false);
+            return;
+          }
+          if (timer !== null) return;
+          timer = window.setTimeout(() => {
+            timer = null;
+            setActive(true);
+          }, gridThumbnailUpgradeDelayMs);
+          return;
+        }
+        if (!intersecting) return;
         setActive(true);
         observer.disconnect();
       },
-      { rootMargin: "800px 0px" },
+      { rootMargin: deferredGridThumbnail ? gridThumbnailRootMargin : "800px 0px" },
     );
     observer.observe(host);
-    return () => observer.disconnect();
-  }, [active, cacheOnly, priority]);
+    return () => {
+      clearTimer();
+      observer.disconnect();
+    };
+  }, [cacheOnly, deferredGridThumbnail, priority]);
 
   useEffect(
     () =>
@@ -110,6 +151,10 @@ export function CachedPhotoImage({
   useEffect(() => {
     if ((!active && !priority && !cacheOnly) || warmUrl !== null) return;
     let cancelled = false;
+    const controller =
+      deferredGridThumbnail && !cacheOnly && !isAlbumDataSaverActive()
+        ? new AbortController()
+        : null;
     setResolved((current) => (current?.identity === identity ? current : null));
     const request = { scope, mediaId, kind, bytes };
     const work = cacheOnly
@@ -117,6 +162,7 @@ export function CachedPhotoImage({
       : loadDerivedImage({
           ...request,
           sourceUrl,
+          ...(controller === null ? {} : { signal: controller.signal }),
           refreshUrl:
             refreshUrl ??
             (async () => {
@@ -136,20 +182,21 @@ export function CachedPhotoImage({
           setFallback((current) => (current?.identity === identity ? null : current));
         }
       })
-      .catch(() => {
-        if (!cancelled && !cacheOnly) {
-          recordMediaCacheDiagnostic("directFallback", telemetryScope);
-          setFallback({ identity, mode: "direct" });
-        }
+      .catch((error: unknown) => {
+        if (cancelled || cacheOnly || isAbortError(error)) return;
+        recordMediaCacheDiagnostic("directFallback", telemetryScope);
+        setFallback({ identity, mode: "direct" });
       });
     return () => {
       cancelled = true;
+      controller?.abort();
     };
   }, [
     active,
     priority,
     cacheOnly,
     bytes,
+    deferredGridThumbnail,
     identity,
     kind,
     mediaId,
@@ -173,6 +220,19 @@ export function CachedPhotoImage({
 
   return (
     <span className="absolute inset-0" ref={hostRef}>
+      {microUrl !== null && !microFailed && displayUrl === null ? (
+        <Image
+          alt=""
+          aria-hidden="true"
+          className="scale-[1.015] object-cover blur-[1px]"
+          fill
+          loading="eager"
+          onError={() => setMicroFailed(true)}
+          sizes={sizes}
+          src={microUrl}
+          unoptimized
+        />
+      ) : null}
       {displayUrl === null ? (
         fallbackMode === "failed" ? (
           <span className="absolute inset-0 grid place-items-center text-xs text-white/70">
