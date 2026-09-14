@@ -30,8 +30,16 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet } from "@/lib/client-api";
-import { isWarmDerivedImageDecoded, loadDerivedImage } from "@/lib/derived-image-cache";
+import {
+  isWarmDerivedImageDecoded,
+  loadDerivedImage,
+  readCachedDerivedImage,
+} from "@/lib/derived-image-cache";
 import { fetchImageWithProgress } from "@/lib/image-download-progress";
+import {
+  readCachedOriginalImage,
+  writeCachedOriginalImage,
+} from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
 const toolbarButtonClass =
@@ -395,30 +403,39 @@ export function PhotoLightbox({
 
   const preparePreviewForWeChat = useCallback(
     async (source: WeChatDownloadSource) => {
-      if (selected === null || large === null) return;
-      if (
-        activePreparedImage?.kind === "preview" ||
-        (activePreparedImage === null && large.kind === "photo_1920" && loaded)
-      ) {
+      if (selected === null || slug === undefined) return;
+      if (activePreparedImage?.kind === "preview") {
         showSaveHint("preview");
         return;
       }
       setWeChatDownload({ kind: "preview", progress: 0 });
       try {
-        const blob = await fetchImageWithProgress({
-          url: source.url,
-          expectedBytes: source.bytes,
-          onProgress: (progress) =>
-            setWeChatDownload((current) =>
-              current?.kind === "preview" ? { ...current, progress } : current,
-            ),
+        let blob = await readCachedDerivedImage({
+          scope: slug,
+          mediaId: selected.id,
+          kind: "photo_1920",
+          bytes: source.bytes,
         });
+        if (blob === null) {
+          blob = await fetchImageWithProgress({
+            url: source.url,
+            expectedBytes: source.bytes,
+            onProgress: (progress) =>
+              setWeChatDownload((current) =>
+                current?.kind === "preview" ? { ...current, progress } : current,
+              ),
+          });
+        } else {
+          setWeChatDownload((current) =>
+            current?.kind === "preview" ? { ...current, progress: 1 } : current,
+          );
+        }
         await replacePreparedImage("preview", blob);
       } finally {
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
     },
-    [activePreparedImage, large, loaded, replacePreparedImage, selected, showSaveHint],
+    [activePreparedImage, replacePreparedImage, selected, showSaveHint, slug],
   );
 
   const prepareOriginalForWeChat = useCallback(
@@ -430,14 +447,22 @@ export function PhotoLightbox({
       }
       setWeChatDownload({ kind: "original", progress: 0 });
       try {
-        const blob = await fetchImageWithProgress({
-          url: source.url,
-          expectedBytes: source.bytes,
-          onProgress: (progress) =>
-            setWeChatDownload((current) =>
-              current?.kind === "original" ? { ...current, progress } : current,
-            ),
-        });
+        let blob = await readCachedOriginalImage(slug, selected.id, source.bytes);
+        if (blob === null) {
+          blob = await fetchImageWithProgress({
+            url: source.url,
+            expectedBytes: source.bytes,
+            onProgress: (progress) =>
+              setWeChatDownload((current) =>
+                current?.kind === "original" ? { ...current, progress } : current,
+              ),
+          });
+          await writeCachedOriginalImage(slug, selected.id, source.bytes, blob);
+        } else {
+          setWeChatDownload((current) =>
+            current?.kind === "original" ? { ...current, progress: 1 } : current,
+          );
+        }
         await replacePreparedImage("original", blob);
       } finally {
         setWeChatDownload((current) => (current?.kind === "original" ? null : current));
