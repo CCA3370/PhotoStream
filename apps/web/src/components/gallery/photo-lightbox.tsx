@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 const toolbarButtonClass =
   "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
 
-async function decodeObjectUrl(url: string): Promise<void> {
+async function decodeImageUrl(url: string): Promise<void> {
   if (typeof window === "undefined") return;
   const decoder = new window.Image();
   decoder.decoding = "async";
@@ -49,6 +49,21 @@ async function decodeObjectUrl(url: string): Promise<void> {
   await new Promise<void>((resolve) => {
     decoder.onload = () => resolve();
     decoder.onerror = () => resolve();
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("图片转换失败，请重试。"));
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("图片转换失败，请重试。"));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -92,7 +107,6 @@ export function PhotoLightbox({
   const controlsEntranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewerOpenRef = useRef(false);
-  const preparedObjectUrlRef = useRef<string | null>(null);
   const preparedRequestRef = useRef(0);
   const [loadedDerivedIdentity, setLoadedDerivedIdentity] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -271,10 +285,6 @@ export function PhotoLightbox({
 
   useEffect(() => {
     preparedRequestRef.current += 1;
-    if (preparedObjectUrlRef.current !== null) {
-      URL.revokeObjectURL(preparedObjectUrlRef.current);
-      preparedObjectUrlRef.current = null;
-    }
     setDownloadMenuOpen(false);
     setWeChatDownload(null);
     setPreparedImage(null);
@@ -286,10 +296,7 @@ export function PhotoLightbox({
       cancelTargetRequest();
       if (controlsEntranceTimerRef.current !== null) clearTimeout(controlsEntranceTimerRef.current);
       clearControlsHideTimer();
-      if (preparedObjectUrlRef.current !== null) {
-        URL.revokeObjectURL(preparedObjectUrlRef.current);
-        preparedObjectUrlRef.current = null;
-      }
+      preparedRequestRef.current += 1;
     },
     [cancelTargetRequest, clearControlsHideTimer],
   );
@@ -376,17 +383,10 @@ export function PhotoLightbox({
       const mediaId = selected.id;
       const requestId = preparedRequestRef.current + 1;
       preparedRequestRef.current = requestId;
-      const objectUrl = URL.createObjectURL(blob);
-      await decodeObjectUrl(objectUrl);
-      if (preparedRequestRef.current !== requestId || selectedId !== mediaId) {
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      if (preparedObjectUrlRef.current !== null) {
-        URL.revokeObjectURL(preparedObjectUrlRef.current);
-      }
-      preparedObjectUrlRef.current = objectUrl;
-      setPreparedImage({ mediaId, kind, url: objectUrl });
+      const dataUrl = await blobToDataUrl(blob);
+      await decodeImageUrl(dataUrl);
+      if (preparedRequestRef.current !== requestId || selectedId !== mediaId) return;
+      setPreparedImage({ mediaId, kind, url: dataUrl });
       resetView();
       showSaveHint(kind);
     },
