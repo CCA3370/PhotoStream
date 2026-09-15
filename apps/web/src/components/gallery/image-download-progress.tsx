@@ -1,5 +1,12 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
+import {
+  hasPendingNetworkImageDownload,
+  subscribeNetworkImageDownload,
+} from "@/lib/image-download-progress";
+
 export function ImageDownloadProgress({
   kind,
   progress,
@@ -7,18 +14,26 @@ export function ImageDownloadProgress({
   kind: "preview" | "original";
   progress: number;
 }>) {
+  const visible = useSyncExternalStore(
+    subscribeNetworkImageDownload,
+    hasPendingNetworkImageDownload,
+    () => false,
+  );
+  if (!visible) return null;
+
   const percent = Math.min(100, Math.max(0, Math.round(progress * 100)));
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - percent / 100);
-  const label = kind === "original" ? "正在加载原图" : "正在加载普通图";
+  const label =
+    percent >= 100 ? "图片已加载完成" : kind === "original" ? "正在加载原图" : "正在加载普通图";
 
   return (
     <div
       aria-live="polite"
       className="pointer-events-none fixed inset-0 z-[100] grid place-items-center"
     >
-      <div className="flex min-w-36 flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/70 px-5 py-4 text-white shadow-2xl shadow-black/40 backdrop-blur-xl">
+      <div className="flex min-w-60 max-w-[calc(100vw-2rem)] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/70 px-5 py-4 text-white shadow-2xl shadow-black/40 backdrop-blur-xl">
         <div
           className="relative grid size-20 place-items-center"
           role="progressbar"
@@ -57,6 +72,9 @@ export function ImageDownloadProgress({
           <span className="text-sm font-semibold tabular-nums">{percent}%</span>
         </div>
         <span className="text-sm font-medium">{label}</span>
+        <span className="max-w-64 text-center text-xs leading-5 text-white/65">
+          下载完成后，请长按图片并选择“保存到手机”
+        </span>
       </div>
     </div>
   );
