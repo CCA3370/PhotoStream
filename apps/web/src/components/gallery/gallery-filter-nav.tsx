@@ -68,7 +68,9 @@ export function GalleryFilterNav({
             onClick={() => onSelect(item)}
             type="button"
           >
-            {pending ? <LoaderCircleIcon aria-hidden="true" className="size-3.5 animate-spin" /> : null}
+            {pending ? (
+              <LoaderCircleIcon aria-hidden="true" className="size-3.5 animate-spin" />
+            ) : null}
             {item.label}
           </button>
         );
