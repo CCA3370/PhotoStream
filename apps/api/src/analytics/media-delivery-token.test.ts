@@ -12,12 +12,20 @@ describe("media delivery telemetry token", () => {
     const issued = issueMediaDeliveryToken(secret, slug, visitorId, now);
 
     expect(verifyMediaDeliveryToken(secret, slug, visitorId, issued.token, now)).toBe(true);
-    expect(verifyMediaDeliveryToken(secret, "another-album", visitorId, issued.token, now)).toBe(false);
+    expect(verifyMediaDeliveryToken(secret, "another-album", visitorId, issued.token, now)).toBe(
+      false,
+    );
+    expect(verifyMediaDeliveryToken(secret, slug, `${visitorId}-other`, issued.token, now)).toBe(
+      false,
+    );
     expect(
-      verifyMediaDeliveryToken(secret, slug, `${visitorId}-other`, issued.token, now),
-    ).toBe(false);
-    expect(
-      verifyMediaDeliveryToken(secret, slug, visitorId, issued.token, new Date(now.getTime() + 301_000)),
+      verifyMediaDeliveryToken(
+        secret,
+        slug,
+        visitorId,
+        issued.token,
+        new Date(now.getTime() + 301_000),
+      ),
     ).toBe(false);
   });
 
