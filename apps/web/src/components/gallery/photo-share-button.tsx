@@ -145,14 +145,7 @@ export function PhotoShareButton({
               aria-modal="true"
               className="dark public-theme fixed inset-0 z-[300] cursor-pointer bg-black/40 text-white transition-opacity duration-150"
               onClick={closeWeChatGuide}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  closeWeChatGuide();
-                }
-              }}
               role="dialog"
-              tabIndex={0}
             >
               <div className="pointer-events-none absolute top-[max(0.55rem,env(safe-area-inset-top))] right-2.5 flex max-w-[calc(100vw-1.25rem)] flex-col items-end sm:right-4">
                 <ArrowUpRightIcon
