@@ -1,25 +1,24 @@
-import type {
-  AlbumSummaryView,
-  AlbumView,
-  BibConfigView,
-  FaceConfigView,
-} from "@photostream/contracts";
+import type { AlbumSummaryView, AlbumView } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
-import { AlbumDataSaverSetting } from "@/components/albums/album-data-saver-setting";
 import { AlbumSettings } from "@/components/albums/album-settings";
 import { AlbumWorkspaceHeader } from "@/components/albums/album-workspace-header";
 import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
 
+interface CategoryDetails {
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
+}
+
 export default async function AlbumSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin"]);
   const { id } = await params;
-  const [album, bibConfig, faceConfig, dataSaver, summaries] = await Promise.all([
+  const [album, categories, dataSaver, summaries] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
-    serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
-    serverApi<FaceConfigView>(`/api/v1/albums/${id}/face-config`),
+    serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
     serverApi<DataSaverSettingView>(`/api/v1/albums/${id}/data-saver`),
     serverApi<AlbumSummaryView[]>("/api/v1/albums"),
   ]);
@@ -52,8 +51,7 @@ export default async function AlbumSettingsPage({ params }: { params: Promise<{ 
         current="settings"
         role={session.user.role}
       />
-      <AlbumDataSaverSetting albumId={id} initialSetting={dataSaver} />
-      <AlbumSettings bibConfig={bibConfig} faceConfig={faceConfig} initialAlbum={album} />
+      <AlbumSettings categories={categories} dataSaver={dataSaver} initialAlbum={album} />
     </section>
   );
 }
