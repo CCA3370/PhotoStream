@@ -74,7 +74,11 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
         type="button"
         variant="outline"
       >
-        {queue.paused ? <PlayIcon data-icon="inline-start" /> : <PauseIcon data-icon="inline-start" />}
+        {queue.paused ? (
+          <PlayIcon data-icon="inline-start" />
+        ) : (
+          <PauseIcon data-icon="inline-start" />
+        )}
         {queue.paused ? "继续队列" : "暂停新任务"}
       </Button>
       <Button
@@ -116,7 +120,8 @@ export function UploadShell({ albumTitle, children, queue }: UploadShellProps) {
   }, []);
 
   const processed = queue.completed + queue.failed;
-  const progress = queue.total === 0 ? 0 : Math.min(100, Math.round((processed / queue.total) * 100));
+  const progress =
+    queue.total === 0 ? 0 : Math.min(100, Math.round((processed / queue.total) * 100));
 
   return (
     <section className="overflow-hidden rounded-xl border bg-card" aria-label="上传队列">
@@ -159,10 +164,15 @@ export function UploadShell({ albumTitle, children, queue }: UploadShellProps) {
         <div className="border-b px-4 py-2 sm:px-5">
           <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
             <span>本轮处理进度</span>
-            <span className="tabular-nums">{processed}/{queue.total} · {progress}%</span>
+            <span className="tabular-nums">
+              {processed}/{queue.total} · {progress}%
+            </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
+            <div
+              className="h-full rounded-full bg-primary transition-[width]"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
       ) : null}

@@ -36,6 +36,7 @@ interface CategoryView {
 
 const publicationLabels: Record<InternalMediaView["publicationStatus"], string> = {
   draft: "待发布",
+  pending_review: "待审核",
   published: "已发布",
   hidden: "已隐藏",
   deleted: "已删除",
@@ -284,12 +285,15 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="text-muted-foreground">分类</span>
               <span className="font-medium tabular-nums">
-                {categories.filter((category) => category.enabled).length} / {categories.length} 启用
+                {categories.filter((category) => category.enabled).length} / {categories.length}{" "}
+                启用
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="text-muted-foreground">逻辑存储量</span>
-              <span className="font-medium tabular-nums">{formatBytes(statistics.logicalBytes)}</span>
+              <span className="font-medium tabular-nums">
+                {formatBytes(statistics.logicalBytes)}
+              </span>
             </div>
           </CardContent>
         </Card>

@@ -29,15 +29,16 @@ export const PublicGallery: Story = {
 export const UploadQueue: Story = {
   render: () => (
     <UploadShell
-      albumId="demo"
       albumTitle="春季运动会"
       queue={{
         paused: false,
+        queued: 0,
         processing: 0,
         failed: 0,
         retryableFailed: 0,
         pendingReview: 0,
         completed: 0,
+        total: 0,
         onTogglePause: () => undefined,
         onRetryFailed: () => undefined,
         onClearCompleted: () => undefined,

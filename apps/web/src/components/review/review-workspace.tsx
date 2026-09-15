@@ -213,7 +213,8 @@ export function ReviewWorkspace({
       let urls = localUrlCache.current.get(photo.id);
       if (urls === undefined) {
         const thumb =
-          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
+          photo.originalBlob;
         urls = {
           previewUrl: URL.createObjectURL(thumb),
           originalUrl: URL.createObjectURL(photo.originalBlob),
@@ -255,9 +256,11 @@ export function ReviewWorkspace({
   }, []);
 
   useEffect(() => {
-    void Promise.all([refreshLocal(), refreshFeatured(), resumeLocalBibOcr(albumId, bibConfig)]).catch(
-      (cause) => setError(cause instanceof Error ? cause.message : "审核数据加载失败"),
-    );
+    void Promise.all([
+      refreshLocal(),
+      refreshFeatured(),
+      resumeLocalBibOcr(albumId, bibConfig),
+    ]).catch((cause) => setError(cause instanceof Error ? cause.message : "审核数据加载失败"));
     const localChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly albumId?: string }>).detail;
       if (detail?.albumId !== albumId) return;
@@ -357,7 +360,8 @@ export function ReviewWorkspace({
       items.filter((item) => {
         if (category !== "all" && item.categoryId !== category) return false;
         if (uploader !== "all" && item.uploaderId !== uploader) return false;
-        if (filter === "local") return item.source === "local" && item.publicationStatus === "local";
+        if (filter === "local")
+          return item.source === "local" && item.publicationStatus === "local";
         if (filter === "featured") return item.featured;
         if (filter === "published") return item.publicationStatus === "published";
         if (filter === "hidden") return item.publicationStatus === "hidden";
@@ -366,10 +370,10 @@ export function ReviewWorkspace({
     [category, filter, items, uploader],
   );
 
-  useEffect(() => {
+  function resetSelection(): void {
     setSelectedKeys(new Set());
     lastSelectedIndexRef.current = null;
-  }, [category, filter, uploader]);
+  }
 
   useEffect(() => {
     const validKeys = new Set(items.map((item) => item.key));
@@ -385,7 +389,8 @@ export function ReviewWorkspace({
   );
 
   const lightboxSourceItems = useMemo(() => {
-    if (activeKey === null || visibleItems.some((item) => item.key === activeKey)) return visibleItems;
+    if (activeKey === null || visibleItems.some((item) => item.key === activeKey))
+      return visibleItems;
     const activeItem = items.find((item) => item.key === activeKey);
     return activeItem === undefined ? visibleItems : [...visibleItems, activeItem];
   }, [activeKey, items, visibleItems]);
@@ -483,7 +488,9 @@ export function ReviewWorkspace({
       } else if (mediaId !== null) {
         await clientMutation(`/api/v1/media/${mediaId}/featured`, { body: { featured: next } });
         if (item.local !== null) {
-          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(() => undefined);
+          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(
+            () => undefined,
+          );
         }
         setFeaturedIds((current) => {
           const updated = new Set(current);
@@ -651,7 +658,11 @@ export function ReviewWorkspace({
         });
         for (const item of result.items) {
           if (item.ok) okIds.push(item.mediaId);
-          else failures.push({ label: item.mediaId.slice(0, 8), message: item.message ?? item.code ?? "操作失败" });
+          else
+            failures.push({
+              label: item.mediaId.slice(0, 8),
+              message: item.message ?? item.code ?? "操作失败",
+            });
         }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "批量请求失败";
@@ -661,7 +672,11 @@ export function ReviewWorkspace({
     return { okIds, failures };
   }
 
-  function finishBatch(label: string, successCount: number, failures: readonly BatchFailure[]): void {
+  function finishBatch(
+    label: string,
+    successCount: number,
+    failures: readonly BatchFailure[],
+  ): void {
     if (failures.length === 0) {
       showNotice(`${label}完成：${successCount} 张`);
     } else {
@@ -684,7 +699,8 @@ export function ReviewWorkspace({
     let successCount = 0;
     try {
       const localTargets = selectedItems.filter(
-        (item) => item.source === "local" && item.publicationStatus === "local",
+        (item): item is Extract<ReviewItem, { source: "local" }> =>
+          item.source === "local" && item.publicationStatus === "local",
       );
       for (const item of localTargets) {
         setPending(item.key, "state");
@@ -736,7 +752,10 @@ export function ReviewWorkspace({
         (item): item is Extract<ReviewItem, { source: "remote" }> =>
           item.source === "remote" && item.publicationStatus === "published",
       );
-      const result = await applyRemoteBatch("hide", targets.map((item) => item.remote.id));
+      const result = await applyRemoteBatch(
+        "hide",
+        targets.map((item) => item.remote.id),
+      );
       const ok = new Set(result.okIds);
       setRemoteMedia((current) =>
         current.map((item) =>
@@ -745,7 +764,8 @@ export function ReviewWorkspace({
       );
       const failures = [...result.failures];
       const skipped = selectedItems.length - targets.length;
-      if (skipped > 0) failures.push({ label: `${skipped} 张`, message: "只有已发布照片可以批量隐藏" });
+      if (skipped > 0)
+        failures.push({ label: `${skipped} 张`, message: "只有已发布照片可以批量隐藏" });
       finishBatch("批量隐藏", result.okIds.length, failures);
     } finally {
       setBatchBusy(false);
@@ -760,7 +780,8 @@ export function ReviewWorkspace({
     let successCount = 0;
     try {
       const localOnly = selectedItems.filter(
-        (item) => item.source === "local" && item.local.photo.mediaId === null,
+        (item): item is Extract<ReviewItem, { source: "local" }> =>
+          item.source === "local" && item.local.photo.mediaId === null,
       );
       for (const item of localOnly) {
         try {
@@ -786,11 +807,15 @@ export function ReviewWorkspace({
       successCount += remoteResult.okIds.length;
       failures.push(...remoteResult.failures);
       setRemoteMedia((current) =>
-        current.map((item) => (remoteOk.has(item.id) ? { ...item, categoryId: nextCategory } : item)),
+        current.map((item) =>
+          remoteOk.has(item.id) ? { ...item, categoryId: nextCategory } : item,
+        ),
       );
       for (const item of remoteTargets) {
         if (!remoteOk.has(item.remote.id) || item.local === null) continue;
-        await patchLocalReviewPhoto(item.local.photo.id, { categoryId: nextCategory }).catch(() => undefined);
+        await patchLocalReviewPhoto(item.local.photo.id, { categoryId: nextCategory }).catch(
+          () => undefined,
+        );
       }
       await refreshLocal();
       finishBatch("批量修改分类", successCount, failures);
@@ -854,7 +879,10 @@ export function ReviewWorkspace({
             <Button
               className="h-7 shrink-0 px-2.5 text-xs"
               key={item.id}
-              onClick={() => setFilter(item.id)}
+              onClick={() => {
+                setFilter(item.id);
+                resetSelection();
+              }}
               size="sm"
               type="button"
               variant={filter === item.id ? "secondary" : "ghost"}
@@ -870,7 +898,10 @@ export function ReviewWorkspace({
                 { label: "全部分类", value: "all" },
                 ...categories.map((item) => ({ label: item.name, value: item.id })),
               ]}
-              onValueChange={(value) => setCategory(value ?? "all")}
+              onValueChange={(value) => {
+                setCategory(value ?? "all");
+                resetSelection();
+              }}
               value={category}
             >
               <SelectTrigger aria-label="分类筛选" className="h-7 w-28 text-xs">
@@ -880,7 +911,9 @@ export function ReviewWorkspace({
                 <SelectGroup>
                   <SelectItem value="all">全部分类</SelectItem>
                   {categories.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}
+                    </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
@@ -892,7 +925,10 @@ export function ReviewWorkspace({
                 { label: "全部上传者", value: "all" },
                 ...uploaders.map((item) => ({ label: item.displayName, value: item.id })),
               ]}
-              onValueChange={(value) => setUploader(value ?? "all")}
+              onValueChange={(value) => {
+                setUploader(value ?? "all");
+                resetSelection();
+              }}
               value={uploader}
             >
               <SelectTrigger aria-label="上传者筛选" className="h-7 w-28 text-xs">
@@ -902,7 +938,9 @@ export function ReviewWorkspace({
                 <SelectGroup>
                   <SelectItem value="all">全部上传者</SelectItem>
                   {uploaders.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>{item.displayName}</SelectItem>
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.displayName}
+                    </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
@@ -940,11 +978,27 @@ export function ReviewWorkspace({
           >
             选择当前已加载 {visibleItems.length} 张
           </Button>
-          <Button disabled={batchBusy} onClick={() => void batchPublish()} size="sm" type="button" variant="outline">
-            {batchBusy ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
+          <Button
+            disabled={batchBusy}
+            onClick={() => void batchPublish()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {batchBusy ? (
+              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <SendIcon data-icon="inline-start" />
+            )}
             批量发布
           </Button>
-          <Button disabled={batchBusy} onClick={() => void batchHide()} size="sm" type="button" variant="outline">
+          <Button
+            disabled={batchBusy}
+            onClick={() => void batchHide()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             <EyeOffIcon data-icon="inline-start" />
             批量隐藏
           </Button>
@@ -964,12 +1018,20 @@ export function ReviewWorkspace({
                 <SelectGroup>
                   <SelectItem value="uncategorized">未分类</SelectItem>
                   {categories.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}
+                    </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Button disabled={batchBusy} onClick={() => void batchChangeCategory()} size="sm" type="button" variant="outline">
+            <Button
+              disabled={batchBusy}
+              onClick={() => void batchChangeCategory()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
               应用分类
             </Button>
           </div>
@@ -1034,7 +1096,9 @@ export function ReviewWorkspace({
                         mediaId={item.source === "remote" ? item.remote.id : null}
                         variantKind={
                           item.source === "remote"
-                            ? item.remote.variants.find((variant) => variant.url === item.previewUrl)?.kind
+                            ? item.remote.variants.find(
+                                (variant) => variant.url === item.previewUrl,
+                              )?.kind
                             : undefined
                         }
                         unoptimized
@@ -1054,7 +1118,11 @@ export function ReviewWorkspace({
                     type="button"
                     variant={selected ? "default" : "secondary"}
                   >
-                    {selected ? <CheckIcon className="size-3.5" /> : <SquareIcon className="size-3.5" />}
+                    {selected ? (
+                      <CheckIcon className="size-3.5" />
+                    ) : (
+                      <SquareIcon className="size-3.5" />
+                    )}
                   </Button>
                 </div>
                 <div className="flex items-center justify-center gap-1 border-t bg-card p-1.5">
@@ -1076,7 +1144,11 @@ export function ReviewWorkspace({
                   </Button>
                   <Button
                     aria-label={published ? "隐藏" : hidden ? "显示" : "发布"}
-                    className={cn("size-8", published && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
+                    className={cn(
+                      "size-8",
+                      published &&
+                        "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+                    )}
                     disabled={pending || batchBusy}
                     onClick={() => void stateAction(item)}
                     size="icon"
@@ -1095,7 +1167,9 @@ export function ReviewWorkspace({
                     )}
                   </Button>
                   <Button
-                    aria-label={bibBlocked ? "号码识别中" : bibConfirmed ? "修改号码确认" : "确认号码"}
+                    aria-label={
+                      bibBlocked ? "号码识别中" : bibConfirmed ? "修改号码确认" : "确认号码"
+                    }
                     className={cn(
                       "size-8",
                       bibBlocked
@@ -1107,7 +1181,13 @@ export function ReviewWorkspace({
                     disabled={pending || batchBusy || bibBlocked}
                     onClick={() => setBibDialogKey(item.key)}
                     size="icon"
-                    title={bibBlocked ? "号码识别中" : bibConfirmed ? "号码已确认，点击修改" : "号码待确认"}
+                    title={
+                      bibBlocked
+                        ? "号码识别中"
+                        : bibConfirmed
+                          ? "号码已确认，点击修改"
+                          : "号码待确认"
+                    }
                     type="button"
                     variant="ghost"
                   >
@@ -1143,7 +1223,9 @@ export function ReviewWorkspace({
       )}
 
       <div className="flex h-8 items-center justify-center" ref={sentinelRef}>
-        {loadingMore ? <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" /> : null}
+        {loadingMore ? (
+          <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+        ) : null}
       </div>
 
       <ReviewLightbox
