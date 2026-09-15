@@ -59,6 +59,9 @@ const multipartThreshold = 16 * 1024 * 1024;
 const uploadCleanupInitialGraceMs = 30 * 60 * 1_000;
 const uploadCleanupVerificationDelayMs = 24 * 60 * 60 * 1_000;
 const multipartPartBytes = 8 * 1024 * 1024;
+const maxActiveUploadIntentsPerUploader = 32;
+const maxOutstandingUploadBytesPerUploader = 4 * 1024 * 1024 * 1024;
+const maxAlbumReservedBytes = 256 * 1024 * 1024 * 1024;
 const incompleteIngestStatuses = [
   "created",
   "local_processing",
@@ -80,8 +83,8 @@ function albumView(row: typeof schema.albums.$inferSelect): AlbumView {
     state: row.state,
     access: row.access,
     publishMode: row.publishMode,
-    previewDownloadEnabled: row.previewDownloadEnabled,
-    originalDownloadEnabled: row.originalDownloadEnabled,
+    previewDownloadEnabled: true,
+    originalDownloadEnabled: true,
     privacyNotice: row.privacyNotice,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
@@ -290,7 +293,6 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw new Error("Album state update returned no row");
-      await this.#applyFaceAlbumState(transaction, album.id, "live", now);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.started",
@@ -364,6 +366,8 @@ export class PhotoService {
         .update(schema.albums)
         .set({
           ...options.input,
+          previewDownloadEnabled: true,
+          originalDownloadEnabled: true,
           ...(options.input.access === "public" ? { bibSearchEnabled: false } : {}),
           ...(accessChanged ? { accessVersion: album.accessVersion + 1 } : {}),
           updatedAt: now,
@@ -371,9 +375,6 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
-      if (accessChanged && options.input.access === "public") {
-        await this.#disableFaceForPublicAccess(transaction, album.id, now);
-      }
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.settings.updated",
@@ -589,6 +590,66 @@ export class PhotoService {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
           message: "相册照片数量已达到 5000 张上限",
+          statusCode: 409,
+        });
+      }
+
+      const requestedBytes = options.input.variants.reduce(
+        (sum, variant) => sum + variant.bytes,
+        0,
+      );
+      await this.#advisoryLock(transaction, `uploader-upload-quota:${options.actor.id}`);
+      const quotaNow = new Date();
+      const [uploaderQuota] = await transaction
+        .select({
+          activeIntents: sql<number>`count(distinct ${schema.uploadIntents.id})::int`,
+          outstandingBytes: sql<number>`coalesce(sum(case when ${schema.mediaVariants.verified} = false then ${schema.mediaVariants.expectedBytes} else 0 end), 0)::bigint`,
+        })
+        .from(schema.uploadIntents)
+        .innerJoin(
+          schema.mediaVariants,
+          eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId),
+        )
+        .where(
+          and(
+            eq(schema.uploadIntents.uploaderId, options.actor.id),
+            eq(schema.uploadIntents.status, "active"),
+            gt(schema.uploadIntents.expiresAt, quotaNow),
+          ),
+        );
+      if ((uploaderQuota?.activeIntents ?? 0) >= maxActiveUploadIntentsPerUploader) {
+        throw new AppError({
+          code: "MEDIA_LIMIT_EXCEEDED",
+          message: "同时进行的上传任务过多，请等待现有上传完成后重试",
+          statusCode: 409,
+        });
+      }
+      if (
+        Number(uploaderQuota?.outstandingBytes ?? 0) + requestedBytes >
+        maxOutstandingUploadBytesPerUploader
+      ) {
+        throw new AppError({
+          code: "MEDIA_LIMIT_EXCEEDED",
+          message: "未完成上传占用已达到上限，请等待现有上传完成后重试",
+          statusCode: 409,
+        });
+      }
+      const [albumQuota] = await transaction
+        .select({
+          reservedBytes: sql<number>`coalesce(sum(${schema.mediaVariants.expectedBytes}), 0)::bigint`,
+        })
+        .from(schema.mediaVariants)
+        .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
+        .where(
+          and(
+            eq(schema.media.albumId, album.id),
+            sql`${schema.media.publicationStatus} <> 'deleted'`,
+          ),
+        );
+      if (Number(albumQuota?.reservedBytes ?? 0) + requestedBytes > maxAlbumReservedBytes) {
+        throw new AppError({
+          code: "MEDIA_LIMIT_EXCEEDED",
+          message: "相册已达到 256 GiB 上传配额",
           statusCode: 409,
         });
       }
@@ -1561,12 +1622,7 @@ export class PhotoService {
       .from(schema.albumFaceIndexes)
       .where(eq(schema.albumFaceIndexes.albumId, album.id))
       .limit(1);
-    const faceSearchAvailable =
-      this.#config.FACE_SEARCH_GLOBAL_ENABLED &&
-      unlocked &&
-      album.access === "password" &&
-      faceIndex?.enabled === true &&
-      (faceIndex.indexState === "ready" || faceIndex.indexState === "degraded");
+    const faceSearchAvailable = faceIndex?.enabled === true;
     const categories = await this.#database
       .select()
       .from(schema.categories)
@@ -1642,11 +1698,13 @@ export class PhotoService {
         state: album.state,
         access: album.access,
         accessRequired: album.access === "password" && !unlocked,
-        previewDownloadEnabled: album.previewDownloadEnabled,
-        originalDownloadEnabled: album.originalDownloadEnabled,
+        previewDownloadEnabled: true,
+        originalDownloadEnabled: true,
         privacyNotice: album.privacyNotice,
         faceSearchAvailable,
-        faceSearchNoticeVersion: faceSearchAvailable ? (faceIndex.noticeVersion ?? null) : null,
+        faceSearchNoticeVersion: faceSearchAvailable
+          ? this.#config.FACE_SEARCH_NOTICE_VERSION
+          : null,
         bibSearchEnabled,
         bibNumberLengths,
         bibAttributeFilterEnabled,
@@ -1779,16 +1837,12 @@ export class PhotoService {
             };
           }),
         downloads: {
-          preview:
-            album.previewDownloadEnabled &&
-            (byMedia.get(media.id) ?? []).some(
-              (variant) => variant.kind === "photo_1920" && variant.verified,
-            ),
-          original:
-            album.originalDownloadEnabled &&
-            (byMedia.get(media.id) ?? []).some(
-              (variant) => variant.kind === "photo_original" && variant.verified,
-            ),
+          preview: (byMedia.get(media.id) ?? []).some(
+            (variant) => variant.kind === "photo_1920" && variant.verified,
+          ),
+          original: (byMedia.get(media.id) ?? []).some(
+            (variant) => variant.kind === "photo_original" && variant.verified,
+          ),
           originalBytes:
             (byMedia.get(media.id) ?? []).find(
               (variant) => variant.kind === "photo_original" && variant.verified,
@@ -1892,7 +1946,6 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
-      await this.#applyFaceAlbumState(transaction, album.id, options.to, now);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: options.action,
@@ -1908,97 +1961,6 @@ export class PhotoService {
 
   async #advisoryLock(executor: DbExecutor, value: string): Promise<void> {
     await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended(${value}, 0))`);
-  }
-
-  async #applyFaceAlbumState(
-    transaction: Transaction,
-    albumId: string,
-    state: AlbumView["state"],
-    now: Date,
-  ): Promise<void> {
-    if (state === "live") {
-      await transaction
-        .update(schema.albumFaceIndexes)
-        .set({ deletionDueAt: null, updatedAt: now })
-        .where(eq(schema.albumFaceIndexes.albumId, albumId));
-      return;
-    }
-    if (state !== "ended") return;
-    const [index] = await transaction
-      .select({
-        deletionDueAt: schema.albumFaceIndexes.deletionDueAt,
-        retentionDays: schema.albumFaceIndexes.retentionDays,
-      })
-      .from(schema.albumFaceIndexes)
-      .where(eq(schema.albumFaceIndexes.albumId, albumId))
-      .limit(1);
-    if (index === undefined || index.deletionDueAt !== null) return;
-    await transaction
-      .update(schema.albumFaceIndexes)
-      .set({
-        deletionDueAt: new Date(now.getTime() + index.retentionDays * 86_400_000),
-        updatedAt: now,
-      })
-      .where(eq(schema.albumFaceIndexes.albumId, albumId));
-  }
-
-  async #disableFaceForPublicAccess(
-    transaction: Transaction,
-    albumId: string,
-    now: Date,
-  ): Promise<void> {
-    const [index] = await transaction
-      .select({ datasetName: schema.albumFaceIndexes.datasetName })
-      .from(schema.albumFaceIndexes)
-      .where(eq(schema.albumFaceIndexes.albumId, albumId))
-      .limit(1);
-    if (index === undefined) return;
-    await transaction
-      .update(schema.albumFaceIndexes)
-      .set({
-        enabled: false,
-        indexState: index.datasetName === null ? "disabled" : "deleting",
-        indexedFacesAuthorized: false,
-        authorizationConfirmedAt: null,
-        updatedAt: now,
-      })
-      .where(eq(schema.albumFaceIndexes.albumId, albumId));
-    if (index.datasetName !== null) {
-      await transaction
-        .insert(schema.faceAlbumJobs)
-        .values({ albumId, kind: "delete_dataset", nextAttemptAt: now })
-        .onConflictDoNothing();
-    }
-    const intentIds = transaction
-      .select({ id: schema.faceSearchIntents.id })
-      .from(schema.faceSearchIntents)
-      .where(eq(schema.faceSearchIntents.albumId, albumId));
-    const receiptIds = transaction
-      .select({ id: schema.faceSearchIntents.consentReceiptId })
-      .from(schema.faceSearchIntents)
-      .where(
-        and(
-          eq(schema.faceSearchIntents.albumId, albumId),
-          inArray(schema.faceSearchIntents.status, ["awaiting_upload", "processing", "partial"]),
-          isNotNull(schema.faceSearchIntents.consentReceiptId),
-        ),
-      );
-    await transaction
-      .update(schema.faceConsentReceipts)
-      .set({ resultCategory: "cancelled", updatedAt: now })
-      .where(inArray(schema.faceConsentReceipts.id, receiptIds));
-    await transaction
-      .update(schema.faceSearchIntents)
-      .set({ status: "cancelled", completedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(schema.faceSearchIntents.albumId, albumId),
-          inArray(schema.faceSearchIntents.status, ["awaiting_upload", "processing", "partial"]),
-        ),
-      );
-    await transaction
-      .delete(schema.faceSearchCandidates)
-      .where(inArray(schema.faceSearchCandidates.searchIntentId, intentIds));
   }
 
   async #albumById(executor: DbExecutor, albumId: string) {

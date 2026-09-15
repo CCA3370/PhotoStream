@@ -6,6 +6,8 @@ import type { DashboardService } from "../analytics/dashboard-service.js";
 import { requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
+import type { PhotoService } from "../media/service.js";
+import { visitorSessionToken } from "../media/visitor-http.js";
 
 const dashboardQuerySchema = z
   .object({
@@ -17,9 +19,6 @@ const dashboardQuerySchema = z
   .strict();
 
 const searchUsageParamsSchema = z.object({ slug: z.string().min(12).max(32) }).strict();
-const searchUsageRequestSchema = z
-  .object({ method: z.enum(["number", "attributes", "face"]) })
-  .strict();
 const deliveryCounterSchema = z.number().int().min(0).max(100_000);
 const deliveryBytesSchema = z
   .number()
@@ -152,6 +151,7 @@ export async function registerDashboardRoutes(
   options: {
     readonly authService: AuthService;
     readonly dashboardService: DashboardService;
+    readonly photoService: PhotoService;
     readonly config: AppConfig;
   },
 ): Promise<void> {
@@ -163,27 +163,6 @@ export async function registerDashboardRoutes(
     404: apiErrorSchema,
     500: apiErrorSchema,
   };
-
-  typed.post(
-    "/api/v1/public/albums/:slug/analytics/search-usage",
-    {
-      config: { rateLimit: { max: 60, timeWindow: "10 minutes" } },
-      schema: {
-        operationId: "recordPhotoSearchUsage",
-        tags: ["public", "analytics"],
-        params: searchUsageParamsSchema,
-        body: searchUsageRequestSchema,
-        response: { 200: okResponseSchema, ...errors },
-      },
-    },
-    async (request) => {
-      await options.dashboardService.recordSearchUsage({
-        slug: request.params.slug,
-        method: request.body.method,
-      });
-      return { ok: true as const };
-    },
-  );
 
   typed.post(
     "/api/v1/public/albums/:slug/analytics/media-delivery",
@@ -198,6 +177,10 @@ export async function registerDashboardRoutes(
       },
     },
     async (request) => {
+      await options.photoService.getAuthorizedPublicAlbum(
+        request.params.slug,
+        visitorSessionToken(request, options.config, request.params.slug),
+      );
       await options.dashboardService.recordMediaDelivery({
         slug: request.params.slug,
         input: request.body,

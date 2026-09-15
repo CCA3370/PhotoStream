@@ -82,10 +82,7 @@ export class PhotoShareService {
       options.slug,
       options.visitorToken,
     );
-    return this.#mediaView(album.id, options.mediaId, {
-      preview: album.previewDownloadEnabled,
-      original: album.originalDownloadEnabled,
-    });
+    return this.#mediaView(album.id, options.mediaId);
   }
 
   async getSharedMedia(options: {
@@ -94,7 +91,7 @@ export class PhotoShareService {
     readonly shareId: string;
   }): Promise<PublicMediaView> {
     const context = await this.#sharedContext(options);
-    return this.#mediaView(context.album.id, options.mediaId, { preview: true, original: true });
+    return this.#mediaView(context.album.id, options.mediaId);
   }
 
   async getSharedLikeState(options: {
@@ -256,11 +253,7 @@ export class PhotoShareService {
     return album;
   }
 
-  async #mediaView(
-    albumId: string,
-    mediaId: string,
-    downloads: { readonly preview: boolean; readonly original: boolean },
-  ): Promise<PublicMediaView> {
+  async #mediaView(albumId: string, mediaId: string): Promise<PublicMediaView> {
     const media = await this.#publishedMedia(albumId, mediaId);
     const variants = await this.#database
       .select()
@@ -296,9 +289,9 @@ export class PhotoShareService {
           contentType: variant.contentType,
         })),
       downloads: {
-        preview: downloads.preview && preview1920 !== undefined,
-        original: downloads.original && original !== undefined,
-        originalBytes: downloads.original ? (original?.bytes ?? null) : null,
+        preview: preview1920 !== undefined,
+        original: original !== undefined,
+        originalBytes: original?.bytes ?? null,
       },
     };
   }

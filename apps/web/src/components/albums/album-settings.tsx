@@ -37,14 +37,7 @@ interface PasswordRotation {
   readonly generatedPassword: string;
 }
 
-type PendingAction =
-  | "access"
-  | "basic"
-  | "original-download"
-  | "password"
-  | "preview-download"
-  | "privacy"
-  | "publish";
+type PendingAction = "access" | "basic" | "password" | "privacy" | "publish";
 
 const stateLabels: Record<AlbumView["state"], string> = {
   draft: "草稿",
@@ -70,12 +63,6 @@ function mergeAlbumUpdate(
     ...(input.description === undefined ? {} : { description: updated.description }),
     ...(input.access === undefined ? {} : { access: updated.access }),
     ...(input.publishMode === undefined ? {} : { publishMode: updated.publishMode }),
-    ...(input.previewDownloadEnabled === undefined
-      ? {}
-      : { previewDownloadEnabled: updated.previewDownloadEnabled }),
-    ...(input.originalDownloadEnabled === undefined
-      ? {}
-      : { originalDownloadEnabled: updated.originalDownloadEnabled }),
     ...(input.privacyNotice === undefined ? {} : { privacyNotice: updated.privacyNotice }),
     updatedAt: updated.updatedAt,
   };
@@ -440,48 +427,6 @@ export function AlbumSettings({
                       )}
                       {isPending("password") ? "更换中" : "更换"}
                     </Button>
-                  </SettingRow>
-                </CardContent>
-              </Card>
-
-              <Card className="overflow-hidden">
-                <CardHeader className="border-b py-3.5">
-                  <CardTitle>下载权限</CardTitle>
-                </CardHeader>
-                <CardContent className="divide-y p-0">
-                  <SettingRow description="允许访客下载 1920px 派生图" title="普通图下载">
-                    {isPending("preview-download") ? (
-                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Switch
-                        aria-label="普通图下载"
-                        checked={album.previewDownloadEnabled}
-                        onCheckedChange={(checked) =>
-                          void update(
-                            { previewDownloadEnabled: checked },
-                            "普通图下载权限已更新",
-                            "preview-download",
-                          )
-                        }
-                      />
-                    )}
-                  </SettingRow>
-                  <SettingRow description="原始文件可能包含相机元数据" title="照片原图下载">
-                    {isPending("original-download") ? (
-                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Switch
-                        aria-label="照片原图下载"
-                        checked={album.originalDownloadEnabled}
-                        onCheckedChange={(checked) =>
-                          void update(
-                            { originalDownloadEnabled: checked },
-                            "原图下载权限已更新",
-                            "original-download",
-                          )
-                        }
-                      />
-                    )}
                   </SettingRow>
                 </CardContent>
               </Card>

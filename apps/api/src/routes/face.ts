@@ -22,6 +22,7 @@ import {
   requireInternalSession,
   verifyPasswordConfirmation,
 } from "../auth/http.js";
+import type { DashboardService } from "../analytics/dashboard-service.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import {
@@ -54,61 +55,6 @@ function privateResponse(reply: FastifyReply): void {
   void reply.header("referrer-policy", "no-referrer");
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-}
-
-function logFaceSearchSimilarityResults(
-  request: FastifyRequest,
-  payload: unknown,
-  config: AppConfig,
-): void {
-  const root = asRecord(payload);
-  const data = asRecord(root?.data);
-  if (data === null || data.TaskType !== "FacesSearching") return;
-
-  const groups = Array.isArray(data.SimilarFaces) ? data.SimilarFaces : [];
-  const mediaPrefix =
-    config.ALIYUN_OSS_MEDIA_BUCKET === undefined
-      ? null
-      : `oss://${config.ALIYUN_OSS_MEDIA_BUCKET}/`;
-  const candidates = groups.flatMap((groupValue) => {
-    const group = asRecord(groupValue);
-    const similarFaces = Array.isArray(group?.SimilarFaces) ? group.SimilarFaces : [];
-    return similarFaces.flatMap((candidateValue) => {
-      const candidate = asRecord(candidateValue);
-      if (candidate === null) return [];
-      const similarity = candidate.Similarity;
-      if (typeof similarity !== "number" || !Number.isFinite(similarity)) return [];
-      const uri = candidate.URI;
-      const objectKey =
-        typeof uri === "string" && mediaPrefix !== null && uri.startsWith(mediaPrefix)
-          ? uri.slice(mediaPrefix.length)
-          : null;
-      return [
-        {
-          objectKey,
-          similarity,
-          accepted: similarity >= config.FACE_SEARCH_ASYNC_THRESHOLD,
-        },
-      ];
-    });
-  });
-
-  request.log.info(
-    {
-      event: "face_search_similarity",
-      source: "aliyun_faces_searching",
-      providerTaskId: typeof data.TaskId === "string" ? data.TaskId : null,
-      providerStatus: typeof data.Status === "string" ? data.Status : null,
-      threshold: config.FACE_SEARCH_ASYNC_THRESHOLD,
-      candidateCount: candidates.length,
-      candidates,
-    },
-    "face search similarity results",
-  );
-}
-
 export async function registerFaceRoutes(
   app: FastifyInstance,
   options: {
@@ -116,6 +62,7 @@ export async function registerFaceRoutes(
     faceService: FaceService;
     facePublicStateService: FacePublicStateService;
     eventBridgeVerifier: EventBridgeVerifier;
+    dashboardService?: DashboardService;
     config: AppConfig;
   },
 ): Promise<void> {
@@ -185,7 +132,7 @@ export async function registerFaceRoutes(
       privateResponse(reply);
       const session = await requireInternalCsrf(request, options.authService, options.config);
       return options.faceService.excludeMedia({
-        actor: { ...actorFrom(session), authenticatedAt: new Date() },
+        actor: actorFrom(session),
         albumId: request.params.id,
         mediaIds: request.body.mediaIds,
         requestId: request.id,
@@ -264,7 +211,7 @@ export async function registerFaceRoutes(
     },
     async (request, reply) => {
       privateResponse(reply);
-      return options.faceService.createSearch({
+      const result = await options.faceService.createSearch({
         slug: request.params.slug,
         visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),
         ip: request.ip,
@@ -272,6 +219,11 @@ export async function registerFaceRoutes(
         declaration: request.body.declaration,
         bytes: request.body.reference.bytes,
       });
+      await options.dashboardService?.recordSearchUsage({
+        slug: request.params.slug,
+        method: "face",
+      });
+      return result;
     },
   );
 
@@ -384,9 +336,7 @@ export async function registerFaceRoutes(
         }
         throw error;
       }
-      const result = await options.faceService.processEvent(request.body);
-      logFaceSearchSimilarityResults(request, request.body, options.config);
-      return result;
+      return options.faceService.processEvent(request.body);
     },
   );
 }

@@ -375,7 +375,7 @@ export class OperationsService {
   }
 
   async retryDeletion(options: {
-    readonly actor: InternalActor & { readonly authenticatedAt: Date };
+    readonly actor: InternalActor;
     readonly taskId: string;
     readonly now?: Date;
   }): Promise<DeletionTaskView> {
@@ -384,7 +384,6 @@ export class OperationsService {
       throw new AppError({ code: "FORBIDDEN", message: "仅管理员可以重试删除", statusCode: 403 });
     }
     const now = options.now ?? new Date();
-    assertRecentAuthentication(options.actor.authenticatedAt, now);
     await this.#database
       .update(schema.deletionTasks)
       .set({ status: "pending", nextAttemptAt: now, updatedAt: now })
@@ -640,16 +639,10 @@ export class OperationsService {
       .limit(1);
     if (media === undefined || media.publishSequence === null) throw this.#publicNotFound();
     const downloadSelection = {
-      preview: { variantKind: "photo_1920", enabled: album.previewDownloadEnabled },
-      original: { variantKind: "photo_original", enabled: album.originalDownloadEnabled },
-    } satisfies Record<
-      DownloadKind,
-      { variantKind: (typeof schema.variantKindEnum.enumValues)[number]; enabled: boolean }
-    >;
-    const { variantKind, enabled } = downloadSelection[options.kind];
-    if (!enabled) {
-      throw new AppError({ code: "DOWNLOAD_DISABLED", message: "该下载未开启", statusCode: 403 });
-    }
+      preview: "photo_1920",
+      original: "photo_original",
+    } satisfies Record<DownloadKind, (typeof schema.variantKindEnum.enumValues)[number]>;
+    const variantKind = downloadSelection[options.kind];
     const [variant] = await this.#database
       .select()
       .from(schema.mediaVariants)

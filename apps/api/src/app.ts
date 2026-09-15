@@ -272,10 +272,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       config: options.config,
     });
   }
-  if (options.dashboardService !== undefined) {
+  if (options.dashboardService !== undefined && options.photoService !== undefined) {
     await registerDashboardRoutes(app, {
       authService,
       dashboardService: options.dashboardService,
+      photoService: options.photoService,
       config: options.config,
     });
   }
@@ -323,7 +324,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       authService,
       photoService: options.photoService,
       operationsService: options.operationsService,
-      ...(options.faceService === undefined ? {} : { faceService: options.faceService }),
       config: options.config,
     });
   }
@@ -344,6 +344,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     await registerBibRoutes(app, {
       authService,
       bibService: options.bibService,
+      ...(options.dashboardService === undefined
+        ? {}
+        : { dashboardService: options.dashboardService }),
       config: options.config,
     });
   }
@@ -357,6 +360,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       faceService: options.faceService,
       facePublicStateService: options.facePublicStateService,
       eventBridgeVerifier: options.eventBridgeVerifier,
+      ...(options.dashboardService === undefined
+        ? {}
+        : { dashboardService: options.dashboardService }),
       config: options.config,
     });
   }
