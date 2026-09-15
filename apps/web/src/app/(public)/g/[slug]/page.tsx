@@ -1,17 +1,14 @@
 import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { GalleryBrowser } from "@/components/gallery/gallery-browser";
 import { LiveUpdates } from "@/components/gallery/live-updates";
-import { SharedPhotoViewer } from "@/components/gallery/shared-photo-viewer";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
-import { Toaster } from "@/components/ui/toast";
 import { serverApi } from "@/lib/api";
 import { orderFeaturedMedia } from "@/lib/featured-order";
 
@@ -37,7 +34,6 @@ interface GalleryPageSearchParams {
   readonly category?: string;
   readonly featured?: string;
   readonly photo?: string;
-  readonly share?: string;
 }
 
 interface GalleryPageProps {
@@ -50,66 +46,21 @@ const dataSaverInitialMediaPageSize = 30;
 const initialFeaturedTarget = 8;
 const initialPrefetchPageLimit = 3;
 
-function firstForwardedValue(value: string | null): string | null {
-  const first = value?.split(",")[0]?.trim();
-  return first === undefined || first.length === 0 ? null : first;
-}
-
-async function requestOrigin(): Promise<string> {
-  const requestHeaders = await headers();
-  const host =
-    firstForwardedValue(requestHeaders.get("x-forwarded-host")) ?? requestHeaders.get("host");
-  if (host === null) return "https://photos.bhsy.tech";
-  const protocol =
-    firstForwardedValue(requestHeaders.get("x-forwarded-proto")) ??
-    (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
-  return `${protocol}://${host}`;
-}
-
-export async function generateMetadata({ params, searchParams }: GalleryPageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: GalleryPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const query = await searchParams;
 
   try {
     const album = await serverApi<PublicAlbumView>(
       `/api/v1/public/albums/${encodeURIComponent(slug)}`,
     );
-    const albumDescription =
-      album.description?.trim() || `查看「${album.title}」活动影像直播`;
-
-    if (query.photo === undefined) {
-      return {
-        title: { absolute: `${album.title}｜影像直播` },
-        description: albumDescription,
-        openGraph: {
-          title: `${album.title}｜影像直播`,
-          description: albumDescription,
-          type: "website",
-        },
-      };
-    }
-
-    const origin = await requestOrigin();
-    const imageUrl = new URL(
-      `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(query.photo)}/micro-preview`,
-      origin,
-    );
-    if (query.share !== undefined) imageUrl.searchParams.set("share", query.share);
-
-    const pageUrl = new URL(`/g/${encodeURIComponent(slug)}`, origin);
-    pageUrl.searchParams.set("photo", query.photo);
-    if (query.share !== undefined) pageUrl.searchParams.set("share", query.share);
-
-    const photoDescription = `查看「${album.title}」活动中的这张照片`;
+    const description = album.description?.trim() || `查看「${album.title}」活动影像直播`;
     return {
       title: { absolute: `${album.title}｜影像直播` },
-      description: photoDescription,
+      description,
       openGraph: {
         title: `${album.title}｜影像直播`,
-        description: photoDescription,
+        description,
         type: "website",
-        url: pageUrl.toString(),
-        images: [{ url: imageUrl.toString() }],
       },
     };
   } catch {
@@ -122,23 +73,6 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   const query = await searchParams;
   const requestedCategory = query.category;
   const featuredOnly = query.featured === "1";
-
-  if (query.photo !== undefined && query.share !== undefined) {
-    const [shared, dataSaver] = await Promise.all([
-      serverApi<PublicMediaView>(
-        `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(query.photo)}?share=${encodeURIComponent(query.share)}`,
-      ),
-      serverApi<DataSaverSettingView>(
-        `/api/v1/public/albums/${encodeURIComponent(slug)}/data-saver`,
-      ),
-    ]);
-    return (
-      <Toaster>
-        <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
-        <SharedPhotoViewer media={shared} shareId={query.share} slug={slug} />
-      </Toaster>
-    );
-  }
 
   const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
 
