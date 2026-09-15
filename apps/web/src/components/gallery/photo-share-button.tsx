@@ -1,7 +1,7 @@
 "use client";
 
 import type { PublicAlbumView } from "@photostream/contracts";
-import { ArrowUpRightIcon, LoaderCircleIcon, Share2Icon, XIcon } from "lucide-react";
+import { ArrowUpRightIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -144,43 +144,35 @@ export function PhotoShareButton({
               aria-describedby="wechat-share-guide-description"
               aria-labelledby="wechat-share-guide-title"
               aria-modal="true"
-              className="dark public-theme fixed inset-0 z-[300] bg-black/72 text-white backdrop-blur-[2px]"
+              className="dark public-theme fixed inset-0 z-[300] bg-black/40 text-white transition-opacity duration-150"
               role="dialog"
             >
-              <div className="pointer-events-none absolute top-[max(0.85rem,env(safe-area-inset-top))] right-3 flex items-start gap-2 sm:right-5">
-                <div className="mt-10 rounded-2xl border border-white/10 bg-black/65 px-4 py-3 text-right shadow-xl shadow-black/30 backdrop-blur-xl">
-                  <p className="text-sm font-semibold">点这里分享</p>
-                  <p className="mt-1 max-w-52 text-xs leading-5 text-white/68">
-                    点击微信右上角 ···，选择「转发给朋友」或「分享到朋友圈」
+              <div className="pointer-events-none absolute top-[max(0.55rem,env(safe-area-inset-top))] right-2.5 flex max-w-[calc(100vw-1.25rem)] flex-col items-end sm:right-4">
+                <ArrowUpRightIcon
+                  aria-hidden="true"
+                  className="mr-1 size-10 shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)]"
+                />
+                <div className="mt-1 max-w-[17rem] rounded-2xl border border-white/12 bg-black/78 px-4 py-3 text-right shadow-2xl shadow-black/35 backdrop-blur-md">
+                  <p className="text-[15px] font-semibold leading-5" id="wechat-share-guide-title">
+                    点击右上角 ··· 分享
+                  </p>
+                  <p
+                    className="mt-1 text-xs leading-5 text-white/68"
+                    id="wechat-share-guide-description"
+                  >
+                    选择「转发给朋友」或「分享到朋友圈」
                   </p>
                 </div>
-                <ArrowUpRightIcon aria-hidden="true" className="mt-1 size-9 shrink-0 text-white" />
               </div>
 
-              <div className="pointer-events-none absolute inset-x-5 top-1/2 -translate-y-1/2 text-center">
-                <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/12 backdrop-blur-md">
-                  <Share2Icon aria-hidden="true" className="size-6" />
-                </div>
-                <h2 className="mt-4 text-xl font-semibold tracking-tight" id="wechat-share-guide-title">
-                  分享这张照片
-                </h2>
-                <p
-                  className="mx-auto mt-2 max-w-xs text-sm leading-6 text-white/68"
-                  id="wechat-share-guide-description"
-                >
-                  已准备好这张照片的直达链接。请使用微信右上角菜单完成分享。
-                </p>
-              </div>
-
-              <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex justify-center px-5">
+              <div className="absolute inset-x-0 bottom-[max(1.1rem,env(safe-area-inset-bottom))] flex justify-center px-5">
                 <Button
-                  className="min-w-28 rounded-full border-white/15 bg-white/10 text-white backdrop-blur-xl hover:bg-white/16 hover:text-white"
+                  className="h-9 min-w-20 rounded-full border-white/10 bg-black/45 px-4 text-sm font-normal text-white/82 shadow-lg shadow-black/20 backdrop-blur-md hover:bg-black/60 hover:text-white"
                   onClick={closeWeChatGuide}
                   type="button"
                   variant="outline"
                 >
-                  <XIcon data-icon="inline-start" />
-                  关闭提示
+                  知道了
                 </Button>
               </div>
             </div>,
