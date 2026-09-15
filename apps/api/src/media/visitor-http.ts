@@ -80,6 +80,14 @@ export function faceSearchVisitorToken(
   );
 }
 
+export function anonymousVisitorToken(
+  request: FastifyRequest,
+  config: AppConfig,
+): string | undefined {
+  const value = request.cookies[anonymousCookieName(config)];
+  return validVisitorId(value) ? value : undefined;
+}
+
 export function anonymousVisitorId(
   request: FastifyRequest,
   reply: FastifyReply,
