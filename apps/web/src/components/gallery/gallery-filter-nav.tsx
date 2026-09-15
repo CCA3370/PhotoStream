@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { LoaderCircleIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
@@ -10,34 +10,38 @@ interface GalleryCategory {
   readonly name: string;
 }
 
-interface FilterItem {
+export interface GalleryFilterSelection {
+  readonly categoryId?: string;
+  readonly featuredOnly: boolean;
   readonly key: string;
   readonly label: string;
-  readonly href: string;
 }
 
 export function GalleryFilterNav({
   categories,
+  onSelect,
+  pendingKey = null,
   reserveSearchSpace = false,
   selectedKey,
-  slug,
 }: Readonly<{
   categories: readonly GalleryCategory[];
+  onSelect: (selection: GalleryFilterSelection) => void;
+  pendingKey?: string | null;
   reserveSearchSpace?: boolean;
   selectedKey: string;
-  slug: string;
 }>) {
-  const items = useMemo<readonly FilterItem[]>(
+  const items = useMemo<readonly GalleryFilterSelection[]>(
     () => [
-      { key: "all", label: "全部", href: `/g/${slug}` },
-      { key: "featured", label: "精选", href: `/g/${slug}?featured=1` },
+      { key: "all", label: "全部", featuredOnly: false },
+      { key: "featured", label: "精选", featuredOnly: true },
       ...categories.map((category) => ({
         key: category.id,
         label: category.name,
-        href: `/g/${slug}?category=${category.id}`,
+        categoryId: category.id,
+        featuredOnly: false,
       })),
     ],
-    [categories, slug],
+    [categories],
   );
 
   return (
@@ -50,18 +54,23 @@ export function GalleryFilterNav({
     >
       {items.map((item) => {
         const active = selectedKey === item.key;
+        const pending = pendingKey === item.key;
         return (
-          <Link
+          <button
+            aria-busy={pending || undefined}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex h-full shrink-0 touch-manipulation items-center justify-center px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] sm:px-3.5 lg:px-5 lg:text-[15px] lg:after:inset-x-3",
+              "relative flex h-full shrink-0 touch-manipulation items-center justify-center gap-1.5 bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-wait disabled:opacity-70 sm:px-3.5 lg:px-5 lg:text-[15px] lg:after:inset-x-3",
               active && "text-foreground after:bg-primary",
             )}
-            href={item.href}
+            disabled={pendingKey !== null}
             key={item.key}
+            onClick={() => onSelect(item)}
+            type="button"
           >
+            {pending ? <LoaderCircleIcon aria-hidden="true" className="size-3.5 animate-spin" /> : null}
             {item.label}
-          </Link>
+          </button>
         );
       })}
     </nav>
