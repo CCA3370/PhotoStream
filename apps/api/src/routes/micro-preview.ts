@@ -17,6 +17,7 @@ const publicParamsSchema = z
     mediaId: z.string().uuid(),
   })
   .strict();
+const publicQuerySchema = z.object({ share: z.string().uuid().optional() }).strict();
 
 function actorFrom(session: Awaited<ReturnType<typeof requireInternalCsrf>>) {
   return { id: session.record.user.id, role: session.record.user.role };
@@ -91,12 +92,14 @@ export async function registerMicroPreviewRoutes(
         operationId: "readPublicMicroPreview",
         tags: ["public"],
         params: publicParamsSchema,
+        querystring: publicQuerySchema,
       },
     },
     async (request, reply) => {
       const url = await options.microPreviewService.publicUrl({
         ...request.params,
         visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        ...(request.query.share === undefined ? {} : { shareId: request.query.share }),
       });
       return reply
         .status(302)
