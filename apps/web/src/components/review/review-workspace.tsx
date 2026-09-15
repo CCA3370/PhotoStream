@@ -361,7 +361,11 @@ export function ReviewWorkspace({
         if (category !== "all" && item.categoryId !== category) return false;
         if (uploader !== "all" && item.uploaderId !== uploader) return false;
         if (filter === "local")
-          return item.source === "local" && item.publicationStatus === "local";
+          return (
+            (item.source === "local" && item.publicationStatus === "local") ||
+            item.publicationStatus === "draft" ||
+            item.publicationStatus === "pending_review"
+          );
         if (filter === "featured") return item.featured;
         if (filter === "published") return item.publicationStatus === "published";
         if (filter === "hidden") return item.publicationStatus === "hidden";
@@ -724,7 +728,8 @@ export function ReviewWorkspace({
 
       const remoteTargets = selectedItems.filter(
         (item): item is Extract<ReviewItem, { source: "remote" }> =>
-          item.source === "remote" && item.publicationStatus === "draft",
+          item.source === "remote" &&
+          (item.publicationStatus === "draft" || item.publicationStatus === "pending_review"),
       );
       const remoteResult = await applyRemoteBatch(
         "publish",
