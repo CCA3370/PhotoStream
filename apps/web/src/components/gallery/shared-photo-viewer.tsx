@@ -104,9 +104,7 @@ export function SharedPhotoViewer({
 
   useEffect(() => {
     let disposed = false;
-    void clientGet<PhotoLikeState>(
-      `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(media.id)}/like?share=${encodeURIComponent(shareId)}`,
-    )
+    void clientGet<PhotoLikeState>(`/api/v1/public/shares/${encodeURIComponent(shareId)}/like`)
       .then((state) => {
         if (!disposed) setLikeState(state);
       })
@@ -116,7 +114,7 @@ export function SharedPhotoViewer({
     return () => {
       disposed = true;
     };
-  }, [media.id, shareId, slug]);
+  }, [media.id, shareId]);
 
   const showSaveHint = useCallback((kind: "preview" | "original") => {
     setDownloadMenuOpen(false);
@@ -275,7 +273,7 @@ export function SharedPhotoViewer({
                 refreshUrl={async () =>
                   (
                     await clientGet<{ url: string }>(
-                      `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(media.id)}/variants/${preview.kind}?share=${encodeURIComponent(shareId)}`,
+                      `/api/v1/public/shares/${encodeURIComponent(shareId)}/variants/${preview.kind}`,
                     )
                   ).url
                 }
