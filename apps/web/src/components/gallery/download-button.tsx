@@ -126,7 +126,7 @@ export function DownloadButton({
       const endpoint =
         shareId === undefined
           ? `/api/v1/public/albums/${encodeURIComponent(slug)}/downloads/${encodeURIComponent(mediaId)}/${kind}`
-          : `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(mediaId)}/downloads/${kind}?share=${encodeURIComponent(shareId)}`;
+          : `/api/v1/public/shares/${encodeURIComponent(shareId)}/downloads/${kind}`;
       const signed = await publicMutation<SignedDownload>(endpoint, {
         idempotencyKey: crypto.randomUUID(),
       });
