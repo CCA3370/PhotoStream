@@ -6,13 +6,27 @@ import type {
   FaceConfigView,
   UpdateAlbumRequest,
 } from "@photostream/contracts";
+import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 import { CopyIcon, ExternalLinkIcon, KeyRoundIcon, LoaderCircleIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { AlbumDataSaverSetting } from "@/components/albums/album-data-saver-setting";
+import { CategoryForm } from "@/components/albums/category-form";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,27 +44,30 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { clientMutation } from "@/lib/client-api";
+import { toast } from "@/components/ui/toast";
+import { clientGet, clientMutation } from "@/lib/client-api";
 
 interface PasswordRotation {
   readonly album: AlbumView;
   readonly generatedPassword: string;
 }
 
-type PendingAction = "access" | "basic" | "password" | "privacy" | "publish";
-
-const stateLabels: Record<AlbumView["state"], string> = {
-  draft: "草稿",
-  live: "直播中",
-  ended: "已结束",
-  archived: "已归档",
-};
-
-function stateVariant(state: AlbumView["state"]): "default" | "outline" | "secondary" {
-  if (state === "live") return "default";
-  if (state === "archived") return "outline";
-  return "secondary";
+interface CategoryOption {
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
 }
+
+type PendingAction =
+  | "access"
+  | "basic"
+  | "originalDownload"
+  | "password"
+  | "previewDownload"
+  | "privacy"
+  | "publish";
+type SettingsTab = "access" | "basic" | "categories" | "features" | "traffic";
+type FeatureTab = "bib" | "face";
 
 function mergeAlbumUpdate(
   current: AlbumView,
@@ -63,6 +80,12 @@ function mergeAlbumUpdate(
     ...(input.description === undefined ? {} : { description: updated.description }),
     ...(input.access === undefined ? {} : { access: updated.access }),
     ...(input.publishMode === undefined ? {} : { publishMode: updated.publishMode }),
+    ...(input.previewDownloadEnabled === undefined
+      ? {}
+      : { previewDownloadEnabled: updated.previewDownloadEnabled }),
+    ...(input.originalDownloadEnabled === undefined
+      ? {}
+      : { originalDownloadEnabled: updated.originalDownloadEnabled }),
     ...(input.privacyNotice === undefined ? {} : { privacyNotice: updated.privacyNotice }),
     updatedAt: updated.updatedAt,
   };
@@ -87,7 +110,7 @@ function SettingRow({
           {status}
         </div>
         {description === undefined ? null : (
-          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
         )}
       </div>
       <div className="shrink-0">{children}</div>
@@ -96,32 +119,27 @@ function SettingRow({
 }
 
 export function AlbumSettings({
+  categories,
+  dataSaver,
   initialAlbum,
-  bibConfig,
-  faceConfig,
 }: Readonly<{
+  categories: readonly CategoryOption[];
+  dataSaver: DataSaverSettingView;
   initialAlbum: AlbumView;
-  bibConfig: BibConfigView;
-  faceConfig: FaceConfigView;
-  statistics?: unknown;
 }>) {
-  const noticeTimer = useRef<number | null>(null);
   const pendingRef = useRef(new Set<PendingAction>());
   const [album, setAlbum] = useState(initialAlbum);
   const [pendingActions, setPendingActions] = useState<ReadonlySet<PendingAction>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [title, setTitle] = useState(initialAlbum.title);
   const [description, setDescription] = useState(initialAlbum.description);
   const [privacyNotice, setPrivacyNotice] = useState(initialAlbum.privacyNotice);
-
-  useEffect(
-    () => () => {
-      if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-    },
-    [],
-  );
+  const [activeTab, setActiveTab] = useState<SettingsTab>("basic");
+  const [featureTab, setFeatureTab] = useState<FeatureTab>("bib");
+  const [bibConfig, setBibConfig] = useState<BibConfigView | null>(null);
+  const [faceConfig, setFaceConfig] = useState<FaceConfigView | null>(null);
+  const [featureLoading, setFeatureLoading] = useState(false);
 
   function isPending(action: PendingAction): boolean {
     return pendingActions.has(action);
@@ -140,9 +158,7 @@ export function AlbumSettings({
   }
 
   function showNotice(text: string): void {
-    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-    setNotice(text);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 1_800);
+    toast.add({ title: text, type: "success" });
   }
 
   async function update(
@@ -199,13 +215,50 @@ export function AlbumSettings({
 
   const basicDirty = title.trim() !== album.title || description.trim() !== album.description;
   const privacyDirty = privacyNotice.trim() !== album.privacyNotice;
+  const dirty = basicDirty || privacyDirty;
   const galleryPath = `/g/${album.slug}`;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (activeTab !== "features") return;
+    if (featureTab === "bib" && bibConfig !== null) return;
+    if (featureTab === "face" && faceConfig !== null) return;
+    let cancelled = false;
+    setFeatureLoading(true);
+    const path =
+      featureTab === "bib"
+        ? `/api/v1/albums/${album.id}/bib-config`
+        : `/api/v1/albums/${album.id}/face-config`;
+    void clientGet<BibConfigView | FaceConfigView>(path)
+      .then((config) => {
+        if (cancelled) return;
+        if (featureTab === "bib") setBibConfig(config as BibConfigView);
+        else setFaceConfig(config as FaceConfigView);
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : "查找功能配置加载失败");
+      })
+      .finally(() => {
+        if (!cancelled) setFeatureLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, album.id, bibConfig, faceConfig, featureTab]);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Badge variant={stateVariant(album.state)}>{stateLabels[album.state]}</Badge>
           <code className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {galleryPath}
           </code>
@@ -213,13 +266,12 @@ export function AlbumSettings({
           <Badge variant="outline">
             {album.publishMode === "auto" ? "自动发布" : "审核后发布"}
           </Badge>
+          {dirty ? <Badge variant="secondary">有未保存修改</Badge> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button
             aria-label="复制观众页地址"
-            onClick={() =>
-              void copyText(`${window.location.origin}${galleryPath}`, "观众页地址已复制")
-            }
+            onClick={() => void copyText(`${window.location.origin}${galleryPath}`, "观众页地址已复制")}
             size="icon-sm"
             type="button"
             variant="ghost"
@@ -237,188 +289,188 @@ export function AlbumSettings({
         </div>
       </div>
 
-      <Tabs className="gap-3" defaultValue="general">
+      <Tabs
+        className="gap-3"
+        onValueChange={(value) => {
+          if (
+            value === "basic" ||
+            value === "access" ||
+            value === "categories" ||
+            value === "features" ||
+            value === "traffic"
+          ) {
+            setActiveTab(value);
+          }
+        }}
+        value={activeTab}
+      >
         <TabsList className="w-fit max-w-full gap-1 overflow-x-auto p-1">
-          <TabsTrigger className="px-3" value="general">
-            常规
-          </TabsTrigger>
-          <TabsTrigger className="px-3" value="features">
-            查找功能
-          </TabsTrigger>
+          <TabsTrigger className="px-3" value="basic">基础信息</TabsTrigger>
+          <TabsTrigger className="px-3" value="access">访问与发布</TabsTrigger>
+          <TabsTrigger className="px-3" value="categories">分类</TabsTrigger>
+          <TabsTrigger className="px-3" value="features">查找功能</TabsTrigger>
+          <TabsTrigger className="px-3" value="traffic">流量</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-            <div className="flex min-w-0 flex-col gap-3">
-              <Card className="overflow-hidden">
-                <CardHeader className="border-b py-3.5">
-                  <CardTitle>基本信息</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <form
-                    className="flex flex-col gap-4"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void update(
-                        { title: title.trim(), description: description.trim() },
-                        "基本信息已保存",
-                        "basic",
-                      );
-                    }}
-                  >
-                    <FieldGroup className="gap-3">
-                      <Field>
-                        <FieldLabel htmlFor="settings-title">活动标题</FieldLabel>
-                        <Input
-                          id="settings-title"
-                          maxLength={120}
-                          onChange={(event) => setTitle(event.currentTarget.value)}
-                          required
-                          value={title}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
-                        <Textarea
-                          className="min-h-24 resize-y"
-                          id="settings-description"
-                          maxLength={1_000}
-                          onChange={(event) => setDescription(event.currentTarget.value)}
-                          value={description}
-                        />
-                      </Field>
-                    </FieldGroup>
-                    <div className="flex min-h-7 items-center justify-between gap-3">
-                      <span className="text-xs text-muted-foreground">
-                        {basicDirty ? "有未保存修改" : null}
-                      </span>
-                      <Button
-                        disabled={!basicDirty || title.trim().length === 0 || isPending("basic")}
-                        size="sm"
-                        type="submit"
-                      >
-                        {isPending("basic") ? (
-                          <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
-                        ) : null}
-                        {isPending("basic") ? "保存中" : "保存"}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <Card className="overflow-hidden">
-                <CardHeader className="border-b py-3.5">
-                  <CardTitle>相册隐私说明</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <form
-                    className="flex flex-col gap-4"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void update(
-                        { privacyNotice: privacyNotice.trim() },
-                        "隐私说明已保存",
-                        "privacy",
-                      );
-                    }}
-                  >
+        <TabsContent value="basic">
+          <div className="grid gap-3 xl:grid-cols-2">
+            <Card className="overflow-hidden shadow-none">
+              <CardHeader className="border-b py-3.5">
+                <CardTitle>基本信息</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <form
+                  className="flex flex-col gap-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void update(
+                      { title: title.trim(), description: description.trim() },
+                      "基本信息已保存",
+                      "basic",
+                    );
+                  }}
+                >
+                  <FieldGroup className="gap-3">
                     <Field>
-                      <FieldLabel htmlFor="privacy-notice">补充说明</FieldLabel>
-                      <Textarea
-                        className="min-h-24 resize-y"
-                        id="privacy-notice"
-                        maxLength={2_000}
-                        onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
-                        placeholder="可选。这里的内容会作为本相册的人脸找图补充说明显示。"
-                        value={privacyNotice}
+                      <FieldLabel htmlFor="settings-title">活动标题</FieldLabel>
+                      <Input
+                        id="settings-title"
+                        maxLength={120}
+                        onChange={(event) => setTitle(event.currentTarget.value)}
+                        required
+                        value={title}
                       />
                     </Field>
-                    <div className="flex min-h-7 items-center justify-between gap-3">
-                      <span className="text-xs text-muted-foreground">
-                        {privacyDirty ? "有未保存修改" : null}
-                      </span>
-                      <Button
-                        disabled={!privacyDirty || isPending("privacy")}
-                        size="sm"
-                        type="submit"
-                      >
-                        {isPending("privacy") ? (
-                          <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
-                        ) : null}
-                        {isPending("privacy") ? "保存中" : "保存"}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="flex min-w-0 flex-col gap-3">
-              <Card className="overflow-hidden">
-                <CardHeader className="border-b py-3.5">
-                  <CardTitle>访问与发布</CardTitle>
-                </CardHeader>
-                <CardContent className="divide-y p-0">
-                  <SettingRow
-                    description="关闭后访客需要输入活动口令"
-                    status={
-                      <Badge variant="secondary">
-                        {album.access === "public" ? "公开" : "口令"}
-                      </Badge>
-                    }
-                    title="公开访问"
-                  >
-                    {isPending("access") ? (
-                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Switch
-                        aria-label="公开访问"
-                        checked={album.access === "public"}
-                        onCheckedChange={(checked) =>
-                          void update(
-                            { access: checked ? "public" : "password" },
-                            "访问方式已更新",
-                            "access",
-                          )
-                        }
+                    <Field>
+                      <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
+                      <Textarea
+                        className="min-h-24 resize-y"
+                        id="settings-description"
+                        maxLength={1_000}
+                        onChange={(event) => setDescription(event.currentTarget.value)}
+                        value={description}
                       />
-                    )}
-                  </SettingRow>
-
-                  <SettingRow
-                    description="关闭后照片进入审核列表，由审核员确认发布"
-                    status={
-                      <Badge variant="secondary">
-                        {album.publishMode === "auto" ? "自动" : "审核"}
-                      </Badge>
-                    }
-                    title="自动发布"
-                  >
-                    {isPending("publish") ? (
-                      <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Switch
-                        aria-label="自动发布"
-                        checked={album.publishMode === "auto"}
-                        onCheckedChange={(checked) =>
-                          void update(
-                            { publishMode: checked ? "auto" : "review" },
-                            "发布方式已更新",
-                            "publish",
-                          )
-                        }
-                      />
-                    )}
-                  </SettingRow>
-
-                  <SettingRow description="更换后旧访客会话立即失效" title="活动口令">
+                    </Field>
+                  </FieldGroup>
+                  <div className="flex min-h-7 items-center justify-between gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {basicDirty ? "有未保存修改" : "已保存"}
+                    </span>
                     <Button
-                      disabled={isPending("password")}
-                      onClick={() => void rotatePassword()}
+                      disabled={!basicDirty || title.trim().length === 0 || isPending("basic")}
                       size="sm"
-                      type="button"
-                      variant="outline"
+                      type="submit"
+                    >
+                      {isPending("basic") ? (
+                        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                      ) : null}
+                      {isPending("basic") ? "保存中" : "保存"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden shadow-none">
+              <CardHeader className="border-b py-3.5">
+                <CardTitle>隐私说明</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <form
+                  className="flex flex-col gap-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void update(
+                      { privacyNotice: privacyNotice.trim() },
+                      "隐私说明已保存",
+                      "privacy",
+                    );
+                  }}
+                >
+                  <Field>
+                    <FieldLabel htmlFor="privacy-notice">补充说明</FieldLabel>
+                    <Textarea
+                      className="min-h-24 resize-y"
+                      id="privacy-notice"
+                      maxLength={2_000}
+                      onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
+                      placeholder="可选。这里的内容会作为本活动的隐私补充说明显示。"
+                      value={privacyNotice}
+                    />
+                  </Field>
+                  <div className="flex min-h-7 items-center justify-between gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {privacyDirty ? "有未保存修改" : "已保存"}
+                    </span>
+                    <Button disabled={!privacyDirty || isPending("privacy")} size="sm" type="submit">
+                      {isPending("privacy") ? (
+                        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                      ) : null}
+                      {isPending("privacy") ? "保存中" : "保存"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="access">
+          <div className="grid gap-3 xl:grid-cols-2">
+            <Card className="overflow-hidden shadow-none">
+              <CardHeader className="border-b py-3.5">
+                <CardTitle>访问与发布</CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y p-0">
+                <SettingRow
+                  description="关闭后访客需要输入活动口令"
+                  status={<Badge variant="secondary">{album.access === "public" ? "公开" : "口令"}</Badge>}
+                  title="公开访问"
+                >
+                  {isPending("access") ? (
+                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch
+                      aria-label="公开访问"
+                      checked={album.access === "public"}
+                      onCheckedChange={(checked) =>
+                        void update(
+                          { access: checked ? "public" : "password" },
+                          "访问方式已更新",
+                          "access",
+                        )
+                      }
+                    />
+                  )}
+                </SettingRow>
+
+                <SettingRow
+                  description="关闭后照片进入审核列表，由审核员确认后才发布"
+                  status={<Badge variant="secondary">{album.publishMode === "auto" ? "自动" : "审核"}</Badge>}
+                  title="自动发布"
+                >
+                  {isPending("publish") ? (
+                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch
+                      aria-label="自动发布"
+                      checked={album.publishMode === "auto"}
+                      onCheckedChange={(checked) =>
+                        void update(
+                          { publishMode: checked ? "auto" : "review" },
+                          "发布方式已更新",
+                          "publish",
+                        )
+                      }
+                    />
+                  )}
+                </SettingRow>
+
+                <SettingRow description="更换后旧访客会话立即失效" title="活动口令">
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      disabled={isPending("password")}
+                      render={<Button size="sm" type="button" variant="outline" />}
                     >
                       {isPending("password") ? (
                         <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
@@ -426,31 +478,140 @@ export function AlbumSettings({
                         <KeyRoundIcon data-icon="inline-start" />
                       )}
                       {isPending("password") ? "更换中" : "更换"}
-                    </Button>
-                  </SettingRow>
-                </CardContent>
-              </Card>
-            </div>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>更换活动口令？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          更换后当前旧口令和已有访客会话会立即失效，需要把新口令重新发送给观众。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => void rotatePassword()}>
+                          确认更换
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </SettingRow>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden shadow-none">
+              <CardHeader className="border-b py-3.5">
+                <CardTitle>下载权限</CardTitle>
+              </CardHeader>
+              <CardContent className="divide-y p-0">
+                <SettingRow description="允许观众下载普通尺寸图片" title="普通图下载">
+                  {isPending("previewDownload") ? (
+                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch
+                      aria-label="普通图下载"
+                      checked={album.previewDownloadEnabled}
+                      onCheckedChange={(checked) =>
+                        void update(
+                          { previewDownloadEnabled: checked },
+                          "普通图下载设置已更新",
+                          "previewDownload",
+                        )
+                      }
+                    />
+                  )}
+                </SettingRow>
+                <SettingRow description="允许观众下载原始尺寸图片，流量消耗通常更高" title="原图下载">
+                  {isPending("originalDownload") ? (
+                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch
+                      aria-label="原图下载"
+                      checked={album.originalDownloadEnabled}
+                      onCheckedChange={(checked) =>
+                        void update(
+                          { originalDownloadEnabled: checked },
+                          "原图下载设置已更新",
+                          "originalDownload",
+                        )
+                      }
+                    />
+                  )}
+                </SettingRow>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
+        <TabsContent value="categories">
+          <Card className="overflow-hidden shadow-none">
+            <CardHeader className="border-b py-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle>分类</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">管理上传和观众页使用的活动分类。</p>
+                </div>
+                <Badge variant="outline">{categories.length} 个</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-4">
+              {categories.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                  还没有分类
+                </div>
+              ) : (
+                <div className="divide-y rounded-lg border">
+                  {categories.map((category) => (
+                    <div className="flex items-center justify-between gap-3 px-3 py-2.5" key={category.id}>
+                      <span className="text-sm font-medium">{category.name}</span>
+                      <Badge variant={category.enabled ? "secondary" : "outline"}>
+                        {category.enabled ? "启用" : "停用"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <CategoryForm albumId={album.id} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="features">
-          <Tabs className="gap-3" defaultValue="bib">
+          <Tabs
+            className="gap-3"
+            onValueChange={(value) => {
+              if (value === "bib" || value === "face") setFeatureTab(value);
+            }}
+            value={featureTab}
+          >
             <TabsList className="w-fit max-w-full gap-1 overflow-x-auto p-1">
-              <TabsTrigger className="px-3" value="bib">
-                号码识别
-              </TabsTrigger>
-              <TabsTrigger className="px-3" value="face">
-                人脸找图
-              </TabsTrigger>
+              <TabsTrigger className="px-3" value="bib">号码识别</TabsTrigger>
+              <TabsTrigger className="px-3" value="face">人脸找图</TabsTrigger>
             </TabsList>
             <TabsContent value="bib">
-              <BibConfigEditor initial={bibConfig} />
+              {featureLoading && bibConfig === null ? (
+                <div className="flex min-h-40 items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                  <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
+                  正在加载号码识别配置
+                </div>
+              ) : bibConfig === null ? null : (
+                <BibConfigEditor initial={bibConfig} />
+              )}
             </TabsContent>
             <TabsContent value="face">
-              <FaceConfigEditor initial={faceConfig} />
+              {featureLoading && faceConfig === null ? (
+                <div className="flex min-h-40 items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                  <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
+                  正在加载人脸找图配置
+                </div>
+              ) : faceConfig === null ? null : (
+                <FaceConfigEditor initial={faceConfig} />
+              )}
             </TabsContent>
           </Tabs>
+        </TabsContent>
+
+        <TabsContent value="traffic">
+          <AlbumDataSaverSetting albumId={album.id} initialSetting={dataSaver} />
         </TabsContent>
       </Tabs>
 
@@ -484,14 +645,6 @@ export function AlbumSettings({
           <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
-
-      {notice === null ? null : (
-        <div className="pointer-events-none fixed inset-x-0 top-1/2 z-[70] flex -translate-y-1/2 justify-center px-4">
-          <div className="rounded-md bg-black/85 px-4 py-2 text-sm font-medium text-white shadow-xl">
-            {notice}
-          </div>
-        </div>
-      )}
 
       <ErrorDialog message={error} onClose={() => setError(null)} title="操作失败" />
     </div>
