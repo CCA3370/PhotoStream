@@ -1,0 +1,260 @@
+name: Apply security audit fixes
+
+on:
+  push:
+    branches:
+      - fix/security-audit-20260915
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: fix/security-audit-20260915
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Apply deterministic source changes
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          function read(path) { return fs.readFileSync(path, 'utf8'); }
+          function write(path, value) { fs.writeFileSync(path, value); }
+          function exact(path, from, to, expected = 1) {
+            let text = read(path);
+            const count = text.split(from).length - 1;
+            if (count !== expected) throw new Error(`${path}: expected ${expected} exact matches, found ${count}`);
+            text = text.split(from).join(to);
+            write(path, text);
+          }
+          function regex(path, pattern, replacement, expected = 1) {
+            let text = read(path);
+            const matches = [...text.matchAll(new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`))];
+            if (matches.length !== expected) throw new Error(`${path}: expected ${expected} regex matches, found ${matches.length} for ${pattern}`);
+            text = text.replace(pattern, replacement);
+            write(path, text);
+          }
+
+          const photo = 'apps/api/src/media/service.ts';
+          exact(photo,
+            'const multipartPartBytes = 8 * 1024 * 1024;\nconst incompleteIngestStatuses = [',
+            'const multipartPartBytes = 8 * 1024 * 1024;\nconst maxActiveUploadIntentsPerUploader = 32;\nconst maxOutstandingUploadBytesPerUploader = 4 * 1024 * 1024 * 1024;\nconst maxAlbumReservedBytes = 256 * 1024 * 1024 * 1024;\nconst incompleteIngestStatuses = ['
+          );
+          exact(photo,
+            '    previewDownloadEnabled: row.previewDownloadEnabled,\n    originalDownloadEnabled: row.originalDownloadEnabled,',
+            '    previewDownloadEnabled: true,\n    originalDownloadEnabled: true,'
+          );
+          exact(photo, '      await this.#applyFaceAlbumState(transaction, album.id, "live", now);\n', '');
+          exact(photo, '      await this.#applyFaceAlbumState(transaction, album.id, options.to, now);\n', '');
+          exact(photo,
+            '          ...options.input,\n          ...(options.input.access === "public" ? { bibSearchEnabled: false } : {}),',
+            '          ...options.input,\n          previewDownloadEnabled: true,\n          originalDownloadEnabled: true,\n          ...(options.input.access === "public" ? { bibSearchEnabled: false } : {}),'
+          );
+          exact(photo,
+            '      if (accessChanged && options.input.access === "public") {\n        await this.#disableFaceForPublicAccess(transaction, album.id, now);\n      }\n',
+            ''
+          );
+          exact(photo,
+            '    const faceSearchAvailable =\n      this.#config.FACE_SEARCH_GLOBAL_ENABLED &&\n      unlocked &&\n      album.access === "password" &&\n      faceIndex?.enabled === true &&\n      (faceIndex.indexState === "ready" || faceIndex.indexState === "degraded");',
+            '    const faceSearchAvailable = faceIndex?.enabled === true;'
+          );
+          exact(photo,
+            '        previewDownloadEnabled: album.previewDownloadEnabled,\n        originalDownloadEnabled: album.originalDownloadEnabled,\n        privacyNotice: album.privacyNotice,\n        faceSearchAvailable,\n        faceSearchNoticeVersion: faceSearchAvailable ? (faceIndex.noticeVersion ?? null) : null,',
+            '        previewDownloadEnabled: true,\n        originalDownloadEnabled: true,\n        privacyNotice: album.privacyNotice,\n        faceSearchAvailable,\n        faceSearchNoticeVersion: faceSearchAvailable ? this.#config.FACE_SEARCH_NOTICE_VERSION : null,'
+          );
+          exact(photo,
+            '          preview:\n            album.previewDownloadEnabled &&\n            (byMedia.get(media.id) ?? []).some(\n              (variant) => variant.kind === "photo_1920" && variant.verified,\n            ),\n          original:\n            album.originalDownloadEnabled &&\n            (byMedia.get(media.id) ?? []).some(\n              (variant) => variant.kind === "photo_original" && variant.verified,\n            ),',
+            '          preview: (byMedia.get(media.id) ?? []).some(\n            (variant) => variant.kind === "photo_1920" && variant.verified,\n          ),\n          original: (byMedia.get(media.id) ?? []).some(\n            (variant) => variant.kind === "photo_original" && variant.verified,\n          ),'
+          );
+          exact(photo,
+            '      const original = options.input.variants.find((variant) => variant.kind === "photo_original");',
+            `      const requestedBytes = options.input.variants.reduce((sum, variant) => sum + variant.bytes, 0);\n      await this.#advisoryLock(transaction, \`uploader-upload-quota:\${options.actor.id}\`);\n      const quotaNow = new Date();\n      const [uploaderQuota] = await transaction\n        .select({\n          activeIntents: sql<number>\`count(distinct \${schema.uploadIntents.id})::int\`,\n          outstandingBytes: sql<number>\`coalesce(sum(case when \${schema.mediaVariants.verified} = false then \${schema.mediaVariants.expectedBytes} else 0 end), 0)::bigint\`,\n        })\n        .from(schema.uploadIntents)\n        .innerJoin(schema.mediaVariants, eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId))\n        .where(\n          and(\n            eq(schema.uploadIntents.uploaderId, options.actor.id),\n            eq(schema.uploadIntents.status, "active"),\n            gt(schema.uploadIntents.expiresAt, quotaNow),\n          ),\n        );\n      if ((uploaderQuota?.activeIntents ?? 0) >= maxActiveUploadIntentsPerUploader) {\n        throw new AppError({\n          code: "MEDIA_LIMIT_EXCEEDED",\n          message: "同时进行的上传任务过多，请等待现有上传完成后重试",\n          statusCode: 409,\n        });\n      }\n      if (Number(uploaderQuota?.outstandingBytes ?? 0) + requestedBytes > maxOutstandingUploadBytesPerUploader) {\n        throw new AppError({\n          code: "MEDIA_LIMIT_EXCEEDED",\n          message: "未完成上传占用已达到上限，请等待现有上传完成后重试",\n          statusCode: 409,\n        });\n      }\n      const [albumQuota] = await transaction\n        .select({ reservedBytes: sql<number>\`coalesce(sum(\${schema.mediaVariants.expectedBytes}), 0)::bigint\` })\n        .from(schema.mediaVariants)\n        .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))\n        .where(\n          and(\n            eq(schema.media.albumId, album.id),\n            sql\`\${schema.media.publicationStatus} <> 'deleted'\`,\n          ),\n        );\n      if (Number(albumQuota?.reservedBytes ?? 0) + requestedBytes > maxAlbumReservedBytes) {\n        throw new AppError({\n          code: "MEDIA_LIMIT_EXCEEDED",\n          message: "相册已达到 256 GiB 上传配额",\n          statusCode: 409,\n        });\n      }\n\n      const original = options.input.variants.find((variant) => variant.kind === "photo_original");`
+          );
+          regex(photo, /\n  async #applyFaceAlbumState\([\s\S]*?\n  async #disableFaceForPublicAccess\(/, '\n  async #disableFaceForPublicAccess(');
+          regex(photo, /\n  async #disableFaceForPublicAccess\([\s\S]*?\n  async #albumById\(/, '\n  async #albumById(');
+
+          const operations = 'apps/api/src/media/operations-service.ts';
+          exact(operations,
+            '  async retryDeletion(options: {\n    readonly actor: InternalActor & { readonly authenticatedAt: Date };',
+            '  async retryDeletion(options: {\n    readonly actor: InternalActor;'
+          );
+          exact(operations, '    assertRecentAuthentication(options.actor.authenticatedAt, now);\n', '', 1);
+          exact(operations,
+            '    const downloadSelection = {\n      preview: { variantKind: "photo_1920", enabled: album.previewDownloadEnabled },\n      original: { variantKind: "photo_original", enabled: album.originalDownloadEnabled },\n    } satisfies Record<\n      DownloadKind,\n      { variantKind: (typeof schema.variantKindEnum.enumValues)[number]; enabled: boolean }\n    >;\n    const { variantKind, enabled } = downloadSelection[options.kind];\n    if (!enabled) {\n      throw new AppError({ code: "DOWNLOAD_DISABLED", message: "该下载未开启", statusCode: 403 });\n    }',
+            '    const downloadSelection = {\n      preview: "photo_1920",\n      original: "photo_original",\n    } satisfies Record<DownloadKind, (typeof schema.variantKindEnum.enumValues)[number]>;\n    const variantKind = downloadSelection[options.kind];'
+          );
+
+          const share = 'apps/api/src/media/share-service.ts';
+          exact(share,
+            '    return this.#mediaView(album.id, options.mediaId, {\n      preview: album.previewDownloadEnabled,\n      original: album.originalDownloadEnabled,\n    });',
+            '    return this.#mediaView(album.id, options.mediaId);'
+          );
+          exact(share,
+            '    return this.#mediaView(context.album.id, options.mediaId, { preview: true, original: true });',
+            '    return this.#mediaView(context.album.id, options.mediaId);'
+          );
+          exact(share,
+            '  async #mediaView(\n    albumId: string,\n    mediaId: string,\n    downloads: { readonly preview: boolean; readonly original: boolean },\n  ): Promise<PublicMediaView> {',
+            '  async #mediaView(albumId: string, mediaId: string): Promise<PublicMediaView> {'
+          );
+          exact(share,
+            '      downloads: {\n        preview: downloads.preview && preview1920 !== undefined,\n        original: downloads.original && original !== undefined,\n        originalBytes: downloads.original ? (original?.bytes ?? null) : null,\n      },',
+            '      downloads: {\n        preview: preview1920 !== undefined,\n        original: original !== undefined,\n        originalBytes: original?.bytes ?? null,\n      },'
+          );
+
+          const faceService = 'apps/api/src/face/service.ts';
+          exact(faceService,
+            '  async excludeMedia(options: {\n    actor: InternalActor & { authenticatedAt: Date };',
+            '  async excludeMedia(options: {\n    actor: InternalActor;'
+          );
+          exact(faceService, '    requireRecentAuthentication(options.actor.authenticatedAt);\n', '');
+
+          const faceRoute = 'apps/api/src/routes/face.ts';
+          exact(faceRoute,
+            'import type { AuthService } from "../auth/service.js";\nimport type { AppConfig } from "../config.js";',
+            'import type { DashboardService } from "../analytics/dashboard-service.js";\nimport type { AuthService } from "../auth/service.js";\nimport type { AppConfig } from "../config.js";'
+          );
+          regex(faceRoute, /\nfunction asRecord\([\s\S]*?\nexport async function registerFaceRoutes/, '\nexport async function registerFaceRoutes');
+          exact(faceRoute,
+            '    eventBridgeVerifier: EventBridgeVerifier;\n    config: AppConfig;',
+            '    eventBridgeVerifier: EventBridgeVerifier;\n    dashboardService?: DashboardService;\n    config: AppConfig;'
+          );
+          exact(faceRoute,
+            '        actor: { ...actorFrom(session), authenticatedAt: new Date() },',
+            '        actor: actorFrom(session),',
+            1
+          );
+          exact(faceRoute,
+            '      return options.faceService.createSearch({\n        slug: request.params.slug,\n        visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),\n        ip: request.ip,\n        noticeVersion: request.body.noticeVersion,\n        declaration: request.body.declaration,\n        bytes: request.body.reference.bytes,\n      });',
+            '      const result = await options.faceService.createSearch({\n        slug: request.params.slug,\n        visitorToken: faceSearchVisitorToken(request, reply, options.config, request.params.slug),\n        ip: request.ip,\n        noticeVersion: request.body.noticeVersion,\n        declaration: request.body.declaration,\n        bytes: request.body.reference.bytes,\n      });\n      await options.dashboardService?.recordSearchUsage({ slug: request.params.slug, method: "face" });\n      return result;'
+          );
+          exact(faceRoute,
+            '      const result = await options.faceService.processEvent(request.body);\n      logFaceSearchSimilarityResults(request, request.body, options.config);\n      return result;',
+            '      return options.faceService.processEvent(request.body);'
+          );
+
+          const opsRoute = 'apps/api/src/routes/operations.ts';
+          exact(opsRoute, 'import type { FaceService } from "../face/service.js";\n', '');
+          exact(opsRoute, '    readonly faceService?: FaceService;\n', '');
+          regex(opsRoute,
+            /      const actor = actorFrom\(session\);[\s\S]*?      return updated;/,
+            '      return options.photoService.updateAlbum({\n        actor: actorFrom(session),\n        albumId: request.params.id,\n        input: request.body,\n        requestId: request.id,\n      });'
+          );
+          exact(opsRoute,
+            '        actor: { ...actorFrom(session), authenticatedAt: new Date() },\n        taskId: request.params.id,',
+            '        actor: actorFrom(session),\n        taskId: request.params.id,'
+          );
+
+          const bibRoute = 'apps/api/src/routes/bib.ts';
+          exact(bibRoute,
+            'import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";',
+            'import type { DashboardService } from "../analytics/dashboard-service.js";\nimport { requireInternalCsrf, requireInternalSession } from "../auth/http.js";'
+          );
+          exact(bibRoute,
+            '    readonly bibService: BibService;\n    readonly config: AppConfig;',
+            '    readonly bibService: BibService;\n    readonly dashboardService?: DashboardService;\n    readonly config: AppConfig;'
+          );
+          exact(bibRoute,
+            '      return options.bibService.searchPublic({\n        slug: request.params.slug,\n        visitorToken: visitorSessionToken(request, options.config, request.params.slug),\n        number: request.body.number,\n        cursor: request.body.cursor,\n      });',
+            '      const result = await options.bibService.searchPublic({\n        slug: request.params.slug,\n        visitorToken: visitorSessionToken(request, options.config, request.params.slug),\n        number: request.body.number,\n        cursor: request.body.cursor,\n      });\n      if (request.body.cursor === undefined) {\n        await options.dashboardService?.recordSearchUsage({ slug: request.params.slug, method: "number" });\n      }\n      return result;'
+          );
+          exact(bibRoute,
+            '      return options.bibService.filterPublicAttributes({\n        slug: request.params.slug,\n        visitorToken: visitorSessionToken(request, options.config, request.params.slug),\n        gradeOptionId: request.body.gradeOptionId,\n        classOptionId: request.body.classOptionId,\n        categoryId: request.body.categoryId,\n        cursor: request.body.cursor,\n      });',
+            '      const result = await options.bibService.filterPublicAttributes({\n        slug: request.params.slug,\n        visitorToken: visitorSessionToken(request, options.config, request.params.slug),\n        gradeOptionId: request.body.gradeOptionId,\n        classOptionId: request.body.classOptionId,\n        categoryId: request.body.categoryId,\n        cursor: request.body.cursor,\n      });\n      if (request.body.cursor === undefined) {\n        await options.dashboardService?.recordSearchUsage({ slug: request.params.slug, method: "attributes" });\n      }\n      return result;'
+          );
+
+          const dashboard = 'apps/api/src/routes/dashboard.ts';
+          exact(dashboard,
+            'import type { AppConfig } from "../config.js";',
+            'import type { AppConfig } from "../config.js";\nimport type { PhotoService } from "../media/service.js";\nimport { visitorSessionToken } from "../media/visitor-http.js";'
+          );
+          regex(dashboard, /const searchUsageRequestSchema = z[\s\S]*?\.strict\(\);\n/, '');
+          exact(dashboard,
+            '    readonly dashboardService: DashboardService;\n    readonly config: AppConfig;',
+            '    readonly dashboardService: DashboardService;\n    readonly photoService: PhotoService;\n    readonly config: AppConfig;'
+          );
+          regex(dashboard,
+            /\n  typed\.post\(\n    "\/api\/v1\/public\/albums\/:slug\/analytics\/search-usage",[\s\S]*?\n  \);\n(?=\n  typed\.post\(\n    "\/api\/v1\/public\/albums\/:slug\/analytics\/media-delivery")/,
+            ''
+          );
+          exact(dashboard,
+            '    async (request) => {\n      await options.dashboardService.recordMediaDelivery({',
+            '    async (request) => {\n      await options.photoService.getAuthorizedPublicAlbum(\n        request.params.slug,\n        visitorSessionToken(request, options.config, request.params.slug),\n      );\n      await options.dashboardService.recordMediaDelivery({'
+          );
+
+          const app = 'apps/api/src/app.ts';
+          exact(app,
+            '  if (options.dashboardService !== undefined) {\n    await registerDashboardRoutes(app, {\n      authService,\n      dashboardService: options.dashboardService,\n      config: options.config,\n    });\n  }',
+            '  if (options.dashboardService !== undefined && options.photoService !== undefined) {\n    await registerDashboardRoutes(app, {\n      authService,\n      dashboardService: options.dashboardService,\n      photoService: options.photoService,\n      config: options.config,\n    });\n  }'
+          );
+          exact(app,
+            '      operationsService: options.operationsService,\n      ...(options.faceService === undefined ? {} : { faceService: options.faceService }),\n      config: options.config,',
+            '      operationsService: options.operationsService,\n      config: options.config,'
+          );
+          exact(app,
+            '      authService,\n      bibService: options.bibService,\n      config: options.config,',
+            '      authService,\n      bibService: options.bibService,\n      ...(options.dashboardService === undefined ? {} : { dashboardService: options.dashboardService }),\n      config: options.config,'
+          );
+          exact(app,
+            '      eventBridgeVerifier: options.eventBridgeVerifier,\n      config: options.config,',
+            '      eventBridgeVerifier: options.eventBridgeVerifier,\n      ...(options.dashboardService === undefined ? {} : { dashboardService: options.dashboardService }),\n      config: options.config,'
+          );
+
+          const panel = 'apps/web/src/components/gallery/bib-search-panel.tsx';
+          exact(panel, 'import { recordSearchUsage } from "@/lib/search-usage";\n', '');
+          exact(panel, '  async function search(cursor?: string, trackUsage = true): Promise<void> {', '  async function search(cursor?: string): Promise<void> {');
+          exact(panel, '      if (cursor === undefined && trackUsage) recordSearchUsage(slug, mode);\n', '');
+          exact(panel, '    if (resultMode === "number" || resultMode === "attributes") void search(undefined, false);', '    if (resultMode === "number" || resultMode === "attributes") void search();');
+          exact(panel, '      recordSearchUsage(slug, "face");\n', '');
+          fs.rmSync('apps/web/src/lib/search-usage.ts');
+
+          const settings = 'apps/web/src/components/albums/album-settings.tsx';
+          exact(settings, '  | "original-download"\n', '');
+          exact(settings, '  | "preview-download"\n', '');
+          regex(settings, /    \.\.\.\(input\.previewDownloadEnabled === undefined[\s\S]*?\n      : \{ originalDownloadEnabled: updated\.originalDownloadEnabled \} \),\n/, '');
+          regex(settings,
+            /\n              <Card className="overflow-hidden">\n                <CardHeader className="border-b py-3\.5">\n                  <CardTitle>下载权限<\/CardTitle>[\s\S]*?\n              <\/Card>\n/,
+            '\n'
+          );
+
+          console.log('Source transformations applied successfully.');
+          NODE
+      - name: Refresh lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Format changed source
+        run: |
+          pnpm exec biome format --write \
+            apps/api/src/media/service.ts \
+            apps/api/src/media/operations-service.ts \
+            apps/api/src/media/share-service.ts \
+            apps/api/src/face/service.ts \
+            apps/api/src/routes/face.ts \
+            apps/api/src/routes/operations.ts \
+            apps/api/src/routes/bib.ts \
+            apps/api/src/routes/dashboard.ts \
+            apps/api/src/app.ts \
+            apps/web/src/components/gallery/bib-search-panel.tsx \
+            apps/web/src/components/albums/album-settings.tsx
+          git diff --check
+      - name: Commit fixes and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/security-audit-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply security audit fixes"
+          git push origin HEAD:fix/security-audit-20260915
