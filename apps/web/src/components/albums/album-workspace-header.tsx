@@ -28,18 +28,21 @@ export function AlbumWorkspaceHeader({
   state,
   title,
 }: Readonly<{
-  actions?: ReactNode;
+  actions?: ReactNode | undefined;
   albumId: string;
-  description?: string | null;
+  description?: string | null | undefined;
   headingId: string;
-  metrics?: readonly { readonly label: string; readonly value: string | number }[];
+  metrics?: readonly { readonly label: string; readonly value: string | number }[] | undefined;
   section: string;
-  state?: AlbumView["state"];
+  state?: AlbumView["state"] | undefined;
   title: string;
 }>) {
   return (
     <header className="flex flex-col gap-3">
-      <nav aria-label="面包屑" className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+      <nav
+        aria-label="面包屑"
+        className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+      >
         <Link className="shrink-0 hover:text-foreground" href="/studio/albums">
           活动
         </Link>
@@ -76,7 +79,9 @@ export function AlbumWorkspaceHeader({
             </div>
           )}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+        ) : null}
       </div>
     </header>
   );
