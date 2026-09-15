@@ -115,7 +115,7 @@ maybeDescribe("single-photo sharing", () => {
 
   afterAll(async () => pool.end());
 
-  it("grants full single-photo interaction without unlocking the album", async () => {
+  it("grants full single-photo interaction using only the share ID", async () => {
     const [album] = await database
       .insert(schema.albums)
       .values({
@@ -214,26 +214,21 @@ maybeDescribe("single-photo sharing", () => {
       mediaId: media.id,
     });
 
-    const shared = await shareService.getSharedMedia({
-      slug: album.slug,
-      mediaId: media.id,
-      shareId: share.shareId,
-    });
-    expect(shared.id).toBe(media.id);
-    expect(shared.variants.map((variant) => variant.kind).sort()).toEqual([
+    const shared = await shareService.getShareView({ shareId: share.shareId });
+    expect(shared.slug).toBe(album.slug);
+    expect(shared.media.id).toBe(media.id);
+    expect(shared.media.variants.map((variant) => variant.kind).sort()).toEqual([
       "photo_1920",
       "photo_960",
     ]);
-    expect(shared.downloads).toEqual({
+    expect(shared.media.downloads).toEqual({
       preview: true,
       original: true,
       originalBytes: 4_000_000,
     });
-    expect(JSON.stringify(shared)).not.toContain("photo_original");
+    expect(JSON.stringify(shared.media)).not.toContain("photo_original");
 
     const refreshed = await shareService.refreshSharedVariant({
-      slug: album.slug,
-      mediaId: media.id,
       shareId: share.shareId,
       kind: "photo_1920",
     });
@@ -241,16 +236,12 @@ maybeDescribe("single-photo sharing", () => {
     expect(refreshed.url).toContain("http://127.0.0.1:3002");
 
     const initialLike = await shareService.getSharedLikeState({
-      slug: album.slug,
-      mediaId: media.id,
       shareId: share.shareId,
       viewerId: "share-viewer-one",
     });
     expect(initialLike).toEqual({ mediaId: media.id, count: 0, likedByViewer: false });
 
     const liked = await shareService.setSharedLike({
-      slug: album.slug,
-      mediaId: media.id,
       shareId: share.shareId,
       viewerId: "share-viewer-one",
       liked: true,
@@ -258,24 +249,16 @@ maybeDescribe("single-photo sharing", () => {
     expect(liked).toEqual({ mediaId: media.id, count: 1, likedByViewer: true });
     expect(
       await shareService.getSharedLikeState({
-        slug: album.slug,
-        mediaId: media.id,
         shareId: share.shareId,
         viewerId: "share-viewer-two",
       }),
     ).toEqual({ mediaId: media.id, count: 1, likedByViewer: false });
 
-    const original = await shareService.issueSharedOriginalView({
-      slug: album.slug,
-      mediaId: media.id,
-      shareId: share.shareId,
-    });
+    const original = await shareService.issueSharedOriginalView({ shareId: share.shareId });
     expect(original.bytes).toBe(4_000_000);
     expect(original.filename).toMatch(/original\.jpg$/u);
 
     const download = await shareService.issueSharedDownload({
-      slug: album.slug,
-      mediaId: media.id,
       shareId: share.shareId,
       kind: "original",
       visitorId: "share-download-viewer",
@@ -301,11 +284,7 @@ maybeDescribe("single-photo sharing", () => {
     ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
     await expect(
-      shareService.getSharedMedia({
-        slug: album.slug,
-        mediaId: randomUUID(),
-        shareId: share.shareId,
-      }),
+      shareService.getShareView({ shareId: randomUUID() }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
 
     await database
@@ -314,18 +293,10 @@ maybeDescribe("single-photo sharing", () => {
       .where(eq(schema.albums.id, album.id));
 
     await expect(
-      shareService.getSharedMedia({
-        slug: album.slug,
-        mediaId: media.id,
-        shareId: share.shareId,
-      }),
+      shareService.getShareView({ shareId: share.shareId }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
-      shareService.issueSharedOriginalView({
-        slug: album.slug,
-        mediaId: media.id,
-        shareId: share.shareId,
-      }),
+      shareService.issueSharedOriginalView({ shareId: share.shareId }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
