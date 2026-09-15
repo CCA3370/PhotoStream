@@ -11,18 +11,14 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { consumeNetworkImageDownloadCompletion } from "@/lib/image-download-progress";
 import { cn } from "@/lib/utils";
 
-const weChatSaveHintStorageKey = "photostream.wechat-save-hint.dismissed.v1";
 const weChatSaveHintToastId = "photostream-wechat-save-hint";
-const weChatNetworkSaveHintToastId = "photostream-wechat-network-save-hint";
 const weChatLongPressDurationMs = 650;
 const weChatLongPressMoveTolerancePx = 12;
 
 interface PhotoStreamToastData {
-  readonly presentation?: "wechat-save-hint" | "wechat-network-save-hint";
+  readonly presentation?: "wechat-save-hint";
 }
 
 function isWeChatSaveHintTitle(title: ReactNode): boolean {
@@ -32,24 +28,6 @@ function isWeChatSaveHintTitle(title: ReactNode): boolean {
   );
 }
 
-function isWeChatSaveHintSuppressed(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(weChatSaveHintStorageKey) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function suppressWeChatSaveHint(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(weChatSaveHintStorageKey, "1");
-  } catch {
-    // Keep the confirmation usable even when storage is unavailable.
-  }
-}
-
 const toast = ToastPrimitive.createToastManager();
 const baseToastAdd = toast.add.bind(toast);
 type ToastAddOptions = Parameters<typeof toast.add>[0];
@@ -57,30 +35,11 @@ type ToastAddOptions = Parameters<typeof toast.add>[0];
 toast.add = ((options: ToastAddOptions) => {
   if (!isWeChatSaveHintTitle(options.title)) return baseToastAdd(options);
 
-  if (consumeNetworkImageDownloadCompletion()) {
-    return baseToastAdd({
-      ...options,
-      id: weChatNetworkSaveHintToastId,
-      title: "长按图片保存",
-      description: "按住图片，圆环闭合后选择「保存到手机」",
-      type: "info",
-      priority: "high",
-      timeout: 0,
-      data: {
-        ...(typeof options.data === "object" && options.data !== null ? options.data : {}),
-        presentation: "wechat-network-save-hint",
-      },
-    });
-  }
-
-  if (isWeChatSaveHintSuppressed()) return options.id ?? weChatSaveHintToastId;
-
   return baseToastAdd({
     ...options,
-    id: options.id ?? weChatSaveHintToastId,
-    title: "还差一步",
-    description:
-      "图片已准备好，但还没有保存到手机。点击「我知道了」后，长按图片并选择「保存到手机」。",
+    id: weChatSaveHintToastId,
+    title: "长按图片保存",
+    description: "按住图片，圆环闭合后选择「保存到手机」",
     type: "info",
     priority: "high",
     timeout: 0,
@@ -246,64 +205,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   );
 }
 
-function WeChatSaveHintToast({ toastItem }: { toastItem: ToastPrimitive.Root.Props["toast"] }) {
-  const [dontRemindAgain, setDontRemindAgain] = useState(false);
-
-  return (
-    <ToastPrimitive.Root
-      aria-describedby="wechat-save-hint-description"
-      aria-labelledby="wechat-save-hint-title"
-      aria-modal="true"
-      className="dark public-theme pointer-events-auto fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4 py-6 text-white opacity-100 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0"
-      role="dialog"
-      toast={toastItem}
-    >
-      <div className="w-full max-w-sm rounded-3xl border border-white/12 bg-zinc-950/95 p-5 shadow-2xl shadow-black/50 sm:p-6">
-        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-sky-400/15 text-sky-300">
-          <InfoIcon aria-hidden="true" className="size-7" />
-        </div>
-        <ToastPrimitive.Title
-          className="text-center text-xl font-semibold tracking-tight"
-          id="wechat-save-hint-title"
-        />
-        <ToastPrimitive.Description
-          className="mt-2 text-center text-[15px] leading-6 text-white/72"
-          id="wechat-save-hint-description"
-        />
-
-        <label
-          className="mt-5 flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] px-3.5 py-2.5 text-sm text-white/85 transition-colors hover:bg-white/[0.08]"
-          htmlFor="wechat-save-hint-dont-remind"
-        >
-          <Checkbox
-            checked={dontRemindAgain}
-            className="size-5 rounded-md border-2 border-white/30 bg-white/[0.06] data-checked:border-primary data-checked:bg-primary"
-            id="wechat-save-hint-dont-remind"
-            onCheckedChange={setDontRemindAgain}
-          />
-          <span>下次不再提醒</span>
-        </label>
-
-        <ToastPrimitive.Close
-          onClick={() => {
-            if (dontRemindAgain) suppressWeChatSaveHint();
-          }}
-          render={
-            <Button
-              autoFocus
-              className="mt-4 h-11 w-full rounded-xl text-base font-medium"
-              type="button"
-            />
-          }
-        >
-          我知道了
-        </ToastPrimitive.Close>
-      </div>
-    </ToastPrimitive.Root>
-  );
-}
-
-function WeChatNetworkSaveHintToast({
+function WeChatSaveHintToast({
   toastItem,
 }: {
   toastItem: ToastPrimitive.Root.Props["toast"];
@@ -458,20 +360,12 @@ function isWeChatSaveHintToast(toastItem: ToastPrimitive.Root.Props["toast"]): b
   return data?.presentation === "wechat-save-hint";
 }
 
-function isWeChatNetworkSaveHintToast(toastItem: ToastPrimitive.Root.Props["toast"]): boolean {
-  const data = toastItem.data as PhotoStreamToastData | undefined;
-  return data?.presentation === "wechat-network-save-hint";
-}
-
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager();
 
   return toasts.map((toastItem) => {
     if (isWeChatSaveHintToast(toastItem)) {
       return <WeChatSaveHintToast key={toastItem.id} toastItem={toastItem} />;
-    }
-    if (isWeChatNetworkSaveHintToast(toastItem)) {
-      return <WeChatNetworkSaveHintToast key={toastItem.id} toastItem={toastItem} />;
     }
     return (
       <Toast key={toastItem.id} toast={toastItem}>
