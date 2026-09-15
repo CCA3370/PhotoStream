@@ -272,7 +272,8 @@ maybeDescribe("photo vertical slice transactions", () => {
     });
     expect(retried).toEqual(first);
     expect(first.album.access).toBe("password");
-    expect(first.album.previewDownloadEnabled).toBe(false);
+    expect(first.album.previewDownloadEnabled).toBe(true);
+    expect(first.album.originalDownloadEnabled).toBe(true);
     await service.startAlbum({
       actor: { id: adminId, role: "admin" },
       albumId: first.album.id,
