@@ -1,15 +1,10 @@
-import type { BibConfigView } from "@photostream/contracts";
+import type { AlbumView, BibConfigView } from "@photostream/contracts";
 
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
 import { AlbumWorkspaceHeader } from "@/components/albums/album-workspace-header";
 import { UploadQueue } from "@/components/uploads/upload-queue";
 import { serverApi } from "@/lib/api";
 import { requireInternalSession } from "@/lib/server-auth";
-
-interface AlbumDetails {
-  readonly id: string;
-  readonly title: string;
-}
 
 interface CategoryDetails {
   readonly id: string;
@@ -21,14 +16,20 @@ export default async function UploadPage({ params }: { params: Promise<{ id: str
   const session = await requireInternalSession(["admin", "uploader"]);
   const { id } = await params;
   const [album, categories, bibConfig] = await Promise.all([
-    serverApi<AlbumDetails>(`/api/v1/albums/${id}`),
+    serverApi<AlbumView>(`/api/v1/albums/${id}`),
     serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
     serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
   ]);
 
   return (
     <section aria-labelledby="upload-title" className="flex flex-col gap-4">
-      <AlbumWorkspaceHeader headingId="upload-title" section="上传工作区" title={album.title} />
+      <AlbumWorkspaceHeader
+        albumId={id}
+        headingId="upload-title"
+        section="上传"
+        state={album.state}
+        title={album.title}
+      />
       <AlbumContextNav albumId={id} current="upload" role={session.user.role} />
       <UploadQueue
         albumId={album.id}
