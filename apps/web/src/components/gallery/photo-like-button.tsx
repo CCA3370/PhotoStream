@@ -96,7 +96,7 @@ export function PhotoLikeButton({
       const endpoint =
         shareId === undefined
           ? `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/like`
-          : `/api/v1/public/albums/${encodeURIComponent(slug)}/shared/${encodeURIComponent(mediaId)}/like?share=${encodeURIComponent(shareId)}`;
+          : `/api/v1/public/shares/${encodeURIComponent(shareId)}/like`;
       const result = await publicMutation<PhotoLikeState>(
         endpoint,
         nextLiked ? {} : { method: "DELETE" },
