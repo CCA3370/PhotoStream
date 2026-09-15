@@ -65,8 +65,95 @@ interface QueueTaskView {
   readonly error: string | null;
 }
 
-const processingConcurrency = 3;
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const mebibyte = 1024 ** 2;
+const adaptiveSampleIntervalMs = 2_000;
+const eventLoopPressureMs = 180;
+const eventLoopHealthyMs = 60;
+const heapPressureThreshold = 0.82;
+const heapHealthyThreshold = 0.68;
+
+interface AdaptiveProcessingProfile {
+  readonly initial: number;
+  readonly max: number;
+  readonly inputByteBudget: number;
+}
+
+interface NavigatorWithDeviceMemory extends Navigator {
+  readonly deviceMemory?: number;
+}
+
+interface PerformanceMemorySnapshot {
+  readonly jsHeapSizeLimit: number;
+  readonly usedJSHeapSize: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  readonly memory?: PerformanceMemorySnapshot;
+}
+
+const defaultProcessingProfile: AdaptiveProcessingProfile = {
+  initial: 3,
+  max: 4,
+  inputByteBudget: 96 * mebibyte,
+};
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function adaptiveProcessingProfile(): AdaptiveProcessingProfile {
+  if (typeof navigator === "undefined") return defaultProcessingProfile;
+
+  const cores = Math.max(1, navigator.hardwareConcurrency || 4);
+  const memoryGb = (navigator as NavigatorWithDeviceMemory).deviceMemory;
+  const likelyMobile =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches &&
+    Math.min(window.screen.width, window.screen.height) < 900;
+  const platformMax = likelyMobile ? 4 : 8;
+
+  const cpuInitial =
+    cores <= 2 ? 1 : cores <= 4 ? 2 : cores <= 6 ? 3 : cores <= 8 ? 4 : cores <= 12 ? 5 : 6;
+  const cpuMax = clamp(Math.ceil(cores * 0.75), 1, platformMax);
+  const memoryMax =
+    memoryGb === undefined
+      ? platformMax
+      : memoryGb <= 2
+        ? 1
+        : memoryGb <= 4
+          ? 2
+          : memoryGb <= 8
+            ? 5
+            : memoryGb <= 16
+              ? 7
+              : platformMax;
+  const max = clamp(Math.min(platformMax, cpuMax, memoryMax), 1, platformMax);
+  const initial = clamp(Math.min(cpuInitial, max), 1, max);
+  const inputByteBudget = clamp(
+    Math.round((memoryGb ?? 8) * 16 * mebibyte),
+    48 * mebibyte,
+    likelyMobile ? 96 * mebibyte : 256 * mebibyte,
+  );
+
+  return { initial, max, inputByteBudget };
+}
+
+function heapPressureRatio(): number | null {
+  if (typeof performance === "undefined") return null;
+  const memory = (performance as PerformanceWithMemory).memory;
+  if (memory === undefined || memory.jsHeapSizeLimit <= 0) return null;
+  return memory.usedJSHeapSize / memory.jsHeapSizeLimit;
+}
+
+function isResourcePressureError(error: unknown): boolean {
+  if (error instanceof RangeError) return true;
+  if (!(error instanceof Error)) return false;
+  const message = `${error.name} ${error.message}`.toLowerCase();
+  return ["memory", "allocation", "out of memory", "imagebitmap", "canvas"].some((token) =>
+    message.includes(token),
+  );
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -99,7 +186,13 @@ export function UploadQueue({
   const previewUrls = useRef<string[]>([]);
   const taskStore = useRef(new Map<string, QueueTask>());
   const runningTasks = useRef(0);
+  const runningInputBytes = useRef(0);
   const pausedRef = useRef(false);
+  const processingProfile = useRef<AdaptiveProcessingProfile>(defaultProcessingProfile);
+  const processingLimitRef = useRef(defaultProcessingProfile.initial);
+  const healthySamples = useRef(0);
+  const [processingLimit, setProcessingLimit] = useState(defaultProcessingProfile.initial);
+  const [processingMax, setProcessingMax] = useState(defaultProcessingProfile.max);
   const [categoryId, setCategoryId] = useState("uncategorized");
   const [items, setItems] = useState<readonly PreviewPhoto[]>([]);
   const [tasks, setTasks] = useState<readonly QueueTaskView[]>([]);
@@ -136,6 +229,7 @@ export function UploadQueue({
     task.status = "processing";
     task.error = null;
     runningTasks.current += 1;
+    runningInputBytes.current += task.file.size;
     syncTasks();
     try {
       const processed = await processPhotoInWorker(task.file);
@@ -162,8 +256,14 @@ export function UploadQueue({
     } catch (error) {
       task.status = "failed";
       task.error = error instanceof Error ? error.message : "本地处理失败";
+      if (isResourcePressureError(error) && processingLimitRef.current > 1) {
+        healthySamples.current = 0;
+        processingLimitRef.current -= 1;
+        setProcessingLimit(processingLimitRef.current);
+      }
     } finally {
       runningTasks.current = Math.max(0, runningTasks.current - 1);
+      runningInputBytes.current = Math.max(0, runningInputBytes.current - task.file.size);
       syncTasks();
       pump();
     }
@@ -171,8 +271,14 @@ export function UploadQueue({
 
   function pump(): void {
     if (pausedRef.current) return;
-    while (runningTasks.current < processingConcurrency) {
-      const next = [...taskStore.current.values()].find((task) => task.status === "queued");
+    while (runningTasks.current < processingLimitRef.current) {
+      const queued = [...taskStore.current.values()].filter((task) => task.status === "queued");
+      if (queued.length === 0) break;
+      const next =
+        queued.find(
+          (task) =>
+            runningInputBytes.current + task.file.size <= processingProfile.current.inputByteBudget,
+        ) ?? (runningTasks.current === 0 ? queued[0] : undefined);
       if (next === undefined) break;
       void runTask(next);
     }
@@ -222,6 +328,57 @@ export function UploadQueue({
       directoryInputRef.current.setAttribute("webkitdirectory", "");
       directoryInputRef.current.setAttribute("directory", "");
     }
+  }, []);
+
+  useEffect(() => {
+    const profile = adaptiveProcessingProfile();
+    processingProfile.current = profile;
+    processingLimitRef.current = profile.initial;
+    healthySamples.current = 0;
+    setProcessingLimit(profile.initial);
+    setProcessingMax(profile.max);
+  }, []);
+
+  useEffect(() => {
+    let expected = performance.now() + adaptiveSampleIntervalMs;
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const lag = Math.max(0, now - expected);
+      expected = now + adaptiveSampleIntervalMs;
+      if (document.visibilityState !== "visible" || pausedRef.current) {
+        healthySamples.current = 0;
+        return;
+      }
+
+      const heapRatio = heapPressureRatio();
+      const current = processingLimitRef.current;
+      const profile = processingProfile.current;
+      const hasQueued = [...taskStore.current.values()].some((task) => task.status === "queued");
+      const saturated = runningTasks.current >= current;
+      const underPressure =
+        lag >= eventLoopPressureMs || (heapRatio !== null && heapRatio >= heapPressureThreshold);
+
+      if (underPressure && current > 1) {
+        healthySamples.current = 0;
+        processingLimitRef.current = current - 1;
+        setProcessingLimit(current - 1);
+        return;
+      }
+
+      const healthy =
+        lag <= eventLoopHealthyMs && (heapRatio === null || heapRatio <= heapHealthyThreshold);
+      if (!hasQueued || !saturated || !healthy || current >= profile.max) {
+        healthySamples.current = 0;
+        return;
+      }
+
+      healthySamples.current += 1;
+      if (healthySamples.current < 2) return;
+      healthySamples.current = 0;
+      processingLimitRef.current = current + 1;
+      setProcessingLimit(current + 1);
+    }, adaptiveSampleIntervalMs);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -357,7 +514,7 @@ export function UploadQueue({
             </Link>
           ) : null}
           <span className="text-xs text-muted-foreground">
-            不限制单次选择数量 · 同时最多处理 {processingConcurrency} 张
+            不限制单次选择数量 · 自适应并发 {processingLimit}/{processingMax}
           </span>
         </div>
 
