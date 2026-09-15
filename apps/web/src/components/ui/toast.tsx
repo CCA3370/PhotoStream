@@ -20,7 +20,7 @@ const weChatSaveHintToastId = "photostream-wechat-save-hint";
 const weChatNetworkSaveHintToastId = "photostream-wechat-network-save-hint";
 
 interface PhotoStreamToastData {
-  readonly presentation?: "wechat-save-hint";
+  readonly presentation?: "wechat-save-hint" | "wechat-network-save-hint";
 }
 
 function isWeChatSaveHintTitle(title: ReactNode): boolean {
@@ -59,11 +59,15 @@ toast.add = ((options: ToastAddOptions) => {
     return baseToastAdd({
       ...options,
       id: weChatNetworkSaveHintToastId,
-      title: "还差一步",
-      description: "图片已加载完成，请长按图片并选择「保存到手机」。",
+      title: "图片已准备好",
+      description: "长按图片，选择「保存到手机」",
       type: "info",
       priority: "high",
       timeout: 4_000,
+      data: {
+        ...(typeof options.data === "object" && options.data !== null ? options.data : {}),
+        presentation: "wechat-network-save-hint",
+      },
     });
   }
 
@@ -297,18 +301,46 @@ function WeChatSaveHintToast({ toastItem }: { toastItem: ToastPrimitive.Root.Pro
   );
 }
 
+function WeChatNetworkSaveHintToast({
+  toastItem,
+}: {
+  toastItem: ToastPrimitive.Root.Props["toast"];
+}) {
+  return (
+    <ToastPrimitive.Root
+      aria-live="polite"
+      className="dark public-theme pointer-events-none fixed inset-0 z-[200] grid place-items-center px-4 text-white opacity-100 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0"
+      toast={toastItem}
+    >
+      <div className="max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-black/80 px-5 py-3.5 text-center shadow-xl shadow-black/30 backdrop-blur-md">
+        <ToastPrimitive.Title className="text-sm font-medium" />
+        <ToastPrimitive.Description className="mt-1 text-xs leading-5 text-white/70" />
+      </div>
+    </ToastPrimitive.Root>
+  );
+}
+
 function isWeChatSaveHintToast(toastItem: ToastPrimitive.Root.Props["toast"]): boolean {
   const data = toastItem.data as PhotoStreamToastData | undefined;
   return data?.presentation === "wechat-save-hint";
 }
 
+function isWeChatNetworkSaveHintToast(toastItem: ToastPrimitive.Root.Props["toast"]): boolean {
+  const data = toastItem.data as PhotoStreamToastData | undefined;
+  return data?.presentation === "wechat-network-save-hint";
+}
+
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager();
 
-  return toasts.map((toastItem) =>
-    isWeChatSaveHintToast(toastItem) ? (
-      <WeChatSaveHintToast key={toastItem.id} toastItem={toastItem} />
-    ) : (
+  return toasts.map((toastItem) => {
+    if (isWeChatSaveHintToast(toastItem)) {
+      return <WeChatSaveHintToast key={toastItem.id} toastItem={toastItem} />;
+    }
+    if (isWeChatNetworkSaveHintToast(toastItem)) {
+      return <WeChatNetworkSaveHintToast key={toastItem.id} toastItem={toastItem} />;
+    }
+    return (
       <Toast key={toastItem.id} toast={toastItem}>
         <ToastContent>
           <ToastIcon type={toastItem.type} />
@@ -320,8 +352,8 @@ function ToastList() {
           <ToastClose />
         </ToastContent>
       </Toast>
-    ),
-  );
+    );
+  });
 }
 
 function Toaster({ children, toastManager = toast, ...props }: ToastPrimitive.Provider.Props) {
