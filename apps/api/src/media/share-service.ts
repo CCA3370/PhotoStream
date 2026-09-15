@@ -121,58 +121,39 @@ export class PhotoShareService {
     return this.#mediaView(album.id, options.mediaId);
   }
 
-  async getSharedMedia(options: {
-    readonly slug: string;
-    readonly mediaId: string;
-    readonly shareId: string;
-  }): Promise<PublicMediaView> {
-    const context = await this.#sharedContext(options);
-    return this.#mediaView(context.album.id, options.mediaId);
-  }
-
   async getSharedLikeState(options: {
-    readonly slug: string;
-    readonly mediaId: string;
     readonly shareId: string;
     readonly viewerId: string;
   }): Promise<MediaLikeState> {
-    const context = await this.#sharedContext(options);
+    const context = await this.#sharedContextById(options.shareId);
     const likeService = this.#requireLikeService();
     const [state] = await likeService.listStates({
       albumId: context.album.id,
-      mediaIds: [options.mediaId],
+      mediaIds: [context.media.id],
       viewerId: options.viewerId,
     });
-    return state ?? { mediaId: options.mediaId, count: 0, likedByViewer: false };
+    return state ?? { mediaId: context.media.id, count: 0, likedByViewer: false };
   }
 
   async setSharedLike(options: {
-    readonly slug: string;
-    readonly mediaId: string;
     readonly shareId: string;
     readonly viewerId: string;
     readonly liked: boolean;
   }): Promise<MediaLikeState> {
-    const context = await this.#sharedContext(options);
+    const context = await this.#sharedContextById(options.shareId);
     return this.#requireLikeService().setLike({
       albumId: context.album.id,
-      mediaId: options.mediaId,
+      mediaId: context.media.id,
       viewerId: options.viewerId,
       liked: options.liked,
     });
   }
 
-  async issueSharedOriginalView(options: {
-    readonly slug: string;
-    readonly mediaId: string;
-    readonly shareId: string;
-  }) {
+  async issueSharedOriginalView(options: { readonly shareId: string }) {
     return this.#issueSharedMediaAccess({ ...options, kind: "original", intent: "view" });
   }
 
   async issueSharedDownload(options: {
-    readonly slug: string;
-    readonly mediaId: string;
     readonly shareId: string;
     readonly kind: DownloadKind;
     readonly visitorId: string;
@@ -181,13 +162,11 @@ export class PhotoShareService {
   }
 
   async refreshSharedVariant(options: {
-    readonly slug: string;
-    readonly mediaId: string;
     readonly shareId: string;
     readonly kind: DerivedPhotoVariantKind;
   }) {
     if (!publicVariantKinds.has(options.kind)) throw this.#notFound();
-    const context = await this.#sharedContext(options);
+    const context = await this.#sharedContextById(options.shareId);
     const [variant] = await this.#database
       .select()
       .from(schema.mediaVariants)
@@ -210,14 +189,12 @@ export class PhotoShareService {
   }
 
   async #issueSharedMediaAccess(options: {
-    readonly slug: string;
-    readonly mediaId: string;
     readonly shareId: string;
     readonly kind: DownloadKind;
     readonly intent: "download" | "view";
     readonly visitorId?: string;
   }) {
-    const context = await this.#sharedContext(options);
+    const context = await this.#sharedContextById(options.shareId);
     const variantKind = options.kind === "preview" ? "photo_1920" : "photo_original";
     const [variant] = await this.#database
       .select()
@@ -257,18 +234,6 @@ export class PhotoShareService {
       bytes: variant.bytes,
       expiresAt: expiresAt.toISOString(),
     };
-  }
-
-  async #sharedContext(options: {
-    readonly slug: string;
-    readonly mediaId: string;
-    readonly shareId: string;
-  }) {
-    const context = await this.#sharedContextById(options.shareId);
-    if (context.album.slug !== options.slug || context.media.id !== options.mediaId) {
-      throw this.#notFound();
-    }
-    return context;
   }
 
   async #sharedContextById(shareId: string) {
