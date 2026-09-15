@@ -60,20 +60,18 @@ export function PhotoShareButton({
       const album = await clientGet<PublicAlbumView>(
         `/api/v1/public/albums/${encodeURIComponent(slug)}`,
       );
-      let resolvedShareId = shareId;
-      if (resolvedShareId === undefined && album.access === "password") {
-        resolvedShareId = (
+      const resolvedShareId =
+        shareId ??
+        (
           await publicMutation<ShareResponse>(
             `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/share`,
           )
         ).shareId;
-      }
 
-      const url = new URL(`/g/${encodeURIComponent(slug)}`, window.location.origin);
-      url.searchParams.set("photo", mediaId);
-      url.searchParams.set("sharecard", "1");
-      if (resolvedShareId !== undefined) url.searchParams.set("share", resolvedShareId);
-      const shareUrl = url.toString();
+      const shareUrl = new URL(
+        `/s/${encodeURIComponent(resolvedShareId)}`,
+        window.location.origin,
+      ).toString();
 
       if (isWeChatBrowser()) {
         previousUrlRef.current ??= window.location.href;
@@ -98,10 +96,7 @@ export function PhotoShareButton({
       await navigator.clipboard.writeText(shareUrl);
       toast.add({
         title: "分享链接已复制",
-        description:
-          resolvedShareId === undefined
-            ? "对方打开链接即可直达这张照片。"
-            : "对方打开链接即可直接查看这张照片，无需输入相册口令。",
+        description: "对方打开链接即可直接查看这张照片，无需输入相册口令。",
         type: "success",
         timeout: 3_000,
       });
