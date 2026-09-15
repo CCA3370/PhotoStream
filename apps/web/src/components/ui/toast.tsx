@@ -12,10 +12,12 @@ import {
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { consumeNetworkImageDownloadCompletion } from "@/lib/image-download-progress";
 import { cn } from "@/lib/utils";
 
 const weChatSaveHintStorageKey = "photostream.wechat-save-hint.dismissed.v1";
 const weChatSaveHintToastId = "photostream-wechat-save-hint";
+const weChatNetworkSaveHintToastId = "photostream-wechat-network-save-hint";
 
 interface PhotoStreamToastData {
   readonly presentation?: "wechat-save-hint";
@@ -52,6 +54,19 @@ type ToastAddOptions = Parameters<typeof toast.add>[0];
 
 toast.add = ((options: ToastAddOptions) => {
   if (!isWeChatSaveHintTitle(options.title)) return baseToastAdd(options);
+
+  if (consumeNetworkImageDownloadCompletion()) {
+    return baseToastAdd({
+      ...options,
+      id: weChatNetworkSaveHintToastId,
+      title: "还差一步",
+      description: "图片已加载完成，请长按图片并选择「保存到手机」。",
+      type: "info",
+      priority: "high",
+      timeout: 4_000,
+    });
+  }
+
   if (isWeChatSaveHintSuppressed()) return options.id ?? weChatSaveHintToastId;
 
   return baseToastAdd({
