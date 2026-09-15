@@ -9,7 +9,7 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { consumeNetworkImageDownloadCompletion } from "@/lib/image-download-progress";
@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 const weChatSaveHintStorageKey = "photostream.wechat-save-hint.dismissed.v1";
 const weChatSaveHintToastId = "photostream-wechat-save-hint";
 const weChatNetworkSaveHintToastId = "photostream-wechat-network-save-hint";
+const weChatLongPressDurationMs = 650;
+const weChatLongPressMoveTolerancePx = 12;
 
 interface PhotoStreamToastData {
   readonly presentation?: "wechat-save-hint" | "wechat-network-save-hint";
@@ -59,11 +61,11 @@ toast.add = ((options: ToastAddOptions) => {
     return baseToastAdd({
       ...options,
       id: weChatNetworkSaveHintToastId,
-      title: "图片已准备好",
-      description: "长按图片，选择「保存到手机」",
+      title: "长按图片保存",
+      description: "按住图片，圆环闭合后选择「保存到手机」",
       type: "info",
       priority: "high",
-      timeout: 4_000,
+      timeout: 0,
       data: {
         ...(typeof options.data === "object" && options.data !== null ? options.data : {}),
         presentation: "wechat-network-save-hint",
@@ -194,8 +196,8 @@ function ToastClose({
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="关闭通知"
       render={render}
+      aria-label="关闭通知"
       className={cn(
         "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",
         className,
@@ -306,16 +308,147 @@ function WeChatNetworkSaveHintToast({
 }: {
   toastItem: ToastPrimitive.Root.Props["toast"];
 }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const strokeOffset = circumference * (1 - holdProgress);
+
+  useEffect(() => {
+    let activePointerId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let startedAt = 0;
+    let animationFrame: number | null = null;
+    let dismissTimer: number | null = null;
+
+    const clearAnimation = () => {
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    };
+
+    const resetHold = () => {
+      clearAnimation();
+      activePointerId = null;
+      setHoldProgress(0);
+    };
+
+    const isPhotoTarget = (target: EventTarget | null) =>
+      target instanceof Element && target.closest("img") !== null;
+
+    const dismiss = () => {
+      clearAnimation();
+      activePointerId = null;
+      setHoldProgress(1);
+      if (dismissTimer !== null) window.clearTimeout(dismissTimer);
+      dismissTimer = window.setTimeout(() => closeButtonRef.current?.click(), 80);
+    };
+
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / weChatLongPressDurationMs);
+      setHoldProgress(progress);
+      if (progress >= 1) {
+        dismiss();
+        return;
+      }
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isPhotoTarget(event.target)) return;
+      resetHold();
+      activePointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      startedAt = performance.now();
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerId) return;
+      if (
+        Math.hypot(event.clientX - startX, event.clientY - startY) >
+        weChatLongPressMoveTolerancePx
+      ) {
+        resetHold();
+      }
+    };
+
+    const onPointerEnd = (event: PointerEvent) => {
+      if (event.pointerId === activePointerId) resetHold();
+    };
+
+    const onContextMenu = (event: MouseEvent) => {
+      if (isPhotoTarget(event.target)) dismiss();
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointermove", onPointerMove, true);
+    document.addEventListener("pointerup", onPointerEnd, true);
+    document.addEventListener("pointercancel", onPointerEnd, true);
+    document.addEventListener("contextmenu", onContextMenu, true);
+
+    return () => {
+      clearAnimation();
+      if (dismissTimer !== null) window.clearTimeout(dismissTimer);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("pointermove", onPointerMove, true);
+      document.removeEventListener("pointerup", onPointerEnd, true);
+      document.removeEventListener("pointercancel", onPointerEnd, true);
+      document.removeEventListener("contextmenu", onContextMenu, true);
+    };
+  }, []);
+
   return (
     <ToastPrimitive.Root
       aria-live="polite"
       className="dark public-theme pointer-events-none fixed inset-0 z-[200] grid place-items-center px-4 text-white opacity-100 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0"
       toast={toastItem}
     >
-      <div className="max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-black/80 px-5 py-3.5 text-center shadow-xl shadow-black/30 backdrop-blur-md">
-        <ToastPrimitive.Title className="text-sm font-medium" />
-        <ToastPrimitive.Description className="mt-1 text-xs leading-5 text-white/70" />
+      <div className="flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 text-left shadow-xl shadow-black/30 backdrop-blur-md">
+        <div className="relative grid size-11 shrink-0 place-items-center" aria-hidden="true">
+          <svg className="absolute inset-0 size-11 -rotate-90" viewBox="0 0 40 40">
+            <circle
+              className="text-white/15"
+              cx="20"
+              cy="20"
+              fill="none"
+              r={radius}
+              stroke="currentColor"
+              strokeWidth="3"
+            />
+            <circle
+              className="text-white"
+              cx="20"
+              cy="20"
+              fill="none"
+              r={radius}
+              stroke="currentColor"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeOffset}
+              strokeLinecap="round"
+              strokeWidth="3"
+              style={{
+                transition:
+                  holdProgress === 0 ? "stroke-dashoffset 180ms ease-out" : "none",
+              }}
+            />
+          </svg>
+          <span className="text-[9px] font-medium text-white/80">按住</span>
+        </div>
+        <div className="min-w-0">
+          <ToastPrimitive.Title className="text-sm font-medium" />
+          <ToastPrimitive.Description className="mt-0.5 text-xs leading-5 text-white/70" />
+        </div>
       </div>
+      <ToastPrimitive.Close
+        aria-hidden="true"
+        className="sr-only"
+        ref={closeButtonRef}
+        tabIndex={-1}
+      >
+        关闭
+      </ToastPrimitive.Close>
     </ToastPrimitive.Root>
   );
 }
