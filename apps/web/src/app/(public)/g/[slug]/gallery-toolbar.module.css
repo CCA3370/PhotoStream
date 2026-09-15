@@ -95,30 +95,34 @@
   .searchToolbar > section > div > div:first-child {
     top: calc(var(--public-gallery-header-height) / 2);
     right: 2rem;
-    z-index: 55;
-    max-width: none;
-    transform: translateY(-50%);
-
-    /* globals.css also styles the generic search markup. Lock the desktop
-       gallery action here so that those rules cannot inflate the control. */
+    z-index: 45;
+    display: flex !important;
+    width: max-content !important;
+    max-width: none !important;
+    align-items: center !important;
+    gap: 0.2rem !important;
     margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
+    padding: 0.1875rem !important;
+    transform: translateY(-50%);
+    border: 1px solid color-mix(in oklab, var(--border) 68%, transparent) !important;
+    border-radius: 999px !important;
+    background: color-mix(in oklab, var(--background) 91%, transparent) !important;
+    box-shadow:
+      0 1px 2px color-mix(in oklab, var(--foreground) 7%, transparent),
+      0 5px 16px color-mix(in oklab, var(--foreground) 5%, transparent) !important;
+    backdrop-filter: blur(14px) !important;
   }
 
   .searchToolbar > section > div > div:first-child > button:first-child {
     width: max-content !important;
-    height: 2rem !important;
+    height: 2.25rem !important;
     min-width: 0 !important;
     max-width: none !important;
     flex: 0 0 auto !important;
-    gap: 0.375rem !important;
-    padding: 0 0.625rem !important;
-    border-radius: 0.625rem !important;
+    gap: 0.45rem !important;
+    padding: 0 0.7rem 0 0.35rem !important;
+    border: 0 !important;
+    border-radius: 999px !important;
     background: transparent !important;
     color: var(--foreground) !important;
     font-weight: 600;
@@ -126,21 +130,25 @@
   }
 
   .searchToolbar > section > div > div:first-child > button:first-child:hover {
-    background: color-mix(in oklab, var(--accent) 72%, transparent) !important;
+    background: color-mix(in oklab, var(--accent) 78%, transparent) !important;
     color: var(--foreground) !important;
   }
 
+  .searchToolbar > section > div > div:first-child > button:first-child:active {
+    transform: none !important;
+  }
+
   .searchToolbar > section > div > div:first-child > button:first-child > span:first-child {
-    width: 0.875rem !important;
-    height: 0.875rem !important;
-    border-radius: 0 !important;
-    background: transparent !important;
+    width: 1.65rem !important;
+    height: 1.65rem !important;
+    border-radius: 999px !important;
+    background: color-mix(in oklab, var(--primary) 12%, transparent) !important;
     color: var(--primary) !important;
   }
 
   .searchToolbar > section > div > div:first-child > button:first-child svg {
-    width: 0.875rem !important;
-    height: 0.875rem !important;
+    width: 0.9rem !important;
+    height: 0.9rem !important;
     color: var(--primary) !important;
   }
 
@@ -151,14 +159,26 @@
     > button:first-child
     > span:last-child
     > span:first-child {
-    max-width: none;
+    max-width: 7.5rem;
+    overflow: hidden;
     font-size: 0.8125rem !important;
     line-height: 1rem !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .searchToolbar > section > div > div:first-child > button:not(:first-child) {
-    width: 2rem !important;
-    height: 2rem !important;
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+    min-width: 1.75rem !important;
+    min-height: 1.75rem !important;
+    border-radius: 999px !important;
+    color: var(--muted-foreground) !important;
+  }
+
+  .searchToolbar > section > div > div:first-child > button:not(:first-child):hover {
+    background: color-mix(in oklab, var(--accent) 82%, transparent) !important;
+    color: var(--foreground) !important;
   }
 }
 
