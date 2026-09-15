@@ -32,10 +32,18 @@ interface PendingDelivery {
   readonly events: number;
 }
 
+interface TelemetryToken {
+  readonly token: string;
+  readonly expiresAt: number;
+}
+
 const flushDelayMs = 10_000;
 const flushEventThreshold = 24;
+const tokenRefreshMarginMs = 30_000;
 const pending = new Map<string, PendingDelivery>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const telemetryTokens = new Map<string, TelemetryToken>();
+const tokenRequests = new Map<string, Promise<TelemetryToken>>();
 let lifecycleInstalled = false;
 
 export function emptyMediaDeliverySnapshot(): MediaDeliverySnapshot {
@@ -123,6 +131,33 @@ function validScope(scope: string | undefined): scope is string {
   );
 }
 
+async function requestTelemetryToken(scope: string): Promise<TelemetryToken> {
+  const response = await fetch(
+    `/api/v1/public/albums/${encodeURIComponent(scope)}/analytics/media-delivery-token`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) throw new Error(`telemetry token ${response.status}`);
+  const body = (await response.json()) as { token?: unknown; expiresAt?: unknown };
+  if (typeof body.token !== "string" || typeof body.expiresAt !== "string") {
+    throw new Error("invalid telemetry token response");
+  }
+  const expiresAt = Date.parse(body.expiresAt);
+  if (!Number.isFinite(expiresAt)) throw new Error("invalid telemetry token expiry");
+  const token = { token: body.token, expiresAt };
+  telemetryTokens.set(scope, token);
+  return token;
+}
+
+async function ensureTelemetryToken(scope: string): Promise<TelemetryToken> {
+  const cached = telemetryTokens.get(scope);
+  if (cached !== undefined && cached.expiresAt - Date.now() > tokenRefreshMarginMs) return cached;
+  const inFlight = tokenRequests.get(scope);
+  if (inFlight !== undefined) return inFlight;
+  const request = requestTelemetryToken(scope).finally(() => tokenRequests.delete(scope));
+  tokenRequests.set(scope, request);
+  return request;
+}
+
 function clearFlushTimer(scope: string): void {
   const timer = timers.get(scope);
   if (timer === undefined) return;
@@ -146,17 +181,22 @@ async function submitDelivery(
   snapshot: MediaDeliverySnapshot,
   keepalive: boolean,
 ): Promise<void> {
+  const telemetryToken = await ensureTelemetryToken(scope);
   const response = await fetch(
     `/api/v1/public/albums/${encodeURIComponent(scope)}/analytics/media-delivery`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-telemetry-token": telemetryToken.token,
+      },
       body: JSON.stringify(snapshot),
       cache: "no-store",
       keepalive,
     },
   );
-  if (!response.ok && response.status >= 500) throw new Error(`telemetry ${response.status}`);
+  if (response.status === 403) telemetryTokens.delete(scope);
+  if (!response.ok) throw new Error(`telemetry ${response.status}`);
 }
 
 async function flushMediaDelivery(scope: string, keepalive: boolean): Promise<void> {
@@ -191,6 +231,7 @@ export function recordMediaDeliveryMetric(
 ): void {
   if (typeof window === "undefined" || !validScope(scope)) return;
   installLifecycleFlush();
+  void ensureTelemetryToken(scope).catch(() => undefined);
   const current = pending.get(scope) ?? {
     snapshot: emptyMediaDeliverySnapshot(),
     events: 0,
