@@ -1,4 +1,4 @@
-export const viewerServiceNoticeStorageKey = "photostream:viewer-service-notice:v2";
+export const viewerServiceNoticeStorageKey = "photostream:viewer-service-notice:v3";
 export const viewerServiceNoticeDismissedEvent = "photostream:viewer-service-notice-dismissed";
 
 export const viewerOnboardingStorageKey = "photostream:viewer-onboarding:v1";
