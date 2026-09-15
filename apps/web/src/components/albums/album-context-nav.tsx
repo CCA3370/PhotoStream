@@ -10,10 +10,12 @@ export function AlbumContextNav({
   role,
 }: Readonly<{
   albumId: string;
-  counts?: {
-    readonly pendingReview?: number;
-    readonly uploadIssues?: number;
-  };
+  counts?:
+    | {
+        readonly pendingReview?: number | undefined;
+        readonly uploadIssues?: number | undefined;
+      }
+    | undefined;
   current: "overview" | "review" | "settings" | "upload";
   role: "admin" | "reviewer" | "uploader";
 }>) {
