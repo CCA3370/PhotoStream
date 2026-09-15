@@ -143,10 +143,16 @@ export function PhotoShareButton({
               aria-describedby="wechat-share-guide-description"
               aria-labelledby="wechat-share-guide-title"
               aria-modal="true"
-              className="dark public-theme fixed inset-0 z-[300] cursor-pointer bg-black/40 text-white transition-opacity duration-150"
-              onClick={closeWeChatGuide}
+              className="dark public-theme fixed inset-0 z-[300] bg-black/40 text-white transition-opacity duration-150"
               role="dialog"
             >
+              <button
+                aria-label="关闭分享提示"
+                className="absolute inset-0 cursor-pointer"
+                onClick={closeWeChatGuide}
+                type="button"
+              />
+
               <div className="pointer-events-none absolute top-[max(0.55rem,env(safe-area-inset-top))] right-2.5 flex max-w-[calc(100vw-1.25rem)] flex-col items-end sm:right-4">
                 <ArrowUpRightIcon
                   aria-hidden="true"
