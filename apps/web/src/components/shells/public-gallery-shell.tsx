@@ -126,7 +126,7 @@ export function PublicGalleryShell({
 
               <Badge
                 className={`h-6 shrink-0 self-center gap-1 rounded-full px-2.5 text-[10px] shadow-xs sm:text-[11px] lg:h-9 lg:gap-1.5 lg:px-4 lg:text-[13px] ${
-                  reserveSearchAction ? "lg:mr-28" : ""
+                  reserveSearchAction ? "lg:mr-40" : ""
                 }`}
                 variant={status === "直播中" ? "default" : "secondary"}
               >
