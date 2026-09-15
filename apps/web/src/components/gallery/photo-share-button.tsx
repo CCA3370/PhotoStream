@@ -144,8 +144,16 @@ export function PhotoShareButton({
               aria-describedby="wechat-share-guide-description"
               aria-labelledby="wechat-share-guide-title"
               aria-modal="true"
-              className="dark public-theme fixed inset-0 z-[300] bg-black/40 text-white transition-opacity duration-150"
+              className="dark public-theme fixed inset-0 z-[300] cursor-pointer bg-black/40 text-white transition-opacity duration-150"
+              onClick={closeWeChatGuide}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  closeWeChatGuide();
+                }
+              }}
               role="dialog"
+              tabIndex={0}
             >
               <div className="pointer-events-none absolute top-[max(0.55rem,env(safe-area-inset-top))] right-2.5 flex max-w-[calc(100vw-1.25rem)] flex-col items-end sm:right-4">
                 <ArrowUpRightIcon
@@ -165,15 +173,10 @@ export function PhotoShareButton({
                 </div>
               </div>
 
-              <div className="absolute inset-x-0 bottom-[max(1.1rem,env(safe-area-inset-bottom))] flex justify-center px-5">
-                <Button
-                  className="h-9 min-w-20 rounded-full border-white/10 bg-black/45 px-4 text-sm font-normal text-white/82 shadow-lg shadow-black/20 backdrop-blur-md hover:bg-black/60 hover:text-white"
-                  onClick={closeWeChatGuide}
-                  type="button"
-                  variant="outline"
-                >
-                  知道了
-                </Button>
+              <div className="pointer-events-none absolute inset-x-0 top-[62%] flex -translate-y-1/2 justify-center px-5">
+                <div className="rounded-full border border-white/10 bg-black/45 px-4 py-2 text-sm text-white/76 shadow-lg shadow-black/20 backdrop-blur-md">
+                  点击任意位置关闭提示
+                </div>
               </div>
             </div>,
             document.body,
