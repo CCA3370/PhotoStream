@@ -205,11 +205,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   );
 }
 
-function WeChatSaveHintToast({
-  toastItem,
-}: {
-  toastItem: ToastPrimitive.Root.Props["toast"];
-}) {
+function WeChatSaveHintToast({ toastItem }: { toastItem: ToastPrimitive.Root.Props["toast"] }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const radius = 16;
@@ -269,8 +265,7 @@ function WeChatSaveHintToast({
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerId !== activePointerId) return;
       if (
-        Math.hypot(event.clientX - startX, event.clientY - startY) >
-        weChatLongPressMoveTolerancePx
+        Math.hypot(event.clientX - startX, event.clientY - startY) > weChatLongPressMoveTolerancePx
       ) {
         resetHold();
       }
@@ -309,7 +304,11 @@ function WeChatSaveHintToast({
     >
       <div className="flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 text-left shadow-xl shadow-black/30 backdrop-blur-md">
         <div className="relative grid size-11 shrink-0 place-items-center" aria-hidden="true">
-          <svg className="absolute inset-0 size-11 -rotate-90" viewBox="0 0 40 40">
+          <svg
+            aria-hidden="true"
+            className="absolute inset-0 size-11 -rotate-90"
+            viewBox="0 0 40 40"
+          >
             <circle
               className="text-white/15"
               cx="20"
@@ -331,8 +330,7 @@ function WeChatSaveHintToast({
               strokeLinecap="round"
               strokeWidth="3"
               style={{
-                transition:
-                  holdProgress === 0 ? "stroke-dashoffset 180ms ease-out" : "none",
+                transition: holdProgress === 0 ? "stroke-dashoffset 180ms ease-out" : "none",
               }}
             />
           </svg>
