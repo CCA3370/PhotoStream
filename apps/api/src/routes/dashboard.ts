@@ -3,11 +3,20 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { DashboardService } from "../analytics/dashboard-service.js";
+import {
+  issueMediaDeliveryToken,
+  verifyMediaDeliveryToken,
+} from "../analytics/media-delivery-token.js";
 import { requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
+import { AppError } from "../errors.js";
 import type { PhotoService } from "../media/service.js";
-import { visitorSessionToken } from "../media/visitor-http.js";
+import {
+  anonymousVisitorId,
+  anonymousVisitorToken,
+  visitorSessionToken,
+} from "../media/visitor-http.js";
 
 const dashboardQuerySchema = z
   .object({
@@ -19,12 +28,12 @@ const dashboardQuerySchema = z
   .strict();
 
 const searchUsageParamsSchema = z.object({ slug: z.string().min(12).max(32) }).strict();
-const deliveryCounterSchema = z.number().int().min(0).max(100_000);
+const deliveryCounterSchema = z.number().int().min(0).max(128);
 const deliveryBytesSchema = z
   .number()
   .int()
   .min(0)
-  .max(10 * 1024 * 1024 * 1024);
+  .max(768 * 1024 * 1024);
 const mediaDeliveryFields = {
   memoryHits: deliveryCounterSchema,
   memoryBytes: deliveryBytesSchema,
@@ -46,6 +55,12 @@ const mediaDeliveryRequestSchema = z
   .refine((value) => Object.values(value).some((item) => item > 0), {
     message: "媒体交付统计不能为空",
   });
+const mediaDeliveryTokenSchema = z
+  .object({
+    token: z.string().min(32).max(256),
+    expiresAt: z.iso.datetime(),
+  })
+  .strict();
 const browserDeliverySchema = z
   .object({
     ...mediaDeliveryFields,
@@ -161,13 +176,40 @@ export async function registerDashboardRoutes(
     401: apiErrorSchema,
     403: apiErrorSchema,
     404: apiErrorSchema,
+    429: apiErrorSchema,
     500: apiErrorSchema,
   };
+
+  typed.get(
+    "/api/v1/public/albums/:slug/analytics/media-delivery-token",
+    {
+      config: { rateLimit: { max: 30, timeWindow: "10 minutes" } },
+      schema: {
+        operationId: "issueMediaDeliveryToken",
+        tags: ["public", "analytics"],
+        params: searchUsageParamsSchema,
+        response: { 200: mediaDeliveryTokenSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      await options.photoService.getAuthorizedPublicAlbum(
+        request.params.slug,
+        visitorSessionToken(request, options.config, request.params.slug),
+      );
+      const visitorId = anonymousVisitorId(request, reply, options.config);
+      return issueMediaDeliveryToken(
+        options.config.ANALYTICS_HMAC_SECRET,
+        request.params.slug,
+        visitorId,
+      );
+    },
+  );
 
   typed.post(
     "/api/v1/public/albums/:slug/analytics/media-delivery",
     {
-      config: { rateLimit: { max: 120, timeWindow: "10 minutes" } },
+      config: { rateLimit: { max: 90, timeWindow: "10 minutes" } },
       schema: {
         operationId: "recordMediaDelivery",
         tags: ["public", "analytics"],
@@ -181,6 +223,24 @@ export async function registerDashboardRoutes(
         request.params.slug,
         visitorSessionToken(request, options.config, request.params.slug),
       );
+      const visitorId = anonymousVisitorToken(request, options.config);
+      const telemetryToken = request.headers["x-telemetry-token"];
+      if (
+        visitorId === undefined ||
+        typeof telemetryToken !== "string" ||
+        !verifyMediaDeliveryToken(
+          options.config.ANALYTICS_HMAC_SECRET,
+          request.params.slug,
+          visitorId,
+          telemetryToken,
+        )
+      ) {
+        throw new AppError({
+          code: "FORBIDDEN",
+          message: "统计上报凭据无效或已过期",
+          statusCode: 403,
+        });
+      }
       await options.dashboardService.recordMediaDelivery({
         slug: request.params.slug,
         input: request.body,
