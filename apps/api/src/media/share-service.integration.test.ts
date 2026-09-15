@@ -283,18 +283,18 @@ maybeDescribe("single-photo sharing", () => {
       }),
     ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
-    await expect(
-      shareService.getShareView({ shareId: randomUUID() }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(shareService.getShareView({ shareId: randomUUID() })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
 
     await database
       .update(schema.albums)
       .set({ accessVersion: album.accessVersion + 1 })
       .where(eq(schema.albums.id, album.id));
 
-    await expect(
-      shareService.getShareView({ shareId: share.shareId }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(shareService.getShareView({ shareId: share.shareId })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
     await expect(
       shareService.issueSharedOriginalView({ shareId: share.shareId }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
