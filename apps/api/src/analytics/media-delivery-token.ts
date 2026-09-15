@@ -2,7 +2,13 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const tokenTtlMs = 5 * 60 * 1_000;
 
-function signature(secret: string, slug: string, visitorId: string, expiresAt: number, nonce: string): Buffer {
+function signature(
+  secret: string,
+  slug: string,
+  visitorId: string,
+  expiresAt: number,
+  nonce: string,
+): Buffer {
   return createHmac("sha256", secret)
     .update(`${slug}\n${visitorId}\n${expiresAt}\n${nonce}`, "utf8")
     .digest();
