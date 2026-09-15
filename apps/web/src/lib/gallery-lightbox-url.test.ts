@@ -26,6 +26,7 @@ describe("gallery lightbox URL isolation", () => {
   it("keeps photo deep links confined to the explicit share action", () => {
     const source = readFileSync(photoShareButtonPath, "utf8");
 
-    expect(source).toContain('url.searchParams.set("photo", mediaId);');
+    expect(source).toContain("`/s/${encodeURIComponent(resolvedShareId)}`");
+    expect(source).not.toContain('searchParams.set("photo"');
   });
 });
