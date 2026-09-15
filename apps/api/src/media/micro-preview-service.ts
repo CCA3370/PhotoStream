@@ -165,51 +165,11 @@ export class MicroPreviewService {
     readonly slug: string;
     readonly mediaId: string;
     readonly visitorToken: string | undefined;
-    readonly shareId?: string;
   }): Promise<string> {
-    let albumId: string;
-
-    if (options.shareId !== undefined) {
-      const [album] = await this.#database
-        .select({
-          id: schema.albums.id,
-          accessVersion: schema.albums.accessVersion,
-        })
-        .from(schema.albums)
-        .where(
-          and(
-            eq(schema.albums.slug, options.slug),
-            or(
-              eq(schema.albums.state, "live"),
-              eq(schema.albums.state, "ended"),
-              eq(schema.albums.state, "archived"),
-            ),
-          ),
-        )
-        .limit(1);
-      if (album === undefined) throw this.#publicPreviewNotFound();
-
-      const [share] = await this.#database
-        .select({ id: schema.photoShares.id })
-        .from(schema.photoShares)
-        .where(
-          and(
-            eq(schema.photoShares.id, options.shareId),
-            eq(schema.photoShares.albumId, album.id),
-            eq(schema.photoShares.mediaId, options.mediaId),
-            eq(schema.photoShares.accessVersion, album.accessVersion),
-          ),
-        )
-        .limit(1);
-      if (share === undefined) throw this.#publicPreviewNotFound();
-      albumId = album.id;
-    } else {
-      const album = await this.#photoService.getAuthorizedPublicAlbum(
-        options.slug,
-        options.visitorToken,
-      );
-      albumId = album.id;
-    }
+    const album = await this.#photoService.getAuthorizedPublicAlbum(
+      options.slug,
+      options.visitorToken,
+    );
 
     const [preview] = await this.#database
       .select({ objectKey: schema.mediaMicroPreviews.objectKey })
@@ -218,9 +178,9 @@ export class MicroPreviewService {
       .where(
         and(
           eq(schema.mediaMicroPreviews.mediaId, options.mediaId),
-          eq(schema.mediaMicroPreviews.albumId, albumId),
+          eq(schema.mediaMicroPreviews.albumId, album.id),
           eq(schema.mediaMicroPreviews.verified, true),
-          eq(schema.media.albumId, albumId),
+          eq(schema.media.albumId, album.id),
           eq(schema.media.publicationStatus, "published"),
         ),
       )
