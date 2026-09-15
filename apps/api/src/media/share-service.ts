@@ -73,6 +73,42 @@ export class PhotoShareService {
     return { shareId: share.id };
   }
 
+  async getShareView(options: { readonly shareId: string }): Promise<{
+    readonly slug: string;
+    readonly title: string;
+    readonly description: string | null;
+    readonly media: PublicMediaView;
+  }> {
+    const context = await this.#sharedContextById(options.shareId);
+    return {
+      slug: context.album.slug,
+      title: context.album.title,
+      description: context.album.description,
+      media: await this.#mediaView(context.album.id, context.media.id),
+    };
+  }
+
+  async sharedMicroPreviewUrl(options: { readonly shareId: string }): Promise<string> {
+    const context = await this.#sharedContextById(options.shareId);
+    const [preview] = await this.#database
+      .select({ objectKey: schema.mediaMicroPreviews.objectKey })
+      .from(schema.mediaMicroPreviews)
+      .where(
+        and(
+          eq(schema.mediaMicroPreviews.mediaId, context.media.id),
+          eq(schema.mediaMicroPreviews.albumId, context.album.id),
+          eq(schema.mediaMicroPreviews.verified, true),
+        ),
+      )
+      .limit(1);
+    if (preview === undefined) throw this.#notFound();
+    return this.#storage.signRead({
+      key: preview.objectKey,
+      expiresAt: previewExpiresAt(15 * 60 * 1_000),
+      stable: true,
+    });
+  }
+
   async getAuthorizedMedia(options: {
     readonly slug: string;
     readonly visitorToken: string | undefined;
@@ -228,19 +264,32 @@ export class PhotoShareService {
     readonly mediaId: string;
     readonly shareId: string;
   }) {
-    const album = await this.#publicAlbum(options.slug);
-    await this.#assertShare({ ...options, albumId: album.id, accessVersion: album.accessVersion });
-    const media = await this.#publishedMedia(album.id, options.mediaId);
-    return { album, media };
+    const context = await this.#sharedContextById(options.shareId);
+    if (context.album.slug !== options.slug || context.media.id !== options.mediaId) {
+      throw this.#notFound();
+    }
+    return context;
   }
 
-  async #publicAlbum(slug: string) {
+  async #sharedContextById(shareId: string) {
+    const [share] = await this.#database
+      .select({
+        albumId: schema.photoShares.albumId,
+        mediaId: schema.photoShares.mediaId,
+        accessVersion: schema.photoShares.accessVersion,
+      })
+      .from(schema.photoShares)
+      .where(eq(schema.photoShares.id, shareId))
+      .limit(1);
+    if (share === undefined) throw this.#notFound();
+
     const [album] = await this.#database
       .select()
       .from(schema.albums)
       .where(
         and(
-          eq(schema.albums.slug, slug),
+          eq(schema.albums.id, share.albumId),
+          eq(schema.albums.accessVersion, share.accessVersion),
           or(
             eq(schema.albums.state, "live"),
             eq(schema.albums.state, "ended"),
@@ -250,7 +299,9 @@ export class PhotoShareService {
       )
       .limit(1);
     if (album === undefined) throw this.#notFound();
-    return album;
+
+    const media = await this.#publishedMedia(album.id, share.mediaId);
+    return { album, media };
   }
 
   async #mediaView(albumId: string, mediaId: string): Promise<PublicMediaView> {
@@ -312,27 +363,6 @@ export class PhotoShareService {
       .limit(1);
     if (media === undefined) throw this.#notFound();
     return media;
-  }
-
-  async #assertShare(options: {
-    readonly albumId: string;
-    readonly mediaId: string;
-    readonly shareId: string;
-    readonly accessVersion: number;
-  }): Promise<void> {
-    const [share] = await this.#database
-      .select({ id: schema.photoShares.id })
-      .from(schema.photoShares)
-      .where(
-        and(
-          eq(schema.photoShares.id, options.shareId),
-          eq(schema.photoShares.albumId, options.albumId),
-          eq(schema.photoShares.mediaId, options.mediaId),
-          eq(schema.photoShares.accessVersion, options.accessVersion),
-        ),
-      )
-      .limit(1);
-    if (share === undefined) throw this.#notFound();
   }
 
   #requireLikeService(): MediaLikeService {
