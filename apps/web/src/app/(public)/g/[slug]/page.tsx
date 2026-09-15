@@ -2,10 +2,8 @@ import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostr
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
-import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
-import { GalleryFilterNav } from "@/components/gallery/gallery-filter-nav";
+import { GalleryBrowser } from "@/components/gallery/gallery-browser";
 import { LiveUpdates } from "@/components/gallery/live-updates";
-import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { SharedPhotoViewer } from "@/components/gallery/shared-photo-viewer";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
@@ -166,14 +164,13 @@ export default async function GalleryPage({
     : undefined;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== undefined;
   const inlineSearch = searchAvailable && !featuredOnly;
-  const sectionTitle = featuredOnly ? "精选照片" : (category?.name ?? "全部照片");
   const selectedFilterKey = featuredOnly ? "featured" : (category?.id ?? "all");
 
   return (
     <PublicGalleryShell
       albumDescription={album.description}
       albumTitle={album.title}
-      reserveSearchAction={inlineSearch}
+      reserveSearchAction={searchAvailable}
       status={album.state === "live" ? "直播中" : "已结束"}
     >
       <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
@@ -188,55 +185,24 @@ export default async function GalleryPage({
         searchAvailable={inlineSearch}
       />
 
-      <div className={inlineSearch ? styles.searchToolbar : undefined}>
-        <GalleryFilterNav
-          categories={album.categories}
-          reserveSearchSpace={inlineSearch}
-          selectedKey={selectedFilterKey}
-          slug={slug}
-        />
-
-        <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
-          {inlineSearch ? (
-            <BibSearchPanel
-              attributeFilterEnabled={album.bibAttributeFilterEnabled}
-              attributeOptions={album.bibAttributeOptions}
-              attributePairs={album.bibAttributePairs}
-              bibSearchEnabled={album.bibSearchEnabled}
-              numberLengths={album.bibNumberLengths}
-              {...(category === undefined ? {} : { categoryId: category.id })}
-              {...(faceSearch === undefined ? {} : { faceSearch })}
-              slug={slug}
-            >
-              <PaginatedMediaGrid
-                {...(category === undefined ? {} : { categoryId: category.id })}
-                dataSaverEnabled={dataSaver.enabled}
-                initialFeaturedIds={featured.mediaIds}
-                initialPage={initialPage}
-                {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
-                initialVisibilityNow={initialVisibilityNow}
-                key={category?.id ?? "all"}
-                slug={slug}
-              />
-            </BibSearchPanel>
-          ) : (
-            <>
-              <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
-              <PaginatedMediaGrid
-                {...(category === undefined ? {} : { categoryId: category.id })}
-                dataSaverEnabled={dataSaver.enabled}
-                featuredOnly={featuredOnly}
-                initialFeaturedIds={featured.mediaIds}
-                initialPage={initialPage}
-                {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
-                initialVisibilityNow={initialVisibilityNow}
-                key={featuredOnly ? "featured" : (category?.id ?? "all")}
-                slug={slug}
-              />
-            </>
-          )}
-        </section>
-      </div>
+      <GalleryBrowser
+        attributeFilterEnabled={album.bibAttributeFilterEnabled}
+        attributeOptions={album.bibAttributeOptions}
+        attributePairs={album.bibAttributePairs}
+        bibSearchEnabled={album.bibSearchEnabled}
+        categories={album.categories}
+        dataSaverEnabled={dataSaver.enabled}
+        {...(faceSearch === undefined ? {} : { faceSearch })}
+        initialFeaturedIds={featured.mediaIds}
+        initialFilterKey={selectedFilterKey}
+        initialPage={initialPage}
+        {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
+        initialVisibilityNow={initialVisibilityNow}
+        numberLengths={album.bibNumberLengths}
+        searchAvailable={searchAvailable}
+        searchToolbarClassName={styles.searchToolbar}
+        slug={slug}
+      />
 
       {album.state === "live" ? (
         <LiveUpdates
