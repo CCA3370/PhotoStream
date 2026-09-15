@@ -89,6 +89,9 @@ export function ViewerServiceNotice() {
           <p>
             PhotoStream 网站的自主开发程序及原创界面内容版权归 CCA3370 所有；本平台展示的活动照片版权及相关权益归北航实验学校中学部校团委学生会电视台或相应权利人所有，另有署名或约定的除外。未经相应权利人许可，请勿将相关内容用于超出个人合理使用范围的转载、发布或其他用途。
           </p>
+          <p className="text-xs leading-5 text-muted-foreground/80">
+            顺带一提：开发者明年就毕业了，所以下次运动会大概率不会再有 PhotoStream 了。需要的照片记得早点存下来。
+          </p>
           <div className="flex items-start gap-2.5 rounded-xl border bg-muted/25 px-3.5 py-3 text-foreground">
             <DownloadIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <p className="text-sm font-medium leading-5">
