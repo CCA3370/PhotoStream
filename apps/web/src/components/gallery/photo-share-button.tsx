@@ -71,6 +71,7 @@ export function PhotoShareButton({
 
       const url = new URL(`/g/${encodeURIComponent(slug)}`, window.location.origin);
       url.searchParams.set("photo", mediaId);
+      url.searchParams.set("sharecard", "1");
       if (resolvedShareId !== undefined) url.searchParams.set("share", resolvedShareId);
       const shareUrl = url.toString();
 
@@ -173,10 +174,10 @@ export function PhotoShareButton({
                 </div>
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 top-[62%] flex -translate-y-1/2 justify-center px-5">
-                <div className="rounded-full border border-white/10 bg-black/45 px-4 py-2 text-sm text-white/76 shadow-lg shadow-black/20 backdrop-blur-md">
+              <div className="pointer-events-none absolute inset-x-0 top-[62%] flex justify-center px-5">
+                <span className="rounded-full border border-white/10 bg-black/42 px-4 py-2 text-sm text-white/72 shadow-lg shadow-black/20 backdrop-blur-md">
                   点击任意位置关闭提示
-                </div>
+                </span>
               </div>
             </div>,
             document.body,
