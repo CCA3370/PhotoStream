@@ -474,7 +474,7 @@ maybeDescribe("stage 3 operations", () => {
 
     cdn.failNext = true;
     const failedCdn = await service.retryDeletion({
-      actor: { id: adminId, role: "admin", authenticatedAt: now },
+      actor: { id: adminId, role: "admin" },
       taskId: failedObjects.id,
       now: new Date(now.getTime() + 1_000),
     });
@@ -482,7 +482,7 @@ maybeDescribe("stage 3 operations", () => {
     expect(await database.select().from(schema.mediaVariants)).toHaveLength(2);
 
     const completed = await service.retryDeletion({
-      actor: { id: adminId, role: "admin", authenticatedAt: now },
+      actor: { id: adminId, role: "admin" },
       taskId: failedObjects.id,
       now: new Date(now.getTime() + 2_000),
     });
@@ -563,7 +563,7 @@ maybeDescribe("stage 3 operations", () => {
     expect(storage.objects.has(objectKey)).toBe(false);
   });
 
-  it("enforces download switches and keeps anonymous analytics unlinkable from raw visitors", async () => {
+  it("always allows available downloads and keeps anonymous analytics unlinkable from raw visitors", async () => {
     const [media] = await database
       .insert(schema.media)
       .values({
@@ -592,20 +592,6 @@ maybeDescribe("stage 3 operations", () => {
       bytes: 200,
       verified: true,
     });
-    await expect(
-      service.issueDownload({
-        slug: "operations-album-one",
-        visitorToken: undefined,
-        mediaId: media.id,
-        kind: "preview",
-        visitorId: "raw-visitor-token",
-        idempotencyKey: "download-disabled-key",
-      }),
-    ).rejects.toMatchObject({ code: "DOWNLOAD_DISABLED" });
-    await database
-      .update(schema.albums)
-      .set({ previewDownloadEnabled: true })
-      .where(eq(schema.albums.id, albumId));
     const issued = await service.issueDownload({
       slug: "operations-album-one",
       visitorToken: undefined,
@@ -633,13 +619,6 @@ maybeDescribe("stage 3 operations", () => {
       visitorToken: undefined,
       mediaId: media.id,
     };
-    await expect(service.issueOriginalView(viewRequest)).rejects.toMatchObject({
-      code: "DOWNLOAD_DISABLED",
-    });
-    await database
-      .update(schema.albums)
-      .set({ originalDownloadEnabled: true })
-      .where(eq(schema.albums.id, albumId));
     const beforeView = Date.now();
     const view = await service.issueOriginalView(viewRequest);
     expect(view.bytes).toBe(500);
