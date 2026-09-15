@@ -17,12 +17,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import type { DashboardService } from "../analytics/dashboard-service.js";
 import {
   requireInternalCsrf,
   requireInternalSession,
   verifyPasswordConfirmation,
 } from "../auth/http.js";
-import type { DashboardService } from "../analytics/dashboard-service.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import {
