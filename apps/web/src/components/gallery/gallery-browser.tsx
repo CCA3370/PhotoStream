@@ -195,11 +195,7 @@ export function GalleryBrowser({
         )}
       </section>
 
-      <ErrorDialog
-        message={error}
-        onClose={() => setError(null)}
-        title="无法切换照片筛选"
-      />
+      <ErrorDialog message={error} onClose={() => setError(null)} title="无法切换照片筛选" />
     </div>
   );
 }
