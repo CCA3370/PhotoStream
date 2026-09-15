@@ -200,7 +200,9 @@ export default async function GalleryPage({
         initialVisibilityNow={initialVisibilityNow}
         numberLengths={album.bibNumberLengths}
         searchAvailable={searchAvailable}
-        searchToolbarClassName={styles.searchToolbar}
+        {...(styles.searchToolbar === undefined
+          ? {}
+          : { searchToolbarClassName: styles.searchToolbar })}
         slug={slug}
       />
 
