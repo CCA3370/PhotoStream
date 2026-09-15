@@ -5,10 +5,15 @@ import { cn } from "@/lib/utils";
 
 export function AlbumContextNav({
   albumId,
+  counts,
   current,
   role,
 }: Readonly<{
   albumId: string;
+  counts?: {
+    readonly pendingReview?: number;
+    readonly uploadIssues?: number;
+  };
   current: "overview" | "review" | "settings" | "upload";
   role: "admin" | "reviewer" | "uploader";
 }>) {
@@ -19,6 +24,7 @@ export function AlbumContextNav({
       label: "概览",
       icon: LayoutDashboardIcon,
       roles: ["admin", "reviewer"],
+      count: undefined,
     },
     {
       id: "upload",
@@ -26,6 +32,7 @@ export function AlbumContextNav({
       label: "上传",
       icon: UploadIcon,
       roles: ["admin", "uploader"],
+      count: counts?.uploadIssues,
     },
     {
       id: "review",
@@ -33,6 +40,7 @@ export function AlbumContextNav({
       label: "审核",
       icon: SearchIcon,
       roles: ["admin", "reviewer"],
+      count: counts?.pendingReview,
     },
     {
       id: "settings",
@@ -40,6 +48,7 @@ export function AlbumContextNav({
       label: "设置",
       icon: SettingsIcon,
       roles: ["admin"],
+      count: undefined,
     },
   ] as const;
 
@@ -67,6 +76,16 @@ export function AlbumContextNav({
             >
               <Icon aria-hidden="true" className="size-3.5" />
               {link.label}
+              {typeof link.count === "number" && link.count > 0 ? (
+                <span
+                  className={cn(
+                    "min-w-5 rounded-full px-1.5 text-center text-[11px] tabular-nums",
+                    active ? "bg-muted text-foreground" : "bg-background/80 text-muted-foreground",
+                  )}
+                >
+                  {link.count > 999 ? "999+" : link.count}
+                </span>
+              ) : null}
             </Link>
           );
         })}
