@@ -48,6 +48,7 @@ interface BrowserState {
   readonly label: string;
   readonly page: MediaPage;
   readonly revision: number;
+  readonly visibilityNow: number;
 }
 
 export function GalleryBrowser({
@@ -98,6 +99,7 @@ export function GalleryBrowser({
           : initialCategory.name,
     page: initialPage,
     revision: 0,
+    visibilityNow: initialVisibilityNow,
   }));
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +127,7 @@ export function GalleryBrowser({
         );
         if (controller.signal.aborted) return;
 
+        const visibilityNow = Date.now();
         setState((current) => ({
           ...(selection.categoryId === undefined ? {} : { categoryId: selection.categoryId }),
           featuredOnly: selection.featuredOnly,
@@ -132,6 +135,7 @@ export function GalleryBrowser({
           label: selection.label,
           page,
           revision: current.revision + 1,
+          visibilityNow,
         }));
       } catch (caught) {
         if (controller.signal.aborted) return;
@@ -152,7 +156,7 @@ export function GalleryBrowser({
       initialFeaturedIds={initialFeaturedIds}
       initialPage={state.page}
       {...(state.revision === 0 && initialSelectedId !== undefined ? { initialSelectedId } : {})}
-      initialVisibilityNow={state.revision === 0 ? initialVisibilityNow : Date.now()}
+      initialVisibilityNow={state.visibilityNow}
       key={`${state.filterKey}:${state.revision}`}
       slug={slug}
     />
@@ -177,6 +181,7 @@ export function GalleryBrowser({
             bibSearchEnabled={bibSearchEnabled}
             {...(state.categoryId === undefined ? {} : { categoryId: state.categoryId })}
             {...(faceSearch === undefined ? {} : { faceSearch })}
+            key={`search:${state.filterKey}:${state.revision}`}
             numberLengths={numberLengths}
             slug={slug}
           >
