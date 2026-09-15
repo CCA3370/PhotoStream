@@ -1,6 +1,5 @@
 "use client";
 
-import type { PublicAlbumView } from "@photostream/contracts";
 import { ArrowUpRightIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,6 +11,10 @@ import { cn } from "@/lib/utils";
 
 interface ShareResponse {
   readonly shareId: string;
+}
+
+interface ShareView {
+  readonly title: string;
 }
 
 function isWeChatBrowser(): boolean {
@@ -57,9 +60,6 @@ export function PhotoShareButton({
     if (pending) return;
     setPending(true);
     try {
-      const album = await clientGet<PublicAlbumView>(
-        `/api/v1/public/albums/${encodeURIComponent(slug)}`,
-      );
       const resolvedShareId =
         shareId ??
         (
@@ -82,9 +82,12 @@ export function PhotoShareButton({
 
       if (typeof navigator.share === "function") {
         try {
+          const share = await clientGet<ShareView>(
+            `/api/v1/public/shares/${encodeURIComponent(resolvedShareId)}`,
+          );
           await navigator.share({
-            title: `${album.title} · PhotoStream`,
-            text: `查看「${album.title}」活动中的这张照片`,
+            title: `${share.title} · PhotoStream`,
+            text: `查看「${share.title}」活动中的这张照片`,
             url: shareUrl,
           });
           return;
