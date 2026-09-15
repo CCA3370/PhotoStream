@@ -26,7 +26,6 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { serverApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { requireInternalSession } from "@/lib/server-auth";
 
 interface CategoryView {
@@ -266,11 +265,15 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
           <CardContent className="divide-y p-0 text-sm">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="text-muted-foreground">访问方式</span>
-              <span className="font-medium">{album.access === "password" ? "口令访问" : "公开访问"}</span>
+              <span className="font-medium">
+                {album.access === "password" ? "口令访问" : "公开访问"}
+              </span>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="text-muted-foreground">发布方式</span>
-              <span className="font-medium">{album.publishMode === "review" ? "审核后发布" : "自动发布"}</span>
+              <span className="font-medium">
+                {album.publishMode === "review" ? "审核后发布" : "自动发布"}
+              </span>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="text-muted-foreground">省流模式</span>
