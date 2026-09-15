@@ -17,8 +17,11 @@ import {
   viewerServiceNoticeStorageKey,
 } from "@/lib/viewer-onboarding";
 
+const dismissCountdownSeconds = 3;
+
 export function ViewerServiceNotice() {
   const [open, setOpen] = useState(false);
+  const [dismissCountdown, setDismissCountdown] = useState(dismissCountdownSeconds);
 
   useEffect(() => {
     try {
@@ -28,7 +31,23 @@ export function ViewerServiceNotice() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    setDismissCountdown(dismissCountdownSeconds);
+    const timer = window.setInterval(() => {
+      setDismissCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [open]);
+
   function dismiss(): void {
+    if (dismissCountdown > 0) return;
     try {
       window.localStorage.setItem(viewerServiceNoticeStorageKey, "seen");
     } catch {
@@ -46,7 +65,7 @@ export function ViewerServiceNotice() {
           setOpen(true);
           return;
         }
-        dismiss();
+        if (dismissCountdown === 0) dismiss();
       }}
     >
       <DialogContent className="public-theme z-[100] sm:max-w-md" overlayClassName="z-[90]">
@@ -56,7 +75,7 @@ export function ViewerServiceNotice() {
           </div>
           <DialogTitle>请及时保存需要的照片</DialogTitle>
           <DialogDescription>
-            本网站由学生个人开发、维护，仅用于活动期间及结束后短期提供照片浏览与下载，不作为长期照片存储或备份服务。
+            本网站由学生个人开发者（昵称：CCA3370）开发、维护，并作为北航实验学校中学部校团委学生会电视台的活动照片发布与服务平台运行，仅用于活动期间及结束后短期提供照片浏览与下载，不作为长期照片存储或备份服务。
           </DialogDescription>
         </DialogHeader>
 
@@ -67,6 +86,9 @@ export function ViewerServiceNotice() {
           <p>
             服务停止后，该活动相册及其中的照片将无法继续访问、查看或下载。若有需要长期保留的照片，请尽早下载并自行妥善保存。
           </p>
+          <p>
+            PhotoStream 网站的自主开发程序及原创界面内容版权归 CCA3370 所有；本平台展示的活动照片版权及相关权益归北航实验学校中学部校团委学生会电视台或相应权利人所有，另有署名或约定的除外。未经相应权利人许可，请勿将相关内容用于超出个人合理使用范围的转载、发布或其他用途。
+          </p>
           <div className="flex items-start gap-2.5 rounded-xl border bg-muted/25 px-3.5 py-3 text-foreground">
             <DownloadIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <p className="text-sm font-medium leading-5">
@@ -76,8 +98,13 @@ export function ViewerServiceNotice() {
         </div>
 
         <DialogFooter>
-          <Button className="sm:min-w-24" onClick={dismiss} type="button">
-            我知道了
+          <Button
+            className="sm:min-w-28"
+            disabled={dismissCountdown > 0}
+            onClick={dismiss}
+            type="button"
+          >
+            {dismissCountdown > 0 ? `我知道了（${dismissCountdown}s）` : "我知道了"}
           </Button>
         </DialogFooter>
       </DialogContent>
