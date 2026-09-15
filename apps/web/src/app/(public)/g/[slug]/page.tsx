@@ -1,5 +1,7 @@
 import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
+import type { Metadata } from "next";
+import { headers } from "next/headers";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { GalleryBrowser } from "@/components/gallery/gallery-browser";
@@ -31,23 +33,91 @@ interface FaceState {
   readonly indexState: FaceIndexState;
 }
 
+interface GalleryPageSearchParams {
+  readonly category?: string;
+  readonly featured?: string;
+  readonly photo?: string;
+  readonly share?: string;
+}
+
+interface GalleryPageProps {
+  readonly params: Promise<{ slug: string }>;
+  readonly searchParams: Promise<GalleryPageSearchParams>;
+}
+
 const standardInitialMediaPageSize = 60;
 const dataSaverInitialMediaPageSize = 30;
 const initialFeaturedTarget = 8;
 const initialPrefetchPageLimit = 3;
 
-export default async function GalleryPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<{
-    category?: string;
-    featured?: string;
-    photo?: string;
-    share?: string;
-  }>;
-}) {
+function firstForwardedValue(value: string | null): string | null {
+  const first = value?.split(",")[0]?.trim();
+  return first === undefined || first.length === 0 ? null : first;
+}
+
+async function requestOrigin(): Promise<string> {
+  const requestHeaders = await headers();
+  const host =
+    firstForwardedValue(requestHeaders.get("x-forwarded-host")) ?? requestHeaders.get("host");
+  if (host === null) return "https://photos.bhsy.tech";
+  const protocol =
+    firstForwardedValue(requestHeaders.get("x-forwarded-proto")) ??
+    (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  return `${protocol}://${host}`;
+}
+
+export async function generateMetadata({ params, searchParams }: GalleryPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const query = await searchParams;
+
+  try {
+    const album = await serverApi<PublicAlbumView>(
+      `/api/v1/public/albums/${encodeURIComponent(slug)}`,
+    );
+    const albumDescription =
+      album.description?.trim() || `查看「${album.title}」活动影像直播`;
+
+    if (query.photo === undefined) {
+      return {
+        title: { absolute: `${album.title}｜影像直播` },
+        description: albumDescription,
+        openGraph: {
+          title: `${album.title}｜影像直播`,
+          description: albumDescription,
+          type: "website",
+        },
+      };
+    }
+
+    const origin = await requestOrigin();
+    const imageUrl = new URL(
+      `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(query.photo)}/micro-preview`,
+      origin,
+    );
+    if (query.share !== undefined) imageUrl.searchParams.set("share", query.share);
+
+    const pageUrl = new URL(`/g/${encodeURIComponent(slug)}`, origin);
+    pageUrl.searchParams.set("photo", query.photo);
+    if (query.share !== undefined) pageUrl.searchParams.set("share", query.share);
+
+    const photoDescription = `查看「${album.title}」活动中的这张照片`;
+    return {
+      title: { absolute: `${album.title}｜影像直播` },
+      description: photoDescription,
+      openGraph: {
+        title: `${album.title}｜影像直播`,
+        description: photoDescription,
+        type: "website",
+        url: pageUrl.toString(),
+        images: [{ url: imageUrl.toString() }],
+      },
+    };
+  } catch {
+    return {};
+  }
+}
+
+export default async function GalleryPage({ params, searchParams }: GalleryPageProps) {
   const { slug } = await params;
   const query = await searchParams;
   const requestedCategory = query.category;
