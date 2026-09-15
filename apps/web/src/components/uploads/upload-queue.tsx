@@ -178,47 +178,44 @@ export function UploadQueue({
     }
   }
 
-  const enqueue = useCallback(
-    (files: readonly File[]) => {
-      if (files.length === 0) return;
-      if (!localQueueSupported()) {
-        toast.add({ title: "当前浏览器不支持本地审核队列", type: "error" });
-        return;
-      }
-      const valid = files.filter((file) => acceptedTypes.has(file.type));
-      const skipped = files.length - valid.length;
-      const selectedCategory = categoryId === "uncategorized" ? null : categoryId;
-      for (const file of valid) {
-        const id = crypto.randomUUID();
-        taskStore.current.set(id, {
-          id,
-          file,
-          categoryId: selectedCategory,
-          status: "queued",
-          error: null,
-        });
-      }
-      syncTasks();
-      pump();
-      if (valid.length > 0) {
-        toast.add({
-          title: `已加入处理队列 ${valid.length} 张`,
-          description: "不会在审核通过前上传。",
-          type: "success",
-        });
-      }
-      if (skipped > 0) {
-        toast.add({
-          title: `已跳过 ${skipped} 个不支持的文件`,
-          description: "当前支持 JPEG、PNG 和 WebP。",
-          type: "warning",
-        });
-      }
-      if (inputRef.current !== null) inputRef.current.value = "";
-      if (directoryInputRef.current !== null) directoryInputRef.current.value = "";
-    },
-    [categoryId, syncTasks],
-  );
+  function enqueue(files: readonly File[]): void {
+    if (files.length === 0) return;
+    if (!localQueueSupported()) {
+      toast.add({ title: "当前浏览器不支持本地审核队列", type: "error" });
+      return;
+    }
+    const valid = files.filter((file) => acceptedTypes.has(file.type));
+    const skipped = files.length - valid.length;
+    const selectedCategory = categoryId === "uncategorized" ? null : categoryId;
+    for (const file of valid) {
+      const id = crypto.randomUUID();
+      taskStore.current.set(id, {
+        id,
+        file,
+        categoryId: selectedCategory,
+        status: "queued",
+        error: null,
+      });
+    }
+    syncTasks();
+    pump();
+    if (valid.length > 0) {
+      toast.add({
+        title: `已加入处理队列 ${valid.length} 张`,
+        description: "不会在审核通过前上传。",
+        type: "success",
+      });
+    }
+    if (skipped > 0) {
+      toast.add({
+        title: `已跳过 ${skipped} 个不支持的文件`,
+        description: "当前支持 JPEG、PNG 和 WebP。",
+        type: "warning",
+      });
+    }
+    if (inputRef.current !== null) inputRef.current.value = "";
+    if (directoryInputRef.current !== null) directoryInputRef.current.value = "";
+  }
 
   useEffect(() => {
     if (directoryInputRef.current !== null) {
@@ -342,7 +339,12 @@ export function UploadQueue({
             <ImagePlusIcon data-icon="inline-start" />
             选择图片
           </Button>
-          <Button onClick={() => directoryInputRef.current?.click()} size="sm" type="button" variant="outline">
+          <Button
+            onClick={() => directoryInputRef.current?.click()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             <FolderOpenIcon data-icon="inline-start" />
             选择文件夹
           </Button>
@@ -402,7 +404,8 @@ export function UploadQueue({
           <ImagePlusIcon className="size-5 text-muted-foreground" />
           <span className="text-sm font-medium">拖入图片或点击选择</span>
           <span className="max-w-2xl text-xs leading-5 text-muted-foreground">
-            原图和处理结果只保存在当前浏览器。本页不会创建上传任务，也不会向 OSS 传输文件；只有审核页执行发布后才会开始上传。
+            原图和处理结果只保存在当前浏览器。本页不会创建上传任务，也不会向 OSS
+            传输文件；只有审核页执行发布后才会开始上传。
           </span>
         </button>
 

@@ -119,13 +119,18 @@ function SettingRow({
 }
 
 export function AlbumSettings({
-  categories,
-  dataSaver,
+  categories = [],
+  dataSaver = { enabled: false },
   initialAlbum,
+  bibConfig: initialBibConfig,
+  faceConfig: initialFaceConfig,
 }: Readonly<{
-  categories: readonly CategoryOption[];
-  dataSaver: DataSaverSettingView;
+  categories?: readonly CategoryOption[] | undefined;
+  dataSaver?: DataSaverSettingView | undefined;
   initialAlbum: AlbumView;
+  bibConfig?: BibConfigView | undefined;
+  faceConfig?: FaceConfigView | undefined;
+  statistics?: unknown;
 }>) {
   const pendingRef = useRef(new Set<PendingAction>());
   const [album, setAlbum] = useState(initialAlbum);
@@ -137,8 +142,8 @@ export function AlbumSettings({
   const [privacyNotice, setPrivacyNotice] = useState(initialAlbum.privacyNotice);
   const [activeTab, setActiveTab] = useState<SettingsTab>("basic");
   const [featureTab, setFeatureTab] = useState<FeatureTab>("bib");
-  const [bibConfig, setBibConfig] = useState<BibConfigView | null>(null);
-  const [faceConfig, setFaceConfig] = useState<FaceConfigView | null>(null);
+  const [bibConfig, setBibConfig] = useState<BibConfigView | null>(initialBibConfig ?? null);
+  const [faceConfig, setFaceConfig] = useState<FaceConfigView | null>(initialFaceConfig ?? null);
   const [featureLoading, setFeatureLoading] = useState(false);
 
   function isPending(action: PendingAction): boolean {
@@ -271,7 +276,9 @@ export function AlbumSettings({
         <div className="flex shrink-0 items-center gap-1">
           <Button
             aria-label="复制观众页地址"
-            onClick={() => void copyText(`${window.location.origin}${galleryPath}`, "观众页地址已复制")}
+            onClick={() =>
+              void copyText(`${window.location.origin}${galleryPath}`, "观众页地址已复制")
+            }
             size="icon-sm"
             type="button"
             variant="ghost"
@@ -305,11 +312,21 @@ export function AlbumSettings({
         value={activeTab}
       >
         <TabsList className="w-fit max-w-full gap-1 overflow-x-auto p-1">
-          <TabsTrigger className="px-3" value="basic">基础信息</TabsTrigger>
-          <TabsTrigger className="px-3" value="access">访问与发布</TabsTrigger>
-          <TabsTrigger className="px-3" value="categories">分类</TabsTrigger>
-          <TabsTrigger className="px-3" value="features">查找功能</TabsTrigger>
-          <TabsTrigger className="px-3" value="traffic">流量</TabsTrigger>
+          <TabsTrigger className="px-3" value="basic">
+            基础信息
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="access">
+            访问与发布
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="categories">
+            分类
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="features">
+            查找功能
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="traffic">
+            流量
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="basic">
@@ -402,7 +419,11 @@ export function AlbumSettings({
                     <span className="text-xs text-muted-foreground">
                       {privacyDirty ? "有未保存修改" : "已保存"}
                     </span>
-                    <Button disabled={!privacyDirty || isPending("privacy")} size="sm" type="submit">
+                    <Button
+                      disabled={!privacyDirty || isPending("privacy")}
+                      size="sm"
+                      type="submit"
+                    >
                       {isPending("privacy") ? (
                         <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
                       ) : null}
@@ -424,7 +445,9 @@ export function AlbumSettings({
               <CardContent className="divide-y p-0">
                 <SettingRow
                   description="关闭后访客需要输入活动口令"
-                  status={<Badge variant="secondary">{album.access === "public" ? "公开" : "口令"}</Badge>}
+                  status={
+                    <Badge variant="secondary">{album.access === "public" ? "公开" : "口令"}</Badge>
+                  }
                   title="公开访问"
                 >
                   {isPending("access") ? (
@@ -446,7 +469,11 @@ export function AlbumSettings({
 
                 <SettingRow
                   description="关闭后照片进入审核列表，由审核员确认后才发布"
-                  status={<Badge variant="secondary">{album.publishMode === "auto" ? "自动" : "审核"}</Badge>}
+                  status={
+                    <Badge variant="secondary">
+                      {album.publishMode === "auto" ? "自动" : "审核"}
+                    </Badge>
+                  }
                   title="自动发布"
                 >
                   {isPending("publish") ? (
@@ -520,7 +547,10 @@ export function AlbumSettings({
                     />
                   )}
                 </SettingRow>
-                <SettingRow description="允许观众下载原始尺寸图片，流量消耗通常更高" title="原图下载">
+                <SettingRow
+                  description="允许观众下载原始尺寸图片，流量消耗通常更高"
+                  title="原图下载"
+                >
                   {isPending("originalDownload") ? (
                     <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
                   ) : (
@@ -548,7 +578,9 @@ export function AlbumSettings({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <CardTitle>分类</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">管理上传和观众页使用的活动分类。</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    管理上传和观众页使用的活动分类。
+                  </p>
                 </div>
                 <Badge variant="outline">{categories.length} 个</Badge>
               </div>
@@ -561,7 +593,10 @@ export function AlbumSettings({
               ) : (
                 <div className="divide-y rounded-lg border">
                   {categories.map((category) => (
-                    <div className="flex items-center justify-between gap-3 px-3 py-2.5" key={category.id}>
+                    <div
+                      className="flex items-center justify-between gap-3 px-3 py-2.5"
+                      key={category.id}
+                    >
                       <span className="text-sm font-medium">{category.name}</span>
                       <Badge variant={category.enabled ? "secondary" : "outline"}>
                         {category.enabled ? "启用" : "停用"}
@@ -584,8 +619,12 @@ export function AlbumSettings({
             value={featureTab}
           >
             <TabsList className="w-fit max-w-full gap-1 overflow-x-auto p-1">
-              <TabsTrigger className="px-3" value="bib">号码识别</TabsTrigger>
-              <TabsTrigger className="px-3" value="face">人脸找图</TabsTrigger>
+              <TabsTrigger className="px-3" value="bib">
+                号码识别
+              </TabsTrigger>
+              <TabsTrigger className="px-3" value="face">
+                人脸找图
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="bib">
               {featureLoading && bibConfig === null ? (
