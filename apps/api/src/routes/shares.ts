@@ -20,8 +20,17 @@ const paramsSchema = z
     mediaId: z.string().uuid(),
   })
   .strict();
+const shareIdParamsSchema = z.object({ shareId: z.string().uuid() }).strict();
 const shareQuerySchema = z.object({ share: z.string().uuid() }).strict();
 const createShareResponseSchema = z.object({ shareId: z.string().uuid() }).strict();
+const shortShareViewSchema = z
+  .object({
+    slug: z.string().min(12).max(32),
+    title: z.string(),
+    description: z.string().nullable(),
+    media: publicMediaViewSchema,
+  })
+  .strict();
 const mediaLikeStateSchema = z
   .object({
     mediaId: z.string().uuid(),
@@ -61,6 +70,43 @@ export async function registerShareRoutes(
         ...request.params,
         visitorToken: visitorSessionToken(request, options.config, request.params.slug),
       });
+    },
+  );
+
+  typed.get(
+    "/api/v1/public/shares/:shareId",
+    {
+      config: { rateLimit: { max: 180, timeWindow: "1 minute" } },
+      schema: {
+        operationId: "getPublicPhotoShare",
+        tags: ["public"],
+        params: shareIdParamsSchema,
+        response: { 200: shortShareViewSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      return options.shareService.getShareView(request.params);
+    },
+  );
+
+  typed.get(
+    "/api/v1/public/shares/:shareId/micro-preview",
+    {
+      config: { rateLimit: { max: 300, timeWindow: "1 minute" } },
+      schema: {
+        operationId: "readPublicPhotoShareMicroPreview",
+        tags: ["public"],
+        params: shareIdParamsSchema,
+      },
+    },
+    async (request, reply) => {
+      const url = await options.shareService.sharedMicroPreviewUrl(request.params);
+      return reply
+        .status(302)
+        .header("cache-control", "public, max-age=60")
+        .header("location", url)
+        .send();
     },
   );
 
