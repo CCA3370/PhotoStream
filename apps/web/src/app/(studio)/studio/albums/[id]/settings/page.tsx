@@ -20,7 +20,13 @@ export default async function AlbumSettingsPage({ params }: { params: Promise<{ 
 
   return (
     <section aria-labelledby="settings-heading" className="flex flex-col gap-4">
-      <AlbumWorkspaceHeader headingId="settings-heading" section="活动设置" title={album.title} />
+      <AlbumWorkspaceHeader
+        albumId={id}
+        headingId="settings-heading"
+        section="设置"
+        state={album.state}
+        title={album.title}
+      />
       <AlbumContextNav albumId={id} current="settings" role={session.user.role} />
       <AlbumDataSaverSetting albumId={id} initialSetting={dataSaver} />
       <AlbumSettings bibConfig={bibConfig} faceConfig={faceConfig} initialAlbum={album} />
