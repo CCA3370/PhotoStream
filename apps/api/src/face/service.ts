@@ -330,13 +330,12 @@ export class FaceService {
   }
 
   async excludeMedia(options: {
-    actor: InternalActor & { authenticatedAt: Date };
+    actor: InternalActor;
     albumId: string;
     mediaIds: readonly string[];
     requestId: string;
   }): Promise<FaceConfigView> {
     requirePermission(options.actor, "album:configure");
-    requireRecentAuthentication(options.actor.authenticatedAt);
     const rows = await this.#database
       .select({ id: schema.media.id })
       .from(schema.media)

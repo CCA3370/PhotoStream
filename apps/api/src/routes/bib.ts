@@ -21,6 +21,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import type { DashboardService } from "../analytics/dashboard-service.js";
 import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { BibService } from "../bib/service.js";
@@ -59,6 +60,7 @@ export async function registerBibRoutes(
   options: {
     readonly authService: AuthService;
     readonly bibService: BibService;
+    readonly dashboardService?: DashboardService;
     readonly config: AppConfig;
   },
 ): Promise<void> {
@@ -394,12 +396,19 @@ export async function registerBibRoutes(
     async (request, reply) => {
       noStore(reply);
       await enforcePublicBibRateLimit(request, request.params.slug);
-      return options.bibService.searchPublic({
+      const result = await options.bibService.searchPublic({
         slug: request.params.slug,
         visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         number: request.body.number,
         cursor: request.body.cursor,
       });
+      if (request.body.cursor === undefined) {
+        await options.dashboardService?.recordSearchUsage({
+          slug: request.params.slug,
+          method: "number",
+        });
+      }
+      return result;
     },
   );
 
@@ -417,7 +426,7 @@ export async function registerBibRoutes(
     async (request, reply) => {
       noStore(reply);
       await enforcePublicBibRateLimit(request, request.params.slug);
-      return options.bibService.filterPublicAttributes({
+      const result = await options.bibService.filterPublicAttributes({
         slug: request.params.slug,
         visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         gradeOptionId: request.body.gradeOptionId,
@@ -425,6 +434,13 @@ export async function registerBibRoutes(
         categoryId: request.body.categoryId,
         cursor: request.body.cursor,
       });
+      if (request.body.cursor === undefined) {
+        await options.dashboardService?.recordSearchUsage({
+          slug: request.params.slug,
+          method: "attributes",
+        });
+      }
+      return result;
     },
   );
 }
