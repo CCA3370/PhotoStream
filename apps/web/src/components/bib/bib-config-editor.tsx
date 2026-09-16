@@ -95,11 +95,7 @@ function optionLabel(option: BibAttributeOptionInput): string {
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
   if (value.trim().length === 0) return false;
   const parsed = Number(value);
-  return (
-    Number.isInteger(parsed) &&
-    parsed >= min &&
-    (max === undefined || parsed <= max)
-  );
+  return Number.isInteger(parsed) && parsed >= min && (max === undefined || parsed <= max);
 }
 
 function DraftNumberInput({
