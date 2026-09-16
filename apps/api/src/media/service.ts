@@ -1599,6 +1599,172 @@ export class PhotoService {
     };
   }
 
+  async listInternalMediaSelection(
+    actor: InternalActor,
+    options: {
+      readonly albumId: string;
+      readonly publicationStatus?:
+        | (typeof schema.publicationStatusEnum.enumValues)[number]
+        | undefined;
+      readonly featured?: "true" | undefined;
+      readonly ingestStatus?: (typeof schema.ingestStatusEnum.enumValues)[number] | undefined;
+      readonly ingestGroup?: "incomplete" | "failed" | undefined;
+      readonly categoryId?: string | undefined;
+      readonly uploaderId?: string | undefined;
+      readonly bibReviewDecision?:
+        | (typeof schema.bibReviewDecisionEnum.enumValues)[number]
+        | undefined;
+      readonly bibOcrStatus?: (typeof schema.bibOcrStatusEnum.enumValues)[number] | undefined;
+      readonly gradeOptionId?: string | undefined;
+      readonly classOptionId?: string | undefined;
+      readonly cursor?: string | undefined;
+      readonly limit: number;
+    },
+  ) {
+    requirePermission(actor.role, "album:read");
+    const album = await this.#albumById(this.#database, options.albumId);
+    if (album === null) throw this.#albumNotFound();
+    const cursor =
+      options.cursor === undefined
+        ? null
+        : this.#decodeInternalCursor(options.cursor, options.albumId);
+    const baseConditions = [eq(schema.media.albumId, options.albumId)];
+    if (options.publicationStatus !== undefined) {
+      baseConditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
+    }
+    if (options.featured === "true") {
+      baseConditions.push(
+        exists(
+          this.#database
+            .select({ value: sql`1` })
+            .from(schema.featuredMedia)
+            .where(eq(schema.featuredMedia.mediaId, schema.media.id)),
+        ),
+      );
+    }
+    if (options.ingestStatus !== undefined) {
+      baseConditions.push(eq(schema.media.ingestStatus, options.ingestStatus));
+    }
+    if (options.ingestGroup === "incomplete") {
+      baseConditions.push(inArray(schema.media.ingestStatus, incompleteIngestStatuses));
+    } else if (options.ingestGroup === "failed") {
+      baseConditions.push(eq(schema.media.ingestStatus, "failed"));
+    }
+    if (options.categoryId !== undefined) {
+      baseConditions.push(eq(schema.media.categoryId, options.categoryId));
+    }
+    if (options.uploaderId !== undefined) {
+      baseConditions.push(eq(schema.media.uploaderId, options.uploaderId));
+    }
+    if (options.bibReviewDecision !== undefined) {
+      const matchingReview = this.#database
+        .select({ value: sql`1` })
+        .from(schema.mediaBibReviews)
+        .where(
+          and(
+            eq(schema.mediaBibReviews.mediaId, schema.media.id),
+            eq(schema.mediaBibReviews.decision, options.bibReviewDecision),
+          ),
+        );
+      if (options.bibReviewDecision === "pending") {
+        const anyReview = this.#database
+          .select({ value: sql`1` })
+          .from(schema.mediaBibReviews)
+          .where(eq(schema.mediaBibReviews.mediaId, schema.media.id));
+        const pending = or(exists(matchingReview), not(exists(anyReview)));
+        if (pending !== undefined) baseConditions.push(pending);
+      } else {
+        baseConditions.push(exists(matchingReview));
+      }
+    }
+    if (options.bibOcrStatus !== undefined) {
+      baseConditions.push(
+        exists(
+          this.#database
+            .select({ value: sql`1` })
+            .from(schema.mediaBibReviews)
+            .where(
+              and(
+                eq(schema.mediaBibReviews.mediaId, schema.media.id),
+                eq(schema.mediaBibReviews.ocrStatus, options.bibOcrStatus),
+              ),
+            ),
+        ),
+      );
+    }
+    if (options.gradeOptionId !== undefined) {
+      baseConditions.push(
+        exists(
+          this.#database
+            .select({ value: sql`1` })
+            .from(schema.mediaBibTags)
+            .where(
+              and(
+                eq(schema.mediaBibTags.mediaId, schema.media.id),
+                eq(schema.mediaBibTags.status, "confirmed"),
+                eq(schema.mediaBibTags.mappingVersion, album.bibMappingVersion),
+                eq(schema.mediaBibTags.gradeOptionId, options.gradeOptionId),
+                ...(options.classOptionId === undefined
+                  ? []
+                  : [eq(schema.mediaBibTags.classOptionId, options.classOptionId)]),
+              ),
+            ),
+        ),
+      );
+    }
+    if (actor.role === "uploader") {
+      baseConditions.push(eq(schema.media.uploaderId, actor.id));
+    }
+    const [countRow] = await this.#database
+      .select({ total: sql<number>`count(*)::int` })
+      .from(schema.media)
+      .where(and(...baseConditions));
+    const conditions = [...baseConditions];
+    if (cursor !== null) {
+      const cursorCondition = or(
+        lt(schema.media.createdAt, cursor.createdAt),
+        and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),
+      );
+      if (cursorCondition !== undefined) conditions.push(cursorCondition);
+    }
+    const rows = await this.#database
+      .select({
+        id: schema.media.id,
+        publicationStatus: schema.media.publicationStatus,
+        categoryId: schema.media.categoryId,
+        createdAt: schema.media.createdAt,
+      })
+      .from(schema.media)
+      .where(and(...conditions))
+      .orderBy(desc(schema.media.createdAt), desc(schema.media.id))
+      .limit(options.limit + 1);
+    const hasMore = rows.length > options.limit;
+    const page = rows.slice(0, options.limit);
+    const mediaIds = page.map((row) => row.id);
+    const featured =
+      mediaIds.length === 0
+        ? []
+        : await this.#database
+            .select({ mediaId: schema.featuredMedia.mediaId })
+            .from(schema.featuredMedia)
+            .where(inArray(schema.featuredMedia.mediaId, mediaIds));
+    const featuredIds = new Set(featured.map((row) => row.mediaId));
+    const last = page.at(-1);
+    return {
+      items: page.map((row) => ({
+        id: row.id,
+        publicationStatus: row.publicationStatus,
+        categoryId: row.categoryId,
+        featured: featuredIds.has(row.id),
+      })),
+      nextCursor:
+        hasMore && last !== undefined
+          ? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id)
+          : null,
+      total: countRow?.total ?? 0,
+    };
+  }
+
   async listAlbumUploaders(actor: InternalActor, albumId: string) {
     requirePermission(actor.role, "album:read");
     const album = await this.#albumById(this.#database, albumId);
