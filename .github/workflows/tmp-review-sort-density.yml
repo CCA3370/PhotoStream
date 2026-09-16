@@ -1,0 +1,166 @@
+name: Temporary review sort and density integrator
+
+on:
+  push:
+    branches:
+      - review-workspace-efficiency
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: review-workspace-efficiency
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Integrate sorting and grid density
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          routes = Path('apps/api/src/routes/photos.ts')
+          text = routes.read_text()
+          old = '''    classOptionId: z.string().uuid().optional(),\n    cursor: z.string().max(1_000).optional(),'''
+          new = '''    classOptionId: z.string().uuid().optional(),\n    sort: z.enum(["newest", "oldest"]).default("newest"),\n    cursor: z.string().max(1_000).optional(),'''
+          if text.count(old) != 2:
+              raise SystemExit(f'expected 2 route sort anchors, found {text.count(old)}')
+          text = text.replace(old, new)
+          routes.write_text(text)
+
+          service = Path('apps/api/src/media/service.ts')
+          text = service.read_text()
+          old = '''      readonly classOptionId?: string | undefined;\n      readonly cursor?: string | undefined;\n      readonly limit: number;'''
+          new = '''      readonly classOptionId?: string | undefined;\n      readonly sort: "newest" | "oldest";\n      readonly cursor?: string | undefined;\n      readonly limit: number;'''
+          if text.count(old) != 2:
+              raise SystemExit(f'expected 2 service option anchors, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '        : this.#decodeInternalCursor(options.cursor, options.albumId);'
+          new = '        : this.#decodeInternalCursor(options.cursor, options.albumId, options.sort);'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected 2 decode calls, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '''      const cursorCondition = or(\n        lt(schema.media.createdAt, cursor.createdAt),\n        and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),\n      );'''
+          new = '''      const cursorCondition =\n        options.sort === "oldest"\n          ? or(\n              gt(schema.media.createdAt, cursor.createdAt),\n              and(eq(schema.media.createdAt, cursor.createdAt), gt(schema.media.id, cursor.mediaId)),\n            )\n          : or(\n              lt(schema.media.createdAt, cursor.createdAt),\n              and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),\n            );'''
+          if text.count(old) != 2:
+              raise SystemExit(f'expected 2 cursor condition anchors, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '.orderBy(desc(schema.media.createdAt), desc(schema.media.id))'
+          new = '''.orderBy(\n        ...(options.sort === "oldest"\n          ? [asc(schema.media.createdAt), asc(schema.media.id)]\n          : [desc(schema.media.createdAt), desc(schema.media.id)]),\n      )'''
+          if text.count(old) < 2:
+              raise SystemExit(f'expected at least 2 internal order anchors, found {text.count(old)}')
+          text = text.replace(old, new, 2)
+          old = '? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id)'
+          new = '? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id, options.sort)'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected 2 encode calls, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '''  #encodeInternalCursor(albumId: string, createdAt: Date, mediaId: string): string {\n    const encoded = Buffer.from(\n      JSON.stringify({ albumId, createdAt: createdAt.toISOString(), mediaId }),'''
+          new = '''  #encodeInternalCursor(\n    albumId: string,\n    createdAt: Date,\n    mediaId: string,\n    sort: "newest" | "oldest",\n  ): string {\n    const encoded = Buffer.from(\n      JSON.stringify({ albumId, createdAt: createdAt.toISOString(), mediaId, sort }),'''
+          if old not in text:
+              raise SystemExit('encode helper anchor missing')
+          text = text.replace(old, new, 1)
+          old = '  #decodeInternalCursor(value: string, albumId: string) {'
+          new = '''  #decodeInternalCursor(\n    value: string,\n    albumId: string,\n    sort: "newest" | "oldest",\n  ) {'''
+          if old not in text:
+              raise SystemExit('decode helper anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''        albumId: string;\n        createdAt: string;\n        mediaId: string;\n      };'''
+          new = '''        albumId: string;\n        createdAt: string;\n        mediaId: string;\n        sort: "newest" | "oldest";\n      };'''
+          if old not in text:
+              raise SystemExit('decode payload type anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''        parsed.albumId !== albumId ||\n        Number.isNaN(createdAt.getTime()) ||'''
+          new = '''        parsed.albumId !== albumId ||\n        parsed.sort !== sort ||\n        Number.isNaN(createdAt.getTime()) ||'''
+          if old not in text:
+              raise SystemExit('decode validation anchor missing')
+          text = text.replace(old, new, 1)
+          service.write_text(text)
+
+          workspace = Path('apps/web/src/components/review/review-workspace.tsx')
+          text = workspace.read_text()
+          old = '''type BibOcrFilter = "all" | "completed" | "failed" | "not_started" | "processing" | "unsupported";\ntype RemoteBatchAction = "change_category" | "hide" | "publish" | "restore";'''
+          new = '''type BibOcrFilter = "all" | "completed" | "failed" | "not_started" | "processing" | "unsupported";\ntype SortOrder = "newest" | "oldest";\ntype GridDensity = "compact" | "standard" | "large";\ntype RemoteBatchAction = "change_category" | "hide" | "publish" | "restore";'''
+          if old not in text:
+              raise SystemExit('workspace type anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''const bibOcrFilters = new Set<BibOcrFilter>([\n  "all",\n  "completed",\n  "failed",\n  "not_started",\n  "processing",\n  "unsupported",\n]);'''
+          new = '''const bibOcrFilters = new Set<BibOcrFilter>([\n  "all",\n  "completed",\n  "failed",\n  "not_started",\n  "processing",\n  "unsupported",\n]);\nconst sortOrders = new Set<SortOrder>(["newest", "oldest"]);\nconst gridDensities = new Set<GridDensity>(["compact", "standard", "large"]);\nconst reviewGridDensityStorageKey = "photostream:review-grid-density";'''
+          if old not in text:
+              raise SystemExit('workspace constants anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''  const [classOption, setClassOption] = useState("all");\n  const [filtersHydrated, setFiltersHydrated] = useState(false);'''
+          new = '''  const [classOption, setClassOption] = useState("all");\n  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");\n  const [gridDensity, setGridDensity] = useState<GridDensity>("standard");\n  const [filtersHydrated, setFiltersHydrated] = useState(false);'''
+          if old not in text:
+              raise SystemExit('workspace state anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''    setGradeOption(simpleQueryValue(params, "grade"));\n    setClassOption(simpleQueryValue(params, "class"));\n    setFiltersHydrated(true);'''
+          new = '''    setGradeOption(simpleQueryValue(params, "grade"));\n    setClassOption(simpleQueryValue(params, "class"));\n    setSortOrder(enumQueryValue(params, "sort", sortOrders, "newest"));\n    setFiltersHydrated(true);'''
+          if old not in text:
+              raise SystemExit('workspace URL hydrate anchor missing')
+          text = text.replace(old, new, 1)
+          anchor = '''  useEffect(() => {\n    applyFiltersFromLocation();\n    window.addEventListener("popstate", applyFiltersFromLocation);\n    return () => window.removeEventListener("popstate", applyFiltersFromLocation);\n  }, [applyFiltersFromLocation]);\n'''
+          addition = anchor + '''\n  useEffect(() => {\n    const saved = window.localStorage.getItem(reviewGridDensityStorageKey);\n    if (saved !== null && gridDensities.has(saved as GridDensity)) {\n      setGridDensity(saved as GridDensity);\n    }\n  }, []);\n\n  function changeGridDensity(value: GridDensity): void {\n    setGridDensity(value);\n    window.localStorage.setItem(reviewGridDensityStorageKey, value);\n  }\n'''
+          if anchor not in text:
+              raise SystemExit('workspace density effect anchor missing')
+          text = text.replace(anchor, addition, 1)
+          old = '''    setOrDelete("grade", gradeOption);\n    if (gradeOption === "all") url.searchParams.delete("class");\n    else setOrDelete("class", classOption);'''
+          new = '''    setOrDelete("grade", gradeOption);\n    if (gradeOption === "all") url.searchParams.delete("class");\n    else setOrDelete("class", classOption);\n    setOrDelete("sort", sortOrder, "newest");'''
+          if old not in text:
+              raise SystemExit('workspace URL sync anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''    ingestFilter,\n    uploader,\n  ]);'''
+          new = '''    ingestFilter,\n    sortOrder,\n    uploader,\n  ]);'''
+          if old not in text:
+              raise SystemExit('workspace URL dependency anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''      if (gradeOption !== "all") query.set("gradeOptionId", gradeOption);\n      if (gradeOption !== "all" && classOption !== "all") query.set("classOptionId", classOption);\n      if (pageCursor !== undefined) query.set("cursor", pageCursor);'''
+          new = '''      if (gradeOption !== "all") query.set("gradeOptionId", gradeOption);\n      if (gradeOption !== "all" && classOption !== "all") query.set("classOptionId", classOption);\n      query.set("sort", sortOrder);\n      if (pageCursor !== undefined) query.set("cursor", pageCursor);'''
+          if old not in text:
+              raise SystemExit('workspace remote query anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''    [bibDecision, bibOcrStatus, category, classOption, gradeOption, ingestFilter, uploader],'''
+          new = '''    [\n      bibDecision,\n      bibOcrStatus,\n      category,\n      classOption,\n      gradeOption,\n      ingestFilter,\n      sortOrder,\n      uploader,\n    ],'''
+          if old not in text:
+              raise SystemExit('workspace remote query dependencies anchor missing')
+          text = text.replace(old, new, 1)
+          old = '''    return [...localItems, ...remoteItems].sort((left, right) =>\n      right.createdAt.localeCompare(left.createdAt),\n    );\n  }, [featuredIds, localMedia, remoteMedia]);'''
+          new = '''    return [...localItems, ...remoteItems].sort((left, right) =>\n      sortOrder === "oldest"\n        ? left.createdAt.localeCompare(right.createdAt)\n        : right.createdAt.localeCompare(left.createdAt),\n    );\n  }, [featuredIds, localMedia, remoteMedia, sortOrder]);'''
+          if old not in text:
+              raise SystemExit('workspace item sort anchor missing')
+          text = text.replace(old, new, 1)
+          uploader_end = '''            {uploaders.length === 0 ? null : (\n              <Select\n                items={[\n                  { label: "全部上传者", value: "all" },\n                  ...uploaders.map((item) => ({ label: item.displayName, value: item.id })),\n                ]}\n                onValueChange={(value) => {\n                  setUploader(value ?? "all");\n                  resetSelection();\n                }}\n                value={uploader}\n              >\n                <SelectTrigger aria-label="上传者筛选" className="h-7 w-28 text-xs">\n                  <SelectValue />\n                </SelectTrigger>\n                <SelectContent>\n                  <SelectGroup>\n                    <SelectItem value="all">全部上传者</SelectItem>\n                    {uploaders.map((item) => (\n                      <SelectItem key={item.id} value={item.id}>\n                        {item.displayName}\n                      </SelectItem>\n                    ))}\n                  </SelectGroup>\n                </SelectContent>\n              </Select>\n            )}'''
+          controls = uploader_end + '''\n            <Select\n              items={[\n                { label: "最新优先", value: "newest" },\n                { label: "最早优先", value: "oldest" },\n              ]}\n              onValueChange={(value) => {\n                setSortOrder((value ?? "newest") as SortOrder);\n                resetSelection();\n              }}\n              value={sortOrder}\n            >\n              <SelectTrigger aria-label="照片排序" className="h-7 w-24 text-xs">\n                <SelectValue />\n              </SelectTrigger>\n              <SelectContent>\n                <SelectGroup>\n                  <SelectItem value="newest">最新优先</SelectItem>\n                  <SelectItem value="oldest">最早优先</SelectItem>\n                </SelectGroup>\n              </SelectContent>\n            </Select>\n            <Select\n              items={[\n                { label: "紧凑", value: "compact" },\n                { label: "标准", value: "standard" },\n                { label: "大图", value: "large" },\n              ]}\n              onValueChange={(value) => changeGridDensity((value ?? "standard") as GridDensity)}\n              value={gridDensity}\n            >\n              <SelectTrigger aria-label="网格密度" className="h-7 w-20 text-xs">\n                <SelectValue />\n              </SelectTrigger>\n              <SelectContent>\n                <SelectGroup>\n                  <SelectItem value="compact">紧凑</SelectItem>\n                  <SelectItem value="standard">标准</SelectItem>\n                  <SelectItem value="large">大图</SelectItem>\n                </SelectGroup>\n              </SelectContent>\n            </Select>'''
+          if uploader_end not in text:
+              raise SystemExit('workspace toolbar uploader anchor missing')
+          text = text.replace(uploader_end, controls, 1)
+          old = '<div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">'
+          new = '''<div\n          className={cn(\n            "grid grid-cols-2 gap-2 sm:grid-cols-3",\n            gridDensity === "compact" && "md:grid-cols-4 xl:grid-cols-7 2xl:grid-cols-8",\n            gridDensity === "standard" && "md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",\n            gridDensity === "large" && "md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",\n          )}\n        >'''
+          if old not in text:
+              raise SystemExit('workspace grid anchor missing')
+          text = text.replace(old, new, 1)
+          workspace.write_text(text)
+          PY
+          pnpm exec biome check --write apps/api/src/routes/photos.ts apps/api/src/media/service.ts apps/web/src/components/review/review-workspace.tsx
+          pnpm typecheck
+      - name: Commit integration
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/api/src/routes/photos.ts apps/api/src/media/service.ts apps/web/src/components/review/review-workspace.tsx
+          git commit -m 'feat(review): add sorting and grid density'
+          git push origin HEAD:review-workspace-efficiency
