@@ -76,6 +76,7 @@ const internalMediaQuerySchema = z
     bibOcrStatus: bibOcrStatusSchema.optional(),
     gradeOptionId: z.string().uuid().optional(),
     classOptionId: z.string().uuid().optional(),
+    sort: z.enum(["newest", "oldest"]).default("newest"),
     cursor: z.string().max(1_000).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(60),
   })
@@ -96,6 +97,7 @@ const internalMediaSelectionQuerySchema = z
     bibOcrStatus: bibOcrStatusSchema.optional(),
     gradeOptionId: z.string().uuid().optional(),
     classOptionId: z.string().uuid().optional(),
+    sort: z.enum(["newest", "oldest"]).default("newest"),
     cursor: z.string().max(1_000).optional(),
     limit: z.coerce.number().int().min(1).max(1_000).default(1_000),
   })

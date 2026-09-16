@@ -98,6 +98,8 @@ type BibDecisionFilter =
   | "numbers_confirmed"
   | "pending";
 type BibOcrFilter = "all" | "completed" | "failed" | "not_started" | "processing" | "unsupported";
+type SortOrder = "newest" | "oldest";
+type GridDensity = "compact" | "standard" | "large";
 type RemoteBatchAction = "change_category" | "hide" | "publish" | "restore";
 
 type RemoteCursor =
@@ -201,6 +203,9 @@ const bibOcrFilters = new Set<BibOcrFilter>([
   "processing",
   "unsupported",
 ]);
+const sortOrders = new Set<SortOrder>(["newest", "oldest"]);
+const gridDensities = new Set<GridDensity>(["compact", "standard", "large"]);
+const reviewGridDensityStorageKey = "photostream:review-grid-density";
 
 function enumQueryValue<T extends string>(
   params: URLSearchParams,
@@ -254,12 +259,6 @@ function chunks<T>(items: readonly T[], size: number): readonly T[][] {
   return result;
 }
 
-function cursorSignature(cursor: RemoteCursor): string {
-  return cursor.kind === "single"
-    ? `single:${cursor.value}`
-    : `unpublished:${cursor.draft ?? "-"}:${cursor.pendingReview ?? "-"}`;
-}
-
 export function ReviewWorkspace({
   albumId,
   albumTitle,
@@ -297,6 +296,8 @@ export function ReviewWorkspace({
   const [bibOcrStatus, setBibOcrStatus] = useState<BibOcrFilter>("all");
   const [gradeOption, setGradeOption] = useState("all");
   const [classOption, setClassOption] = useState("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [gridDensity, setGridDensity] = useState<GridDensity>("standard");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [inspectorKey, setInspectorKey] = useState<string | null>(null);
@@ -344,6 +345,7 @@ export function ReviewWorkspace({
     setBibOcrStatus(enumQueryValue(params, "bibOcr", bibOcrFilters, "all"));
     setGradeOption(simpleQueryValue(params, "grade"));
     setClassOption(simpleQueryValue(params, "class"));
+    setSortOrder(enumQueryValue(params, "sort", sortOrders, "newest"));
     setFiltersHydrated(true);
   }, []);
 
@@ -352,6 +354,18 @@ export function ReviewWorkspace({
     window.addEventListener("popstate", applyFiltersFromLocation);
     return () => window.removeEventListener("popstate", applyFiltersFromLocation);
   }, [applyFiltersFromLocation]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(reviewGridDensityStorageKey);
+    if (saved !== null && gridDensities.has(saved as GridDensity)) {
+      setGridDensity(saved as GridDensity);
+    }
+  }, []);
+
+  function changeGridDensity(value: GridDensity): void {
+    setGridDensity(value);
+    window.localStorage.setItem(reviewGridDensityStorageKey, value);
+  }
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -369,6 +383,7 @@ export function ReviewWorkspace({
     setOrDelete("grade", gradeOption);
     if (gradeOption === "all") url.searchParams.delete("class");
     else setOrDelete("class", classOption);
+    setOrDelete("sort", sortOrder, "newest");
     const next = `${url.pathname}${url.search}${url.hash}`;
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (next !== current) window.history.replaceState(window.history.state, "", next);
@@ -381,6 +396,7 @@ export function ReviewWorkspace({
     filtersHydrated,
     gradeOption,
     ingestFilter,
+    sortOrder,
     uploader,
   ]);
 
@@ -431,10 +447,20 @@ export function ReviewWorkspace({
       if (bibOcrStatus !== "all") query.set("bibOcrStatus", bibOcrStatus);
       if (gradeOption !== "all") query.set("gradeOptionId", gradeOption);
       if (gradeOption !== "all" && classOption !== "all") query.set("classOptionId", classOption);
+      query.set("sort", sortOrder);
       if (pageCursor !== undefined) query.set("cursor", pageCursor);
       return query;
     },
-    [bibDecision, bibOcrStatus, category, classOption, gradeOption, ingestFilter, uploader],
+    [
+      bibDecision,
+      bibOcrStatus,
+      category,
+      classOption,
+      gradeOption,
+      ingestFilter,
+      sortOrder,
+      uploader,
+    ],
   );
 
   const fetchRemote = useCallback(
@@ -617,9 +643,11 @@ export function ReviewWorkspace({
         };
       });
     return [...localItems, ...remoteItems].sort((left, right) =>
-      right.createdAt.localeCompare(left.createdAt),
+      sortOrder === "oldest"
+        ? left.createdAt.localeCompare(right.createdAt)
+        : right.createdAt.localeCompare(left.createdAt),
     );
-  }, [featuredIds, localMedia, remoteMedia]);
+  }, [featuredIds, localMedia, remoteMedia, sortOrder]);
 
   const visibleItems = useMemo(
     () =>
@@ -1819,6 +1847,47 @@ export function ReviewWorkspace({
                 </SelectContent>
               </Select>
             )}
+            <Select
+              items={[
+                { label: "最新优先", value: "newest" },
+                { label: "最早优先", value: "oldest" },
+              ]}
+              onValueChange={(value) => {
+                setSortOrder((value ?? "newest") as SortOrder);
+                resetSelection();
+              }}
+              value={sortOrder}
+            >
+              <SelectTrigger aria-label="照片排序" className="h-7 w-24 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="newest">最新优先</SelectItem>
+                  <SelectItem value="oldest">最早优先</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Select
+              items={[
+                { label: "紧凑", value: "compact" },
+                { label: "标准", value: "standard" },
+                { label: "大图", value: "large" },
+              ]}
+              onValueChange={(value) => changeGridDensity((value ?? "standard") as GridDensity)}
+              value={gridDensity}
+            >
+              <SelectTrigger aria-label="网格密度" className="h-7 w-20 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="compact">紧凑</SelectItem>
+                  <SelectItem value="standard">标准</SelectItem>
+                  <SelectItem value="large">大图</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <Button
               className="h-7 px-2.5 text-xs"
               onClick={() => {
@@ -2186,7 +2255,14 @@ export function ReviewWorkspace({
           当前筛选没有图片
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-2 sm:grid-cols-3",
+            gridDensity === "compact" && "md:grid-cols-4 xl:grid-cols-7 2xl:grid-cols-8",
+            gridDensity === "standard" && "md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
+            gridDensity === "large" && "md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
+          )}
+        >
           {visibleItems.map((item, index) => {
             const pendingAction = pendingActions.get(item.key) ?? null;
             const pending = pendingAction !== null;
