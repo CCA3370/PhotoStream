@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  ListChecksIcon,
-  PauseIcon,
-  PlayIcon,
-  RotateCcwIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { ListChecksIcon, PauseIcon, PlayIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
