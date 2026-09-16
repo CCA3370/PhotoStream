@@ -36,15 +36,15 @@ import {
 import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
 import {
-  ReviewLightbox,
-  type ReviewLightboxItem,
-  type ReviewPendingAction,
-} from "@/components/review/review-lightbox";
-import {
   ReviewBatchInspector,
   ReviewInspector,
   type ReviewInspectorItem,
 } from "@/components/review/review-inspector";
+import {
+  ReviewLightbox,
+  type ReviewLightboxItem,
+  type ReviewPendingAction,
+} from "@/components/review/review-lightbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -711,6 +711,45 @@ export function ReviewWorkspace({
     () =>
       lightboxSourceItems.map((item) => ({
         key: item.key,
+        inspector:
+          item.source === "local"
+            ? {
+                key: item.key,
+                title: item.local.photo.fileName,
+                mediaId: item.local.photo.mediaId,
+                categoryId: item.categoryId,
+                uploaderName: null,
+                sourceLabel: "本机",
+                featured: item.featured,
+                publicationStatus: item.publicationStatus,
+                ingestStatus: item.local.photo.uploadState,
+                width: item.local.photo.width,
+                height: item.local.photo.height,
+                totalBytes: item.local.photo.totalBytes,
+                createdAt: item.createdAt,
+                capturedAt: item.local.photo.capturedAt,
+                bib: item.bib,
+                canDelete: item.publicationStatus === "local" || userRole === "admin",
+              }
+            : {
+                key: item.key,
+                title: item.local?.photo.fileName ?? `媒体 ${item.remote.id.slice(0, 8)}`,
+                mediaId: item.remote.id,
+                categoryId: item.categoryId,
+                uploaderName:
+                  uploaders.find((entry) => entry.id === item.uploaderId)?.displayName ?? null,
+                sourceLabel: "远端",
+                featured: item.featured,
+                publicationStatus: item.publicationStatus,
+                ingestStatus: item.remote.ingestStatus,
+                width: item.remote.width,
+                height: item.remote.height,
+                totalBytes: item.remote.totalBytes,
+                createdAt: item.createdAt,
+                capturedAt: item.remote.capturedAt,
+                bib: item.bib,
+                canDelete: userRole === "admin",
+              },
         src: item.viewerUrl,
         variants: item.source === "remote" ? item.remote.variants : [],
         fallbackSrc: item.viewerFallbackUrl,
@@ -728,7 +767,7 @@ export function ReviewWorkspace({
             : userRole === "admin",
         pendingAction: pendingActions.get(item.key) ?? null,
       })),
-    [lightboxSourceItems, pendingActions, userRole],
+    [lightboxSourceItems, pendingActions, uploaders, userRole],
   );
 
   function itemByKey(key: string): ReviewItem | null {
@@ -2348,8 +2387,13 @@ export function ReviewWorkspace({
       ) : null}
 
       <ReviewLightbox
+        categories={categories}
         items={lightboxItems}
         onBibError={setError}
+        onCategoryChange={(key, categoryId) => {
+          const item = itemByKey(key);
+          if (item !== null) void changeCategory(item, categoryId);
+        }}
         onBibStateChange={updateBibState}
         onClose={() => setActiveKey(null)}
         onDelete={(key) => {
