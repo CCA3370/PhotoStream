@@ -40,6 +40,7 @@ const axisFormatter = new Intl.DateTimeFormat("zh-CN", {
   day: "numeric",
   hour: "2-digit",
   hour12: false,
+  timeZone: "Asia/Shanghai",
 });
 const tooltipFormatter = new Intl.DateTimeFormat("zh-CN", {
   month: "numeric",
@@ -47,6 +48,7 @@ const tooltipFormatter = new Intl.DateTimeFormat("zh-CN", {
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
+  timeZone: "Asia/Shanghai",
 });
 
 function valueAt(point: ShadcnChartPoint, key: string): number | null {
