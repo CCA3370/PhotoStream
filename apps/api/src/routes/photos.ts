@@ -67,6 +67,7 @@ const publicMediaQuerySchema = z
 const internalMediaQuerySchema = z
   .object({
     publicationStatus: publicationStatusSchema.optional(),
+    publicationGroup: z.enum(["unpublished"]).optional(),
     featured: z.enum(["true"]).optional(),
     ingestStatus: ingestStatusSchema.optional(),
     ingestGroup: z.enum(["incomplete", "failed"]).optional(),
@@ -81,6 +82,13 @@ const internalMediaQuerySchema = z
     limit: z.coerce.number().int().min(1).max(100).default(60),
   })
   .strict()
+  .refine(
+    (value) => value.publicationStatus === undefined || value.publicationGroup === undefined,
+    {
+      message: "发布状态与发布状态组不能同时筛选",
+      path: ["publicationGroup"],
+    },
+  )
   .refine((value) => value.classOptionId === undefined || value.gradeOptionId !== undefined, {
     message: "班级筛选必须同时提供年级",
     path: ["classOptionId"],
@@ -88,6 +96,7 @@ const internalMediaQuerySchema = z
 const internalMediaSelectionQuerySchema = z
   .object({
     publicationStatus: publicationStatusSchema.optional(),
+    publicationGroup: z.enum(["unpublished"]).optional(),
     featured: z.enum(["true"]).optional(),
     ingestStatus: ingestStatusSchema.optional(),
     ingestGroup: z.enum(["incomplete", "failed"]).optional(),
@@ -102,6 +111,13 @@ const internalMediaSelectionQuerySchema = z
     limit: z.coerce.number().int().min(1).max(1_000).default(1_000),
   })
   .strict()
+  .refine(
+    (value) => value.publicationStatus === undefined || value.publicationGroup === undefined,
+    {
+      message: "发布状态与发布状态组不能同时筛选",
+      path: ["publicationGroup"],
+    },
+  )
   .refine((value) => value.classOptionId === undefined || value.gradeOptionId !== undefined, {
     message: "班级筛选必须同时提供年级",
     path: ["classOptionId"],

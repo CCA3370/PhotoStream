@@ -1395,6 +1395,7 @@ export class PhotoService {
       readonly publicationStatus?:
         | (typeof schema.publicationStatusEnum.enumValues)[number]
         | undefined;
+      readonly publicationGroup?: "unpublished" | undefined;
       readonly featured?: "true" | undefined;
       readonly ingestStatus?: (typeof schema.ingestStatusEnum.enumValues)[number] | undefined;
       readonly ingestGroup?: "incomplete" | "failed" | undefined;
@@ -1421,6 +1422,8 @@ export class PhotoService {
     const conditions = [eq(schema.media.albumId, options.albumId)];
     if (options.publicationStatus !== undefined) {
       conditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
+    } else if (options.publicationGroup === "unpublished") {
+      conditions.push(inArray(schema.media.publicationStatus, ["draft", "pending_review"]));
     }
     if (options.featured === "true") {
       conditions.push(
@@ -1628,6 +1631,7 @@ export class PhotoService {
       readonly publicationStatus?:
         | (typeof schema.publicationStatusEnum.enumValues)[number]
         | undefined;
+      readonly publicationGroup?: "unpublished" | undefined;
       readonly featured?: "true" | undefined;
       readonly ingestStatus?: (typeof schema.ingestStatusEnum.enumValues)[number] | undefined;
       readonly ingestGroup?: "incomplete" | "failed" | undefined;
@@ -1654,6 +1658,8 @@ export class PhotoService {
     const baseConditions = [eq(schema.media.albumId, options.albumId)];
     if (options.publicationStatus !== undefined) {
       baseConditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
+    } else if (options.publicationGroup === "unpublished") {
+      baseConditions.push(inArray(schema.media.publicationStatus, ["draft", "pending_review"]));
     }
     if (options.featured === "true") {
       baseConditions.push(
