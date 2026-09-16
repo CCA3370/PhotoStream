@@ -1406,6 +1406,7 @@ export class PhotoService {
       readonly bibOcrStatus?: (typeof schema.bibOcrStatusEnum.enumValues)[number] | undefined;
       readonly gradeOptionId?: string | undefined;
       readonly classOptionId?: string | undefined;
+      readonly sort?: "newest" | "oldest";
       readonly cursor?: string | undefined;
       readonly limit: number;
     },
@@ -1416,7 +1417,7 @@ export class PhotoService {
     const cursor =
       options.cursor === undefined
         ? null
-        : this.#decodeInternalCursor(options.cursor, options.albumId);
+        : this.#decodeInternalCursor(options.cursor, options.albumId, options.sort ?? "newest");
     const conditions = [eq(schema.media.albumId, options.albumId)];
     if (options.publicationStatus !== undefined) {
       conditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
@@ -1505,17 +1506,33 @@ export class PhotoService {
       conditions.push(eq(schema.media.uploaderId, actor.id));
     }
     if (cursor !== null) {
-      const cursorCondition = or(
-        lt(schema.media.createdAt, cursor.createdAt),
-        and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),
-      );
+      const cursorCondition =
+        (options.sort ?? "newest") === "oldest"
+          ? or(
+              gt(schema.media.createdAt, cursor.createdAt),
+              and(
+                eq(schema.media.createdAt, cursor.createdAt),
+                gt(schema.media.id, cursor.mediaId),
+              ),
+            )
+          : or(
+              lt(schema.media.createdAt, cursor.createdAt),
+              and(
+                eq(schema.media.createdAt, cursor.createdAt),
+                lt(schema.media.id, cursor.mediaId),
+              ),
+            );
       if (cursorCondition !== undefined) conditions.push(cursorCondition);
     }
     const rows = await this.#database
       .select()
       .from(schema.media)
       .where(and(...conditions))
-      .orderBy(desc(schema.media.createdAt), desc(schema.media.id))
+      .orderBy(
+        ...((options.sort ?? "newest") === "oldest"
+          ? [asc(schema.media.createdAt), asc(schema.media.id)]
+          : [desc(schema.media.createdAt), desc(schema.media.id)]),
+      )
       .limit(options.limit + 1);
     const hasMore = rows.length > options.limit;
     const page = rows.slice(0, options.limit);
@@ -1594,7 +1611,12 @@ export class PhotoService {
       items,
       nextCursor:
         hasMore && last !== undefined
-          ? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id)
+          ? this.#encodeInternalCursor(
+              options.albumId,
+              last.createdAt,
+              last.id,
+              options.sort ?? "newest",
+            )
           : null,
     };
   }
@@ -1617,6 +1639,7 @@ export class PhotoService {
       readonly bibOcrStatus?: (typeof schema.bibOcrStatusEnum.enumValues)[number] | undefined;
       readonly gradeOptionId?: string | undefined;
       readonly classOptionId?: string | undefined;
+      readonly sort?: "newest" | "oldest";
       readonly cursor?: string | undefined;
       readonly limit: number;
     },
@@ -1627,7 +1650,7 @@ export class PhotoService {
     const cursor =
       options.cursor === undefined
         ? null
-        : this.#decodeInternalCursor(options.cursor, options.albumId);
+        : this.#decodeInternalCursor(options.cursor, options.albumId, options.sort ?? "newest");
     const baseConditions = [eq(schema.media.albumId, options.albumId)];
     if (options.publicationStatus !== undefined) {
       baseConditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
@@ -1721,10 +1744,22 @@ export class PhotoService {
       .where(and(...baseConditions));
     const conditions = [...baseConditions];
     if (cursor !== null) {
-      const cursorCondition = or(
-        lt(schema.media.createdAt, cursor.createdAt),
-        and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),
-      );
+      const cursorCondition =
+        (options.sort ?? "newest") === "oldest"
+          ? or(
+              gt(schema.media.createdAt, cursor.createdAt),
+              and(
+                eq(schema.media.createdAt, cursor.createdAt),
+                gt(schema.media.id, cursor.mediaId),
+              ),
+            )
+          : or(
+              lt(schema.media.createdAt, cursor.createdAt),
+              and(
+                eq(schema.media.createdAt, cursor.createdAt),
+                lt(schema.media.id, cursor.mediaId),
+              ),
+            );
       if (cursorCondition !== undefined) conditions.push(cursorCondition);
     }
     const rows = await this.#database
@@ -1736,7 +1771,11 @@ export class PhotoService {
       })
       .from(schema.media)
       .where(and(...conditions))
-      .orderBy(desc(schema.media.createdAt), desc(schema.media.id))
+      .orderBy(
+        ...((options.sort ?? "newest") === "oldest"
+          ? [asc(schema.media.createdAt), asc(schema.media.id)]
+          : [desc(schema.media.createdAt), desc(schema.media.id)]),
+      )
       .limit(options.limit + 1);
     const hasMore = rows.length > options.limit;
     const page = rows.slice(0, options.limit);
@@ -1759,7 +1798,12 @@ export class PhotoService {
       })),
       nextCursor:
         hasMore && last !== undefined
-          ? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id)
+          ? this.#encodeInternalCursor(
+              options.albumId,
+              last.createdAt,
+              last.id,
+              options.sort ?? "newest",
+            )
           : null,
       total: countRow?.total ?? 0,
     };
@@ -2370,15 +2414,20 @@ export class PhotoService {
     }
   }
 
-  #encodeInternalCursor(albumId: string, createdAt: Date, mediaId: string): string {
+  #encodeInternalCursor(
+    albumId: string,
+    createdAt: Date,
+    mediaId: string,
+    sort: "newest" | "oldest",
+  ): string {
     const encoded = Buffer.from(
-      JSON.stringify({ albumId, createdAt: createdAt.toISOString(), mediaId }),
+      JSON.stringify({ albumId, createdAt: createdAt.toISOString(), mediaId, sort }),
       "utf8",
     ).toString("base64url");
     return `${encoded}.${cursorSignature(this.#config.CURSOR_SIGNING_SECRET, encoded)}`;
   }
 
-  #decodeInternalCursor(value: string, albumId: string) {
+  #decodeInternalCursor(value: string, albumId: string, sort: "newest" | "oldest") {
     const [encoded, suppliedSignature] = value.split(".", 2);
     if (
       encoded === undefined ||
@@ -2392,10 +2441,12 @@ export class PhotoService {
         albumId: string;
         createdAt: string;
         mediaId: string;
+        sort: "newest" | "oldest";
       };
       const createdAt = new Date(parsed.createdAt);
       if (
         parsed.albumId !== albumId ||
+        parsed.sort !== sort ||
         Number.isNaN(createdAt.getTime()) ||
         typeof parsed.mediaId !== "string"
       ) {
