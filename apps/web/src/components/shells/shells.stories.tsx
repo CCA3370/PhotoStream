@@ -29,7 +29,6 @@ export const PublicGallery: Story = {
 export const UploadQueue: Story = {
   render: () => (
     <UploadShell
-      albumTitle="春季运动会"
       queue={{
         paused: false,
         queued: 0,
