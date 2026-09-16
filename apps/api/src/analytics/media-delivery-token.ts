@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const tokenTtlMs = 5 * 60 * 1_000;
-const sha256Base64UrlLength = 43;
+const sha256Base64UrlPattern = /^[A-Za-z0-9_-]{43}$/u;
 
 function signature(
   secret: string,
@@ -47,7 +47,7 @@ export function verifyMediaDeliveryToken(
   const [encodedExpiry, nonce, encodedMac] = parts;
   if (encodedExpiry === undefined || nonce === undefined || encodedMac === undefined) return false;
   if (!/^[a-z0-9]+$/u.test(encodedExpiry) || !/^[A-Za-z0-9_-]{20,64}$/u.test(nonce)) return false;
-  if (!new RegExp(`^[A-Za-z0-9_-]{${sha256Base64UrlLength}}$`, "u").test(encodedMac)) return false;
+  if (!sha256Base64UrlPattern.test(encodedMac)) return false;
 
   const expiresAt = Number.parseInt(encodedExpiry, 36);
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= now.getTime()) return false;
