@@ -1,0 +1,499 @@
+name: Temporary scalable review selection integrator
+
+on:
+  push:
+    branches:
+      - review-workspace-efficiency
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: review-workspace-efficiency
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Integrate scalable selection
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          routes = Path('apps/api/src/routes/photos.ts')
+          text = routes.read_text()
+          anchor = 'const changesQuerySchema = z.object({ after: z.coerce.number().int().min(0).default(0) }).strict();'
+          insert = '''const internalMediaSelectionQuerySchema = z\n  .object({\n    publicationStatus: publicationStatusSchema.optional(),\n    featured: z.enum(["true"]).optional(),\n    ingestStatus: ingestStatusSchema.optional(),\n    ingestGroup: z.enum(["incomplete", "failed"]).optional(),\n    categoryId: z.string().uuid().optional(),\n    uploaderId: z.string().uuid().optional(),\n    bibReviewDecision: bibReviewDecisionSchema.optional(),\n    bibOcrStatus: bibOcrStatusSchema.optional(),\n    gradeOptionId: z.string().uuid().optional(),\n    classOptionId: z.string().uuid().optional(),\n    cursor: z.string().max(1_000).optional(),\n    limit: z.coerce.number().int().min(1).max(1_000).default(1_000),\n  })\n  .strict()\n  .refine((value) => value.classOptionId === undefined || value.gradeOptionId !== undefined, {\n    message: "班级筛选必须同时提供年级",\n    path: ["classOptionId"],\n  });\nconst internalMediaSelectionListSchema = z\n  .object({\n    items: z.array(\n      z\n        .object({\n          id: z.string().uuid(),\n          publicationStatus: publicationStatusSchema,\n          categoryId: z.string().uuid().nullable(),\n          featured: z.boolean(),\n        })\n        .strict(),\n    ),\n    nextCursor: z.string().nullable(),\n    total: z.number().int().nonnegative(),\n  })\n  .strict();\n\n'''
+          if anchor not in text:
+            raise SystemExit('photos schema anchor missing')
+          text = text.replace(anchor, insert + anchor, 1)
+          route_anchor = '''  typed.get(\n    "/api/v1/albums/:id/uploaders",'''
+          route = '''  typed.get(\n    "/api/v1/albums/:id/media-selection",\n    {\n      schema: {\n        operationId: "listInternalMediaSelection",\n        tags: ["media"],\n        params: albumIdParamsSchema,\n        querystring: internalMediaSelectionQuerySchema,\n        response: { 200: internalMediaSelectionListSchema, ...commonErrors },\n      },\n    },\n    async (request, reply) => {\n      void reply.header("cache-control", "no-store");\n      const session = await requireInternalSession(request, options.authService, options.config);\n      return options.photoService.listInternalMediaSelection(actorFrom(session), {\n        albumId: request.params.id,\n        ...request.query,\n      });\n    },\n  );\n\n'''
+          if route_anchor not in text:
+            raise SystemExit('photos route anchor missing')
+          routes.write_text(text.replace(route_anchor, route + route_anchor, 1))
+
+          service = Path('apps/api/src/media/service.ts')
+          text = service.read_text()
+          anchor = '  async listAlbumUploaders(actor: InternalActor, albumId: string) {'
+          method = '''  async listInternalMediaSelection(\n    actor: InternalActor,\n    options: {\n      readonly albumId: string;\n      readonly publicationStatus?:\n        | (typeof schema.publicationStatusEnum.enumValues)[number]\n        | undefined;\n      readonly featured?: "true" | undefined;\n      readonly ingestStatus?: (typeof schema.ingestStatusEnum.enumValues)[number] | undefined;\n      readonly ingestGroup?: "incomplete" | "failed" | undefined;\n      readonly categoryId?: string | undefined;\n      readonly uploaderId?: string | undefined;\n      readonly bibReviewDecision?:\n        | (typeof schema.bibReviewDecisionEnum.enumValues)[number]\n        | undefined;\n      readonly bibOcrStatus?: (typeof schema.bibOcrStatusEnum.enumValues)[number] | undefined;\n      readonly gradeOptionId?: string | undefined;\n      readonly classOptionId?: string | undefined;\n      readonly cursor?: string | undefined;\n      readonly limit: number;\n    },\n  ) {\n    requirePermission(actor.role, "album:read");\n    const album = await this.#albumById(this.#database, options.albumId);\n    if (album === null) throw this.#albumNotFound();\n    const cursor =\n      options.cursor === undefined\n        ? null\n        : this.#decodeInternalCursor(options.cursor, options.albumId);\n    const baseConditions = [eq(schema.media.albumId, options.albumId)];\n    if (options.publicationStatus !== undefined) {\n      baseConditions.push(eq(schema.media.publicationStatus, options.publicationStatus));\n    }\n    if (options.featured === "true") {\n      baseConditions.push(\n        exists(\n          this.#database\n            .select({ value: sql`1` })\n            .from(schema.featuredMedia)\n            .where(eq(schema.featuredMedia.mediaId, schema.media.id)),\n        ),\n      );\n    }\n    if (options.ingestStatus !== undefined) {\n      baseConditions.push(eq(schema.media.ingestStatus, options.ingestStatus));\n    }\n    if (options.ingestGroup === "incomplete") {\n      baseConditions.push(inArray(schema.media.ingestStatus, incompleteIngestStatuses));\n    } else if (options.ingestGroup === "failed") {\n      baseConditions.push(eq(schema.media.ingestStatus, "failed"));\n    }\n    if (options.categoryId !== undefined) {\n      baseConditions.push(eq(schema.media.categoryId, options.categoryId));\n    }\n    if (options.uploaderId !== undefined) {\n      baseConditions.push(eq(schema.media.uploaderId, options.uploaderId));\n    }\n    if (options.bibReviewDecision !== undefined) {\n      const matchingReview = this.#database\n        .select({ value: sql`1` })\n        .from(schema.mediaBibReviews)\n        .where(\n          and(\n            eq(schema.mediaBibReviews.mediaId, schema.media.id),\n            eq(schema.mediaBibReviews.decision, options.bibReviewDecision),\n          ),\n        );\n      if (options.bibReviewDecision === "pending") {\n        const anyReview = this.#database\n          .select({ value: sql`1` })\n          .from(schema.mediaBibReviews)\n          .where(eq(schema.mediaBibReviews.mediaId, schema.media.id));\n        const pending = or(exists(matchingReview), not(exists(anyReview)));\n        if (pending !== undefined) baseConditions.push(pending);\n      } else {\n        baseConditions.push(exists(matchingReview));\n      }\n    }\n    if (options.bibOcrStatus !== undefined) {\n      baseConditions.push(\n        exists(\n          this.#database\n            .select({ value: sql`1` })\n            .from(schema.mediaBibReviews)\n            .where(\n              and(\n                eq(schema.mediaBibReviews.mediaId, schema.media.id),\n                eq(schema.mediaBibReviews.ocrStatus, options.bibOcrStatus),\n              ),\n            ),\n        ),\n      );\n    }\n    if (options.gradeOptionId !== undefined) {\n      baseConditions.push(\n        exists(\n          this.#database\n            .select({ value: sql`1` })\n            .from(schema.mediaBibTags)\n            .where(\n              and(\n                eq(schema.mediaBibTags.mediaId, schema.media.id),\n                eq(schema.mediaBibTags.status, "confirmed"),\n                eq(schema.mediaBibTags.mappingVersion, album.bibMappingVersion),\n                eq(schema.mediaBibTags.gradeOptionId, options.gradeOptionId),\n                ...(options.classOptionId === undefined\n                  ? []\n                  : [eq(schema.mediaBibTags.classOptionId, options.classOptionId)]),\n              ),\n            ),\n        ),\n      );\n    }\n    if (actor.role === "uploader") {\n      baseConditions.push(eq(schema.media.uploaderId, actor.id));\n    }\n    const [countRow] = await this.#database\n      .select({ total: sql<number>`count(*)::int` })\n      .from(schema.media)\n      .where(and(...baseConditions));\n    const conditions = [...baseConditions];\n    if (cursor !== null) {\n      const cursorCondition = or(\n        lt(schema.media.createdAt, cursor.createdAt),\n        and(eq(schema.media.createdAt, cursor.createdAt), lt(schema.media.id, cursor.mediaId)),\n      );\n      if (cursorCondition !== undefined) conditions.push(cursorCondition);\n    }\n    const rows = await this.#database\n      .select({\n        id: schema.media.id,\n        publicationStatus: schema.media.publicationStatus,\n        categoryId: schema.media.categoryId,\n        createdAt: schema.media.createdAt,\n      })\n      .from(schema.media)\n      .where(and(...conditions))\n      .orderBy(desc(schema.media.createdAt), desc(schema.media.id))\n      .limit(options.limit + 1);\n    const hasMore = rows.length > options.limit;\n    const page = rows.slice(0, options.limit);\n    const mediaIds = page.map((row) => row.id);\n    const featured =\n      mediaIds.length === 0\n        ? []\n        : await this.#database\n            .select({ mediaId: schema.featuredMedia.mediaId })\n            .from(schema.featuredMedia)\n            .where(inArray(schema.featuredMedia.mediaId, mediaIds));\n    const featuredIds = new Set(featured.map((row) => row.mediaId));\n    const last = page.at(-1);\n    return {\n      items: page.map((row) => ({\n        id: row.id,\n        publicationStatus: row.publicationStatus,\n        categoryId: row.categoryId,\n        featured: featuredIds.has(row.id),\n      })),\n      nextCursor:\n        hasMore && last !== undefined\n          ? this.#encodeInternalCursor(options.albumId, last.createdAt, last.id)\n          : null,\n      total: countRow?.total ?? 0,\n    };\n  }\n\n'''
+          if anchor not in text:
+            raise SystemExit('service selection anchor missing')
+          service.write_text(text.replace(anchor, method + anchor, 1))
+
+          workspace = Path('apps/web/src/components/review/review-workspace.tsx')
+          text = workspace.read_text()
+          page_anchor = '''interface RemotePage {\n  readonly items: readonly InternalMediaView[];\n  readonly nextCursor: RemoteCursor | null;\n}\n'''
+          types = page_anchor + '''\ninterface RemoteSelectionItem {\n  readonly id: string;\n  readonly publicationStatus: InternalMediaView["publicationStatus"];\n  readonly categoryId: string | null;\n  readonly featured: boolean;\n}\n\ninterface RemoteSelectionPage {\n  readonly items: readonly RemoteSelectionItem[];\n  readonly nextCursor: string | null;\n  readonly total: number;\n}\n'''
+          if page_anchor not in text:
+            raise SystemExit('workspace RemotePage anchor missing')
+          text = text.replace(page_anchor, types, 1)
+          text = text.replace(
+            '  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());\n',
+            '  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());\n  const [remoteSelection, setRemoteSelection] = useState<ReadonlyMap<string, RemoteSelectionItem> | null>(null);\n',
+            1,
+          )
+          text = text.replace('  const [selectAllPending, setSelectAllPending] = useState(false);\n', '', 1)
+
+          # Clear all-matching snapshot whenever filters reload.
+          reload_anchor = '''    setLoadingMore(true);\n    setSelectedKeys(new Set());\n    lastSelectedIndexRef.current = null;'''
+          reload_new = '''    setLoadingMore(true);\n    setSelectedKeys(new Set());\n    setRemoteSelection(null);\n    lastSelectedIndexRef.current = null;'''
+          if reload_anchor not in text:
+            raise SystemExit('workspace reload selection anchor missing')
+          text = text.replace(reload_anchor, reload_new, 1)
+
+          reset_anchor = '''  function resetSelection(): void {\n    setSelectedKeys(new Set());\n    lastSelectedIndexRef.current = null;\n    dragSelectionRef.current = null;\n  }'''
+          reset_new = '''  function resetSelection(): void {\n    setSelectedKeys(new Set());\n    setRemoteSelection(null);\n    lastSelectedIndexRef.current = null;\n    dragSelectionRef.current = null;\n  }'''
+          if reset_anchor not in text:
+            raise SystemExit('workspace reset selection anchor missing')
+          text = text.replace(reset_anchor, reset_new, 1)
+
+          old_selected = '''  const selectedItems = useMemo(\n    () => visibleItems.filter((item) => selectedKeys.has(item.key)),\n    [selectedKeys, visibleItems],\n  );\n\n  useEffect(() => {\n    if (selectedItems.length === 0) {\n      setBatchCategory("uncategorized");\n      return;\n    }\n    const values = new Set(selectedItems.map((item) => item.categoryId ?? "uncategorized"));\n    setBatchCategory(values.size === 1 ? ([...values][0] ?? "uncategorized") : "mixed");\n  }, [selectedItems]);\n\n  useEffect(() => {\n    if (!selectAllPending) return;\n    setSelectedKeys(new Set(visibleItems.map((item) => item.key)));\n    lastSelectedIndexRef.current = visibleItems.length === 0 ? null : visibleItems.length - 1;\n    setSelectAllPending(false);\n    setSelectingAll(false);\n  }, [selectAllPending, visibleItems]);\n'''
+          new_selected = '''  const selectedItems = useMemo(\n    () =>\n      visibleItems.filter((item) =>\n        item.source === "remote" && remoteSelection !== null\n          ? remoteSelection.has(item.remote.id)\n          : selectedKeys.has(item.key),\n      ),\n    [remoteSelection, selectedKeys, visibleItems],\n  );\n  const selectedLocalItems = useMemo(\n    () =>\n      selectedItems.filter(\n        (item): item is Extract<ReviewItem, { source: "local" }> => item.source === "local",\n      ),\n    [selectedItems],\n  );\n  const selectedRemoteItems = useMemo<readonly RemoteSelectionItem[]>(() => {\n    if (remoteSelection !== null) return [...remoteSelection.values()];\n    return selectedItems\n      .filter(\n        (item): item is Extract<ReviewItem, { source: "remote" }> => item.source === "remote",\n      )\n      .map((item) => ({\n        id: item.remote.id,\n        publicationStatus: item.publicationStatus,\n        categoryId: item.categoryId,\n        featured: item.featured,\n      }));\n  }, [remoteSelection, selectedItems]);\n  const selectedCount = selectedLocalItems.length + selectedRemoteItems.length;\n\n  useEffect(() => {\n    if (selectedCount === 0) {\n      setBatchCategory("uncategorized");\n      return;\n    }\n    const values = new Set([\n      ...selectedLocalItems.map((item) => item.categoryId ?? "uncategorized"),\n      ...selectedRemoteItems.map((item) => item.categoryId ?? "uncategorized"),\n    ]);\n    setBatchCategory(values.size === 1 ? ([...values][0] ?? "uncategorized") : "mixed");\n  }, [selectedCount, selectedLocalItems, selectedRemoteItems]);\n\n  function itemSelected(item: ReviewItem): boolean {\n    return item.source === "remote" && remoteSelection !== null\n      ? remoteSelection.has(item.remote.id)\n      : selectedKeys.has(item.key);\n  }\n'''
+          if old_selected not in text:
+            raise SystemExit('workspace selected model anchor missing')
+          text = text.replace(old_selected, new_selected, 1)
+
+          stats_start = text.index('  const selectionStats = (() => {')
+          stats_end = text.index('\n\n  async function toggleFeatured', stats_start)
+          stats = '''  const selectionStats = (() => {\n    let publishable = 0;\n    let hideable = 0;\n    let restorable = 0;\n    let featureable = 0;\n    let unfeatureable = 0;\n    let deletable = 0;\n    for (const item of selectedLocalItems) {\n      if (item.publicationStatus === "local") publishable += 1;\n      if (item.featured) unfeatureable += 1;\n      else featureable += 1;\n      if (canDeleteItem(item)) deletable += 1;\n    }\n    for (const item of selectedRemoteItems) {\n      if (item.publicationStatus === "draft" || item.publicationStatus === "pending_review")\n        publishable += 1;\n      if (item.publicationStatus === "published") hideable += 1;\n      if (item.publicationStatus === "hidden") restorable += 1;\n      if (item.featured) unfeatureable += 1;\n      else featureable += 1;\n      if (userRole === "admin") deletable += 1;\n    }\n    return { publishable, hideable, restorable, featureable, unfeatureable, deletable };\n  })();'''
+          text = text[:stats_start] + stats + text[stats_end:]
+
+          toggle_start = text.index('  function toggleSelection(key: string, index: number, range: boolean): void {')
+          toggle_end = text.index('\n\n  function beginDragSelection(', toggle_start)
+          toggle = '''  const setSelectionForKey = useCallback(\n    (key: string, selecting: boolean): void => {\n      const item = visibleItems.find((candidate) => candidate.key === key);\n      if (item?.source === "remote" && remoteSelection !== null) {\n        const snapshot: RemoteSelectionItem = {\n          id: item.remote.id,\n          publicationStatus: item.publicationStatus,\n          categoryId: item.categoryId,\n          featured: item.featured,\n        };\n        setRemoteSelection((current) => {\n          if (current === null) return current;\n          const next = new Map(current);\n          if (selecting) next.set(snapshot.id, snapshot);\n          else next.delete(snapshot.id);\n          return next;\n        });\n        return;\n      }\n      setSelectedKeys((current) => {\n        const currentlySelected = current.has(key);\n        if (currentlySelected === selecting) return current;\n        const next = new Set(current);\n        if (selecting) next.add(key);\n        else next.delete(key);\n        return next;\n      });\n    },\n    [remoteSelection, visibleItems],\n  );\n\n  function toggleSelection(key: string, index: number, range: boolean): void {\n    if (range && lastSelectedIndexRef.current !== null) {\n      const start = Math.min(lastSelectedIndexRef.current, index);\n      const end = Math.max(lastSelectedIndexRef.current, index);\n      for (const item of visibleItems.slice(start, end + 1)) setSelectionForKey(item.key, true);\n    } else {\n      const item = visibleItems[index];\n      if (item !== undefined) setSelectionForKey(key, !itemSelected(item));\n    }\n    lastSelectedIndexRef.current = index;\n  }'''
+          text = text[:toggle_start] + toggle + text[toggle_end:]
+
+          # finishBatch clears both explicit and snapshot selections.
+          finish_anchor = '''    setSelectedKeys(new Set());\n    lastSelectedIndexRef.current = null;\n  }\n\n  async function batchPublish'''
+          finish_new = '''    setSelectedKeys(new Set());\n    setRemoteSelection(null);\n    lastSelectedIndexRef.current = null;\n  }\n\n  async function batchPublish'''
+          if finish_anchor not in text:
+            raise SystemExit('workspace finishBatch anchor missing')
+          text = text.replace(finish_anchor, finish_new, 1)
+
+          batch_start = text.index('  async function batchPublish(): Promise<void> {')
+          batch_end = text.index('\n\n  const loadMore = useCallback', batch_start)
+          batch = r'''  async function batchPublish(): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    setBatchBusy(true);
+    const failures: BatchFailure[] = [];
+    let successCount = 0;
+    try {
+      for (const item of selectedLocalItems) {
+        setPending(item.key, "state");
+        try {
+          const result = await publishLocalReviewPhoto(item.local.photo);
+          await patchLocalReviewPhoto(item.local.photo.id, {
+            mediaId: result.mediaId,
+            uploadState: "published",
+            error: null,
+          });
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "发布失败",
+          });
+        } finally {
+          setPending(item.key, null);
+        }
+      }
+      const remoteTargets = selectedRemoteItems.filter(
+        (item) => item.publicationStatus === "draft" || item.publicationStatus === "pending_review",
+      );
+      const remoteResult = await applyRemoteBatch("publish", remoteTargets.map((item) => item.id));
+      successCount += remoteResult.okIds.length;
+      failures.push(...remoteResult.failures);
+      await Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]);
+      finishBatch(
+        "批量发布",
+        successCount,
+        failures,
+        selectedCount - selectedLocalItems.length - remoteTargets.length,
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchHide(): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    setBatchBusy(true);
+    try {
+      const targets = selectedRemoteItems.filter((item) => item.publicationStatus === "published");
+      const result = await applyRemoteBatch("hide", targets.map((item) => item.id));
+      const ok = new Set(result.okIds);
+      setRemoteMedia((current) =>
+        current.map((item) =>
+          ok.has(item.id) ? { ...item, publicationStatus: "hidden" as const } : item,
+        ),
+      );
+      finishBatch("批量隐藏", result.okIds.length, result.failures, selectedCount - targets.length);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchRestore(): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    setBatchBusy(true);
+    try {
+      const targets = selectedRemoteItems.filter((item) => item.publicationStatus === "hidden");
+      const result = await applyRemoteBatch("restore", targets.map((item) => item.id));
+      const ok = new Set(result.okIds);
+      setRemoteMedia((current) =>
+        current.map((item) =>
+          ok.has(item.id) ? { ...item, publicationStatus: "published" as const } : item,
+        ),
+      );
+      finishBatch("批量恢复", result.okIds.length, result.failures, selectedCount - targets.length);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchSetFeatured(featured: boolean): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    setBatchBusy(true);
+    const localTargets = selectedLocalItems.filter((item) => item.featured !== featured);
+    const remoteTargets = selectedRemoteItems.filter((item) => item.featured !== featured);
+    const failures: BatchFailure[] = [];
+    let successCount = 0;
+    try {
+      for (const item of localTargets) {
+        try {
+          await patchLocalReviewPhoto(item.local.photo.id, { featured });
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "精选状态修改失败",
+          });
+        }
+      }
+      for (const group of chunks(remoteTargets, 16)) {
+        await Promise.all(
+          group.map(async (item) => {
+            try {
+              await clientMutation(`/api/v1/media/${item.id}/featured`, { body: { featured } });
+              successCount += 1;
+              setFeaturedIds((current) => {
+                const next = new Set(current);
+                if (featured) next.add(item.id);
+                else next.delete(item.id);
+                return next;
+              });
+            } catch (cause) {
+              failures.push({
+                label: item.id.slice(0, 8),
+                message: cause instanceof Error ? cause.message : "精选状态修改失败",
+              });
+            }
+          }),
+        );
+      }
+      await refreshLocal();
+      finishBatch(
+        featured ? "批量设为精选" : "批量取消精选",
+        successCount,
+        failures,
+        selectedCount - localTargets.length - remoteTargets.length,
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchChangeCategory(): Promise<void> {
+    if (batchBusy || selectedCount === 0 || batchCategory === "mixed") return;
+    setBatchBusy(true);
+    const nextCategory = batchCategory === "uncategorized" ? null : batchCategory;
+    const failures: BatchFailure[] = [];
+    let successCount = 0;
+    try {
+      for (const item of selectedLocalItems) {
+        try {
+          await patchLocalReviewPhoto(item.local.photo.id, { categoryId: nextCategory });
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "修改分类失败",
+          });
+        }
+      }
+      const remoteResult = await applyRemoteBatch(
+        "change_category",
+        selectedRemoteItems.map((item) => item.id),
+        nextCategory,
+      );
+      const remoteOk = new Set(remoteResult.okIds);
+      successCount += remoteResult.okIds.length;
+      failures.push(...remoteResult.failures);
+      setRemoteMedia((current) =>
+        current.map((item) =>
+          remoteOk.has(item.id) ? { ...item, categoryId: nextCategory } : item,
+        ),
+      );
+      await refreshLocal();
+      finishBatch("批量修改分类", successCount, failures);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchAddBibNumber(): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    const number = batchBibNumber.trim();
+    if (!/^\d{1,12}$/u.test(number)) {
+      setError("统一号码必须为 1–12 位数字");
+      return;
+    }
+    setBatchBusy(true);
+    const failures: BatchFailure[] = [];
+    let successCount = 0;
+    try {
+      for (const item of selectedLocalItems) {
+        try {
+          await confirmLocalBibNumbers(item.local.photo.id, [number], bibConfig.patterns);
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "号码确认失败",
+          });
+        }
+      }
+      const remoteResult = await applyRemoteBibBatch(
+        "/api/v1/media/bib-tags/batch",
+        selectedRemoteItems.map((item) => item.id),
+        number,
+      );
+      successCount += remoteResult.successCount;
+      failures.push(...remoteResult.failures);
+      await Promise.all([refreshLocal(), refreshRemote()]);
+      setBatchBibNumber("");
+      finishBatch("批量添加号码", successCount, failures);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchConfirmNoNumber(): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    setBatchBusy(true);
+    const failures: BatchFailure[] = [];
+    let successCount = 0;
+    try {
+      for (const item of selectedLocalItems) {
+        try {
+          await confirmLocalBibNoNumber(item.local.photo.id);
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "确认无号码失败",
+          });
+        }
+      }
+      const remoteResult = await applyRemoteBibBatch(
+        "/api/v1/media/bib-review/no-number/batch",
+        selectedRemoteItems.map((item) => item.id),
+      );
+      successCount += remoteResult.successCount;
+      failures.push(...remoteResult.failures);
+      await Promise.all([refreshLocal(), refreshRemote()]);
+      finishBatch("批量确认无号码", successCount, failures);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchDelete(): Promise<void> {
+    if (batchBusy || selectedCount === 0) return;
+    setBatchBusy(true);
+    const failures: BatchFailure[] = [];
+    const deletedMediaIds = new Set<string>();
+    let successCount = 0;
+    try {
+      for (const item of selectedLocalItems) {
+        try {
+          await deleteLocalReviewPhoto(item.local.photo.id);
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "删除失败",
+          });
+        }
+      }
+      const remoteTargets = userRole === "admin" ? selectedRemoteItems : [];
+      for (const item of remoteTargets) {
+        try {
+          await clientMutation(`/api/v1/media/${item.id}/direct`, { method: "DELETE" });
+          deletedMediaIds.add(item.id);
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.id.slice(0, 8),
+            message: cause instanceof Error ? cause.message : "删除失败",
+          });
+        }
+      }
+      if (deletedMediaIds.size > 0) {
+        setRemoteMedia((current) => current.filter((item) => !deletedMediaIds.has(item.id)));
+        setFeaturedIds((current) => {
+          const next = new Set(current);
+          for (const id of deletedMediaIds) next.delete(id);
+          return next;
+        });
+      }
+      await refreshLocal();
+      finishBatch(
+        "批量删除",
+        successCount,
+        failures,
+        selectedCount - selectedLocalItems.length - remoteTargets.length,
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  }'''
+          text = text[:batch_start] + batch + text[batch_end:]
+
+          select_start = text.index('  async function selectAllMatching(): Promise<void> {')
+          select_end = text.index('\n\n  useEffect(() => {\n    const sentinel = sentinelRef.current;', select_start)
+          select_fn = r'''  async function fetchSelectionPage(
+    publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
+    pageCursor?: string,
+  ): Promise<RemoteSelectionPage> {
+    const query = buildRemoteQuery(publicationStatus, pageCursor);
+    query.set("limit", "1000");
+    if (filter === "featured") query.set("featured", "true");
+    return clientGet<RemoteSelectionPage>(
+      `/api/v1/albums/${albumId}/media-selection?${query.toString()}`,
+    );
+  }
+
+  async function collectSelection(
+    publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
+  ): Promise<ReadonlyMap<string, RemoteSelectionItem>> {
+    const selected = new Map<string, RemoteSelectionItem>();
+    let pageCursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await fetchSelectionPage(publicationStatus, pageCursor);
+      for (const item of page.items) selected.set(item.id, item);
+      pageCursor = page.nextCursor ?? undefined;
+      pages += 1;
+      if (pages > 1000) throw new Error("筛选分页异常，已停止全量选择");
+    } while (pageCursor !== undefined);
+    return selected;
+  }
+
+  async function selectAllMatching(): Promise<void> {
+    if (batchBusy || selectingAll) return;
+    setSelectingAll(true);
+    try {
+      const remote = new Map<string, RemoteSelectionItem>();
+      if (filter === "local") {
+        const [draft, pending] = await Promise.all([
+          collectSelection("draft"),
+          collectSelection("pending_review"),
+        ]);
+        for (const item of draft.values()) remote.set(item.id, item);
+        for (const item of pending.values()) remote.set(item.id, item);
+      } else {
+        const publicationStatus =
+          filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
+        const selected = await collectSelection(publicationStatus);
+        for (const item of selected.values()) remote.set(item.id, item);
+      }
+      const localKeys = visibleItems
+        .filter((item) => item.source === "local")
+        .map((item) => item.key);
+      setSelectedKeys(new Set(localKeys));
+      setRemoteSelection(remote);
+      lastSelectedIndexRef.current = visibleItems.length === 0 ? null : visibleItems.length - 1;
+      showNotice(`已选择全部匹配结果：${localKeys.length + remote.size} 张`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "选择全部匹配结果失败");
+    } finally {
+      setSelectingAll(false);
+    }
+  }'''
+          text = text[:select_start] + select_fn + text[select_end:]
+
+          # Render and batch inspector counts use the full snapshot count.
+          text = text.replace(
+            '        ((inspectorItem !== null && !selectionMode) ||\n          (selectionMode && selectedItems.length > 0)) &&',
+            '        ((inspectorItem !== null && !selectionMode) || (selectionMode && selectedCount > 0)) &&',
+            1,
+          )
+          text = text.replace('<Badge variant="secondary">已选择 {selectedItems.length} 张</Badge>', '<Badge variant="secondary">已选择 {selectedCount} 张</Badge>', 1)
+          text = text.replace(
+            'disabled={batchBusy || selectingAll || selectedItems.length === visibleItems.length}',
+            'disabled={\n              batchBusy ||\n              selectingAll ||\n              (remoteSelection === null && selectedItems.length === visibleItems.length)\n            }',
+            1,
+          )
+          text = text.replace(
+            '              setSelectedKeys(new Set(visibleItems.map((item) => item.key)));\n              lastSelectedIndexRef.current = visibleItems.length - 1;',
+            '              setRemoteSelection(null);\n              setSelectedKeys(new Set(visibleItems.map((item) => item.key)));\n              lastSelectedIndexRef.current = visibleItems.length - 1;',
+            1,
+          )
+          text = text.replace('{cursor === null ? "选择全部匹配" : "加载并选择全部匹配"}', '选择全部匹配', 1)
+          text = text.replace('{selectedItems.length === 0 ? (', '{selectedCount === 0 ? (', 1)
+          text = text.replace('disabled={batchBusy || selectedItems.length === 0}', 'disabled={batchBusy || selectedCount === 0}', 1)
+          text = text.replace('            const selected = selectedKeys.has(item.key);', '            const selected = itemSelected(item);', 1)
+          text = text.replace('{selectionMode && selectedItems.length > 0 ? (', '{selectionMode && selectedCount > 0 ? (', 1)
+          text = text.replace('            count={selectedItems.length}', '            count={selectedCount}', 1)
+          text = text.replace(
+            '{selectedItems.length > selectionStats.deletable\n                ? ` 另有 ${selectedItems.length - selectionStats.deletable} 张因权限或状态限制会被跳过。`',
+            '{selectedCount > selectionStats.deletable\n                ? ` 另有 ${selectedCount - selectionStats.deletable} 张因权限或状态限制会被跳过。`',
+            1,
+          )
+          workspace.write_text(text)
+          PY
+          pnpm exec biome check --write apps/api/src/routes/photos.ts apps/api/src/media/service.ts apps/web/src/components/review/review-workspace.tsx
+          pnpm typecheck
+          pnpm exec vitest run apps/api/src/media/service.integration.test.ts apps/web/src/lib/local-review-queue.test.ts
+      - name: Commit scalable selection
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/api/src/routes/photos.ts apps/api/src/media/service.ts apps/web/src/components/review/review-workspace.tsx
+          git commit -m 'perf(review): make select-all metadata-only'
+          git push origin HEAD:review-workspace-efficiency
