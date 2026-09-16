@@ -16,7 +16,7 @@ import {
   validateBibRuleSet,
 } from "@photostream/contracts";
 import { FlaskConicalIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,61 @@ function digitCoverage(
   }));
 }
 
+function optionLabel(option: BibAttributeOptionInput): string {
+  const displayName = option.displayName.trim();
+  if (displayName.length > 0) return displayName;
+  return option.dimension === "grade" ? "未命名年级" : "未命名班级";
+}
+
+function numberDraftIsValid(value: string, min: number, max?: number): boolean {
+  if (value.trim().length === 0) return false;
+  const parsed = Number(value);
+  return (
+    Number.isInteger(parsed) &&
+    parsed >= min &&
+    (max === undefined || parsed <= max)
+  );
+}
+
+function DraftNumberInput({
+  id,
+  max,
+  min,
+  onValueChange,
+  value,
+}: Readonly<{
+  id: string;
+  max?: number;
+  min: number;
+  onValueChange: (value: number) => void;
+  value: number;
+}>) {
+  const [draft, setDraft] = useState(() => String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  return (
+    <Input
+      id={id}
+      max={max}
+      min={min}
+      onBlur={() => {
+        if (!numberDraftIsValid(draft, min, max)) setDraft(String(value));
+      }}
+      onChange={(event) => {
+        const next = event.currentTarget.value;
+        setDraft(next);
+        if (!numberDraftIsValid(next, min, max)) return;
+        onValueChange(Number(next));
+      }}
+      type="number"
+      value={draft}
+    />
+  );
+}
+
 export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }>) {
   const [config, setConfig] = useState<BibConfigUpdate>(() => requestFrom(initial));
   const [saved, setSaved] = useState(initial);
@@ -96,7 +151,18 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   const validation = useMemo(() => {
     const rule = validateBibRuleSet(config.patterns);
     const mapping = validateBibMappings(config.patterns, config.attributeOptions, config.mappings);
-    return { rule, mapping, issues: [...rule.issues, ...mapping.issues] };
+    const optionIssues = config.attributeOptions.flatMap((option, index) =>
+      option.displayName.trim().length > 0
+        ? []
+        : [
+            {
+              code: "EMPTY_ATTRIBUTE_OPTION_NAME",
+              path: `attributeOptions.${index}.displayName`,
+              message: option.dimension === "grade" ? "年级名称不能为空" : "班级名称不能为空",
+            },
+          ],
+    );
+    return { rule, mapping, issues: [...rule.issues, ...mapping.issues, ...optionIssues] };
   }, [config]);
   const localTestResult = useMemo(() => {
     const normalizedNumber = normalizeBibNumber(testNumber);
@@ -202,6 +268,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
   async function save(): Promise<void> {
     if (pending) return;
+    if (config.attributeOptions.some((option) => option.displayName.trim().length === 0)) {
+      setError("年级和班级名称不能为空");
+      return;
+    }
     if (
       (config.recognitionEnabled || config.searchEnabled) &&
       (!validation.rule.usable || !validation.mapping.usable)
@@ -247,8 +317,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>功能开关与模型</CardTitle>
-          <CardDescription>搜索只能用于口令相册；模型固定从站内哈希资源路径加载。</CardDescription>
+          <CardTitle>功能开关</CardTitle>
+          <CardDescription>搜索只能用于口令相册。</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -281,10 +351,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   setConfig((current) => ({ ...current, searchEnabled: checked }))
                 }
               />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="bib-model-version">固定模型版本</FieldLabel>
-              <Input id="bib-model-version" readOnly value={config.modelVersion} />
             </Field>
           </FieldGroup>
         </CardContent>
@@ -320,17 +386,16 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <FieldGroup className="md:grid md:grid-cols-3">
                     <Field>
                       <FieldLabel htmlFor={`pattern-length-${patternIndex}`}>总位数</FieldLabel>
-                      <Input
+                      <DraftNumberInput
                         id={`pattern-length-${patternIndex}`}
                         max={12}
                         min={1}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           updatePattern(patternIndex, (current) => ({
                             ...current,
-                            totalLength: Number(event.currentTarget.value),
+                            totalLength: value,
                           }))
                         }
-                        type="number"
                         value={pattern.totalLength}
                       />
                     </Field>
@@ -379,17 +444,16 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             >
                               起始位置
                             </FieldLabel>
-                            <Input
+                            <DraftNumberInput
                               id={`constraint-start-${patternIndex}-${constraintIndex}`}
                               max={12}
                               min={1}
-                              onChange={(event) =>
+                              onValueChange={(value) =>
                                 updateConstraint(patternIndex, constraintIndex, (current) => ({
                                   ...current,
-                                  startPosition: Number(event.currentTarget.value),
+                                  startPosition: value,
                                 }))
                               }
-                              type="number"
                               value={constraint.startPosition}
                             />
                           </Field>
@@ -399,17 +463,16 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             >
                               连续宽度
                             </FieldLabel>
-                            <Input
+                            <DraftNumberInput
                               id={`constraint-width-${patternIndex}-${constraintIndex}`}
                               max={12}
                               min={1}
-                              onChange={(event) =>
+                              onValueChange={(value) =>
                                 updateConstraint(patternIndex, constraintIndex, (current) => ({
                                   ...current,
-                                  width: Number(event.currentTarget.value),
+                                  width: value,
                                 }))
                               }
-                              type="number"
                               value={constraint.width}
                             />
                           </Field>
@@ -556,56 +619,60 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           <CardDescription>只保存类别，不导入姓名、学号或号码到个人身份映射。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {config.attributeOptions.map((option, optionIndex) => (
-            <FieldGroup
-              className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto_auto]"
-              key={option.id}
-            >
-              <Field>
-                <FieldLabel htmlFor={`bib-option-${option.id}`}>
-                  {option.dimension === "grade" ? "年级名称" : "班级名称"}
-                </FieldLabel>
-                <Input
-                  id={`bib-option-${option.id}`}
-                  onChange={(event) =>
-                    updateOption(optionIndex, (current) => ({
-                      ...current,
-                      displayName: event.currentTarget.value,
-                    }))
-                  }
-                  value={option.displayName}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor={`bib-option-sort-${option.id}`}>排序</FieldLabel>
-                <Input
-                  id={`bib-option-sort-${option.id}`}
-                  min={0}
-                  onChange={(event) =>
-                    updateOption(optionIndex, (current) => ({
-                      ...current,
-                      sortOrder: Number(event.currentTarget.value),
-                    }))
-                  }
-                  type="number"
-                  value={option.sortOrder}
-                />
-              </Field>
-              <Field className="self-end">
-                <FieldLabel className="sr-only" htmlFor={`bib-option-enabled-${option.id}`}>
-                  {option.displayName}启用状态
-                </FieldLabel>
-                <Switch
-                  checked={option.enabled}
-                  id={`bib-option-enabled-${option.id}`}
-                  onCheckedChange={(checked) =>
-                    updateOption(optionIndex, (current) => ({ ...current, enabled: checked }))
-                  }
-                />
-              </Field>
-              <Badge variant="outline">{option.dimension === "grade" ? "年级" : "班级"}</Badge>
-            </FieldGroup>
-          ))}
+          {config.attributeOptions.map((option, optionIndex) => {
+            const emptyName = option.displayName.trim().length === 0;
+            return (
+              <FieldGroup
+                className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto_auto]"
+                key={option.id}
+              >
+                <Field data-invalid={emptyName || undefined}>
+                  <FieldLabel htmlFor={`bib-option-${option.id}`}>
+                    {option.dimension === "grade" ? "年级名称" : "班级名称"}
+                  </FieldLabel>
+                  <Input
+                    aria-invalid={emptyName || undefined}
+                    id={`bib-option-${option.id}`}
+                    onChange={(event) =>
+                      updateOption(optionIndex, (current) => ({
+                        ...current,
+                        displayName: event.currentTarget.value,
+                      }))
+                    }
+                    value={option.displayName}
+                  />
+                  {emptyName ? <FieldDescription>名称不能为空</FieldDescription> : null}
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`bib-option-sort-${option.id}`}>排序</FieldLabel>
+                  <DraftNumberInput
+                    id={`bib-option-sort-${option.id}`}
+                    min={0}
+                    onValueChange={(value) =>
+                      updateOption(optionIndex, (current) => ({
+                        ...current,
+                        sortOrder: value,
+                      }))
+                    }
+                    value={option.sortOrder}
+                  />
+                </Field>
+                <Field className="self-end">
+                  <FieldLabel className="sr-only" htmlFor={`bib-option-enabled-${option.id}`}>
+                    {optionLabel(option)}启用状态
+                  </FieldLabel>
+                  <Switch
+                    checked={option.enabled}
+                    id={`bib-option-enabled-${option.id}`}
+                    onCheckedChange={(checked) =>
+                      updateOption(optionIndex, (current) => ({ ...current, enabled: checked }))
+                    }
+                  />
+                </Field>
+                <Badge variant="outline">{option.dimension === "grade" ? "年级" : "班级"}</Badge>
+              </FieldGroup>
+            );
+          })}
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => addOption("grade")} type="button" variant="outline">
               <PlusIcon data-icon="inline-start" />
@@ -628,7 +695,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           {config.mappings.map((mapping, mappingIndex) => {
             const optionItems = config.attributeOptions
               .filter((option) => option.dimension === mapping.dimension && option.enabled)
-              .map((option) => ({ value: option.id, label: option.displayName }));
+              .map((option) => ({ value: option.id, label: optionLabel(option) }));
             return (
               <Card
                 key={
@@ -644,33 +711,31 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <FieldGroup className="md:grid md:grid-cols-3">
                     <Field>
                       <FieldLabel htmlFor={`mapping-start-${mappingIndex}`}>起始位置</FieldLabel>
-                      <Input
+                      <DraftNumberInput
                         id={`mapping-start-${mappingIndex}`}
                         max={12}
                         min={1}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           updateMapping(mappingIndex, (current) => ({
                             ...current,
-                            startPosition: Number(event.currentTarget.value),
+                            startPosition: value,
                           }))
                         }
-                        type="number"
                         value={mapping.startPosition}
                       />
                     </Field>
                     <Field>
                       <FieldLabel htmlFor={`mapping-width-${mappingIndex}`}>宽度</FieldLabel>
-                      <Input
+                      <DraftNumberInput
                         id={`mapping-width-${mappingIndex}`}
                         max={12}
                         min={1}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           updateMapping(mappingIndex, (current) => ({
                             ...current,
-                            width: Number(event.currentTarget.value),
+                            width: value,
                           }))
                         }
-                        type="number"
                         value={mapping.width}
                       />
                     </Field>
