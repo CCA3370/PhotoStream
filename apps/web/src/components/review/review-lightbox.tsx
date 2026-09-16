@@ -137,7 +137,6 @@ export function ReviewLightbox({
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
   const deleteTapRef = useRef<{ readonly key: string; readonly at: number } | null>(null);
-  const spaceTapRef = useRef<{ readonly key: string; readonly at: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -214,7 +213,6 @@ export function ReviewLightbox({
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
-    spaceTapRef.current = null;
   }, [resetView, selected?.src]);
 
   useEffect(() => {
@@ -253,17 +251,10 @@ export function ReviewLightbox({
         event.stopPropagation();
         if (event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
-          spaceTapRef.current = null;
           onToggleVisibility(selected.key);
           return;
         }
-        const now = Date.now();
-        if (spaceTapRef.current?.key === selected.key && now - spaceTapRef.current.at <= 700) {
-          spaceTapRef.current = null;
-          onStateAction(selected.key);
-        } else {
-          spaceTapRef.current = { key: selected.key, at: now };
-        }
+        onStateAction(selected.key);
       } else if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
@@ -403,7 +394,7 @@ export function ReviewLightbox({
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
           <DialogDescription className="sr-only">
-            左右键切换，滚轮、双击或加减键缩放，拖动查看；已发布照片空格切换显示状态，未发布照片连续两次空格发布，回车切换精选，连续两次
+            左右键切换，滚轮、双击或加减键缩放，拖动查看；空格发布或切换显示状态，回车切换精选，连续两次
             Delete 删除。
           </DialogDescription>
 
@@ -575,8 +566,6 @@ export function ReviewLightbox({
                 </div>
 
                 <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl">
-                  <div className="mx-0.5 h-5 w-px bg-white/10" />
-
                   {bibConfirmed ? (
                     <Button
                       aria-label="修改号码确认"
@@ -631,9 +620,7 @@ export function ReviewLightbox({
                           }
                         : undefined
                     }
-                    title={
-                      published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布（双击 Space）"
-                    }
+                    title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布 (Space)"}
                     type="button"
                     variant="outline"
                   >

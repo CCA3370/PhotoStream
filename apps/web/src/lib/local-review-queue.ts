@@ -374,23 +374,21 @@ export function localBibMediaState(photo: LocalReviewPhoto): BibMediaState {
           confirmedAt: photo.bib.decidedAt,
         }),
       )
-    : photo.bib.decision === "pending"
-      ? photo.bib.candidates.map((candidate, index) =>
-          localTag({
-            id: `local-ocr-${photo.id}-${index}`,
-            mediaId,
-            number: candidate.text,
-            status: "suggested",
-            source: "ocr",
-            confidence: candidate.confidence,
-            quadrilateral: candidate.quadrilateral,
-            ruleVersion,
-            modelVersion: candidate.modelVersion,
-            createdAt: photo.createdAt,
-            confirmedAt: null,
-          }),
-        )
-      : [];
+    : photo.bib.candidates.map((candidate, index) =>
+        localTag({
+          id: `local-ocr-${photo.id}-${index}`,
+          mediaId,
+          number: candidate.text,
+          status: photo.bib.decision === "no_number_confirmed" ? "rejected" : "suggested",
+          source: "ocr",
+          confidence: candidate.confidence,
+          quadrilateral: candidate.quadrilateral,
+          ruleVersion,
+          modelVersion: candidate.modelVersion,
+          createdAt: photo.createdAt,
+          confirmedAt: null,
+        }),
+      );
   return {
     tags,
     review: {
