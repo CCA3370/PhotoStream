@@ -145,8 +145,8 @@ export function ReviewInspector({
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-2.5">
             <h3 className="text-xs font-semibold text-muted-foreground">照片属性</h3>
-            <label className="flex flex-col gap-1.5 text-xs font-medium">
-              分类
+            <div className="flex flex-col gap-1.5 text-xs font-medium">
+              <span>分类</span>
               <Select
                 items={[
                   { label: "未分类", value: "uncategorized" },
@@ -171,7 +171,7 @@ export function ReviewInspector({
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </label>
+            </div>
 
             <div className="grid grid-cols-2 gap-2">
               <Button disabled={busy} onClick={onToggleFeatured} type="button" variant="outline">
@@ -375,8 +375,8 @@ export function ReviewBatchInspector({
 
           <section className="flex flex-col gap-2.5 border-t pt-4">
             <h3 className="text-xs font-semibold text-muted-foreground">属性</h3>
-            <label className="flex flex-col gap-1.5 text-xs font-medium">
-              分类
+            <div className="flex flex-col gap-1.5 text-xs font-medium">
+              <span>分类</span>
               <div className="flex gap-2">
                 <Select
                   items={categoryItems}
@@ -411,7 +411,7 @@ export function ReviewBatchInspector({
                   应用
                 </Button>
               </div>
-            </label>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 disabled={busy || stats.featureable === 0}

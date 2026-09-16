@@ -10,6 +10,7 @@ import {
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
+  PanelRightOpenIcon,
   SendIcon,
   StarIcon,
   Trash2Icon,
@@ -29,6 +30,11 @@ import {
   isBibReviewConfirmed,
 } from "@/components/bib/bib-review-editor";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
+import {
+  ReviewInspector,
+  type ReviewInspectorCategory,
+  type ReviewInspectorItem,
+} from "@/components/review/review-inspector";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -49,6 +55,7 @@ export type ReviewPendingAction = "category" | "delete" | "featured" | "state";
 
 export interface ReviewLightboxItem {
   readonly key: string;
+  readonly inspector: ReviewInspectorItem;
   readonly variants?: readonly { readonly url: string; readonly kind: string }[];
   readonly src: string | null;
   readonly fallbackSrc: string | null;
@@ -93,6 +100,7 @@ function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
 
 export function ReviewLightbox({
   items,
+  categories,
   selectedKey,
   onClose,
   onDelete,
@@ -104,8 +112,10 @@ export function ReviewLightbox({
   onLocalBibConfirmNumbers,
   onLocalBibConfirmNoNumber,
   onBibError,
+  onCategoryChange,
 }: Readonly<{
   items: readonly ReviewLightboxItem[];
+  categories: readonly ReviewInspectorCategory[];
   selectedKey: string | null;
   onClose: () => void;
   onDelete: (key: string) => void;
@@ -117,6 +127,7 @@ export function ReviewLightbox({
   onLocalBibConfirmNumbers: (key: string, numbers: readonly string[]) => Promise<BibMediaState>;
   onLocalBibConfirmNoNumber: (key: string) => Promise<BibMediaState>;
   onBibError: (message: string) => void;
+  onCategoryChange: (key: string, categoryId: string | null) => void;
 }>) {
   const selectedIndex =
     selectedKey === null ? -1 : items.findIndex((item) => item.key === selectedKey);
@@ -136,6 +147,7 @@ export function ReviewLightbox({
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -197,6 +209,7 @@ export function ReviewLightbox({
     setLoaded(false);
     setLoadFailed(false);
     setBibDialogOpen(false);
+    setInspectorOpen(false);
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
@@ -508,6 +521,22 @@ export function ReviewLightbox({
               </div>
             ) : null}
 
+            {inspectorOpen ? (
+              <div className="absolute inset-y-0 right-0 z-40 w-[min(92vw,22rem)] p-3 sm:p-4">
+                <ReviewInspector
+                  busy={busy}
+                  categories={categories}
+                  item={selected.inspector}
+                  onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
+                  onClose={() => setInspectorOpen(false)}
+                  onDelete={() => onDelete(selected.key)}
+                  onOpenBib={() => setBibDialogOpen(true)}
+                  onStateAction={() => onStateAction(selected.key)}
+                  onToggleFeatured={() => onToggleFeatured(selected.key)}
+                />
+              </div>
+            ) : null}
+
             {canNavigate ? (
               <>
                 <Button
@@ -617,6 +646,18 @@ export function ReviewLightbox({
                     ) : (
                       <SendIcon />
                     )}
+                  </Button>
+                  <Button
+                    aria-label="照片属性"
+                    className={cn(toolbarButtonClass, "size-8")}
+                    disabled={busy}
+                    onClick={() => setInspectorOpen(true)}
+                    size="icon-sm"
+                    title="照片属性"
+                    type="button"
+                    variant="outline"
+                  >
+                    <PanelRightOpenIcon />
                   </Button>
                   <Button
                     aria-label="删除"
