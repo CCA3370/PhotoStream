@@ -327,7 +327,13 @@ export function ReviewBatchInspector({
           <p className="text-sm font-semibold">批量属性</p>
           <p className="mt-1 text-xs text-muted-foreground">已选择 {count} 张照片</p>
         </div>
-        <Button aria-label="退出批量选择" onClick={onExit} size="icon-sm" type="button" variant="ghost">
+        <Button
+          aria-label="退出批量选择"
+          onClick={onExit}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
           <XIcon />
         </Button>
       </div>
@@ -337,15 +343,30 @@ export function ReviewBatchInspector({
           <section className="flex flex-col gap-2.5">
             <h3 className="text-xs font-semibold text-muted-foreground">发布状态</h3>
             <div className="grid grid-cols-3 gap-2">
-              <Button disabled={busy || stats.publishable === 0} onClick={onPublish} type="button" variant="outline">
+              <Button
+                disabled={busy || stats.publishable === 0}
+                onClick={onPublish}
+                type="button"
+                variant="outline"
+              >
                 <SendIcon data-icon="inline-start" />
                 发布 {stats.publishable}
               </Button>
-              <Button disabled={busy || stats.hideable === 0} onClick={onHide} type="button" variant="outline">
+              <Button
+                disabled={busy || stats.hideable === 0}
+                onClick={onHide}
+                type="button"
+                variant="outline"
+              >
                 <EyeOffIcon data-icon="inline-start" />
                 隐藏 {stats.hideable}
               </Button>
-              <Button disabled={busy || stats.restorable === 0} onClick={onRestore} type="button" variant="outline">
+              <Button
+                disabled={busy || stats.restorable === 0}
+                onClick={onRestore}
+                type="button"
+                variant="outline"
+              >
                 <EyeIcon data-icon="inline-start" />
                 恢复 {stats.restorable}
               </Button>
@@ -381,17 +402,32 @@ export function ReviewBatchInspector({
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <Button disabled={busy || categoryValue === "mixed"} onClick={onApplyCategory} type="button" variant="outline">
+                <Button
+                  disabled={busy || categoryValue === "mixed"}
+                  onClick={onApplyCategory}
+                  type="button"
+                  variant="outline"
+                >
                   应用
                 </Button>
               </div>
             </label>
             <div className="grid grid-cols-2 gap-2">
-              <Button disabled={busy || stats.featureable === 0} onClick={onFeature} type="button" variant="outline">
+              <Button
+                disabled={busy || stats.featureable === 0}
+                onClick={onFeature}
+                type="button"
+                variant="outline"
+              >
                 <StarIcon data-icon="inline-start" />
                 精选 {stats.featureable}
               </Button>
-              <Button disabled={busy || stats.unfeatureable === 0} onClick={onUnfeature} type="button" variant="outline">
+              <Button
+                disabled={busy || stats.unfeatureable === 0}
+                onClick={onUnfeature}
+                type="button"
+                variant="outline"
+              >
                 <StarIcon data-icon="inline-start" />
                 取消 {stats.unfeatureable}
               </Button>
@@ -411,7 +447,12 @@ export function ReviewBatchInspector({
                   placeholder="统一号码"
                   value={bibNumber}
                 />
-                <Button disabled={busy || bibNumber.trim().length === 0} onClick={onAddBibNumber} type="button" variant="outline">
+                <Button
+                  disabled={busy || bibNumber.trim().length === 0}
+                  onClick={onAddBibNumber}
+                  type="button"
+                  variant="outline"
+                >
                   添加
                 </Button>
               </div>
