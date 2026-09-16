@@ -10,6 +10,10 @@ export const metadata: Metadata = {
     template: "%s｜中学部影像直播",
   },
   description: "北航实验学校中学部暨北航实验学校分校活动影像直播平台",
+  icons: {
+    icon: "/photostream-app-icon.svg",
+    shortcut: "/photostream-app-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
