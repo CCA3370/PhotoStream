@@ -61,9 +61,24 @@ const mediaDeliveryTokenSchema = z
     expiresAt: z.iso.datetime(),
   })
   .strict();
+
+const aggregateDeliveryCounterSchema = z.number().int().min(0);
+const aggregateDeliveryBytesSchema = z.number().int().min(0);
 const browserDeliverySchema = z
   .object({
-    ...mediaDeliveryFields,
+    memoryHits: aggregateDeliveryCounterSchema,
+    memoryBytes: aggregateDeliveryBytesSchema,
+    diskHits: aggregateDeliveryCounterSchema,
+    diskBytes: aggregateDeliveryBytesSchema,
+    joinedRequests: aggregateDeliveryCounterSchema,
+    networkRequests: aggregateDeliveryCounterSchema,
+    networkBytes: aggregateDeliveryBytesSchema,
+    readFailures: aggregateDeliveryCounterSchema,
+    writeFailures: aggregateDeliveryCounterSchema,
+    sizeMismatches: aggregateDeliveryCounterSchema,
+    refreshedUrls: aggregateDeliveryCounterSchema,
+    evictions: aggregateDeliveryCounterSchema,
+    directFallbacks: aggregateDeliveryCounterSchema,
     cacheHitRate: z.number().min(0).max(100).nullable(),
   })
   .strict();
@@ -79,7 +94,7 @@ const rankedPhotoSchema = z
   })
   .strict();
 
-const dashboardResponseSchema = z
+export const dashboardResponseSchema = z
   .object({
     from: z.iso.datetime(),
     to: z.iso.datetime(),
