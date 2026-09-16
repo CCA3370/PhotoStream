@@ -15,6 +15,7 @@ import {
 import { isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,15 @@ export interface ReviewInspectorItem {
   readonly capturedAt: string | null;
   readonly bib: BibMediaState | null;
   readonly canDelete: boolean;
+}
+
+export interface ReviewBatchInspectorStats {
+  readonly publishable: number;
+  readonly hideable: number;
+  readonly restorable: number;
+  readonly featureable: number;
+  readonly unfeatureable: number;
+  readonly deletable: number;
 }
 
 function formatBytes(bytes: number): string {
@@ -254,6 +264,179 @@ export function ReviewInspector({
             {!item.canDelete ? (
               <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
                 当前账号无权删除这张远端照片。
+              </p>
+            ) : null}
+          </section>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+export function ReviewBatchInspector({
+  count,
+  stats,
+  categories,
+  categoryValue,
+  bibEnabled,
+  bibNumber,
+  busy,
+  onCategoryValueChange,
+  onApplyCategory,
+  onBibNumberChange,
+  onPublish,
+  onHide,
+  onRestore,
+  onFeature,
+  onUnfeature,
+  onAddBibNumber,
+  onConfirmNoNumber,
+  onDelete,
+  onExit,
+}: Readonly<{
+  count: number;
+  stats: ReviewBatchInspectorStats;
+  categories: readonly ReviewInspectorCategory[];
+  categoryValue: string;
+  bibEnabled: boolean;
+  bibNumber: string;
+  busy: boolean;
+  onCategoryValueChange: (value: string) => void;
+  onApplyCategory: () => void;
+  onBibNumberChange: (value: string) => void;
+  onPublish: () => void;
+  onHide: () => void;
+  onRestore: () => void;
+  onFeature: () => void;
+  onUnfeature: () => void;
+  onAddBibNumber: () => void;
+  onConfirmNoNumber: () => void;
+  onDelete: () => void;
+  onExit: () => void;
+}>) {
+  const categoryItems = [
+    ...(categoryValue === "mixed" ? [{ label: "多个值", value: "mixed" }] : []),
+    { label: "未分类", value: "uncategorized" },
+    ...categories.map((category) => ({ label: category.name, value: category.id })),
+  ];
+
+  return (
+    <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="flex items-start gap-3 border-b p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">批量属性</p>
+          <p className="mt-1 text-xs text-muted-foreground">已选择 {count} 张照片</p>
+        </div>
+        <Button aria-label="退出批量选择" onClick={onExit} size="icon-sm" type="button" variant="ghost">
+          <XIcon />
+        </Button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="flex flex-col gap-5">
+          <section className="flex flex-col gap-2.5">
+            <h3 className="text-xs font-semibold text-muted-foreground">发布状态</h3>
+            <div className="grid grid-cols-3 gap-2">
+              <Button disabled={busy || stats.publishable === 0} onClick={onPublish} type="button" variant="outline">
+                <SendIcon data-icon="inline-start" />
+                发布 {stats.publishable}
+              </Button>
+              <Button disabled={busy || stats.hideable === 0} onClick={onHide} type="button" variant="outline">
+                <EyeOffIcon data-icon="inline-start" />
+                隐藏 {stats.hideable}
+              </Button>
+              <Button disabled={busy || stats.restorable === 0} onClick={onRestore} type="button" variant="outline">
+                <EyeIcon data-icon="inline-start" />
+                恢复 {stats.restorable}
+              </Button>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-2.5 border-t pt-4">
+            <h3 className="text-xs font-semibold text-muted-foreground">属性</h3>
+            <label className="flex flex-col gap-1.5 text-xs font-medium">
+              分类
+              <div className="flex gap-2">
+                <Select
+                  items={categoryItems}
+                  onValueChange={(value) => onCategoryValueChange(value ?? "mixed")}
+                  value={categoryValue}
+                >
+                  <SelectTrigger aria-label="批量修改分类" className="min-w-0 flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {categoryValue === "mixed" ? (
+                        <SelectItem disabled value="mixed">
+                          多个值
+                        </SelectItem>
+                      ) : null}
+                      <SelectItem value="uncategorized">未分类</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Button disabled={busy || categoryValue === "mixed"} onClick={onApplyCategory} type="button" variant="outline">
+                  应用
+                </Button>
+              </div>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button disabled={busy || stats.featureable === 0} onClick={onFeature} type="button" variant="outline">
+                <StarIcon data-icon="inline-start" />
+                精选 {stats.featureable}
+              </Button>
+              <Button disabled={busy || stats.unfeatureable === 0} onClick={onUnfeature} type="button" variant="outline">
+                <StarIcon data-icon="inline-start" />
+                取消 {stats.unfeatureable}
+              </Button>
+            </div>
+          </section>
+
+          {bibEnabled ? (
+            <section className="flex flex-col gap-2.5 border-t pt-4">
+              <h3 className="text-xs font-semibold text-muted-foreground">号码审核</h3>
+              <div className="flex gap-2">
+                <Input
+                  aria-label="批量添加统一号码"
+                  disabled={busy}
+                  inputMode="numeric"
+                  maxLength={12}
+                  onChange={(event) => onBibNumberChange(event.currentTarget.value)}
+                  placeholder="统一号码"
+                  value={bibNumber}
+                />
+                <Button disabled={busy || bibNumber.trim().length === 0} onClick={onAddBibNumber} type="button" variant="outline">
+                  添加
+                </Button>
+              </div>
+              <Button disabled={busy} onClick={onConfirmNoNumber} type="button" variant="outline">
+                <HashIcon data-icon="inline-start" />
+                批量确认无号码
+              </Button>
+            </section>
+          ) : null}
+
+          <section className="border-t pt-4">
+            <h3 className="mb-2 text-xs font-semibold text-destructive">危险操作</h3>
+            <Button
+              className="w-full"
+              disabled={busy || stats.deletable === 0}
+              onClick={onDelete}
+              type="button"
+              variant="destructive"
+            >
+              <Trash2Icon data-icon="inline-start" />
+              删除 {stats.deletable} 张
+            </Button>
+            {count > stats.deletable ? (
+              <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                另有 {count - stats.deletable} 张因权限或状态限制不会删除。
               </p>
             ) : null}
           </section>
