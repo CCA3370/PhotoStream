@@ -1,0 +1,134 @@
+name: Temporary lightbox inspector integrator
+
+on:
+  push:
+    branches:
+      - review-workspace-efficiency
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-lightbox-inspector:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: review-workspace-efficiency
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Integrate lightbox inspector and fix review lint
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          inspector = Path('apps/web/src/components/review/review-inspector.tsx')
+          text = inspector.read_text()
+          text = text.replace(
+              '<label className="flex flex-col gap-1.5 text-xs font-medium">\n              分类\n              <Select',
+              '<div className="flex flex-col gap-1.5 text-xs font-medium">\n              <span>分类</span>\n              <Select',
+              1,
+          )
+          text = text.replace('              </Select>\n            </label>', '              </Select>\n            </div>', 1)
+          text = text.replace(
+              '<label className="flex flex-col gap-1.5 text-xs font-medium">\n              分类\n              <div className="flex gap-2">',
+              '<div className="flex flex-col gap-1.5 text-xs font-medium">\n              <span>分类</span>\n              <div className="flex gap-2">',
+              1,
+          )
+          text = text.replace('              </div>\n            </label>\n            <div className="grid grid-cols-2 gap-2">', '              </div>\n            </div>\n            <div className="grid grid-cols-2 gap-2">', 1)
+          inspector.write_text(text)
+
+          lightbox = Path('apps/web/src/components/review/review-lightbox.tsx')
+          text = lightbox.read_text()
+          text = text.replace('  Minimize2Icon,\n  SendIcon,', '  Minimize2Icon,\n  PanelRightOpenIcon,\n  SendIcon,', 1)
+          text = text.replace(
+              'import { InternalCachedImage } from "@/components/media/internal-cached-image";\n',
+              'import { InternalCachedImage } from "@/components/media/internal-cached-image";\nimport {\n  ReviewInspector,\n  type ReviewInspectorCategory,\n  type ReviewInspectorItem,\n} from "@/components/review/review-inspector";\n',
+              1,
+          )
+          text = text.replace(
+              '  readonly key: string;\n  readonly variants?:',
+              '  readonly key: string;\n  readonly inspector: ReviewInspectorItem;\n  readonly variants?:',
+              1,
+          )
+          text = text.replace(
+              'export function ReviewLightbox({\n  items,\n  selectedKey,',
+              'export function ReviewLightbox({\n  items,\n  categories,\n  selectedKey,',
+              1,
+          )
+          text = text.replace(
+              '  onBibError,\n}: Readonly<{\n  items: readonly ReviewLightboxItem[];',
+              '  onBibError,\n  onCategoryChange,\n}: Readonly<{\n  items: readonly ReviewLightboxItem[];\n  categories: readonly ReviewInspectorCategory[];',
+              1,
+          )
+          text = text.replace(
+              '  onBibError: (message: string) => void;\n}>) {',
+              '  onBibError: (message: string) => void;\n  onCategoryChange: (key: string, categoryId: string | null) => void;\n}>) {',
+              1,
+          )
+          text = text.replace(
+              '  const [bibDialogOpen, setBibDialogOpen] = useState(false);',
+              '  const [bibDialogOpen, setBibDialogOpen] = useState(false);\n  const [inspectorOpen, setInspectorOpen] = useState(false);',
+              1,
+          )
+          text = text.replace(
+              '    setBibDialogOpen(false);\n    resetView();',
+              '    setBibDialogOpen(false);\n    setInspectorOpen(false);\n    resetView();',
+              1,
+          )
+          nav_anchor = '''            {canNavigate ? (\n              <>'''
+          panel = '''            {inspectorOpen ? (\n              <div className="absolute inset-y-0 right-0 z-40 w-[min(92vw,22rem)] p-3 sm:p-4">\n                <ReviewInspector\n                  busy={busy}\n                  categories={categories}\n                  item={selected.inspector}\n                  onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}\n                  onClose={() => setInspectorOpen(false)}\n                  onDelete={() => onDelete(selected.key)}\n                  onOpenBib={() => setBibDialogOpen(true)}\n                  onStateAction={() => onStateAction(selected.key)}\n                  onToggleFeatured={() => onToggleFeatured(selected.key)}\n                />\n              </div>\n            ) : null}\n\n            {canNavigate ? (\n              <>'''
+          if nav_anchor not in text:
+              raise SystemExit('lightbox navigation anchor missing')
+          text = text.replace(nav_anchor, panel, 1)
+          delete_anchor = '''                  <Button\n                    aria-label="删除"'''
+          properties_button = '''                  <Button\n                    aria-label="照片属性"\n                    className={cn(toolbarButtonClass, "size-8")}\n                    disabled={busy}\n                    onClick={() => setInspectorOpen(true)}\n                    size="icon-sm"\n                    title="照片属性"\n                    type="button"\n                    variant="outline"\n                  >\n                    <PanelRightOpenIcon />\n                  </Button>\n                  <Button\n                    aria-label="删除"'''
+          if delete_anchor not in text:
+              raise SystemExit('lightbox delete button anchor missing')
+          text = text.replace(delete_anchor, properties_button, 1)
+          lightbox.write_text(text)
+
+          workspace = Path('apps/web/src/components/review/review-workspace.tsx')
+          text = workspace.read_text()
+          helper_anchor = '''  function canDeleteItem(item: ReviewItem): boolean {\n    if (item.source === "remote") return userRole === "admin";\n    if (item.publicationStatus === "published") return userRole === "admin";\n    return true;\n  }\n'''
+          helper = helper_anchor + '''\n  function inspectorView(item: ReviewItem): ReviewInspectorItem {\n    if (item.source === "local") {\n      return {\n        key: item.key,\n        title: item.local.photo.fileName,\n        mediaId: item.local.photo.mediaId,\n        categoryId: item.categoryId,\n        uploaderName: null,\n        sourceLabel: "本机",\n        featured: item.featured,\n        publicationStatus: item.publicationStatus,\n        ingestStatus: item.local.photo.uploadState,\n        width: item.local.photo.width,\n        height: item.local.photo.height,\n        totalBytes: item.local.photo.totalBytes,\n        createdAt: item.createdAt,\n        capturedAt: item.local.photo.capturedAt,\n        bib: item.bib,\n        canDelete: canDeleteItem(item),\n      };\n    }\n    return {\n      key: item.key,\n      title: item.local?.photo.fileName ?? `媒体 ${item.remote.id.slice(0, 8)}`,\n      mediaId: item.remote.id,\n      categoryId: item.categoryId,\n      uploaderName: uploaders.find((entry) => entry.id === item.uploaderId)?.displayName ?? null,\n      sourceLabel: "远端",\n      featured: item.featured,\n      publicationStatus: item.publicationStatus,\n      ingestStatus: item.remote.ingestStatus,\n      width: item.remote.width,\n      height: item.remote.height,\n      totalBytes: item.remote.totalBytes,\n      createdAt: item.createdAt,\n      capturedAt: item.remote.capturedAt,\n      bib: item.bib,\n      canDelete: canDeleteItem(item),\n    };\n  }\n'''
+          if helper_anchor not in text:
+              raise SystemExit('workspace canDeleteItem anchor missing')
+          text = text.replace(helper_anchor, helper, 1)
+          text = text.replace(
+              '''      lightboxSourceItems.map((item) => ({\n        key: item.key,''',
+              '''      lightboxSourceItems.map((item) => ({\n        key: item.key,\n        inspector: inspectorView(item),''',
+              1,
+          )
+          text = text.replace(
+              '    [lightboxSourceItems, pendingActions, userRole],',
+              '    [lightboxSourceItems, pendingActions, uploaders, userRole],',
+              1,
+          )
+          text = text.replace(
+              '''      <ReviewLightbox\n        items={lightboxItems}\n        onBibError={setError}''',
+              '''      <ReviewLightbox\n        categories={categories}\n        items={lightboxItems}\n        onBibError={setError}\n        onCategoryChange={(key, categoryId) => {\n          const item = itemByKey(key);\n          if (item !== null) void changeCategory(item, categoryId);\n        }}''',
+              1,
+          )
+          workspace.write_text(text)
+          PY
+          pnpm exec biome check --write apps/web/src/components/review/review-inspector.tsx apps/web/src/components/review/review-lightbox.tsx apps/web/src/components/review/review-workspace.tsx
+          pnpm typecheck
+      - name: Commit lightbox inspector
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/components/review/review-inspector.tsx apps/web/src/components/review/review-lightbox.tsx apps/web/src/components/review/review-workspace.tsx
+          git commit -m 'feat(review): edit properties from lightbox'
+          git push origin HEAD:review-workspace-efficiency
