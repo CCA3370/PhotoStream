@@ -109,7 +109,13 @@ interface RemotePage {
 
 interface LocalView {
   readonly photo: LocalReviewPhoto;
-  readonly url: string;
+  readonly originalUrl: string;
+  readonly previewUrl: string;
+}
+
+interface LocalObjectUrls {
+  readonly originalUrl: string;
+  readonly previewUrl: string;
 }
 
 interface DragSelectionState {
@@ -224,7 +230,8 @@ function mergeRemote(
 
 function chunks<T>(items: readonly T[], size: number): readonly T[][] {
   const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  for (let index = 0; index < items.length; index += size)
+    result.push(items.slice(index, index + size));
   return result;
 }
 
@@ -251,7 +258,7 @@ export function ReviewWorkspace({
   userRole: "admin" | "reviewer";
   uploaders: readonly AlbumUploaderView[];
 }>) {
-  const localUrlCache = useRef(new Map<string, string>());
+  const localUrlCache = useRef(new Map<string, LocalObjectUrls>());
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const lastSelectedIndexRef = useRef<number | null>(null);
@@ -356,19 +363,25 @@ export function ReviewWorkspace({
   const refreshLocal = useCallback(async () => {
     const rows = await listLocalReviewPhotos(albumId);
     const activeIds = new Set(rows.map((photo) => photo.id));
-    for (const [photoId, url] of localUrlCache.current) {
+    for (const [photoId, urls] of localUrlCache.current) {
       if (activeIds.has(photoId)) continue;
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(urls.previewUrl);
+      URL.revokeObjectURL(urls.originalUrl);
       localUrlCache.current.delete(photoId);
     }
     const next = rows.map((photo) => {
-      let url = localUrlCache.current.get(photo.id);
-      if (url === undefined) {
-        const thumb = photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
-        url = URL.createObjectURL(thumb);
-        localUrlCache.current.set(photo.id, url);
+      let urls = localUrlCache.current.get(photo.id);
+      if (urls === undefined) {
+        const thumb =
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
+          photo.originalBlob;
+        urls = {
+          previewUrl: URL.createObjectURL(thumb),
+          originalUrl: URL.createObjectURL(photo.originalBlob),
+        };
+        localUrlCache.current.set(photo.id, urls);
       }
-      return { photo, url };
+      return { photo, previewUrl: urls.previewUrl, originalUrl: urls.originalUrl };
     });
     setLocalMedia(next);
   }, [albumId]);
@@ -381,7 +394,10 @@ export function ReviewWorkspace({
   }, [albumId]);
 
   const buildRemoteQuery = useCallback(
-    (publicationStatus?: "draft" | "hidden" | "pending_review" | "published", pageCursor?: string) => {
+    (
+      publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
+      pageCursor?: string,
+    ) => {
       const query = new URLSearchParams({ limit: "60" });
       if (publicationStatus !== undefined) query.set("publicationStatus", publicationStatus);
       if (category !== "all") query.set("categoryId", category);
@@ -409,7 +425,9 @@ export function ReviewWorkspace({
             return { items: [], nextCursor: null };
           }
           const query = buildRemoteQuery(status, statusCursor ?? undefined);
-          return clientGet<InternalMediaList>(`/api/v1/albums/${albumId}/media?${query.toString()}`);
+          return clientGet<InternalMediaList>(
+            `/api/v1/albums/${albumId}/media?${query.toString()}`,
+          );
         };
         const [draftPage, pendingPage] = await Promise.all([
           fetchStatus("draft", unpublishedCursor?.draft),
@@ -459,9 +477,11 @@ export function ReviewWorkspace({
   }, []);
 
   useEffect(() => {
-    void Promise.all([refreshLocal(), refreshFeatured(), resumeLocalBibOcr(albumId, bibConfig)]).catch(
-      (cause) => setError(cause instanceof Error ? cause.message : "审核数据加载失败"),
-    );
+    void Promise.all([
+      refreshLocal(),
+      refreshFeatured(),
+      resumeLocalBibOcr(albumId, bibConfig),
+    ]).catch((cause) => setError(cause instanceof Error ? cause.message : "审核数据加载失败"));
     const localChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly albumId?: string }>).detail;
       if (detail?.albumId !== albumId) return;
@@ -490,7 +510,10 @@ export function ReviewWorkspace({
     return () => {
       window.removeEventListener("photostream:local-review-changed", localChanged);
       window.removeEventListener(LOCAL_BIB_SERVER_STATE_EVENT, serverBibChanged);
-      for (const url of localUrlCache.current.values()) URL.revokeObjectURL(url);
+      for (const urls of localUrlCache.current.values()) {
+        URL.revokeObjectURL(urls.previewUrl);
+        URL.revokeObjectURL(urls.originalUrl);
+      }
       localUrlCache.current.clear();
     };
   }, [albumId, bibConfig, refreshFeatured, refreshLocal, updateBibState]);
@@ -529,8 +552,8 @@ export function ReviewWorkspace({
         key: `local:${item.photo.id}`,
         source: "local",
         local: item,
-        previewUrl: item.url,
-        viewerUrl: item.url,
+        previewUrl: item.previewUrl,
+        viewerUrl: item.originalUrl,
         viewerFallbackUrl: null,
         remoteOriginalUrl: null,
         localPreferred: true,
@@ -551,8 +574,8 @@ export function ReviewWorkspace({
           source: "remote" as const,
           remote: item,
           local: linkedLocal,
-          previewUrl: linkedLocal?.url ?? preview(item),
-          viewerUrl: linkedLocal?.url ?? ordinaryUrl,
+          previewUrl: linkedLocal?.previewUrl ?? preview(item),
+          viewerUrl: linkedLocal?.originalUrl ?? ordinaryUrl,
           viewerFallbackUrl: linkedLocal === null ? null : ordinaryUrl,
           remoteOriginalUrl: remoteOriginal(item),
           localPreferred: linkedLocal !== null,
@@ -592,7 +615,8 @@ export function ReviewWorkspace({
         if (filter === "hidden" && item.publicationStatus !== "hidden") return false;
         if (item.source === "local") {
           if (ingestFilter === "failed" && item.local.photo.uploadState !== "failed") return false;
-          if (ingestFilter === "incomplete" && item.local.photo.uploadState === "published") return false;
+          if (ingestFilter === "incomplete" && item.local.photo.uploadState === "published")
+            return false;
         }
         const decision = item.bib?.review.decision ?? "pending";
         const ocrStatus = item.bib?.review.ocrStatus ?? "not_started";
@@ -659,7 +683,8 @@ export function ReviewWorkspace({
   }, [selectAllPending, visibleItems]);
 
   const lightboxSourceItems = useMemo(() => {
-    if (activeKey === null || visibleItems.some((item) => item.key === activeKey)) return visibleItems;
+    if (activeKey === null || visibleItems.some((item) => item.key === activeKey))
+      return visibleItems;
     const activeItem = items.find((item) => item.key === activeKey);
     return activeItem === undefined ? visibleItems : [...visibleItems, activeItem];
   }, [activeKey, items, visibleItems]);
@@ -781,9 +806,13 @@ export function ReviewWorkspace({
       } else if (mediaId !== null) {
         await clientMutation(`/api/v1/media/${mediaId}/featured`, { body: { featured: next } });
         if (item.source === "remote" && item.local !== null) {
-          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(() => undefined);
+          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(
+            () => undefined,
+          );
         } else if (item.source === "local") {
-          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(() => undefined);
+          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(
+            () => undefined,
+          );
         }
         setFeaturedIds((current) => {
           const updated = new Set(current);
@@ -1036,7 +1065,11 @@ export function ReviewWorkspace({
         });
         for (const item of result.items) {
           if (item.ok) okIds.push(item.mediaId);
-          else failures.push({ label: item.mediaId.slice(0, 8), message: item.message ?? item.code ?? "操作失败" });
+          else
+            failures.push({
+              label: item.mediaId.slice(0, 8),
+              message: item.message ?? item.code ?? "操作失败",
+            });
         }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "批量请求失败";
@@ -1061,7 +1094,11 @@ export function ReviewWorkspace({
         });
         for (const item of result.items) {
           if (item.ok) successCount += 1;
-          else failures.push({ label: item.mediaId.slice(0, 8), message: item.message ?? item.code ?? "号码操作失败" });
+          else
+            failures.push({
+              label: item.mediaId.slice(0, 8),
+              message: item.message ?? item.code ?? "号码操作失败",
+            });
         }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "批量号码请求失败";
@@ -1080,7 +1117,10 @@ export function ReviewWorkspace({
     const skippedText = skippedCount > 0 ? `，跳过 ${skippedCount} 张` : "";
     if (failures.length === 0) showNotice(`${label}完成：${successCount} 张${skippedText}`);
     else {
-      showNotice(`${label}部分完成：成功 ${successCount}，失败 ${failures.length}${skippedText}`, "warning");
+      showNotice(
+        `${label}部分完成：成功 ${successCount}，失败 ${failures.length}${skippedText}`,
+        "warning",
+      );
       setError(
         failures
           .slice(0, 12)
@@ -1106,19 +1146,30 @@ export function ReviewWorkspace({
         setPending(item.key, "state");
         try {
           const result = await publishLocalReviewPhoto(item.local.photo);
-          await patchLocalReviewPhoto(item.local.photo.id, { mediaId: result.mediaId, uploadState: "published", error: null });
+          await patchLocalReviewPhoto(item.local.photo.id, {
+            mediaId: result.mediaId,
+            uploadState: "published",
+            error: null,
+          });
           successCount += 1;
         } catch (cause) {
-          failures.push({ label: item.local.photo.fileName, message: cause instanceof Error ? cause.message : "发布失败" });
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "发布失败",
+          });
         } finally {
           setPending(item.key, null);
         }
       }
       const remoteTargets = selectedItems.filter(
         (item): item is Extract<ReviewItem, { source: "remote" }> =>
-          item.source === "remote" && (item.publicationStatus === "draft" || item.publicationStatus === "pending_review"),
+          item.source === "remote" &&
+          (item.publicationStatus === "draft" || item.publicationStatus === "pending_review"),
       );
-      const remoteResult = await applyRemoteBatch("publish", remoteTargets.map((item) => item.remote.id));
+      const remoteResult = await applyRemoteBatch(
+        "publish",
+        remoteTargets.map((item) => item.remote.id),
+      );
       successCount += remoteResult.okIds.length;
       failures.push(...remoteResult.failures);
       const skipped = selectedItems.length - localTargets.length - remoteTargets.length;
@@ -1135,11 +1186,26 @@ export function ReviewWorkspace({
     try {
       const targets = selectedItems
         .map((item) => ({ item, id: remoteId(item) }))
-        .filter((entry): entry is { readonly item: ReviewItem; readonly id: string } => entry.id !== null && entry.item.publicationStatus === "published");
-      const result = await applyRemoteBatch("hide", targets.map((entry) => entry.id));
+        .filter(
+          (entry): entry is { readonly item: ReviewItem; readonly id: string } =>
+            entry.id !== null && entry.item.publicationStatus === "published",
+        );
+      const result = await applyRemoteBatch(
+        "hide",
+        targets.map((entry) => entry.id),
+      );
       const ok = new Set(result.okIds);
-      setRemoteMedia((current) => current.map((item) => (ok.has(item.id) ? { ...item, publicationStatus: "hidden" as const } : item)));
-      finishBatch("批量隐藏", result.okIds.length, result.failures, selectedItems.length - targets.length);
+      setRemoteMedia((current) =>
+        current.map((item) =>
+          ok.has(item.id) ? { ...item, publicationStatus: "hidden" as const } : item,
+        ),
+      );
+      finishBatch(
+        "批量隐藏",
+        result.okIds.length,
+        result.failures,
+        selectedItems.length - targets.length,
+      );
     } finally {
       setBatchBusy(false);
     }
@@ -1151,11 +1217,26 @@ export function ReviewWorkspace({
     try {
       const targets = selectedItems
         .map((item) => ({ item, id: remoteId(item) }))
-        .filter((entry): entry is { readonly item: ReviewItem; readonly id: string } => entry.id !== null && entry.item.publicationStatus === "hidden");
-      const result = await applyRemoteBatch("restore", targets.map((entry) => entry.id));
+        .filter(
+          (entry): entry is { readonly item: ReviewItem; readonly id: string } =>
+            entry.id !== null && entry.item.publicationStatus === "hidden",
+        );
+      const result = await applyRemoteBatch(
+        "restore",
+        targets.map((entry) => entry.id),
+      );
       const ok = new Set(result.okIds);
-      setRemoteMedia((current) => current.map((item) => (ok.has(item.id) ? { ...item, publicationStatus: "published" as const } : item)));
-      finishBatch("批量恢复", result.okIds.length, result.failures, selectedItems.length - targets.length);
+      setRemoteMedia((current) =>
+        current.map((item) =>
+          ok.has(item.id) ? { ...item, publicationStatus: "published" as const } : item,
+        ),
+      );
+      finishBatch(
+        "批量恢复",
+        result.okIds.length,
+        result.failures,
+        selectedItems.length - targets.length,
+      );
     } finally {
       setBatchBusy(false);
     }
@@ -1172,7 +1253,8 @@ export function ReviewWorkspace({
         setPending(item.key, "featured");
         try {
           const mediaId = remoteId(item);
-          if (item.source === "local" && item.publicationStatus === "local") await patchLocalReviewPhoto(item.local.photo.id, { featured });
+          if (item.source === "local" && item.publicationStatus === "local")
+            await patchLocalReviewPhoto(item.local.photo.id, { featured });
           else if (mediaId !== null) {
             await clientMutation(`/api/v1/media/${mediaId}/featured`, { body: { featured } });
             setFeaturedIds((current) => {
@@ -1181,19 +1263,29 @@ export function ReviewWorkspace({
               else next.delete(mediaId);
               return next;
             });
-            if (item.source === "local") await patchLocalReviewPhoto(item.local.photo.id, { featured }).catch(() => undefined);
-            else if (item.local !== null) await patchLocalReviewPhoto(item.local.photo.id, { featured }).catch(() => undefined);
+            if (item.source === "local")
+              await patchLocalReviewPhoto(item.local.photo.id, { featured }).catch(() => undefined);
+            else if (item.local !== null)
+              await patchLocalReviewPhoto(item.local.photo.id, { featured }).catch(() => undefined);
           }
           successCount += 1;
         } catch (cause) {
           const photo = localPhoto(item);
-          failures.push({ label: photo?.fileName ?? remoteId(item)?.slice(0, 8) ?? "照片", message: cause instanceof Error ? cause.message : "精选状态修改失败" });
+          failures.push({
+            label: photo?.fileName ?? remoteId(item)?.slice(0, 8) ?? "照片",
+            message: cause instanceof Error ? cause.message : "精选状态修改失败",
+          });
         } finally {
           setPending(item.key, null);
         }
       }
       await refreshLocal();
-      finishBatch(featured ? "批量设为精选" : "批量取消精选", successCount, failures, selectedItems.length - targets.length);
+      finishBatch(
+        featured ? "批量设为精选" : "批量取消精选",
+        successCount,
+        failures,
+        selectedItems.length - targets.length,
+      );
     } finally {
       setBatchBusy(false);
     }
@@ -1207,28 +1299,48 @@ export function ReviewWorkspace({
     let successCount = 0;
     try {
       const localOnly = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> => item.source === "local" && item.local.photo.mediaId === null,
+        (item): item is Extract<ReviewItem, { source: "local" }> =>
+          item.source === "local" && item.local.photo.mediaId === null,
       );
       for (const item of localOnly) {
         try {
           await patchLocalReviewPhoto(item.local.photo.id, { categoryId: nextCategory });
           successCount += 1;
         } catch (cause) {
-          failures.push({ label: item.local.photo.fileName, message: cause instanceof Error ? cause.message : "修改分类失败" });
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "修改分类失败",
+          });
         }
       }
       const remoteTargets = selectedItems
         .map((item) => ({ item, id: remoteId(item) }))
-        .filter((entry): entry is { readonly item: ReviewItem; readonly id: string } => entry.id !== null);
-      const remoteResult = await applyRemoteBatch("change_category", remoteTargets.map((entry) => entry.id), nextCategory);
+        .filter(
+          (entry): entry is { readonly item: ReviewItem; readonly id: string } => entry.id !== null,
+        );
+      const remoteResult = await applyRemoteBatch(
+        "change_category",
+        remoteTargets.map((entry) => entry.id),
+        nextCategory,
+      );
       const remoteOk = new Set(remoteResult.okIds);
       successCount += remoteResult.okIds.length;
       failures.push(...remoteResult.failures);
-      setRemoteMedia((current) => current.map((item) => (remoteOk.has(item.id) ? { ...item, categoryId: nextCategory } : item)));
+      setRemoteMedia((current) =>
+        current.map((item) =>
+          remoteOk.has(item.id) ? { ...item, categoryId: nextCategory } : item,
+        ),
+      );
       for (const entry of remoteTargets) {
         if (!remoteOk.has(entry.id)) continue;
-        if (entry.item.source === "local") await patchLocalReviewPhoto(entry.item.local.photo.id, { categoryId: nextCategory }).catch(() => undefined);
-        else if (entry.item.local !== null) await patchLocalReviewPhoto(entry.item.local.photo.id, { categoryId: nextCategory }).catch(() => undefined);
+        if (entry.item.source === "local")
+          await patchLocalReviewPhoto(entry.item.local.photo.id, {
+            categoryId: nextCategory,
+          }).catch(() => undefined);
+        else if (entry.item.local !== null)
+          await patchLocalReviewPhoto(entry.item.local.photo.id, {
+            categoryId: nextCategory,
+          }).catch(() => undefined);
       }
       await refreshLocal();
       finishBatch("批量修改分类", successCount, failures);
@@ -1249,18 +1361,28 @@ export function ReviewWorkspace({
     let successCount = 0;
     try {
       const localOnly = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> => item.source === "local" && item.local.photo.mediaId === null,
+        (item): item is Extract<ReviewItem, { source: "local" }> =>
+          item.source === "local" && item.local.photo.mediaId === null,
       );
       for (const item of localOnly) {
         try {
           await confirmLocalBibNumbers(item.local.photo.id, [number], bibConfig.patterns);
           successCount += 1;
         } catch (cause) {
-          failures.push({ label: item.local.photo.fileName, message: cause instanceof Error ? cause.message : "号码确认失败" });
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "号码确认失败",
+          });
         }
       }
-      const remoteIds = selectedItems.map(remoteId).filter((mediaId): mediaId is string => mediaId !== null);
-      const remoteResult = await applyRemoteBibBatch("/api/v1/media/bib-tags/batch", remoteIds, number);
+      const remoteIds = selectedItems
+        .map(remoteId)
+        .filter((mediaId): mediaId is string => mediaId !== null);
+      const remoteResult = await applyRemoteBibBatch(
+        "/api/v1/media/bib-tags/batch",
+        remoteIds,
+        number,
+      );
       successCount += remoteResult.successCount;
       failures.push(...remoteResult.failures);
       await Promise.all([refreshLocal(), refreshRemote()]);
@@ -1278,18 +1400,27 @@ export function ReviewWorkspace({
     let successCount = 0;
     try {
       const localOnly = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> => item.source === "local" && item.local.photo.mediaId === null,
+        (item): item is Extract<ReviewItem, { source: "local" }> =>
+          item.source === "local" && item.local.photo.mediaId === null,
       );
       for (const item of localOnly) {
         try {
           await confirmLocalBibNoNumber(item.local.photo.id);
           successCount += 1;
         } catch (cause) {
-          failures.push({ label: item.local.photo.fileName, message: cause instanceof Error ? cause.message : "确认无号码失败" });
+          failures.push({
+            label: item.local.photo.fileName,
+            message: cause instanceof Error ? cause.message : "确认无号码失败",
+          });
         }
       }
-      const remoteIds = selectedItems.map(remoteId).filter((mediaId): mediaId is string => mediaId !== null);
-      const remoteResult = await applyRemoteBibBatch("/api/v1/media/bib-review/no-number/batch", remoteIds);
+      const remoteIds = selectedItems
+        .map(remoteId)
+        .filter((mediaId): mediaId is string => mediaId !== null);
+      const remoteResult = await applyRemoteBibBatch(
+        "/api/v1/media/bib-review/no-number/batch",
+        remoteIds,
+      );
       successCount += remoteResult.successCount;
       failures.push(...remoteResult.failures);
       await Promise.all([refreshLocal(), refreshRemote()]);
@@ -1311,17 +1442,23 @@ export function ReviewWorkspace({
         setPending(item.key, "delete");
         try {
           const mediaId = remoteId(item);
-          if (item.source === "local" && mediaId === null) await deleteLocalReviewPhoto(item.local.photo.id);
+          if (item.source === "local" && mediaId === null)
+            await deleteLocalReviewPhoto(item.local.photo.id);
           else if (mediaId !== null) {
             await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
             deletedMediaIds.add(mediaId);
-            if (item.source === "local") await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
-            else if (item.local !== null) await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
+            if (item.source === "local")
+              await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
+            else if (item.local !== null)
+              await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
           }
           successCount += 1;
         } catch (cause) {
           const photo = localPhoto(item);
-          failures.push({ label: photo?.fileName ?? remoteId(item)?.slice(0, 8) ?? "照片", message: cause instanceof Error ? cause.message : "删除失败" });
+          failures.push({
+            label: photo?.fileName ?? remoteId(item)?.slice(0, 8) ?? "照片",
+            message: cause instanceof Error ? cause.message : "删除失败",
+          });
         } finally {
           setPending(item.key, null);
         }
@@ -1366,7 +1503,8 @@ export function ReviewWorkspace({
       const visited = new Set<string>();
       while (next !== null) {
         const signature = cursorSignature(next);
-        if (visited.has(signature) || visited.size >= 200) throw new Error("筛选分页游标异常，已停止全量选择");
+        if (visited.has(signature) || visited.size >= 200)
+          throw new Error("筛选分页游标异常，已停止全量选择");
         visited.add(signature);
         const page = await fetchRemote(next);
         accumulated = mergeRemote(accumulated, page.items);
@@ -1412,7 +1550,8 @@ export function ReviewWorkspace({
   const bibDialogLocalActions =
     bibDialogItem !== null && bibDialogMediaId === null
       ? {
-          confirmNumbers: (numbers: readonly string[]) => confirmLocalNumbersByKey(bibDialogItem.key, numbers),
+          confirmNumbers: (numbers: readonly string[]) =>
+            confirmLocalNumbersByKey(bibDialogItem.key, numbers),
           confirmNoNumber: () => confirmLocalNoNumberByKey(bibDialogItem.key),
         }
       : undefined;
@@ -1441,28 +1580,56 @@ export function ReviewWorkspace({
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             {categories.length === 0 ? null : (
               <Select
-                items={[{ label: "全部分类", value: "all" }, ...categories.map((item) => ({ label: item.name, value: item.id }))]}
+                items={[
+                  { label: "全部分类", value: "all" },
+                  ...categories.map((item) => ({ label: item.name, value: item.id })),
+                ]}
                 onValueChange={(value) => {
                   setCategory(value ?? "all");
                   resetSelection();
                 }}
                 value={category}
               >
-                <SelectTrigger aria-label="分类筛选" className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup><SelectItem value="all">全部分类</SelectItem>{categories.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent>
+                <SelectTrigger aria-label="分类筛选" className="h-7 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部分类</SelectItem>
+                    {categories.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
               </Select>
             )}
             {uploaders.length === 0 ? null : (
               <Select
-                items={[{ label: "全部上传者", value: "all" }, ...uploaders.map((item) => ({ label: item.displayName, value: item.id }))]}
+                items={[
+                  { label: "全部上传者", value: "all" },
+                  ...uploaders.map((item) => ({ label: item.displayName, value: item.id })),
+                ]}
                 onValueChange={(value) => {
                   setUploader(value ?? "all");
                   resetSelection();
                 }}
                 value={uploader}
               >
-                <SelectTrigger aria-label="上传者筛选" className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup><SelectItem value="all">全部上传者</SelectItem>{uploaders.map((item) => <SelectItem key={item.id} value={item.id}>{item.displayName}</SelectItem>)}</SelectGroup></SelectContent>
+                <SelectTrigger aria-label="上传者筛选" className="h-7 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部上传者</SelectItem>
+                    {uploaders.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
               </Select>
             )}
             <Button
@@ -1480,7 +1647,11 @@ export function ReviewWorkspace({
             <Button
               aria-label="刷新审核列表"
               className="size-7"
-              onClick={() => void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch((cause) => setError(cause instanceof Error ? cause.message : "刷新失败"))}
+              onClick={() =>
+                void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch(
+                  (cause) => setError(cause instanceof Error ? cause.message : "刷新失败"),
+                )
+              }
               size="icon"
               type="button"
               variant="ghost"
@@ -1492,53 +1663,137 @@ export function ReviewWorkspace({
 
         <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
           <Select
-            items={[{ label: "全部处理状态", value: "all" }, { label: "不完整", value: "incomplete" }, { label: "处理失败", value: "failed" }]}
+            items={[
+              { label: "全部处理状态", value: "all" },
+              { label: "不完整", value: "incomplete" },
+              { label: "处理失败", value: "failed" },
+            ]}
             onValueChange={(value) => setIngestFilter((value ?? "all") as IngestFilter)}
             value={ingestFilter}
           >
-            <SelectTrigger aria-label="处理状态筛选" className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectGroup><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="incomplete">不完整</SelectItem><SelectItem value="failed">处理失败</SelectItem></SelectGroup></SelectContent>
+            <SelectTrigger aria-label="处理状态筛选" className="h-7 w-28 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">全部处理状态</SelectItem>
+                <SelectItem value="incomplete">不完整</SelectItem>
+                <SelectItem value="failed">处理失败</SelectItem>
+              </SelectGroup>
+            </SelectContent>
           </Select>
           <Select
-            items={[{ label: "全部号码状态", value: "all" }, { label: "待复核", value: "pending" }, { label: "已确认号码", value: "numbers_confirmed" }, { label: "已确认无号码", value: "no_number_confirmed" }, { label: "需复核", value: "needs_review" }]}
+            items={[
+              { label: "全部号码状态", value: "all" },
+              { label: "待复核", value: "pending" },
+              { label: "已确认号码", value: "numbers_confirmed" },
+              { label: "已确认无号码", value: "no_number_confirmed" },
+              { label: "需复核", value: "needs_review" },
+            ]}
             onValueChange={(value) => setBibDecision((value ?? "all") as BibDecisionFilter)}
             value={bibDecision}
           >
-            <SelectTrigger aria-label="号码审核状态筛选" className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectGroup><SelectItem value="all">全部号码状态</SelectItem><SelectItem value="pending">待复核</SelectItem><SelectItem value="numbers_confirmed">已确认号码</SelectItem><SelectItem value="no_number_confirmed">已确认无号码</SelectItem><SelectItem value="needs_review">需复核</SelectItem></SelectGroup></SelectContent>
+            <SelectTrigger aria-label="号码审核状态筛选" className="h-7 w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">全部号码状态</SelectItem>
+                <SelectItem value="pending">待复核</SelectItem>
+                <SelectItem value="numbers_confirmed">已确认号码</SelectItem>
+                <SelectItem value="no_number_confirmed">已确认无号码</SelectItem>
+                <SelectItem value="needs_review">需复核</SelectItem>
+              </SelectGroup>
+            </SelectContent>
           </Select>
           <Select
-            items={[{ label: "全部 OCR 状态", value: "all" }, { label: "未开始", value: "not_started" }, { label: "识别中", value: "processing" }, { label: "已完成", value: "completed" }, { label: "识别失败", value: "failed" }, { label: "不支持", value: "unsupported" }]}
+            items={[
+              { label: "全部 OCR 状态", value: "all" },
+              { label: "未开始", value: "not_started" },
+              { label: "识别中", value: "processing" },
+              { label: "已完成", value: "completed" },
+              { label: "识别失败", value: "failed" },
+              { label: "不支持", value: "unsupported" },
+            ]}
             onValueChange={(value) => setBibOcrStatus((value ?? "all") as BibOcrFilter)}
             value={bibOcrStatus}
           >
-            <SelectTrigger aria-label="号码 OCR 状态筛选" className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectGroup><SelectItem value="all">全部 OCR 状态</SelectItem><SelectItem value="not_started">未开始</SelectItem><SelectItem value="processing">识别中</SelectItem><SelectItem value="completed">已完成</SelectItem><SelectItem value="failed">识别失败</SelectItem><SelectItem value="unsupported">不支持</SelectItem></SelectGroup></SelectContent>
+            <SelectTrigger aria-label="号码 OCR 状态筛选" className="h-7 w-28 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">全部 OCR 状态</SelectItem>
+                <SelectItem value="not_started">未开始</SelectItem>
+                <SelectItem value="processing">识别中</SelectItem>
+                <SelectItem value="completed">已完成</SelectItem>
+                <SelectItem value="failed">识别失败</SelectItem>
+                <SelectItem value="unsupported">不支持</SelectItem>
+              </SelectGroup>
+            </SelectContent>
           </Select>
           {gradeOptions.length === 0 ? null : (
             <Select
-              items={[{ label: "全部年级", value: "all" }, ...gradeOptions.map((item) => ({ label: item.displayName, value: item.id }))]}
+              items={[
+                { label: "全部年级", value: "all" },
+                ...gradeOptions.map((item) => ({ label: item.displayName, value: item.id })),
+              ]}
               onValueChange={(value) => {
                 setGradeOption(value ?? "all");
                 setClassOption("all");
               }}
               value={gradeOption}
             >
-              <SelectTrigger aria-label="年级筛选" className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup><SelectItem value="all">全部年级</SelectItem>{gradeOptions.map((item) => <SelectItem key={item.id} value={item.id}>{item.displayName}</SelectItem>)}</SelectGroup></SelectContent>
+              <SelectTrigger aria-label="年级筛选" className="h-7 w-28 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">全部年级</SelectItem>
+                  {gradeOptions.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
             </Select>
           )}
           {classOptions.length === 0 || gradeOption === "all" ? null : (
             <Select
-              items={[{ label: "全部班级", value: "all" }, ...classOptions.map((item) => ({ label: item.displayName, value: item.id }))]}
+              items={[
+                { label: "全部班级", value: "all" },
+                ...classOptions.map((item) => ({ label: item.displayName, value: item.id })),
+              ]}
               onValueChange={(value) => setClassOption(value ?? "all")}
               value={classOption}
             >
-              <SelectTrigger aria-label="班级筛选" className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup><SelectItem value="all">全部班级</SelectItem>{classOptions.map((item) => <SelectItem key={item.id} value={item.id}>{item.displayName}</SelectItem>)}</SelectGroup></SelectContent>
+              <SelectTrigger aria-label="班级筛选" className="h-7 w-28 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">全部班级</SelectItem>
+                  {classOptions.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
             </Select>
           )}
-          {advancedFiltersActive ? <Button className="h-7 px-2 text-xs" onClick={clearAdvancedFilters} size="sm" type="button" variant="ghost">清除高级筛选</Button> : null}
+          {advancedFiltersActive ? (
+            <Button
+              className="h-7 px-2 text-xs"
+              onClick={clearAdvancedFilters}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              清除高级筛选
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -1564,46 +1819,173 @@ export function ReviewWorkspace({
             type="button"
             variant="outline"
           >
-            {selectingAll ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : null}
+            {selectingAll ? (
+              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+            ) : null}
             {cursor === null ? "选择全部匹配" : "加载并选择全部匹配"}
           </Button>
           {selectedItems.length === 0 ? (
-            <span className="text-xs text-muted-foreground">点击照片选择；从复选框按住拖动可连续选择，Shift 点击可范围选择</span>
+            <span className="text-xs text-muted-foreground">
+              点击照片选择；从复选框按住拖动可连续选择，Shift 点击可范围选择
+            </span>
           ) : (
             <>
-              <span className="text-xs text-muted-foreground">可发布 {selectionStats.publishable} · 可隐藏 {selectionStats.hideable} · 可恢复 {selectionStats.restorable} · 可删除 {selectionStats.deletable}</span>
-              <Button disabled={batchBusy || selectionStats.publishable === 0} onClick={() => void batchPublish()} size="sm" type="button" variant="outline">
-                {batchBusy ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
+              <span className="text-xs text-muted-foreground">
+                可发布 {selectionStats.publishable} · 可隐藏 {selectionStats.hideable} · 可恢复{" "}
+                {selectionStats.restorable} · 可删除 {selectionStats.deletable}
+              </span>
+              <Button
+                disabled={batchBusy || selectionStats.publishable === 0}
+                onClick={() => void batchPublish()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {batchBusy ? (
+                  <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                ) : (
+                  <SendIcon data-icon="inline-start" />
+                )}
                 发布 {selectionStats.publishable}
               </Button>
-              <Button disabled={batchBusy || selectionStats.hideable === 0} onClick={() => void batchHide()} size="sm" type="button" variant="outline"><EyeOffIcon data-icon="inline-start" />隐藏 {selectionStats.hideable}</Button>
-              <Button disabled={batchBusy || selectionStats.restorable === 0} onClick={() => void batchRestore()} size="sm" type="button" variant="outline"><EyeIcon data-icon="inline-start" />恢复 {selectionStats.restorable}</Button>
-              <Button disabled={batchBusy || selectionStats.featureable === 0} onClick={() => void batchSetFeatured(true)} size="sm" type="button" variant="outline"><StarIcon data-icon="inline-start" />精选 {selectionStats.featureable}</Button>
-              <Button disabled={batchBusy || selectionStats.unfeatureable === 0} onClick={() => void batchSetFeatured(false)} size="sm" type="button" variant="outline"><StarIcon data-icon="inline-start" />取消精选 {selectionStats.unfeatureable}</Button>
+              <Button
+                disabled={batchBusy || selectionStats.hideable === 0}
+                onClick={() => void batchHide()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <EyeOffIcon data-icon="inline-start" />
+                隐藏 {selectionStats.hideable}
+              </Button>
+              <Button
+                disabled={batchBusy || selectionStats.restorable === 0}
+                onClick={() => void batchRestore()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <EyeIcon data-icon="inline-start" />
+                恢复 {selectionStats.restorable}
+              </Button>
+              <Button
+                disabled={batchBusy || selectionStats.featureable === 0}
+                onClick={() => void batchSetFeatured(true)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <StarIcon data-icon="inline-start" />
+                精选 {selectionStats.featureable}
+              </Button>
+              <Button
+                disabled={batchBusy || selectionStats.unfeatureable === 0}
+                onClick={() => void batchSetFeatured(false)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <StarIcon data-icon="inline-start" />
+                取消精选 {selectionStats.unfeatureable}
+              </Button>
               <div className="flex items-center gap-1">
-                <Select items={[{ label: "未分类", value: "uncategorized" }, ...categories.map((item) => ({ label: item.name, value: item.id }))]} onValueChange={(value) => setBatchCategory(value ?? "uncategorized")} value={batchCategory}>
-                  <SelectTrigger aria-label="批量分类" className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectGroup><SelectItem value="uncategorized">未分类</SelectItem>{categories.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectGroup></SelectContent>
+                <Select
+                  items={[
+                    { label: "未分类", value: "uncategorized" },
+                    ...categories.map((item) => ({ label: item.name, value: item.id })),
+                  ]}
+                  onValueChange={(value) => setBatchCategory(value ?? "uncategorized")}
+                  value={batchCategory}
+                >
+                  <SelectTrigger aria-label="批量分类" className="h-8 w-32 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="uncategorized">未分类</SelectItem>
+                      {categories.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
                 </Select>
-                <Button disabled={batchBusy} onClick={() => void batchChangeCategory()} size="sm" type="button" variant="outline">应用分类</Button>
+                <Button
+                  disabled={batchBusy}
+                  onClick={() => void batchChangeCategory()}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  应用分类
+                </Button>
               </div>
               {bibConfig.recognitionEnabled ? (
                 <div className="flex items-center gap-1">
-                  <Input aria-label="批量添加统一号码" className="h-8 w-24 text-xs" disabled={batchBusy} inputMode="numeric" maxLength={12} onChange={(event) => setBatchBibNumber(event.currentTarget.value)} placeholder="统一号码" value={batchBibNumber} />
-                  <Button disabled={batchBusy || batchBibNumber.trim().length === 0} onClick={() => void batchAddBibNumber()} size="sm" type="button" variant="outline">添加号码</Button>
-                  <Button disabled={batchBusy} onClick={() => void batchConfirmNoNumber()} size="sm" type="button" variant="outline">确认无号码</Button>
+                  <Input
+                    aria-label="批量添加统一号码"
+                    className="h-8 w-24 text-xs"
+                    disabled={batchBusy}
+                    inputMode="numeric"
+                    maxLength={12}
+                    onChange={(event) => setBatchBibNumber(event.currentTarget.value)}
+                    placeholder="统一号码"
+                    value={batchBibNumber}
+                  />
+                  <Button
+                    disabled={batchBusy || batchBibNumber.trim().length === 0}
+                    onClick={() => void batchAddBibNumber()}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    添加号码
+                  </Button>
+                  <Button
+                    disabled={batchBusy}
+                    onClick={() => void batchConfirmNoNumber()}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    确认无号码
+                  </Button>
                 </div>
               ) : null}
-              <Button disabled={batchBusy || selectionStats.deletable === 0} onClick={() => setBatchDeleteOpen(true)} size="sm" type="button" variant="destructive"><Trash2Icon data-icon="inline-start" />删除 {selectionStats.deletable}</Button>
+              <Button
+                disabled={batchBusy || selectionStats.deletable === 0}
+                onClick={() => setBatchDeleteOpen(true)}
+                size="sm"
+                type="button"
+                variant="destructive"
+              >
+                <Trash2Icon data-icon="inline-start" />
+                删除 {selectionStats.deletable}
+              </Button>
             </>
           )}
-          <Button aria-label="清除选择" className="ml-auto" disabled={batchBusy || selectedItems.length === 0} onClick={resetSelection} size="icon-sm" type="button" variant="ghost"><XIcon /></Button>
-          {albumTitle === undefined ? null : <span className="sr-only">当前活动：{albumTitle}</span>}
+          <Button
+            aria-label="清除选择"
+            className="ml-auto"
+            disabled={batchBusy || selectedItems.length === 0}
+            onClick={resetSelection}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <XIcon />
+          </Button>
+          {albumTitle === undefined ? null : (
+            <span className="sr-only">当前活动：{albumTitle}</span>
+          )}
         </div>
       ) : null}
 
       {visibleItems.length === 0 ? (
-        <div className="flex min-h-56 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">当前筛选没有图片</div>
+        <div className="flex min-h-56 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+          当前筛选没有图片
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {visibleItems.map((item, index) => {
@@ -1618,7 +2000,10 @@ export function ReviewWorkspace({
             const statusLabel = published ? "已发布" : hidden ? "已隐藏" : "待发布";
             return (
               <div
-                className={cn("group overflow-hidden rounded-lg border bg-card outline-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring", selected && "ring-2 ring-primary")}
+                className={cn(
+                  "group overflow-hidden rounded-lg border bg-card outline-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring",
+                  selected && "ring-2 ring-primary",
+                )}
                 data-bib-ocr-pending={ocrPending ? "true" : "false"}
                 data-review-key={item.key}
                 key={item.key}
@@ -1645,7 +2030,13 @@ export function ReviewWorkspace({
                         sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
                         src={item.previewUrl}
                         unoptimized
-                        variantKind={item.source === "remote" ? item.remote.variants.find((variant) => variant.url === item.previewUrl)?.kind : undefined}
+                        variantKind={
+                          item.source === "remote"
+                            ? item.remote.variants.find(
+                                (variant) => variant.url === item.previewUrl,
+                              )?.kind
+                            : undefined
+                        }
                       />
                     )}
                   </button>
@@ -1658,31 +2049,121 @@ export function ReviewWorkspace({
                         event.preventDefault();
                         event.stopPropagation();
                       }}
-                      onPointerDown={(event) => beginDragSelection(event, item.key, index, selected)}
+                      onPointerDown={(event) =>
+                        beginDragSelection(event, item.key, index, selected)
+                      }
                       size="icon"
                       title="按住并拖动可连续选择；从已选照片开始拖动会连续取消"
                       type="button"
                       variant={selected ? "default" : "secondary"}
                     >
-                      {selected ? <CheckIcon className="size-3.5" /> : <SquareIcon className="size-3.5" />}
+                      {selected ? (
+                        <CheckIcon className="size-3.5" />
+                      ) : (
+                        <SquareIcon className="size-3.5" />
+                      )}
                     </Button>
                   ) : null}
                   <div className="pointer-events-none absolute right-1.5 top-1.5 flex max-w-[75%] flex-wrap justify-end gap-1">
-                    <Badge className="bg-background/90 text-foreground shadow-sm" variant="secondary">{statusLabel}</Badge>
-                    {item.featured ? <Badge className="bg-background/90 text-foreground shadow-sm" variant="secondary"><StarIcon className="size-3 fill-current" />精选</Badge> : null}
-                    {!bibConfirmed ? <Badge className="bg-background/90 text-foreground shadow-sm" variant="secondary">{ocrPending ? "号码识别中" : "号码待复核"}</Badge> : null}
+                    <Badge
+                      className="bg-background/90 text-foreground shadow-sm"
+                      variant="secondary"
+                    >
+                      {statusLabel}
+                    </Badge>
+                    {item.featured ? (
+                      <Badge
+                        className="bg-background/90 text-foreground shadow-sm"
+                        variant="secondary"
+                      >
+                        <StarIcon className="size-3 fill-current" />
+                        精选
+                      </Badge>
+                    ) : null}
+                    {!bibConfirmed ? (
+                      <Badge
+                        className="bg-background/90 text-foreground shadow-sm"
+                        variant="secondary"
+                      >
+                        {ocrPending ? "号码识别中" : "号码待复核"}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
                 {selectionMode ? null : (
                   <div className="flex items-center justify-center gap-1 border-t bg-card p-1.5">
-                    <Button aria-label={item.featured ? "取消精选" : "设为精选"} className={cn("size-8", item.featured && "text-primary")} disabled={pending || batchBusy} onClick={() => void toggleFeatured(item)} size="icon" title={item.featured ? "取消精选" : "精选"} type="button" variant="ghost">
-                      {pendingAction === "featured" ? <LoaderCircleIcon className="size-4 animate-spin" /> : <StarIcon className={cn("size-4", item.featured && "fill-current")} />}
+                    <Button
+                      aria-label={item.featured ? "取消精选" : "设为精选"}
+                      className={cn("size-8", item.featured && "text-primary")}
+                      disabled={pending || batchBusy}
+                      onClick={() => void toggleFeatured(item)}
+                      size="icon"
+                      title={item.featured ? "取消精选" : "精选"}
+                      type="button"
+                      variant="ghost"
+                    >
+                      {pendingAction === "featured" ? (
+                        <LoaderCircleIcon className="size-4 animate-spin" />
+                      ) : (
+                        <StarIcon className={cn("size-4", item.featured && "fill-current")} />
+                      )}
                     </Button>
-                    <Button aria-label={published ? "隐藏" : hidden ? "显示" : "发布"} className={cn("size-8", published && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")} disabled={pending || batchBusy} onClick={() => void stateAction(item)} size="icon" title={published ? "隐藏" : hidden ? "显示" : "发布"} type="button" variant="ghost">
-                      {pendingAction === "state" ? <LoaderCircleIcon className="size-4 animate-spin" /> : published ? <EyeIcon className="size-4" /> : hidden ? <EyeOffIcon className="size-4" /> : <SendIcon className="size-4" />}
+                    <Button
+                      aria-label={published ? "隐藏" : hidden ? "显示" : "发布"}
+                      className={cn(
+                        "size-8",
+                        published &&
+                          "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+                      )}
+                      disabled={pending || batchBusy}
+                      onClick={() => void stateAction(item)}
+                      size="icon"
+                      title={published ? "隐藏" : hidden ? "显示" : "发布"}
+                      type="button"
+                      variant="ghost"
+                    >
+                      {pendingAction === "state" ? (
+                        <LoaderCircleIcon className="size-4 animate-spin" />
+                      ) : published ? (
+                        <EyeIcon className="size-4" />
+                      ) : hidden ? (
+                        <EyeOffIcon className="size-4" />
+                      ) : (
+                        <SendIcon className="size-4" />
+                      )}
                     </Button>
-                    <Button aria-label={bibBlocked ? "号码识别中" : bibConfirmed ? "修改号码确认" : "确认号码"} className={cn("size-8", bibBlocked ? "bg-muted text-muted-foreground" : bibConfirmed ? "bg-secondary text-secondary-foreground" : "bg-muted text-foreground")} disabled={pending || batchBusy || bibBlocked} onClick={() => setBibDialogKey(item.key)} size="icon" title={bibBlocked ? "号码识别中" : bibConfirmed ? "号码已确认，点击修改" : "号码待确认"} type="button" variant="ghost">
-                      {bibBlocked ? <LoaderCircleIcon className="size-4 animate-spin" /> : bibConfirmed ? <BadgeCheckIcon className="size-4" /> : <HashIcon className="size-4" />}
+                    <Button
+                      aria-label={
+                        bibBlocked ? "号码识别中" : bibConfirmed ? "修改号码确认" : "确认号码"
+                      }
+                      className={cn(
+                        "size-8",
+                        bibBlocked
+                          ? "bg-muted text-muted-foreground"
+                          : bibConfirmed
+                            ? "bg-secondary text-secondary-foreground"
+                            : "bg-muted text-foreground",
+                      )}
+                      disabled={pending || batchBusy || bibBlocked}
+                      onClick={() => setBibDialogKey(item.key)}
+                      size="icon"
+                      title={
+                        bibBlocked
+                          ? "号码识别中"
+                          : bibConfirmed
+                            ? "号码已确认，点击修改"
+                            : "号码待确认"
+                      }
+                      type="button"
+                      variant="ghost"
+                    >
+                      {bibBlocked ? (
+                        <LoaderCircleIcon className="size-4 animate-spin" />
+                      ) : bibConfirmed ? (
+                        <BadgeCheckIcon className="size-4" />
+                      ) : (
+                        <HashIcon className="size-4" />
+                      )}
                     </Button>
                   </div>
                 )}
@@ -1693,7 +2174,9 @@ export function ReviewWorkspace({
       )}
 
       <div className="flex h-8 items-center justify-center" ref={sentinelRef}>
-        {loadingMore || selectingAll ? <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" /> : null}
+        {loadingMore || selectingAll ? (
+          <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+        ) : null}
       </div>
 
       <ReviewLightbox
@@ -1746,7 +2229,9 @@ export function ReviewWorkspace({
             <AlertDialogTitle>批量删除照片？</AlertDialogTitle>
             <AlertDialogDescription>
               将删除 {selectionStats.deletable} 张可删除照片。
-              {selectedItems.length > selectionStats.deletable ? ` 另有 ${selectedItems.length - selectionStats.deletable} 张因权限或状态限制会被跳过。` : ""}
+              {selectedItems.length > selectionStats.deletable
+                ? ` 另有 ${selectedItems.length - selectionStats.deletable} 张因权限或状态限制会被跳过。`
+                : ""}
               删除属于危险操作，远端照片会进入现有删除任务流程。
             </AlertDialogDescription>
           </AlertDialogHeader>
