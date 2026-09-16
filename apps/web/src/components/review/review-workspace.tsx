@@ -40,7 +40,11 @@ import {
   type ReviewLightboxItem,
   type ReviewPendingAction,
 } from "@/components/review/review-lightbox";
-import { ReviewInspector, type ReviewInspectorItem } from "@/components/review/review-inspector";
+import {
+  ReviewBatchInspector,
+  ReviewInspector,
+  type ReviewInspectorItem,
+} from "@/components/review/review-inspector";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -678,6 +682,15 @@ export function ReviewWorkspace({
     () => visibleItems.filter((item) => selectedKeys.has(item.key)),
     [selectedKeys, visibleItems],
   );
+
+  useEffect(() => {
+    if (selectedItems.length === 0) {
+      setBatchCategory("uncategorized");
+      return;
+    }
+    const values = new Set(selectedItems.map((item) => item.categoryId ?? "uncategorized"));
+    setBatchCategory(values.size === 1 ? ([...values][0] ?? "uncategorized") : "mixed");
+  }, [selectedItems]);
 
   useEffect(() => {
     if (!selectAllPending) return;
@@ -1331,7 +1344,7 @@ export function ReviewWorkspace({
   }
 
   async function batchChangeCategory(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedItems.length === 0 || batchCategory === "mixed") return;
     setBatchBusy(true);
     const nextCategory = batchCategory === "uncategorized" ? null : batchCategory;
     const failures: BatchFailure[] = [];
@@ -1644,7 +1657,9 @@ export function ReviewWorkspace({
     <div
       className={cn(
         "flex flex-col gap-3",
-        inspectorItem !== null && !selectionMode && "xl:pr-[21rem]",
+        ((inspectorItem !== null && !selectionMode) ||
+          (selectionMode && selectedItems.length > 0)) &&
+          "xl:pr-[21rem]",
       )}
     >
       <div className="flex flex-col gap-2 rounded-lg border bg-card px-2 py-1.5">
@@ -1981,10 +1996,11 @@ export function ReviewWorkspace({
               <div className="flex items-center gap-1">
                 <Select
                   items={[
+                    ...(batchCategory === "mixed" ? [{ label: "多个值", value: "mixed" }] : []),
                     { label: "未分类", value: "uncategorized" },
                     ...categories.map((item) => ({ label: item.name, value: item.id })),
                   ]}
-                  onValueChange={(value) => setBatchCategory(value ?? "uncategorized")}
+                  onValueChange={(value) => setBatchCategory(value ?? "mixed")}
                   value={batchCategory}
                 >
                   <SelectTrigger aria-label="批量分类" className="h-8 w-32 text-xs">
@@ -1992,6 +2008,11 @@ export function ReviewWorkspace({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
+                      {batchCategory === "mixed" ? (
+                        <SelectItem disabled value="mixed">
+                          多个值
+                        </SelectItem>
+                      ) : null}
                       <SelectItem value="uncategorized">未分类</SelectItem>
                       {categories.map((item) => (
                         <SelectItem key={item.id} value={item.id}>
@@ -2002,7 +2023,7 @@ export function ReviewWorkspace({
                   </SelectContent>
                 </Select>
                 <Button
-                  disabled={batchBusy}
+                  disabled={batchBusy || batchCategory === "mixed"}
                   onClick={() => void batchChangeCategory()}
                   size="sm"
                   type="button"
@@ -2280,6 +2301,35 @@ export function ReviewWorkspace({
           <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         ) : null}
       </div>
+
+      {selectionMode && selectedItems.length > 0 ? (
+        <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">
+          <ReviewBatchInspector
+            bibEnabled={bibConfig.recognitionEnabled}
+            bibNumber={batchBibNumber}
+            busy={batchBusy}
+            categories={categories}
+            categoryValue={batchCategory}
+            count={selectedItems.length}
+            onAddBibNumber={() => void batchAddBibNumber()}
+            onApplyCategory={() => void batchChangeCategory()}
+            onBibNumberChange={setBatchBibNumber}
+            onCategoryValueChange={setBatchCategory}
+            onConfirmNoNumber={() => void batchConfirmNoNumber()}
+            onDelete={() => setBatchDeleteOpen(true)}
+            onExit={() => {
+              resetSelection();
+              setSelectionMode(false);
+            }}
+            onFeature={() => void batchSetFeatured(true)}
+            onHide={() => void batchHide()}
+            onPublish={() => void batchPublish()}
+            onRestore={() => void batchRestore()}
+            onUnfeature={() => void batchSetFeatured(false)}
+            stats={selectionStats}
+          />
+        </div>
+      ) : null}
 
       {!selectionMode && inspectorItem !== null && inspectorSourceItem !== null ? (
         <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">
