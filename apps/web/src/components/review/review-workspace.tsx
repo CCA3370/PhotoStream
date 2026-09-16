@@ -113,6 +113,19 @@ interface RemotePage {
   readonly nextCursor: RemoteCursor | null;
 }
 
+interface RemoteSelectionItem {
+  readonly id: string;
+  readonly publicationStatus: InternalMediaView["publicationStatus"];
+  readonly categoryId: string | null;
+  readonly featured: boolean;
+}
+
+interface RemoteSelectionPage {
+  readonly items: readonly RemoteSelectionItem[];
+  readonly nextCursor: string | null;
+  readonly total: number;
+}
+
 interface LocalView {
   readonly photo: LocalReviewPhoto;
   readonly originalUrl: string;
@@ -294,13 +307,16 @@ export function ReviewWorkspace({
   );
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());
+  const [remoteSelection, setRemoteSelection] = useState<ReadonlyMap<
+    string,
+    RemoteSelectionItem
+  > | null>(null);
   const [batchCategory, setBatchCategory] = useState("uncategorized");
   const [batchBibNumber, setBatchBibNumber] = useState("");
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
-  const [selectAllPending, setSelectAllPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const gradeOptions = useMemo(
@@ -534,6 +550,7 @@ export function ReviewWorkspace({
     loadingMoreRef.current = false;
     setLoadingMore(true);
     setSelectedKeys(new Set());
+    setRemoteSelection(null);
     lastSelectedIndexRef.current = null;
     void fetchRemote()
       .then((page) => {
@@ -657,6 +674,7 @@ export function ReviewWorkspace({
 
   function resetSelection(): void {
     setSelectedKeys(new Set());
+    setRemoteSelection(null);
     lastSelectedIndexRef.current = null;
     dragSelectionRef.current = null;
   }
@@ -679,26 +697,51 @@ export function ReviewWorkspace({
   }, [items]);
 
   const selectedItems = useMemo(
-    () => visibleItems.filter((item) => selectedKeys.has(item.key)),
-    [selectedKeys, visibleItems],
+    () =>
+      visibleItems.filter((item) =>
+        item.source === "remote" && remoteSelection !== null
+          ? remoteSelection.has(item.remote.id)
+          : selectedKeys.has(item.key),
+      ),
+    [remoteSelection, selectedKeys, visibleItems],
   );
+  const selectedLocalItems = useMemo(
+    () =>
+      selectedItems.filter(
+        (item): item is Extract<ReviewItem, { source: "local" }> => item.source === "local",
+      ),
+    [selectedItems],
+  );
+  const selectedRemoteItems = useMemo<readonly RemoteSelectionItem[]>(() => {
+    if (remoteSelection !== null) return [...remoteSelection.values()];
+    return selectedItems
+      .filter((item): item is Extract<ReviewItem, { source: "remote" }> => item.source === "remote")
+      .map((item) => ({
+        id: item.remote.id,
+        publicationStatus: item.publicationStatus,
+        categoryId: item.categoryId,
+        featured: item.featured,
+      }));
+  }, [remoteSelection, selectedItems]);
+  const selectedCount = selectedLocalItems.length + selectedRemoteItems.length;
 
   useEffect(() => {
-    if (selectedItems.length === 0) {
+    if (selectedCount === 0) {
       setBatchCategory("uncategorized");
       return;
     }
-    const values = new Set(selectedItems.map((item) => item.categoryId ?? "uncategorized"));
+    const values = new Set([
+      ...selectedLocalItems.map((item) => item.categoryId ?? "uncategorized"),
+      ...selectedRemoteItems.map((item) => item.categoryId ?? "uncategorized"),
+    ]);
     setBatchCategory(values.size === 1 ? ([...values][0] ?? "uncategorized") : "mixed");
-  }, [selectedItems]);
+  }, [selectedCount, selectedLocalItems, selectedRemoteItems]);
 
-  useEffect(() => {
-    if (!selectAllPending) return;
-    setSelectedKeys(new Set(visibleItems.map((item) => item.key)));
-    lastSelectedIndexRef.current = visibleItems.length === 0 ? null : visibleItems.length - 1;
-    setSelectAllPending(false);
-    setSelectingAll(false);
-  }, [selectAllPending, visibleItems]);
+  function itemSelected(item: ReviewItem): boolean {
+    return item.source === "remote" && remoteSelection !== null
+      ? remoteSelection.has(item.remote.id)
+      : selectedKeys.has(item.key);
+  }
 
   const lightboxSourceItems = useMemo(() => {
     if (activeKey === null || visibleItems.some((item) => item.key === activeKey))
@@ -868,19 +911,20 @@ export function ReviewWorkspace({
     let featureable = 0;
     let unfeatureable = 0;
     let deletable = 0;
-    for (const item of selectedItems) {
-      if (
-        (item.source === "local" && item.publicationStatus === "local") ||
-        (item.source === "remote" &&
-          (item.publicationStatus === "draft" || item.publicationStatus === "pending_review"))
-      ) {
-        publishable += 1;
-      }
-      if (item.publicationStatus === "published" && remoteId(item) !== null) hideable += 1;
-      if (item.publicationStatus === "hidden" && remoteId(item) !== null) restorable += 1;
+    for (const item of selectedLocalItems) {
+      if (item.publicationStatus === "local") publishable += 1;
       if (item.featured) unfeatureable += 1;
       else featureable += 1;
       if (canDeleteItem(item)) deletable += 1;
+    }
+    for (const item of selectedRemoteItems) {
+      if (item.publicationStatus === "draft" || item.publicationStatus === "pending_review")
+        publishable += 1;
+      if (item.publicationStatus === "published") hideable += 1;
+      if (item.publicationStatus === "hidden") restorable += 1;
+      if (item.featured) unfeatureable += 1;
+      else featureable += 1;
+      if (userRole === "admin") deletable += 1;
     }
     return { publishable, hideable, restorable, featureable, unfeatureable, deletable };
   })();
@@ -1037,33 +1081,48 @@ export function ReviewWorkspace({
     await publish(item);
   }
 
-  function toggleSelection(key: string, index: number, range: boolean): void {
-    setSelectedKeys((current) => {
-      const next = new Set(current);
-      if (range && lastSelectedIndexRef.current !== null) {
-        const start = Math.min(lastSelectedIndexRef.current, index);
-        const end = Math.max(lastSelectedIndexRef.current, index);
-        for (const item of visibleItems.slice(start, end + 1)) next.add(item.key);
-      } else if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
+  const setSelectionForKey = useCallback(
+    (key: string, selecting: boolean): void => {
+      const item = visibleItems.find((candidate) => candidate.key === key);
+      if (item?.source === "remote" && remoteSelection !== null) {
+        const snapshot: RemoteSelectionItem = {
+          id: item.remote.id,
+          publicationStatus: item.publicationStatus,
+          categoryId: item.categoryId,
+          featured: item.featured,
+        };
+        setRemoteSelection((current) => {
+          if (current === null) return current;
+          const next = new Map(current);
+          if (selecting) next.set(snapshot.id, snapshot);
+          else next.delete(snapshot.id);
+          return next;
+        });
+        return;
       }
-      return next;
-    });
+      setSelectedKeys((current) => {
+        const currentlySelected = current.has(key);
+        if (currentlySelected === selecting) return current;
+        const next = new Set(current);
+        if (selecting) next.add(key);
+        else next.delete(key);
+        return next;
+      });
+    },
+    [remoteSelection, visibleItems],
+  );
+
+  function toggleSelection(key: string, index: number, range: boolean): void {
+    if (range && lastSelectedIndexRef.current !== null) {
+      const start = Math.min(lastSelectedIndexRef.current, index);
+      const end = Math.max(lastSelectedIndexRef.current, index);
+      for (const item of visibleItems.slice(start, end + 1)) setSelectionForKey(item.key, true);
+    } else {
+      const item = visibleItems[index];
+      if (item !== undefined) setSelectionForKey(key, !itemSelected(item));
+    }
     lastSelectedIndexRef.current = index;
   }
-
-  const setSelectionForKey = useCallback((key: string, selecting: boolean): void => {
-    setSelectedKeys((current) => {
-      const currentlySelected = current.has(key);
-      if (currentlySelected === selecting) return current;
-      const next = new Set(current);
-      if (selecting) next.add(key);
-      else next.delete(key);
-      return next;
-    });
-  }, []);
 
   function beginDragSelection(
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -1220,20 +1279,17 @@ export function ReviewWorkspace({
       );
     }
     setSelectedKeys(new Set());
+    setRemoteSelection(null);
     lastSelectedIndexRef.current = null;
   }
 
   async function batchPublish(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
     const failures: BatchFailure[] = [];
     let successCount = 0;
     try {
-      const localTargets = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> =>
-          item.source === "local" && item.publicationStatus === "local",
-      );
-      for (const item of localTargets) {
+      for (const item of selectedLocalItems) {
         setPending(item.key, "state");
         try {
           const result = await publishLocalReviewPhoto(item.local.photo);
@@ -1252,38 +1308,35 @@ export function ReviewWorkspace({
           setPending(item.key, null);
         }
       }
-      const remoteTargets = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "remote" }> =>
-          item.source === "remote" &&
-          (item.publicationStatus === "draft" || item.publicationStatus === "pending_review"),
+      const remoteTargets = selectedRemoteItems.filter(
+        (item) => item.publicationStatus === "draft" || item.publicationStatus === "pending_review",
       );
       const remoteResult = await applyRemoteBatch(
         "publish",
-        remoteTargets.map((item) => item.remote.id),
+        remoteTargets.map((item) => item.id),
       );
       successCount += remoteResult.okIds.length;
       failures.push(...remoteResult.failures);
-      const skipped = selectedItems.length - localTargets.length - remoteTargets.length;
       await Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]);
-      finishBatch("批量发布", successCount, failures, skipped);
+      finishBatch(
+        "批量发布",
+        successCount,
+        failures,
+        selectedCount - selectedLocalItems.length - remoteTargets.length,
+      );
     } finally {
       setBatchBusy(false);
     }
   }
 
   async function batchHide(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
     try {
-      const targets = selectedItems
-        .map((item) => ({ item, id: remoteId(item) }))
-        .filter(
-          (entry): entry is { readonly item: ReviewItem; readonly id: string } =>
-            entry.id !== null && entry.item.publicationStatus === "published",
-        );
+      const targets = selectedRemoteItems.filter((item) => item.publicationStatus === "published");
       const result = await applyRemoteBatch(
         "hide",
-        targets.map((entry) => entry.id),
+        targets.map((item) => item.id),
       );
       const ok = new Set(result.okIds);
       setRemoteMedia((current) =>
@@ -1291,30 +1344,20 @@ export function ReviewWorkspace({
           ok.has(item.id) ? { ...item, publicationStatus: "hidden" as const } : item,
         ),
       );
-      finishBatch(
-        "批量隐藏",
-        result.okIds.length,
-        result.failures,
-        selectedItems.length - targets.length,
-      );
+      finishBatch("批量隐藏", result.okIds.length, result.failures, selectedCount - targets.length);
     } finally {
       setBatchBusy(false);
     }
   }
 
   async function batchRestore(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
     try {
-      const targets = selectedItems
-        .map((item) => ({ item, id: remoteId(item) }))
-        .filter(
-          (entry): entry is { readonly item: ReviewItem; readonly id: string } =>
-            entry.id !== null && entry.item.publicationStatus === "hidden",
-        );
+      const targets = selectedRemoteItems.filter((item) => item.publicationStatus === "hidden");
       const result = await applyRemoteBatch(
         "restore",
-        targets.map((entry) => entry.id),
+        targets.map((item) => item.id),
       );
       const ok = new Set(result.okIds);
       setRemoteMedia((current) =>
@@ -1322,60 +1365,58 @@ export function ReviewWorkspace({
           ok.has(item.id) ? { ...item, publicationStatus: "published" as const } : item,
         ),
       );
-      finishBatch(
-        "批量恢复",
-        result.okIds.length,
-        result.failures,
-        selectedItems.length - targets.length,
-      );
+      finishBatch("批量恢复", result.okIds.length, result.failures, selectedCount - targets.length);
     } finally {
       setBatchBusy(false);
     }
   }
 
   async function batchSetFeatured(featured: boolean): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
-    const targets = selectedItems.filter((item) => item.featured !== featured);
+    const localTargets = selectedLocalItems.filter((item) => item.featured !== featured);
+    const remoteTargets = selectedRemoteItems.filter((item) => item.featured !== featured);
     const failures: BatchFailure[] = [];
     let successCount = 0;
     try {
-      for (const item of targets) {
-        setPending(item.key, "featured");
+      for (const item of localTargets) {
         try {
-          const mediaId = remoteId(item);
-          if (item.source === "local" && item.publicationStatus === "local")
-            await patchLocalReviewPhoto(item.local.photo.id, { featured });
-          else if (mediaId !== null) {
-            await clientMutation(`/api/v1/media/${mediaId}/featured`, { body: { featured } });
-            setFeaturedIds((current) => {
-              const next = new Set(current);
-              if (featured) next.add(mediaId);
-              else next.delete(mediaId);
-              return next;
-            });
-            if (item.source === "local")
-              await patchLocalReviewPhoto(item.local.photo.id, { featured }).catch(() => undefined);
-            else if (item.local !== null)
-              await patchLocalReviewPhoto(item.local.photo.id, { featured }).catch(() => undefined);
-          }
+          await patchLocalReviewPhoto(item.local.photo.id, { featured });
           successCount += 1;
         } catch (cause) {
-          const photo = localPhoto(item);
           failures.push({
-            label: photo?.fileName ?? remoteId(item)?.slice(0, 8) ?? "照片",
+            label: item.local.photo.fileName,
             message: cause instanceof Error ? cause.message : "精选状态修改失败",
           });
-        } finally {
-          setPending(item.key, null);
         }
+      }
+      for (const group of chunks(remoteTargets, 16)) {
+        await Promise.all(
+          group.map(async (item) => {
+            try {
+              await clientMutation(`/api/v1/media/${item.id}/featured`, { body: { featured } });
+              successCount += 1;
+              setFeaturedIds((current) => {
+                const next = new Set(current);
+                if (featured) next.add(item.id);
+                else next.delete(item.id);
+                return next;
+              });
+            } catch (cause) {
+              failures.push({
+                label: item.id.slice(0, 8),
+                message: cause instanceof Error ? cause.message : "精选状态修改失败",
+              });
+            }
+          }),
+        );
       }
       await refreshLocal();
       finishBatch(
         featured ? "批量设为精选" : "批量取消精选",
         successCount,
         failures,
-        selectedItems.length - targets.length,
+        selectedCount - localTargets.length - remoteTargets.length,
       );
     } finally {
       setBatchBusy(false);
@@ -1383,17 +1424,13 @@ export function ReviewWorkspace({
   }
 
   async function batchChangeCategory(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0 || batchCategory === "mixed") return;
+    if (batchBusy || selectedCount === 0 || batchCategory === "mixed") return;
     setBatchBusy(true);
     const nextCategory = batchCategory === "uncategorized" ? null : batchCategory;
     const failures: BatchFailure[] = [];
     let successCount = 0;
     try {
-      const localOnly = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> =>
-          item.source === "local" && item.local.photo.mediaId === null,
-      );
-      for (const item of localOnly) {
+      for (const item of selectedLocalItems) {
         try {
           await patchLocalReviewPhoto(item.local.photo.id, { categoryId: nextCategory });
           successCount += 1;
@@ -1404,14 +1441,9 @@ export function ReviewWorkspace({
           });
         }
       }
-      const remoteTargets = selectedItems
-        .map((item) => ({ item, id: remoteId(item) }))
-        .filter(
-          (entry): entry is { readonly item: ReviewItem; readonly id: string } => entry.id !== null,
-        );
       const remoteResult = await applyRemoteBatch(
         "change_category",
-        remoteTargets.map((entry) => entry.id),
+        selectedRemoteItems.map((item) => item.id),
         nextCategory,
       );
       const remoteOk = new Set(remoteResult.okIds);
@@ -1422,17 +1454,6 @@ export function ReviewWorkspace({
           remoteOk.has(item.id) ? { ...item, categoryId: nextCategory } : item,
         ),
       );
-      for (const entry of remoteTargets) {
-        if (!remoteOk.has(entry.id)) continue;
-        if (entry.item.source === "local")
-          await patchLocalReviewPhoto(entry.item.local.photo.id, {
-            categoryId: nextCategory,
-          }).catch(() => undefined);
-        else if (entry.item.local !== null)
-          await patchLocalReviewPhoto(entry.item.local.photo.id, {
-            categoryId: nextCategory,
-          }).catch(() => undefined);
-      }
       await refreshLocal();
       finishBatch("批量修改分类", successCount, failures);
     } finally {
@@ -1441,7 +1462,7 @@ export function ReviewWorkspace({
   }
 
   async function batchAddBibNumber(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     const number = batchBibNumber.trim();
     if (!/^\d{1,12}$/u.test(number)) {
       setError("统一号码必须为 1–12 位数字");
@@ -1451,11 +1472,7 @@ export function ReviewWorkspace({
     const failures: BatchFailure[] = [];
     let successCount = 0;
     try {
-      const localOnly = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> =>
-          item.source === "local" && item.local.photo.mediaId === null,
-      );
-      for (const item of localOnly) {
+      for (const item of selectedLocalItems) {
         try {
           await confirmLocalBibNumbers(item.local.photo.id, [number], bibConfig.patterns);
           successCount += 1;
@@ -1466,12 +1483,9 @@ export function ReviewWorkspace({
           });
         }
       }
-      const remoteIds = selectedItems
-        .map(remoteId)
-        .filter((mediaId): mediaId is string => mediaId !== null);
       const remoteResult = await applyRemoteBibBatch(
         "/api/v1/media/bib-tags/batch",
-        remoteIds,
+        selectedRemoteItems.map((item) => item.id),
         number,
       );
       successCount += remoteResult.successCount;
@@ -1485,16 +1499,12 @@ export function ReviewWorkspace({
   }
 
   async function batchConfirmNoNumber(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
     const failures: BatchFailure[] = [];
     let successCount = 0;
     try {
-      const localOnly = selectedItems.filter(
-        (item): item is Extract<ReviewItem, { source: "local" }> =>
-          item.source === "local" && item.local.photo.mediaId === null,
-      );
-      for (const item of localOnly) {
+      for (const item of selectedLocalItems) {
         try {
           await confirmLocalBibNoNumber(item.local.photo.id);
           successCount += 1;
@@ -1505,12 +1515,9 @@ export function ReviewWorkspace({
           });
         }
       }
-      const remoteIds = selectedItems
-        .map(remoteId)
-        .filter((mediaId): mediaId is string => mediaId !== null);
       const remoteResult = await applyRemoteBibBatch(
         "/api/v1/media/bib-review/no-number/batch",
-        remoteIds,
+        selectedRemoteItems.map((item) => item.id),
       );
       successCount += remoteResult.successCount;
       failures.push(...remoteResult.failures);
@@ -1522,36 +1529,34 @@ export function ReviewWorkspace({
   }
 
   async function batchDelete(): Promise<void> {
-    if (batchBusy || selectedItems.length === 0) return;
+    if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
-    const targets = selectedItems.filter(canDeleteItem);
     const failures: BatchFailure[] = [];
     const deletedMediaIds = new Set<string>();
     let successCount = 0;
     try {
-      for (const item of targets) {
-        setPending(item.key, "delete");
+      for (const item of selectedLocalItems) {
         try {
-          const mediaId = remoteId(item);
-          if (item.source === "local" && mediaId === null)
-            await deleteLocalReviewPhoto(item.local.photo.id);
-          else if (mediaId !== null) {
-            await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
-            deletedMediaIds.add(mediaId);
-            if (item.source === "local")
-              await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
-            else if (item.local !== null)
-              await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
-          }
+          await deleteLocalReviewPhoto(item.local.photo.id);
           successCount += 1;
         } catch (cause) {
-          const photo = localPhoto(item);
           failures.push({
-            label: photo?.fileName ?? remoteId(item)?.slice(0, 8) ?? "照片",
+            label: item.local.photo.fileName,
             message: cause instanceof Error ? cause.message : "删除失败",
           });
-        } finally {
-          setPending(item.key, null);
+        }
+      }
+      const remoteTargets = userRole === "admin" ? selectedRemoteItems : [];
+      for (const item of remoteTargets) {
+        try {
+          await clientMutation(`/api/v1/media/${item.id}/direct`, { method: "DELETE" });
+          deletedMediaIds.add(item.id);
+          successCount += 1;
+        } catch (cause) {
+          failures.push({
+            label: item.id.slice(0, 8),
+            message: cause instanceof Error ? cause.message : "删除失败",
+          });
         }
       }
       if (deletedMediaIds.size > 0) {
@@ -1563,7 +1568,12 @@ export function ReviewWorkspace({
         });
       }
       await refreshLocal();
-      finishBatch("批量删除", successCount, failures, selectedItems.length - targets.length);
+      finishBatch(
+        "批量删除",
+        successCount,
+        failures,
+        selectedCount - selectedLocalItems.length - remoteTargets.length,
+      );
     } finally {
       setBatchBusy(false);
     }
@@ -1585,28 +1595,63 @@ export function ReviewWorkspace({
     }
   }, [cursor, fetchRemote]);
 
+  async function fetchSelectionPage(
+    publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
+    pageCursor?: string,
+  ): Promise<RemoteSelectionPage> {
+    const query = buildRemoteQuery(publicationStatus, pageCursor);
+    query.set("limit", "1000");
+    if (filter === "featured") query.set("featured", "true");
+    return clientGet<RemoteSelectionPage>(
+      `/api/v1/albums/${albumId}/media-selection?${query.toString()}`,
+    );
+  }
+
+  async function collectSelection(
+    publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
+  ): Promise<ReadonlyMap<string, RemoteSelectionItem>> {
+    const selected = new Map<string, RemoteSelectionItem>();
+    let pageCursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await fetchSelectionPage(publicationStatus, pageCursor);
+      for (const item of page.items) selected.set(item.id, item);
+      pageCursor = page.nextCursor ?? undefined;
+      pages += 1;
+      if (pages > 1000) throw new Error("筛选分页异常，已停止全量选择");
+    } while (pageCursor !== undefined);
+    return selected;
+  }
+
   async function selectAllMatching(): Promise<void> {
     if (batchBusy || selectingAll) return;
     setSelectingAll(true);
     try {
-      let accumulated = remoteMedia;
-      let next = cursor;
-      const visited = new Set<string>();
-      while (next !== null) {
-        const signature = cursorSignature(next);
-        if (visited.has(signature) || visited.size >= 200)
-          throw new Error("筛选分页游标异常，已停止全量选择");
-        visited.add(signature);
-        const page = await fetchRemote(next);
-        accumulated = mergeRemote(accumulated, page.items);
-        next = page.nextCursor;
+      const remote = new Map<string, RemoteSelectionItem>();
+      if (filter === "local") {
+        const [draft, pending] = await Promise.all([
+          collectSelection("draft"),
+          collectSelection("pending_review"),
+        ]);
+        for (const item of draft.values()) remote.set(item.id, item);
+        for (const item of pending.values()) remote.set(item.id, item);
+      } else {
+        const publicationStatus =
+          filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
+        const selected = await collectSelection(publicationStatus);
+        for (const item of selected.values()) remote.set(item.id, item);
       }
-      setRemoteMedia(accumulated);
-      setCursor(null);
-      setSelectAllPending(true);
+      const localKeys = visibleItems
+        .filter((item) => item.source === "local")
+        .map((item) => item.key);
+      setSelectedKeys(new Set(localKeys));
+      setRemoteSelection(remote);
+      lastSelectedIndexRef.current = visibleItems.length === 0 ? null : visibleItems.length - 1;
+      showNotice(`已选择全部匹配结果：${localKeys.length + remote.size} 张`);
     } catch (cause) {
-      setSelectingAll(false);
       setError(cause instanceof Error ? cause.message : "选择全部匹配结果失败");
+    } finally {
+      setSelectingAll(false);
     }
   }
 
@@ -1696,8 +1741,7 @@ export function ReviewWorkspace({
     <div
       className={cn(
         "flex flex-col gap-3",
-        ((inspectorItem !== null && !selectionMode) ||
-          (selectionMode && selectedItems.length > 0)) &&
+        ((inspectorItem !== null && !selectionMode) || (selectionMode && selectedCount > 0)) &&
           "xl:pr-[21rem]",
       )}
     >
@@ -1943,10 +1987,15 @@ export function ReviewWorkspace({
 
       {selectionMode ? (
         <div className="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-lg border bg-background/95 p-2 shadow-sm backdrop-blur">
-          <Badge variant="secondary">已选择 {selectedItems.length} 张</Badge>
+          <Badge variant="secondary">已选择 {selectedCount} 张</Badge>
           <Button
-            disabled={batchBusy || selectingAll || selectedItems.length === visibleItems.length}
+            disabled={
+              batchBusy ||
+              selectingAll ||
+              (remoteSelection === null && selectedItems.length === visibleItems.length)
+            }
             onClick={() => {
+              setRemoteSelection(null);
               setSelectedKeys(new Set(visibleItems.map((item) => item.key)));
               lastSelectedIndexRef.current = visibleItems.length - 1;
             }}
@@ -1966,9 +2015,9 @@ export function ReviewWorkspace({
             {selectingAll ? (
               <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
             ) : null}
-            {cursor === null ? "选择全部匹配" : "加载并选择全部匹配"}
+            选择全部匹配
           </Button>
-          {selectedItems.length === 0 ? (
+          {selectedCount === 0 ? (
             <span className="text-xs text-muted-foreground">
               点击照片选择；从复选框按住拖动可连续选择，Shift 点击可范围选择
             </span>
@@ -2118,7 +2167,7 @@ export function ReviewWorkspace({
           <Button
             aria-label="清除选择"
             className="ml-auto"
-            disabled={batchBusy || selectedItems.length === 0}
+            disabled={batchBusy || selectedCount === 0}
             onClick={resetSelection}
             size="icon-sm"
             type="button"
@@ -2143,7 +2192,7 @@ export function ReviewWorkspace({
             const pending = pendingAction !== null;
             const published = item.publicationStatus === "published";
             const hidden = item.publicationStatus === "hidden";
-            const selected = selectedKeys.has(item.key);
+            const selected = itemSelected(item);
             const bibConfirmed = isBibReviewConfirmed(item.bib);
             const ocrPending = bibOcrIsPending(item);
             const bibBlocked = !bibConfirmed && ocrPending;
@@ -2341,7 +2390,7 @@ export function ReviewWorkspace({
         ) : null}
       </div>
 
-      {selectionMode && selectedItems.length > 0 ? (
+      {selectionMode && selectedCount > 0 ? (
         <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">
           <ReviewBatchInspector
             bibEnabled={bibConfig.recognitionEnabled}
@@ -2349,7 +2398,7 @@ export function ReviewWorkspace({
             busy={batchBusy}
             categories={categories}
             categoryValue={batchCategory}
-            count={selectedItems.length}
+            count={selectedCount}
             onAddBibNumber={() => void batchAddBibNumber()}
             onApplyCategory={() => void batchChangeCategory()}
             onBibNumberChange={setBatchBibNumber}
@@ -2465,8 +2514,8 @@ export function ReviewWorkspace({
             <AlertDialogTitle>批量删除照片？</AlertDialogTitle>
             <AlertDialogDescription>
               将删除 {selectionStats.deletable} 张可删除照片。
-              {selectedItems.length > selectionStats.deletable
-                ? ` 另有 ${selectedItems.length - selectionStats.deletable} 张因权限或状态限制会被跳过。`
+              {selectedCount > selectionStats.deletable
+                ? ` 另有 ${selectedCount - selectionStats.deletable} 张因权限或状态限制会被跳过。`
                 : ""}
               删除属于危险操作，远端照片会进入现有删除任务流程。
             </AlertDialogDescription>

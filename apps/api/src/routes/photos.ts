@@ -84,6 +84,43 @@ const internalMediaQuerySchema = z
     message: "班级筛选必须同时提供年级",
     path: ["classOptionId"],
   });
+const internalMediaSelectionQuerySchema = z
+  .object({
+    publicationStatus: publicationStatusSchema.optional(),
+    featured: z.enum(["true"]).optional(),
+    ingestStatus: ingestStatusSchema.optional(),
+    ingestGroup: z.enum(["incomplete", "failed"]).optional(),
+    categoryId: z.string().uuid().optional(),
+    uploaderId: z.string().uuid().optional(),
+    bibReviewDecision: bibReviewDecisionSchema.optional(),
+    bibOcrStatus: bibOcrStatusSchema.optional(),
+    gradeOptionId: z.string().uuid().optional(),
+    classOptionId: z.string().uuid().optional(),
+    cursor: z.string().max(1_000).optional(),
+    limit: z.coerce.number().int().min(1).max(1_000).default(1_000),
+  })
+  .strict()
+  .refine((value) => value.classOptionId === undefined || value.gradeOptionId !== undefined, {
+    message: "班级筛选必须同时提供年级",
+    path: ["classOptionId"],
+  });
+const internalMediaSelectionListSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          id: z.string().uuid(),
+          publicationStatus: publicationStatusSchema,
+          categoryId: z.string().uuid().nullable(),
+          featured: z.boolean(),
+        })
+        .strict(),
+    ),
+    nextCursor: z.string().nullable(),
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+
 const changesQuerySchema = z.object({ after: z.coerce.number().int().min(0).default(0) }).strict();
 const eventStreamQuerySchema = z
   .object({ after: z.coerce.number().int().min(0).optional() })
@@ -468,6 +505,27 @@ export async function registerPhotoRoutes(
       return options.bibService === undefined
         ? media
         : options.bibService.attachMediaStates(actor, media);
+    },
+  );
+
+  typed.get(
+    "/api/v1/albums/:id/media-selection",
+    {
+      schema: {
+        operationId: "listInternalMediaSelection",
+        tags: ["media"],
+        params: albumIdParamsSchema,
+        querystring: internalMediaSelectionQuerySchema,
+        response: { 200: internalMediaSelectionListSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return options.photoService.listInternalMediaSelection(actorFrom(session), {
+        albumId: request.params.id,
+        ...request.query,
+      });
     },
   );
 
