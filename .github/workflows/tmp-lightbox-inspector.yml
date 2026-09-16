@@ -120,7 +120,7 @@ jobs:
           )
           workspace.write_text(text)
           PY
-          pnpm exec biome check --write apps/web/src/components/review/review-inspector.tsx apps/web/src/components/review/review-lightbox.tsx apps/web/src/components/review/review-workspace.tsx
+          pnpm exec biome check --write --unsafe apps/web/src/components/review/review-inspector.tsx apps/web/src/components/review/review-lightbox.tsx apps/web/src/components/review/review-workspace.tsx
           pnpm typecheck
       - name: Commit lightbox inspector
         run: |
