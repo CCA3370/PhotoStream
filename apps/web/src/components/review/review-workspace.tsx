@@ -451,6 +451,7 @@ export function ReviewWorkspace({
         filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
       const singleCursor = pageCursor?.kind === "single" ? pageCursor.value : undefined;
       const query = buildRemoteQuery(publicationStatus, singleCursor);
+      if (filter === "featured") query.set("featured", "true");
       const page = await clientGet<InternalMediaList>(
         `/api/v1/albums/${albumId}/media?${query.toString()}`,
       );
