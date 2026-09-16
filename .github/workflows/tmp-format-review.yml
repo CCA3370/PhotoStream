@@ -1,0 +1,80 @@
+name: Temporary review formatter
+
+on:
+  push:
+    branches:
+      - review-workspace-efficiency
+
+permissions:
+  contents: write
+
+jobs:
+  format-review:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: review-workspace-efficiency
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Repair local image URLs and format review workspace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/web/src/components/review/review-workspace.tsx')
+          text = path.read_text()
+
+          replacements = [
+              (
+                  '''interface LocalView {\n  readonly photo: LocalReviewPhoto;\n  readonly url: string;\n}\n''',
+                  '''interface LocalView {\n  readonly photo: LocalReviewPhoto;\n  readonly originalUrl: string;\n  readonly previewUrl: string;\n}\n\ninterface LocalObjectUrls {\n  readonly originalUrl: string;\n  readonly previewUrl: string;\n}\n''',
+              ),
+              (
+                  'const localUrlCache = useRef(new Map<string, string>());',
+                  'const localUrlCache = useRef(new Map<string, LocalObjectUrls>());',
+              ),
+              (
+                  '''    for (const [photoId, url] of localUrlCache.current) {\n      if (activeIds.has(photoId)) continue;\n      URL.revokeObjectURL(url);\n      localUrlCache.current.delete(photoId);\n    }\n    const next = rows.map((photo) => {\n      let url = localUrlCache.current.get(photo.id);\n      if (url === undefined) {\n        const thumb = photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;\n        url = URL.createObjectURL(thumb);\n        localUrlCache.current.set(photo.id, url);\n      }\n      return { photo, url };\n    });''',
+                  '''    for (const [photoId, urls] of localUrlCache.current) {\n      if (activeIds.has(photoId)) continue;\n      URL.revokeObjectURL(urls.previewUrl);\n      URL.revokeObjectURL(urls.originalUrl);\n      localUrlCache.current.delete(photoId);\n    }\n    const next = rows.map((photo) => {\n      let urls = localUrlCache.current.get(photo.id);\n      if (urls === undefined) {\n        const thumb =\n          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??\n          photo.originalBlob;\n        urls = {\n          previewUrl: URL.createObjectURL(thumb),\n          originalUrl: URL.createObjectURL(photo.originalBlob),\n        };\n        localUrlCache.current.set(photo.id, urls);\n      }\n      return { photo, previewUrl: urls.previewUrl, originalUrl: urls.originalUrl };\n    });''',
+              ),
+              (
+                  '      for (const url of localUrlCache.current.values()) URL.revokeObjectURL(url);',
+                  '''      for (const urls of localUrlCache.current.values()) {\n        URL.revokeObjectURL(urls.previewUrl);\n        URL.revokeObjectURL(urls.originalUrl);\n      }''',
+              ),
+              (
+                  '''        previewUrl: item.url,\n        viewerUrl: item.url,''',
+                  '''        previewUrl: item.previewUrl,\n        viewerUrl: item.originalUrl,''',
+              ),
+              (
+                  '''          previewUrl: linkedLocal?.url ?? preview(item),\n          viewerUrl: linkedLocal?.url ?? ordinaryUrl,''',
+                  '''          previewUrl: linkedLocal?.previewUrl ?? preview(item),\n          viewerUrl: linkedLocal?.originalUrl ?? ordinaryUrl,''',
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'Expected review workspace fragment not found:\n{old[:160]}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          pnpm exec biome format --write apps/web/src/components/review/review-workspace.tsx
+      - name: Commit formatter result
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/components/review/review-workspace.tsx
+          git commit -m 'fix(review): preserve full-resolution local lightbox images'
+          git push origin HEAD:review-workspace-efficiency
