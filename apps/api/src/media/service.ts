@@ -1395,6 +1395,7 @@ export class PhotoService {
       readonly publicationStatus?:
         | (typeof schema.publicationStatusEnum.enumValues)[number]
         | undefined;
+      readonly featured?: "true" | undefined;
       readonly ingestStatus?: (typeof schema.ingestStatusEnum.enumValues)[number] | undefined;
       readonly ingestGroup?: "incomplete" | "failed" | undefined;
       readonly categoryId?: string | undefined;
@@ -1419,6 +1420,16 @@ export class PhotoService {
     const conditions = [eq(schema.media.albumId, options.albumId)];
     if (options.publicationStatus !== undefined) {
       conditions.push(eq(schema.media.publicationStatus, options.publicationStatus));
+    }
+    if (options.featured === "true") {
+      conditions.push(
+        exists(
+          this.#database
+            .select({ value: sql`1` })
+            .from(schema.featuredMedia)
+            .where(eq(schema.featuredMedia.mediaId, schema.media.id)),
+        ),
+      );
     }
     if (options.ingestStatus !== undefined) {
       conditions.push(eq(schema.media.ingestStatus, options.ingestStatus));

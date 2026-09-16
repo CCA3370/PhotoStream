@@ -67,6 +67,7 @@ const publicMediaQuerySchema = z
 const internalMediaQuerySchema = z
   .object({
     publicationStatus: publicationStatusSchema.optional(),
+    featured: z.enum(["true"]).optional(),
     ingestStatus: ingestStatusSchema.optional(),
     ingestGroup: z.enum(["incomplete", "failed"]).optional(),
     categoryId: z.string().uuid().optional(),
