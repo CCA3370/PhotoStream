@@ -51,7 +51,8 @@ export interface ReviewInspectorItem {
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(bytes >= 10 * 1024 ** 2 ? 0 : 1)} MB`;
+  if (bytes < 1024 ** 3)
+    return `${(bytes / 1024 ** 2).toFixed(bytes >= 10 * 1024 ** 2 ? 0 : 1)} MB`;
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
@@ -119,7 +120,13 @@ export function ReviewInspector({
             <Badge variant="outline">{item.sourceLabel}</Badge>
           </div>
         </div>
-        <Button aria-label="关闭属性面板" onClick={onClose} size="icon-sm" type="button" variant="ghost">
+        <Button
+          aria-label="关闭属性面板"
+          onClick={onClose}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
           <XIcon />
         </Button>
       </div>
@@ -158,7 +165,10 @@ export function ReviewInspector({
 
             <div className="grid grid-cols-2 gap-2">
               <Button disabled={busy} onClick={onToggleFeatured} type="button" variant="outline">
-                <StarIcon className={item.featured ? "fill-current" : undefined} data-icon="inline-start" />
+                <StarIcon
+                  className={item.featured ? "fill-current" : undefined}
+                  data-icon="inline-start"
+                />
                 {item.featured ? "取消精选" : "设为精选"}
               </Button>
               <Button disabled={busy} onClick={onStateAction} type="button" variant="outline">
@@ -196,7 +206,9 @@ export function ReviewInspector({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                {item.bib?.review.decision === "no_number_confirmed" ? "已确认无号码" : "暂无已确认号码"}
+                {item.bib?.review.decision === "no_number_confirmed"
+                  ? "已确认无号码"
+                  : "暂无已确认号码"}
               </p>
             )}
             <Button disabled={busy} onClick={onOpenBib} type="button" variant="outline">
@@ -240,7 +252,9 @@ export function ReviewInspector({
               删除照片
             </Button>
             {!item.canDelete ? (
-              <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">当前账号无权删除这张远端照片。</p>
+              <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                当前账号无权删除这张远端照片。
+              </p>
             ) : null}
           </section>
         </div>
