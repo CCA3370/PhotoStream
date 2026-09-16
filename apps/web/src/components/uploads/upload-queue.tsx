@@ -170,7 +170,6 @@ function taskLabel(status: QueueTaskStatus): string {
 
 export function UploadQueue({
   albumId,
-  albumTitle,
   bibConfig,
   categories,
   role,
@@ -191,8 +190,6 @@ export function UploadQueue({
   const processingProfile = useRef<AdaptiveProcessingProfile>(defaultProcessingProfile);
   const processingLimitRef = useRef(defaultProcessingProfile.initial);
   const healthySamples = useRef(0);
-  const [processingLimit, setProcessingLimit] = useState(defaultProcessingProfile.initial);
-  const [processingMax, setProcessingMax] = useState(defaultProcessingProfile.max);
   const [categoryId, setCategoryId] = useState("uncategorized");
   const [items, setItems] = useState<readonly PreviewPhoto[]>([]);
   const [tasks, setTasks] = useState<readonly QueueTaskView[]>([]);
@@ -259,7 +256,6 @@ export function UploadQueue({
       if (isResourcePressureError(error) && processingLimitRef.current > 1) {
         healthySamples.current = 0;
         processingLimitRef.current -= 1;
-        setProcessingLimit(processingLimitRef.current);
       }
     } finally {
       runningTasks.current = Math.max(0, runningTasks.current - 1);
@@ -335,8 +331,6 @@ export function UploadQueue({
     processingProfile.current = profile;
     processingLimitRef.current = profile.initial;
     healthySamples.current = 0;
-    setProcessingLimit(profile.initial);
-    setProcessingMax(profile.max);
   }, []);
 
   useEffect(() => {
@@ -361,7 +355,6 @@ export function UploadQueue({
       if (underPressure && current > 1) {
         healthySamples.current = 0;
         processingLimitRef.current = current - 1;
-        setProcessingLimit(current - 1);
         return;
       }
 
@@ -376,7 +369,6 @@ export function UploadQueue({
       if (healthySamples.current < 2) return;
       healthySamples.current = 0;
       processingLimitRef.current = current + 1;
-      setProcessingLimit(current + 1);
     }, adaptiveSampleIntervalMs);
     return () => window.clearInterval(timer);
   }, []);
@@ -453,7 +445,6 @@ export function UploadQueue({
 
   return (
     <UploadShell
-      albumTitle={albumTitle}
       queue={{
         paused,
         queued: queueCounts.queued,
@@ -513,9 +504,6 @@ export function UploadQueue({
               前往审核
             </Link>
           ) : null}
-          <span className="text-xs text-muted-foreground">
-            不限制单次选择数量 · 自适应并发 {processingLimit}/{processingMax}
-          </span>
         </div>
 
         <input
@@ -560,10 +548,6 @@ export function UploadQueue({
         >
           <ImagePlusIcon className="size-5 text-muted-foreground" />
           <span className="text-sm font-medium">拖入图片或点击选择</span>
-          <span className="max-w-2xl text-xs leading-5 text-muted-foreground">
-            原图和处理结果只保存在当前浏览器。本页不会创建上传任务，也不会向 OSS
-            传输文件；只有审核页执行发布后才会开始上传。
-          </span>
         </button>
 
         {role === "uploader" && items.length > 0 ? (
