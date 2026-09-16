@@ -25,16 +25,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
-import { resumeLocalBibOcr, startLocalBibOcr } from "@/lib/local-bib-ocr";
+import { resumeLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
-  createLocalReviewPhoto,
+  getLocalProcessingRuntime,
+  type LocalProcessingTaskStatus,
+  type LocalProcessingTaskView,
+} from "@/lib/local-processing-runtime";
+import {
   deleteLocalReviewPhoto,
   type LocalReviewPhoto,
   listLocalReviewPhotos,
   localQueueSupported,
-  putLocalReviewPhoto,
 } from "@/lib/local-review-queue";
-import { processPhotoInWorker } from "@/lib/photo-processing";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
@@ -47,113 +49,7 @@ interface PreviewPhoto {
   readonly url: string;
 }
 
-type QueueTaskStatus = "queued" | "processing" | "staged" | "failed";
-
-interface QueueTask {
-  readonly id: string;
-  readonly file: File;
-  readonly categoryId: string | null;
-  status: QueueTaskStatus;
-  error: string | null;
-}
-
-interface QueueTaskView {
-  readonly id: string;
-  readonly fileName: string;
-  readonly bytes: number;
-  readonly status: QueueTaskStatus;
-  readonly error: string | null;
-}
-
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-const mebibyte = 1024 ** 2;
-const adaptiveSampleIntervalMs = 2_000;
-const eventLoopPressureMs = 180;
-const eventLoopHealthyMs = 60;
-const heapPressureThreshold = 0.82;
-const heapHealthyThreshold = 0.68;
-
-interface AdaptiveProcessingProfile {
-  readonly initial: number;
-  readonly max: number;
-  readonly inputByteBudget: number;
-}
-
-interface NavigatorWithDeviceMemory extends Navigator {
-  readonly deviceMemory?: number;
-}
-
-interface PerformanceMemorySnapshot {
-  readonly jsHeapSizeLimit: number;
-  readonly usedJSHeapSize: number;
-}
-
-interface PerformanceWithMemory extends Performance {
-  readonly memory?: PerformanceMemorySnapshot;
-}
-
-const defaultProcessingProfile: AdaptiveProcessingProfile = {
-  initial: 3,
-  max: 4,
-  inputByteBudget: 96 * mebibyte,
-};
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function adaptiveProcessingProfile(): AdaptiveProcessingProfile {
-  if (typeof navigator === "undefined") return defaultProcessingProfile;
-
-  const cores = Math.max(1, navigator.hardwareConcurrency || 4);
-  const memoryGb = (navigator as NavigatorWithDeviceMemory).deviceMemory;
-  const likelyMobile =
-    typeof window !== "undefined" &&
-    window.matchMedia("(pointer: coarse)").matches &&
-    Math.min(window.screen.width, window.screen.height) < 900;
-  const platformMax = likelyMobile ? 4 : 8;
-
-  const cpuInitial =
-    cores <= 2 ? 1 : cores <= 4 ? 2 : cores <= 6 ? 3 : cores <= 8 ? 4 : cores <= 12 ? 5 : 6;
-  const cpuMax = clamp(Math.ceil(cores * 0.75), 1, platformMax);
-  const memoryMax =
-    memoryGb === undefined
-      ? platformMax
-      : memoryGb <= 2
-        ? 1
-        : memoryGb <= 4
-          ? 2
-          : memoryGb <= 8
-            ? 5
-            : memoryGb <= 16
-              ? 7
-              : platformMax;
-  const max = clamp(Math.min(platformMax, cpuMax, memoryMax), 1, platformMax);
-  const initial = clamp(Math.min(cpuInitial, max), 1, max);
-  const inputByteBudget = clamp(
-    Math.round((memoryGb ?? 8) * 16 * mebibyte),
-    48 * mebibyte,
-    likelyMobile ? 96 * mebibyte : 256 * mebibyte,
-  );
-
-  return { initial, max, inputByteBudget };
-}
-
-function heapPressureRatio(): number | null {
-  if (typeof performance === "undefined") return null;
-  const memory = (performance as PerformanceWithMemory).memory;
-  if (memory === undefined || memory.jsHeapSizeLimit <= 0) return null;
-  return memory.usedJSHeapSize / memory.jsHeapSizeLimit;
-}
-
-function isResourcePressureError(error: unknown): boolean {
-  if (error instanceof RangeError) return true;
-  if (!(error instanceof Error)) return false;
-  const message = `${error.name} ${error.message}`.toLowerCase();
-  return ["memory", "allocation", "out of memory", "imagebitmap", "canvas"].some((token) =>
-    message.includes(token),
-  );
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -161,7 +57,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 2).toFixed(bytes >= 10 * 1024 ** 2 ? 0 : 1)} MB`;
 }
 
-function taskLabel(status: QueueTaskStatus): string {
+function taskLabel(status: LocalProcessingTaskStatus): string {
   if (status === "queued") return "等待处理";
   if (status === "processing") return "本地处理中";
   if (status === "staged") return "已进入本机审核队列";
@@ -183,30 +79,12 @@ export function UploadQueue({
   const inputRef = useRef<HTMLInputElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const previewUrls = useRef<string[]>([]);
-  const taskStore = useRef(new Map<string, QueueTask>());
-  const runningTasks = useRef(0);
-  const runningInputBytes = useRef(0);
-  const pausedRef = useRef(false);
-  const processingProfile = useRef<AdaptiveProcessingProfile>(defaultProcessingProfile);
-  const processingLimitRef = useRef(defaultProcessingProfile.initial);
-  const healthySamples = useRef(0);
+  const runtime = useMemo(() => getLocalProcessingRuntime(albumId), [albumId]);
   const [categoryId, setCategoryId] = useState("uncategorized");
   const [items, setItems] = useState<readonly PreviewPhoto[]>([]);
-  const [tasks, setTasks] = useState<readonly QueueTaskView[]>([]);
+  const [tasks, setTasks] = useState<readonly LocalProcessingTaskView[]>([]);
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
-
-  const syncTasks = useCallback(() => {
-    setTasks(
-      [...taskStore.current.values()].map((task) => ({
-        id: task.id,
-        fileName: task.file.name,
-        bytes: task.file.size,
-        status: task.status,
-        error: task.error,
-      })),
-    );
-  }, []);
 
   const refresh = useCallback(async () => {
     const rows = (await listLocalReviewPhotos(albumId)).filter(
@@ -222,65 +100,23 @@ export function UploadQueue({
     setItems(next);
   }, [albumId]);
 
-  async function runTask(task: QueueTask): Promise<void> {
-    task.status = "processing";
-    task.error = null;
-    runningTasks.current += 1;
-    runningInputBytes.current += task.file.size;
-    syncTasks();
-    try {
-      const processed = await processPhotoInWorker(task.file);
-      const created = createLocalReviewPhoto({
-        albumId,
-        categoryId: task.categoryId,
-        file: task.file,
-        processed,
+  useEffect(() => {
+    runtime.configure(bibConfig);
+    const unsubscribe = runtime.subscribe((snapshot) => {
+      setTasks(snapshot.tasks);
+      setPaused(snapshot.paused);
+    });
+    void runtime.initialize().catch((error) => {
+      toast.add({
+        title: "本地处理队列恢复失败",
+        description: error instanceof Error ? error.message : "无法恢复未完成的本地任务",
+        type: "error",
       });
-      const localPhoto: LocalReviewPhoto = {
-        ...created,
-        bib: {
-          ...created.bib,
-          ocrStatus: bibConfig.recognitionEnabled ? "not_started" : "disabled",
-          modelVersion: bibConfig.modelVersion,
-          ruleVersion: bibConfig.ruleVersion,
-        },
-      };
-      await putLocalReviewPhoto(localPhoto);
-      startLocalBibOcr(localPhoto.id, bibConfig);
-      task.status = "staged";
-      task.error = null;
-      await refresh();
-    } catch (error) {
-      task.status = "failed";
-      task.error = error instanceof Error ? error.message : "本地处理失败";
-      if (isResourcePressureError(error) && processingLimitRef.current > 1) {
-        healthySamples.current = 0;
-        processingLimitRef.current -= 1;
-      }
-    } finally {
-      runningTasks.current = Math.max(0, runningTasks.current - 1);
-      runningInputBytes.current = Math.max(0, runningInputBytes.current - task.file.size);
-      syncTasks();
-      pump();
-    }
-  }
+    });
+    return unsubscribe;
+  }, [bibConfig, runtime]);
 
-  function pump(): void {
-    if (pausedRef.current) return;
-    while (runningTasks.current < processingLimitRef.current) {
-      const queued = [...taskStore.current.values()].filter((task) => task.status === "queued");
-      if (queued.length === 0) break;
-      const next =
-        queued.find(
-          (task) =>
-            runningInputBytes.current + task.file.size <= processingProfile.current.inputByteBudget,
-        ) ?? (runningTasks.current === 0 ? queued[0] : undefined);
-      if (next === undefined) break;
-      void runTask(next);
-    }
-  }
-
-  function enqueue(files: readonly File[]): void {
+  async function enqueue(files: readonly File[]): Promise<void> {
     if (files.length === 0) return;
     if (!localQueueSupported()) {
       toast.add({ title: "当前浏览器不支持本地审核队列", type: "error" });
@@ -289,34 +125,32 @@ export function UploadQueue({
     const valid = files.filter((file) => acceptedTypes.has(file.type));
     const skipped = files.length - valid.length;
     const selectedCategory = categoryId === "uncategorized" ? null : categoryId;
-    for (const file of valid) {
-      const id = crypto.randomUUID();
-      taskStore.current.set(id, {
-        id,
-        file,
-        categoryId: selectedCategory,
-        status: "queued",
-        error: null,
-      });
-    }
-    syncTasks();
-    pump();
-    if (valid.length > 0) {
+    try {
+      if (valid.length > 0) {
+        await runtime.enqueue(valid, selectedCategory);
+        toast.add({
+          title: `已加入处理队列 ${valid.length} 张`,
+          description: "原始文件已保存在本机；切换页面或刷新后会继续处理。",
+          type: "success",
+        });
+      }
+      if (skipped > 0) {
+        toast.add({
+          title: `已跳过 ${skipped} 个不支持的文件`,
+          description: "当前支持 JPEG、PNG 和 WebP。",
+          type: "warning",
+        });
+      }
+    } catch (error) {
       toast.add({
-        title: `已加入处理队列 ${valid.length} 张`,
-        description: "不会在审核通过前上传。",
-        type: "success",
+        title: "无法保存到本地处理队列",
+        description: error instanceof Error ? error.message : "浏览器本地存储空间可能不足，请释放空间后重试。",
+        type: "error",
       });
+    } finally {
+      if (inputRef.current !== null) inputRef.current.value = "";
+      if (directoryInputRef.current !== null) directoryInputRef.current.value = "";
     }
-    if (skipped > 0) {
-      toast.add({
-        title: `已跳过 ${skipped} 个不支持的文件`,
-        description: "当前支持 JPEG、PNG 和 WebP。",
-        type: "warning",
-      });
-    }
-    if (inputRef.current !== null) inputRef.current.value = "";
-    if (directoryInputRef.current !== null) directoryInputRef.current.value = "";
   }
 
   useEffect(() => {
@@ -324,53 +158,6 @@ export function UploadQueue({
       directoryInputRef.current.setAttribute("webkitdirectory", "");
       directoryInputRef.current.setAttribute("directory", "");
     }
-  }, []);
-
-  useEffect(() => {
-    const profile = adaptiveProcessingProfile();
-    processingProfile.current = profile;
-    processingLimitRef.current = profile.initial;
-    healthySamples.current = 0;
-  }, []);
-
-  useEffect(() => {
-    let expected = performance.now() + adaptiveSampleIntervalMs;
-    const timer = window.setInterval(() => {
-      const now = performance.now();
-      const lag = Math.max(0, now - expected);
-      expected = now + adaptiveSampleIntervalMs;
-      if (document.visibilityState !== "visible" || pausedRef.current) {
-        healthySamples.current = 0;
-        return;
-      }
-
-      const heapRatio = heapPressureRatio();
-      const current = processingLimitRef.current;
-      const profile = processingProfile.current;
-      const hasQueued = [...taskStore.current.values()].some((task) => task.status === "queued");
-      const saturated = runningTasks.current >= current;
-      const underPressure =
-        lag >= eventLoopPressureMs || (heapRatio !== null && heapRatio >= heapPressureThreshold);
-
-      if (underPressure && current > 1) {
-        healthySamples.current = 0;
-        processingLimitRef.current = current - 1;
-        return;
-      }
-
-      const healthy =
-        lag <= eventLoopHealthyMs && (heapRatio === null || heapRatio <= heapHealthyThreshold);
-      if (!hasQueued || !saturated || !healthy || current >= profile.max) {
-        healthySamples.current = 0;
-        return;
-      }
-
-      healthySamples.current += 1;
-      if (healthySamples.current < 2) return;
-      healthySamples.current = 0;
-      processingLimitRef.current = current + 1;
-    }, adaptiveSampleIntervalMs);
-    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -413,32 +200,14 @@ export function UploadQueue({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [queueCounts.processing, queueCounts.queued]);
 
-  function togglePause(): void {
-    const next = !pausedRef.current;
-    pausedRef.current = next;
-    setPaused(next);
-    if (!next) pump();
-  }
-
   function retryFailed(): void {
-    for (const task of taskStore.current.values()) {
-      if (task.status !== "failed") continue;
-      task.status = "queued";
-      task.error = null;
-    }
-    syncTasks();
-    if (pausedRef.current) {
-      pausedRef.current = false;
-      setPaused(false);
-    }
-    pump();
-  }
-
-  function clearCompleted(): void {
-    for (const [id, task] of taskStore.current) {
-      if (task.status === "staged") taskStore.current.delete(id);
-    }
-    syncTasks();
+    void runtime.retryFailed().catch((error) => {
+      toast.add({
+        title: "重试队列失败",
+        description: error instanceof Error ? error.message : "无法更新本地处理队列",
+        type: "error",
+      });
+    });
   }
 
   const visibleTasks = tasks.filter((task) => task.status !== "staged");
@@ -454,9 +223,9 @@ export function UploadQueue({
         pendingReview: items.length,
         completed: queueCounts.completed,
         total: tasks.length,
-        onTogglePause: togglePause,
+        onTogglePause: () => runtime.togglePause(),
         onRetryFailed: retryFailed,
-        onClearCompleted: clearCompleted,
+        onClearCompleted: () => runtime.clearCompleted(),
       }}
     >
       <div className="flex flex-col gap-5">
@@ -511,7 +280,7 @@ export function UploadQueue({
           className="sr-only"
           id="photo-files"
           multiple
-          onChange={(event) => enqueue(Array.from(event.currentTarget.files ?? []))}
+          onChange={(event) => void enqueue(Array.from(event.currentTarget.files ?? []))}
           ref={inputRef}
           type="file"
         />
@@ -519,7 +288,7 @@ export function UploadQueue({
           accept="image/jpeg,image/png,image/webp"
           className="sr-only"
           multiple
-          onChange={(event) => enqueue(Array.from(event.currentTarget.files ?? []))}
+          onChange={(event) => void enqueue(Array.from(event.currentTarget.files ?? []))}
           ref={directoryInputRef}
           type="file"
         />
@@ -542,7 +311,7 @@ export function UploadQueue({
           onDrop={(event) => {
             event.preventDefault();
             setDragging(false);
-            enqueue(Array.from(event.dataTransfer.files));
+            void enqueue(Array.from(event.dataTransfer.files));
           }}
           type="button"
         >
