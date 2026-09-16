@@ -102,13 +102,7 @@ type SortOrder = "newest" | "oldest";
 type GridDensity = "compact" | "standard" | "large";
 type RemoteBatchAction = "change_category" | "hide" | "publish" | "restore";
 
-type RemoteCursor =
-  | { readonly kind: "single"; readonly value: string }
-  | {
-      readonly kind: "unpublished";
-      readonly draft: string | null;
-      readonly pendingReview: string | null;
-    };
+type RemoteCursor = { readonly kind: "single"; readonly value: string };
 
 interface RemotePage {
   readonly items: readonly InternalMediaView[];
@@ -465,42 +459,10 @@ export function ReviewWorkspace({
 
   const fetchRemote = useCallback(
     async (pageCursor?: RemoteCursor): Promise<RemotePage> => {
-      if (filter === "local") {
-        const unpublishedCursor = pageCursor?.kind === "unpublished" ? pageCursor : undefined;
-        const fetchStatus = async (
-          status: "draft" | "pending_review",
-          statusCursor: string | null | undefined,
-        ): Promise<InternalMediaList> => {
-          if (unpublishedCursor !== undefined && statusCursor === null) {
-            return { items: [], nextCursor: null };
-          }
-          const query = buildRemoteQuery(status, statusCursor ?? undefined);
-          return clientGet<InternalMediaList>(
-            `/api/v1/albums/${albumId}/media?${query.toString()}`,
-          );
-        };
-        const [draftPage, pendingPage] = await Promise.all([
-          fetchStatus("draft", unpublishedCursor?.draft),
-          fetchStatus("pending_review", unpublishedCursor?.pendingReview),
-        ]);
-        const nextCursor =
-          draftPage.nextCursor === null && pendingPage.nextCursor === null
-            ? null
-            : {
-                kind: "unpublished" as const,
-                draft: draftPage.nextCursor,
-                pendingReview: pendingPage.nextCursor,
-              };
-        return {
-          items: mergeRemote(draftPage.items, pendingPage.items),
-          nextCursor,
-        };
-      }
-
       const publicationStatus =
         filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
-      const singleCursor = pageCursor?.kind === "single" ? pageCursor.value : undefined;
-      const query = buildRemoteQuery(publicationStatus, singleCursor);
+      const query = buildRemoteQuery(publicationStatus, pageCursor?.value);
+      if (filter === "local") query.set("publicationGroup", "unpublished");
       if (filter === "featured") query.set("featured", "true");
       const page = await clientGet<InternalMediaList>(
         `/api/v1/albums/${albumId}/media?${query.toString()}`,
@@ -1629,6 +1591,7 @@ export function ReviewWorkspace({
   ): Promise<RemoteSelectionPage> {
     const query = buildRemoteQuery(publicationStatus, pageCursor);
     query.set("limit", "1000");
+    if (filter === "local") query.set("publicationGroup", "unpublished");
     if (filter === "featured") query.set("featured", "true");
     return clientGet<RemoteSelectionPage>(
       `/api/v1/albums/${albumId}/media-selection?${query.toString()}`,
@@ -1656,19 +1619,10 @@ export function ReviewWorkspace({
     setSelectingAll(true);
     try {
       const remote = new Map<string, RemoteSelectionItem>();
-      if (filter === "local") {
-        const [draft, pending] = await Promise.all([
-          collectSelection("draft"),
-          collectSelection("pending_review"),
-        ]);
-        for (const item of draft.values()) remote.set(item.id, item);
-        for (const item of pending.values()) remote.set(item.id, item);
-      } else {
-        const publicationStatus =
-          filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
-        const selected = await collectSelection(publicationStatus);
-        for (const item of selected.values()) remote.set(item.id, item);
-      }
+      const publicationStatus =
+        filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
+      const selected = await collectSelection(publicationStatus);
+      for (const item of selected.values()) remote.set(item.id, item);
       const localKeys = visibleItems
         .filter((item) => item.source === "local")
         .map((item) => item.key);
