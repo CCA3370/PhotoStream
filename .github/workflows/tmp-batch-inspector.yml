@@ -1,0 +1,86 @@
+name: Temporary batch inspector integrator
+
+on:
+  push:
+    branches:
+      - review-workspace-efficiency
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-batch-inspector:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: review-workspace-efficiency
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Integrate batch inspector
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/web/src/components/review/review-workspace.tsx')
+          text = path.read_text()
+          replacements = [
+              (
+                  'import { ReviewInspector, type ReviewInspectorItem } from "@/components/review/review-inspector";',
+                  '''import {\n  ReviewBatchInspector,\n  ReviewInspector,\n  type ReviewInspectorItem,\n} from "@/components/review/review-inspector";''',
+              ),
+              (
+                  '''  const selectedItems = useMemo(\n    () => visibleItems.filter((item) => selectedKeys.has(item.key)),\n    [selectedKeys, visibleItems],\n  );\n\n  useEffect(() => {\n    if (!selectAllPending) return;''',
+                  '''  const selectedItems = useMemo(\n    () => visibleItems.filter((item) => selectedKeys.has(item.key)),\n    [selectedKeys, visibleItems],\n  );\n\n  useEffect(() => {\n    if (selectedItems.length === 0) {\n      setBatchCategory("uncategorized");\n      return;\n    }\n    const values = new Set(\n      selectedItems.map((item) => item.categoryId ?? "uncategorized"),\n    );\n    setBatchCategory(values.size === 1 ? ([...values][0] ?? "uncategorized") : "mixed");\n  }, [selectedItems]);\n\n  useEffect(() => {\n    if (!selectAllPending) return;''',
+              ),
+              (
+                  '''  async function batchChangeCategory(): Promise<void> {\n    if (batchBusy || selectedItems.length === 0) return;\n    setBatchBusy(true);\n    const nextCategory = batchCategory === "uncategorized" ? null : batchCategory;''',
+                  '''  async function batchChangeCategory(): Promise<void> {\n    if (batchBusy || selectedItems.length === 0 || batchCategory === "mixed") return;\n    setBatchBusy(true);\n    const nextCategory = batchCategory === "uncategorized" ? null : batchCategory;''',
+              ),
+              (
+                  '''      className={cn(\n        "flex flex-col gap-3",\n        inspectorItem !== null && !selectionMode && "xl:pr-[21rem]",\n      )}''',
+                  '''      className={cn(\n        "flex flex-col gap-3",\n        ((inspectorItem !== null && !selectionMode) ||\n          (selectionMode && selectedItems.length > 0)) &&\n          "xl:pr-[21rem]",\n      )}''',
+              ),
+              (
+                  '''                <Select\n                  items={[\n                    { label: "未分类", value: "uncategorized" },\n                    ...categories.map((item) => ({ label: item.name, value: item.id })),\n                  ]}\n                  onValueChange={(value) => setBatchCategory(value ?? "uncategorized")}\n                  value={batchCategory}\n                >''',
+                  '''                <Select\n                  items={[\n                    ...(batchCategory === "mixed"\n                      ? [{ label: "多个值", value: "mixed" }]\n                      : []),\n                    { label: "未分类", value: "uncategorized" },\n                    ...categories.map((item) => ({ label: item.name, value: item.id })),\n                  ]}\n                  onValueChange={(value) => setBatchCategory(value ?? "mixed")}\n                  value={batchCategory}\n                >''',
+              ),
+              (
+                  '''                  <SelectContent>\n                    <SelectGroup>\n                      <SelectItem value="uncategorized">未分类</SelectItem>''',
+                  '''                  <SelectContent>\n                    <SelectGroup>\n                      {batchCategory === "mixed" ? (\n                        <SelectItem disabled value="mixed">\n                          多个值\n                        </SelectItem>\n                      ) : null}\n                      <SelectItem value="uncategorized">未分类</SelectItem>''',
+              ),
+              (
+                  '''                <Button\n                  disabled={batchBusy}\n                  onClick={() => void batchChangeCategory()}''',
+                  '''                <Button\n                  disabled={batchBusy || batchCategory === "mixed"}\n                  onClick={() => void batchChangeCategory()}''',
+              ),
+              (
+                  '''      {!selectionMode && inspectorItem !== null && inspectorSourceItem !== null ? (\n        <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">''',
+                  '''      {selectionMode && selectedItems.length > 0 ? (\n        <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">\n          <ReviewBatchInspector\n            bibEnabled={bibConfig.recognitionEnabled}\n            bibNumber={batchBibNumber}\n            busy={batchBusy}\n            categories={categories}\n            categoryValue={batchCategory}\n            count={selectedItems.length}\n            onAddBibNumber={() => void batchAddBibNumber()}\n            onApplyCategory={() => void batchChangeCategory()}\n            onBibNumberChange={setBatchBibNumber}\n            onCategoryValueChange={setBatchCategory}\n            onConfirmNoNumber={() => void batchConfirmNoNumber()}\n            onDelete={() => setBatchDeleteOpen(true)}\n            onExit={() => {\n              resetSelection();\n              setSelectionMode(false);\n            }}\n            onFeature={() => void batchSetFeatured(true)}\n            onHide={() => void batchHide()}\n            onPublish={() => void batchPublish()}\n            onRestore={() => void batchRestore()}\n            onUnfeature={() => void batchSetFeatured(false)}\n            stats={selectionStats}\n          />\n        </div>\n      ) : null}\n\n      {!selectionMode && inspectorItem !== null && inspectorSourceItem !== null ? (\n        <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">''',
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'Expected fragment missing:\n{old[:260]}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          pnpm exec biome format --write apps/web/src/components/review/review-workspace.tsx apps/web/src/components/review/review-inspector.tsx
+      - name: Commit batch inspector integration
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/components/review/review-workspace.tsx apps/web/src/components/review/review-inspector.tsx
+          git commit -m 'feat(review): integrate batch property inspector'
+          git push origin HEAD:review-workspace-efficiency
