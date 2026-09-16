@@ -155,6 +155,7 @@ const rangeFormatter = new Intl.DateTimeFormat("zh-CN", {
   day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
+  timeZone: "Asia/Shanghai",
 });
 
 function formatBytes(bytes: number): string {
