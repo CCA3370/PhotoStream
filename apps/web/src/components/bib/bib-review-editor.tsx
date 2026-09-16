@@ -48,6 +48,7 @@ function ocrLabel(state: BibMediaState): string {
 function tagStatusLabel(tag: BibTagView): string {
   if (tag.status === "confirmed") return "已确认";
   if (tag.status === "needs_review") return "需复核";
+  if (tag.status === "rejected") return "OCR 结果";
   return "识别候选";
 }
 
@@ -120,17 +121,23 @@ export function BibReviewEditor({
   const [dirty, setDirty] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const noNumber = state?.review.decision === "no_number_confirmed";
+
   const activeTags = useMemo(
     () =>
       (state?.tags ?? [])
-        .filter((tag) => tag.status !== "rejected")
+        .filter((tag) => tag.status !== "rejected" || (noNumber && tag.source === "ocr"))
         .toSorted(
           (left, right) =>
             tagPriority(left) - tagPriority(right) ||
             (right.confidence ?? -1) - (left.confidence ?? -1) ||
             left.number.localeCompare(right.number),
         ),
-    [state],
+    [noNumber, state],
+  );
+  const defaultOcrNumbers = useMemo(
+    () => [...new Set(activeTags.filter((tag) => tag.source === "ocr").map((tag) => tag.number))],
+    [activeTags],
   );
   const selectedNumbers = useMemo(
     () =>
@@ -148,11 +155,6 @@ export function BibReviewEditor({
   }, [mediaId, state?.review.mediaId]);
 
   useEffect(() => {
-    if (state?.review.decision === "no_number_confirmed") {
-      setNumber("");
-      setDirty(false);
-      return;
-    }
     const confirmedNumbers = activeTags
       .filter((tag) => tag.status === "confirmed")
       .map((tag) => tag.number);
@@ -161,8 +163,8 @@ export function BibReviewEditor({
       setDirty(false);
       return;
     }
-    if (!dirty) setNumber(activeTags[0]?.number ?? "");
-  }, [activeTags, dirty, state?.review.decision]);
+    if (!dirty) setNumber(defaultOcrNumbers.join(","));
+  }, [activeTags, defaultOcrNumbers, dirty]);
 
   useEffect(() => {
     if (mediaId === null || state !== null) return;
@@ -266,7 +268,6 @@ export function BibReviewEditor({
         if (localActions === undefined) return;
         const result = await localActions.confirmNoNumber();
         onChange(result);
-        setNumber("");
         setDirty(false);
         return;
       }
@@ -285,8 +286,6 @@ export function BibReviewEditor({
 
   const dark = tone === "dark";
   const confirmed = isBibReviewConfirmed(state);
-  const noNumber = state?.review.decision === "no_number_confirmed";
-
   if (mediaId === null && localActions === undefined) {
     return (
       <div
@@ -353,7 +352,7 @@ export function BibReviewEditor({
             )}
           >
             {noNumber
-              ? "已人工确认此照片没有号码"
+              ? "已人工确认此照片没有号码；仍可采用原识别结果或手动输入号码重新设定。"
               : state.review.ocrStatus === "processing"
                 ? "正在识别号码，可直接手动输入并确认。"
                 : "暂未识别到可用号码，可直接手动输入。"}

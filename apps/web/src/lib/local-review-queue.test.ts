@@ -121,7 +121,12 @@ describe("local bib review state", () => {
     );
 
     expect(state.review.decision).toBe("no_number_confirmed");
-    expect(state.tags).toEqual([]);
+    expect(state.tags).toHaveLength(1);
+    expect(state.tags[0]).toMatchObject({
+      number: "101999",
+      status: "rejected",
+      source: "ocr",
+    });
   });
 
   it("prefers unsynced local manual state but never replaces an already confirmed server decision", () => {
