@@ -16,6 +16,7 @@ import {
   EyeOffIcon,
   HashIcon,
   LoaderCircleIcon,
+  PanelRightOpenIcon,
   RefreshCwIcon,
   SendIcon,
   SquareIcon,
@@ -39,6 +40,7 @@ import {
   type ReviewLightboxItem,
   type ReviewPendingAction,
 } from "@/components/review/review-lightbox";
+import { ReviewInspector, type ReviewInspectorItem } from "@/components/review/review-inspector";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -280,6 +282,8 @@ export function ReviewWorkspace({
   const [classOption, setClassOption] = useState("all");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [inspectorKey, setInspectorKey] = useState<string | null>(null);
+  const [inspectorDeleteOpen, setInspectorDeleteOpen] = useState(false);
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
@@ -772,6 +776,39 @@ export function ReviewWorkspace({
     return true;
   }
 
+  async function changeCategory(item: ReviewItem, nextCategory: string | null): Promise<void> {
+    if (isPending(item.key) || item.categoryId === nextCategory) return;
+    setPending(item.key, "category");
+    try {
+      const mediaId = remoteId(item);
+      if (item.source === "local" && mediaId === null) {
+        await patchLocalReviewPhoto(item.local.photo.id, { categoryId: nextCategory });
+      } else if (mediaId !== null) {
+        const result = await applyRemoteBatch("change_category", [mediaId], nextCategory);
+        if (result.failures.length > 0 || result.okIds.length === 0) {
+          throw new Error(result.failures[0]?.message ?? "修改分类失败");
+        }
+        setRemoteMedia((current) =>
+          current.map((media) =>
+            media.id === mediaId ? { ...media, categoryId: nextCategory } : media,
+          ),
+        );
+        const linkedLocal = localPhoto(item);
+        if (linkedLocal !== null) {
+          await patchLocalReviewPhoto(linkedLocal.id, { categoryId: nextCategory }).catch(
+            () => undefined,
+          );
+        }
+      }
+      await refreshLocal();
+      showNotice("分类已更新");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "修改分类失败");
+    } finally {
+      setPending(item.key, null);
+    }
+  }
+
   const selectionStats = (() => {
     let publishable = 0;
     let hideable = 0;
@@ -930,6 +967,7 @@ export function ReviewWorkspace({
         return next;
       });
       if (activeKey === item.key) setActiveKey(nextKey);
+      if (inspectorKey === item.key) setInspectorKey(null);
       if (bibDialogKey === item.key) setBibDialogKey(null);
       showNotice("已删除");
     } catch (cause) {
@@ -1546,6 +1584,51 @@ export function ReviewWorkspace({
     bibOcrStatus !== "all" ||
     gradeOption !== "all" ||
     classOption !== "all";
+  const inspectorSourceItem = inspectorKey === null ? null : itemByKey(inspectorKey);
+  const inspectorItem: ReviewInspectorItem | null =
+    inspectorSourceItem === null
+      ? null
+      : inspectorSourceItem.source === "local"
+        ? {
+            key: inspectorSourceItem.key,
+            title: inspectorSourceItem.local.photo.fileName,
+            mediaId: inspectorSourceItem.local.photo.mediaId,
+            categoryId: inspectorSourceItem.categoryId,
+            uploaderName: null,
+            sourceLabel: "本机",
+            featured: inspectorSourceItem.featured,
+            publicationStatus: inspectorSourceItem.publicationStatus,
+            ingestStatus: inspectorSourceItem.local.photo.uploadState,
+            width: inspectorSourceItem.local.photo.width,
+            height: inspectorSourceItem.local.photo.height,
+            totalBytes: inspectorSourceItem.local.photo.totalBytes,
+            createdAt: inspectorSourceItem.createdAt,
+            capturedAt: inspectorSourceItem.local.photo.capturedAt,
+            bib: inspectorSourceItem.bib,
+            canDelete: canDeleteItem(inspectorSourceItem),
+          }
+        : {
+            key: inspectorSourceItem.key,
+            title:
+              inspectorSourceItem.local?.photo.fileName ??
+              `媒体 ${inspectorSourceItem.remote.id.slice(0, 8)}`,
+            mediaId: inspectorSourceItem.remote.id,
+            categoryId: inspectorSourceItem.categoryId,
+            uploaderName:
+              uploaders.find((entry) => entry.id === inspectorSourceItem.uploaderId)?.displayName ??
+              null,
+            sourceLabel: "远端",
+            featured: inspectorSourceItem.featured,
+            publicationStatus: inspectorSourceItem.publicationStatus,
+            ingestStatus: inspectorSourceItem.remote.ingestStatus,
+            width: inspectorSourceItem.remote.width,
+            height: inspectorSourceItem.remote.height,
+            totalBytes: inspectorSourceItem.remote.totalBytes,
+            createdAt: inspectorSourceItem.createdAt,
+            capturedAt: inspectorSourceItem.remote.capturedAt,
+            bib: inspectorSourceItem.bib,
+            canDelete: canDeleteItem(inspectorSourceItem),
+          };
   const bibDialogItem = bibDialogKey === null ? null : itemByKey(bibDialogKey);
   const bibDialogMediaId = bibDialogItem === null ? null : remoteId(bibDialogItem);
   const bibDialogLocalActions =
@@ -1558,7 +1641,12 @@ export function ReviewWorkspace({
       : undefined;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      className={cn(
+        "flex flex-col gap-3",
+        inspectorItem !== null && !selectionMode && "xl:pr-[21rem]",
+      )}
+    >
       <div className="flex flex-col gap-2 rounded-lg border bg-card px-2 py-1.5">
         <div className="flex min-h-8 flex-wrap items-center gap-1.5">
           <div className="flex items-center gap-1 overflow-x-auto">
@@ -1637,6 +1725,7 @@ export function ReviewWorkspace({
               className="h-7 px-2.5 text-xs"
               onClick={() => {
                 if (selectionMode) resetSelection();
+                else setInspectorKey(null);
                 setSelectionMode((current) => !current);
               }}
               size="sm"
@@ -2166,6 +2255,18 @@ export function ReviewWorkspace({
                         <HashIcon className="size-4" />
                       )}
                     </Button>
+                    <Button
+                      aria-label="编辑照片属性"
+                      className="size-8 max-xl:hidden"
+                      disabled={pending || batchBusy}
+                      onClick={() => setInspectorKey(item.key)}
+                      size="icon"
+                      title="照片属性"
+                      type="button"
+                      variant={inspectorKey === item.key ? "secondary" : "ghost"}
+                    >
+                      <PanelRightOpenIcon className="size-4" />
+                    </Button>
                   </div>
                 )}
               </div>
@@ -2179,6 +2280,22 @@ export function ReviewWorkspace({
           <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         ) : null}
       </div>
+
+      {!selectionMode && inspectorItem !== null && inspectorSourceItem !== null ? (
+        <div className="fixed bottom-4 right-4 top-20 z-30 hidden w-80 xl:block">
+          <ReviewInspector
+            busy={pendingActions.has(inspectorSourceItem.key) || batchBusy}
+            categories={categories}
+            item={inspectorItem}
+            onCategoryChange={(categoryId) => void changeCategory(inspectorSourceItem, categoryId)}
+            onClose={() => setInspectorKey(null)}
+            onDelete={() => setInspectorDeleteOpen(true)}
+            onOpenBib={() => setBibDialogKey(inspectorSourceItem.key)}
+            onStateAction={() => void stateAction(inspectorSourceItem)}
+            onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)}
+          />
+        </div>
+      ) : null}
 
       <ReviewLightbox
         items={lightboxItems}
@@ -2223,6 +2340,30 @@ export function ReviewWorkspace({
         open={bibDialogItem !== null}
         state={bibDialogItem?.bib ?? null}
       />
+
+      <AlertDialog open={inspectorDeleteOpen} onOpenChange={setInspectorDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除这张照片？</AlertDialogTitle>
+            <AlertDialogDescription>
+              这是危险操作。远端照片会进入现有删除任务流程，本机照片会从本地审核队列移除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={inspectorSourceItem === null || !canDeleteItem(inspectorSourceItem)}
+              onClick={() => {
+                setInspectorDeleteOpen(false);
+                if (inspectorSourceItem !== null) void deleteItem(inspectorSourceItem);
+              }}
+              variant="destructive"
+            >
+              删除照片
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
         <AlertDialogContent>

@@ -45,7 +45,7 @@ type Gesture =
   | { mode: "swipe"; start: Point }
   | { mode: "pinch"; distance: number; zoom: number };
 
-export type ReviewPendingAction = "delete" | "featured" | "state";
+export type ReviewPendingAction = "category" | "delete" | "featured" | "state";
 
 export interface ReviewLightboxItem {
   readonly key: string;
