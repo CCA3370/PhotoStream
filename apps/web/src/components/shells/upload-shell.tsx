@@ -6,10 +6,8 @@ import {
   PlayIcon,
   RotateCcwIcon,
   Trash2Icon,
-  WifiIcon,
-  WifiOffIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +21,6 @@ import {
 } from "@/components/ui/drawer";
 
 export interface UploadShellProps {
-  readonly albumTitle: string;
   readonly children: ReactNode;
   readonly queue: {
     readonly paused: boolean;
@@ -105,20 +102,7 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
   );
 }
 
-export function UploadShell({ albumTitle, children, queue }: UploadShellProps) {
-  const [online, setOnline] = useState(true);
-
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
-
+export function UploadShell({ children, queue }: UploadShellProps) {
   const processed = queue.completed + queue.failed;
   const progress =
     queue.total === 0 ? 0 : Math.min(100, Math.round((processed / queue.total) * 100));
@@ -129,11 +113,6 @@ export function UploadShell({ albumTitle, children, queue }: UploadShellProps) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate font-semibold">上传队列</h2>
-            <Badge variant="outline">{albumTitle}</Badge>
-            <Badge variant="secondary" className="gap-1">
-              {online ? <WifiIcon className="size-3" /> : <WifiOffIcon className="size-3" />}
-              {online ? "网络在线" : "网络离线"}
-            </Badge>
             {queue.paused ? <Badge variant="outline">已暂停</Badge> : null}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
