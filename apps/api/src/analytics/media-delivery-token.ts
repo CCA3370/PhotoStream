@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const tokenTtlMs = 5 * 60 * 1_000;
+const sha256Base64UrlLength = 43;
 
 function signature(
   secret: string,
@@ -46,9 +47,11 @@ export function verifyMediaDeliveryToken(
   const [encodedExpiry, nonce, encodedMac] = parts;
   if (encodedExpiry === undefined || nonce === undefined || encodedMac === undefined) return false;
   if (!/^[a-z0-9]+$/u.test(encodedExpiry) || !/^[A-Za-z0-9_-]{20,64}$/u.test(nonce)) return false;
+  if (!new RegExp(`^[A-Za-z0-9_-]{${sha256Base64UrlLength}}$`, "u").test(encodedMac)) return false;
 
   const expiresAt = Number.parseInt(encodedExpiry, 36);
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= now.getTime()) return false;
+  if (expiresAt.toString(36) !== encodedExpiry) return false;
   if (expiresAt > now.getTime() + tokenTtlMs + 30_000) return false;
 
   let provided: Buffer;
@@ -57,6 +60,8 @@ export function verifyMediaDeliveryToken(
   } catch {
     return false;
   }
+  if (provided.toString("base64url") !== encodedMac) return false;
+
   const expected = signature(secret, slug, visitorId, expiresAt, nonce);
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
