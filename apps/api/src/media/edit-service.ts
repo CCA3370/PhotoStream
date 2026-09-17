@@ -12,7 +12,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import { liveEventChannel } from "./live-event-broker.js";
@@ -498,7 +498,10 @@ export class MediaEditService {
       }
 
       const now = new Date();
-      if (state.activeRevisionId !== null && state.activeRevisionId !== options.input.targetRevisionId) {
+      if (
+        state.activeRevisionId !== null &&
+        state.activeRevisionId !== options.input.targetRevisionId
+      ) {
         await transaction
           .update(schema.mediaEditRevisions)
           .set({ status: "ready", updatedAt: now })
