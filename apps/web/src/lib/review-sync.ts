@@ -17,6 +17,10 @@ export function reviewSyncRevision(
         item.categoryId ?? "",
         item.deletionTask?.status ?? "",
         variants,
+        item.edit?.activeRevisionId ?? "",
+        item.edit?.pendingRevisionId ?? "",
+        item.edit?.pendingStatus ?? "",
+        String(item.edit?.generation ?? 0),
         JSON.stringify(item.bib ?? null),
       ].join(":");
     })
