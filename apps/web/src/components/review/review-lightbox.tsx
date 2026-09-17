@@ -11,6 +11,7 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   PanelRightOpenIcon,
+  SlidersHorizontalIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -103,6 +104,7 @@ export function ReviewLightbox({
   selectedKey,
   onClose,
   onDelete,
+  onEdit,
   onSelect,
   onToggleFeatured,
   onToggleVisibility,
@@ -117,6 +119,7 @@ export function ReviewLightbox({
   selectedKey: string | null;
   onClose: () => void;
   onDelete: (key: string) => void;
+  onEdit: (mediaId: string) => void;
   onSelect: (key: string) => void;
   onStateAction: (key: string) => void;
   onToggleFeatured: (key: string) => void;
@@ -367,7 +370,7 @@ export function ReviewLightbox({
 
   const published = selected.publicationStatus === "published";
   const hidden = selected.publicationStatus === "hidden";
-  const canToggleVisibility = published || hidden;
+  const canToggleVisibility = published || (hidden && !selected.inspector.editPending);
   const busy = selected.pendingAction !== null;
   const canNavigate = items.length > 1;
   const bibConfirmed = isBibReviewConfirmed(selected.bib);
@@ -518,6 +521,9 @@ export function ReviewLightbox({
                   onClose={() => setInspectorOpen(false)}
                   onDelete={() => onDelete(selected.key)}
                   onOpenBib={() => setBibDialogOpen(true)}
+                  onEdit={() => {
+                    if (selected.mediaId !== null) onEdit(selected.mediaId);
+                  }}
                   onStateAction={() => onToggleVisibility(selected.key)}
                   onToggleFeatured={() => onToggleFeatured(selected.key)}
                 />
@@ -629,6 +635,20 @@ export function ReviewLightbox({
                     ) : (
                       <LoaderCircleIcon className="opacity-60" />
                     )}
+                  </Button>
+                  <Button
+                    aria-label="修图"
+                    className={cn(toolbarButtonClass, "size-8")}
+                    disabled={busy || selected.mediaId === null}
+                    onClick={() => {
+                      if (selected.mediaId !== null) onEdit(selected.mediaId);
+                    }}
+                    size="icon-sm"
+                    title={selected.inspector.editActive ? "继续修图" : "修图"}
+                    type="button"
+                    variant="outline"
+                  >
+                    <SlidersHorizontalIcon />
                   </Button>
                   <Button
                     aria-label="照片属性"
