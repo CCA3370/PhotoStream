@@ -3,8 +3,22 @@
 import type { BibConfigView } from "@photostream/contracts";
 
 import { startLocalBibOcr } from "@/lib/local-bib-ocr";
-import { createLocalReviewPhoto, putLocalReviewPhoto } from "@/lib/local-review-queue";
-import { processPhotoInWorker } from "@/lib/photo-processing";
+import {
+  createLocalReviewPhoto,
+  patchLocalReviewPhoto,
+  putLocalReviewPhoto,
+  updateLocalReviewPhoto,
+} from "@/lib/local-review-queue";
+import {
+  type ProcessedPhotoMetadata,
+  processPhotoInWorkerStreaming,
+} from "@/lib/photo-processing";
+import {
+  createProgressiveUpload,
+  registerAndUploadProgressiveVariant,
+  uploadProgressiveMicroPreview,
+  uploadProgressiveOriginal,
+} from "@/lib/progressive-photo-upload";
 
 export type LocalProcessingTaskStatus = "queued" | "processing" | "staged" | "failed";
 
@@ -354,8 +368,7 @@ class LocalProcessingRuntime {
       if (queued.length === 0) break;
       const next =
         queued.find(
-          (task) =>
-            this.#runningInputBytes + task.file.size <= this.#profile.inputByteBudget,
+          (task) => this.#runningInputBytes + task.file.size <= this.#profile.inputByteBudget,
         ) ?? (this.#runningTasks === 0 ? queued[0] : undefined);
       if (next === undefined) break;
       void this.#runTask(next);
@@ -370,34 +383,97 @@ class LocalProcessingRuntime {
     this.#runningTasks += 1;
     this.#runningInputBytes += task.file.size;
     this.#emit();
+
+    const uploads: Promise<unknown>[] = [];
+    let intentPromise: ReturnType<typeof createProgressiveUpload> | null = null;
+    let metadata: ProcessedPhotoMetadata | null = null;
+
     try {
       await putPersistedTasks([persistedTask(task)]);
-      const processed = await processPhotoInWorker(task.file);
-      const created = createLocalReviewPhoto({
-        albumId: this.#albumId,
-        categoryId: task.categoryId,
-        file: task.file,
-        processed,
-      });
-      const localPhoto = {
-        ...created,
-        id: task.localPhotoId,
-        createdAt: task.createdAt,
-        bib: {
-          ...created.bib,
-          ocrStatus: bibConfig.recognitionEnabled ? ("not_started" as const) : ("disabled" as const),
-          modelVersion: bibConfig.modelVersion,
-          ruleVersion: bibConfig.ruleVersion,
+      await processPhotoInWorkerStreaming(task.file, {
+        onMetadata: async (nextMetadata) => {
+          metadata = nextMetadata;
+          const created = createLocalReviewPhoto({
+            albumId: this.#albumId,
+            categoryId: task.categoryId,
+            file: task.file,
+            processed: { ...nextMetadata, variants: [] },
+          });
+          const localPhoto = {
+            ...created,
+            id: task.localPhotoId,
+            createdAt: task.createdAt,
+            uploadState: "uploading" as const,
+            bib: {
+              ...created.bib,
+              ocrStatus: bibConfig.recognitionEnabled ? ("not_started" as const) : ("disabled" as const),
+              modelVersion: bibConfig.modelVersion,
+              ruleVersion: bibConfig.ruleVersion,
+            },
+          };
+          await putLocalReviewPhoto(localPhoto);
+          intentPromise = createProgressiveUpload({
+            localPhotoId: task.localPhotoId,
+            albumId: this.#albumId,
+            categoryId: task.categoryId,
+            file: task.file,
+            metadata: nextMetadata,
+          });
+          const intent = await intentPromise;
+          await patchLocalReviewPhoto(task.localPhotoId, {
+            intentId: intent.id,
+            mediaId: intent.mediaId,
+            uploadState: "uploading",
+            error: null,
+          });
+          uploads.push(uploadProgressiveOriginal(intent, task.file));
         },
-      };
-      await putLocalReviewPhoto(localPhoto);
-      startLocalBibOcr(localPhoto.id, bibConfig);
+        onVariant: async (variant) => {
+          await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
+            ...current,
+            variants: [
+              ...current.variants.filter((existing) => existing.kind !== variant.kind),
+              { ...variant },
+            ],
+          }));
+          const intent = await intentPromise;
+          if (intent === null) throw new Error("原图上传任务尚未创建");
+          const uploaded = registerAndUploadProgressiveVariant(intent.id, variant);
+          uploads.push(uploaded);
+          if (variant.kind === "photo_480") {
+            const currentMetadata = metadata;
+            if (currentMetadata !== null) {
+              uploads.push(
+                uploaded.then((latest) =>
+                  uploadProgressiveMicroPreview(
+                    latest.mediaId,
+                    variant,
+                    currentMetadata.width,
+                    currentMetadata.height,
+                  ),
+                ),
+              );
+            }
+          }
+        },
+      });
+      await Promise.all(uploads);
+      await patchLocalReviewPhoto(task.localPhotoId, {
+        uploadState: "published",
+        error: null,
+      });
+      startLocalBibOcr(task.localPhotoId, bibConfig);
       await deletePersistedTask(task.id);
       task.status = "staged";
       task.error = null;
     } catch (error) {
+      const message = error instanceof Error ? error.message : "本地处理或上传失败";
       task.status = "failed";
-      task.error = error instanceof Error ? error.message : "本地处理失败";
+      task.error = message;
+      await patchLocalReviewPhoto(task.localPhotoId, {
+        uploadState: "failed",
+        error: message,
+      }).catch(() => undefined);
       if (isResourcePressureError(error) && this.#processingLimit > 1) {
         this.#healthySamples = 0;
         this.#processingLimit -= 1;
