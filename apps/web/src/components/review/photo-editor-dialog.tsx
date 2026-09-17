@@ -241,7 +241,7 @@ export function PhotoEditorDialog({
       });
       setContext(applied);
       setProgress(100);
-      toast.success("修图版本已应用");
+      toast.add({ title: "修图版本已应用", type: "success" });
       await onApplied();
       onOpenChange(false);
     } catch (cause) {
