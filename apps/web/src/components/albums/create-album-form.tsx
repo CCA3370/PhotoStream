@@ -1,6 +1,5 @@
 "use client";
 
-import type { CreateAlbumRequest } from "@photostream/contracts";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -26,7 +25,6 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { clientMutation } from "@/lib/client-api";
 
 interface CreatedAlbumResponse {
@@ -37,7 +35,6 @@ interface CreatedAlbumResponse {
 export function CreateAlbumForm() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<CreateAlbumRequest["publishMode"]>("review");
   const [result, setResult] = useState<CreatedAlbumResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +52,6 @@ export function CreateAlbumForm() {
         body: {
           title: String(formData.get("title") ?? "").trim(),
           description: String(formData.get("description") ?? "").trim(),
-          publishMode: mode,
         },
       });
       setResult(created);
@@ -87,7 +83,6 @@ export function CreateAlbumForm() {
             setError(null);
             setResult(null);
             setCopied(false);
-            setMode("review");
           }
         }}
       >
@@ -99,7 +94,7 @@ export function CreateAlbumForm() {
           <DialogHeader>
             <DialogTitle>{result === null ? "创建活动" : "活动已创建"}</DialogTitle>
             <DialogDescription>
-              {result === null ? "填写活动信息并选择照片发布方式。" : result.album.title}
+              {result === null ? "填写活动信息。照片上传完成后默认保持隐藏，可在审核页选择显示。" : result.album.title}
             </DialogDescription>
           </DialogHeader>
           {result === null ? (
@@ -112,26 +107,6 @@ export function CreateAlbumForm() {
                 <Field>
                   <FieldLabel htmlFor="album-description">说明</FieldLabel>
                   <Textarea id="album-description" maxLength={1000} name="description" rows={3} />
-                </Field>
-                <Field>
-                  <FieldLabel id="publish-mode-label">发布方式</FieldLabel>
-                  <ToggleGroup
-                    aria-labelledby="publish-mode-label"
-                    className="w-full"
-                    value={[mode]}
-                    onValueChange={(value) => {
-                      const next = value[0];
-                      if (next === "review" || next === "auto") setMode(next);
-                    }}
-                    variant="outline"
-                  >
-                    <ToggleGroupItem className="min-h-10 flex-1" value="review">
-                      审核后发布
-                    </ToggleGroupItem>
-                    <ToggleGroupItem className="min-h-10 flex-1" value="auto">
-                      自动发布
-                    </ToggleGroupItem>
-                  </ToggleGroup>
                 </Field>
               </FieldGroup>
               <DialogFooter>
