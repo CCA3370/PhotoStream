@@ -610,7 +610,14 @@ export class OperationsService {
         actorId: claimed.requestedBy,
         action: "media.deletion.completed",
         targetId: claimed.mediaId,
-        changedFields: ["objects", "editObjects", "cdn", "bibData", "faceIndexTask", "publicationStatus"],
+        changedFields: [
+          "objects",
+          "editObjects",
+          "cdn",
+          "bibData",
+          "faceIndexTask",
+          "publicationStatus",
+        ],
         requestId: claimed.requestId,
       });
     });
