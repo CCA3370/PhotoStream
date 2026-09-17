@@ -10,6 +10,7 @@ import * as microPreviewSchema from "./micro-preview-schema.js";
 import * as coreSchema from "./schema.js";
 import * as searchAnalyticsSchema from "./search-analytics-schema.js";
 import * as shareSchema from "./share-schema.js";
+import * as viewerFeedbackSchema from "./viewer-feedback-schema.js";
 
 export const schema = {
   ...coreSchema,
@@ -20,6 +21,7 @@ export const schema = {
   ...shareSchema,
   ...dataSaverSchema,
   ...microPreviewSchema,
+  ...viewerFeedbackSchema,
 };
 
 export type Database = ReturnType<typeof createDatabase>;
