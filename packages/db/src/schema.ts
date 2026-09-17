@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "reviewer", "uploader"]);
@@ -43,6 +44,20 @@ export const variantKindEnum = pgEnum("variant_kind", [
   "photo_960",
   "photo_1920",
   "photo_original",
+]);
+export const mediaEditRevisionStatusEnum = pgEnum("media_edit_revision_status", [
+  "rendering",
+  "uploading",
+  "ready",
+  "active",
+  "failed",
+  "discarded",
+]);
+export const mediaEditVariantKindEnum = pgEnum("media_edit_variant_kind", [
+  "photo_480",
+  "photo_960",
+  "photo_1920",
+  "photo_download",
 ]);
 export const uploadIntentStatusEnum = pgEnum("upload_intent_status", [
   "active",
@@ -363,6 +378,86 @@ export const mediaVariants = pgTable(
     index("media_variants_media_verified_idx").on(table.mediaId, table.verified),
   ],
 );
+
+
+export const mediaEditRevisions = pgTable(
+  "media_edit_revisions",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    mediaId: uuid("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: mediaEditRevisionStatusEnum("status").notNull().default("rendering"),
+    basedOnRevisionId: uuid("based_on_revision_id").references(
+      (): AnyPgColumn => mediaEditRevisions.id,
+      { onDelete: "set null" },
+    ),
+    basedOnGeneration: integer("based_on_generation").notNull(),
+    pipelineVersion: varchar("pipeline_version", { length: 80 }).notNull(),
+    recipeVersion: integer("recipe_version").notNull(),
+    recipeJson: jsonb("recipe_json").$type<Record<string, unknown>>().notNull(),
+    denoiseModel: varchar("denoise_model", { length: 120 }),
+    denoiseModelVersion: varchar("denoise_model_version", { length: 120 }),
+    deblurModel: varchar("deblur_model", { length: 120 }),
+    deblurModelVersion: varchar("deblur_model_version", { length: 120 }),
+    sourceVariantId: uuid("source_variant_id").references(() => mediaVariants.id, {
+      onDelete: "restrict",
+    }),
+    readyAt: timestamp("ready_at", { withTimezone: true }),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    failureCode: varchar("failure_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [
+    index("media_edit_revisions_media_created_idx").on(table.mediaId, table.createdAt),
+    index("media_edit_revisions_media_status_idx").on(table.mediaId, table.status),
+  ],
+);
+
+export const mediaEditVariants = pgTable(
+  "media_edit_variants",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    editRevisionId: uuid("edit_revision_id")
+      .notNull()
+      .references(() => mediaEditRevisions.id, { onDelete: "cascade" }),
+    kind: mediaEditVariantKindEnum("kind").notNull(),
+    objectKey: varchar("object_key", { length: 512 }).notNull(),
+    format: varchar("format", { length: 16 }).notNull(),
+    contentType: varchar("content_type", { length: 80 }).notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    expectedBytes: bigint("expected_bytes", { mode: "number" }).notNull(),
+    bytes: bigint("bytes", { mode: "number" }),
+    etag: varchar("etag", { length: 128 }),
+    verified: boolean("verified").notNull().default(false),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("media_edit_variants_revision_kind_unique").on(table.editRevisionId, table.kind),
+    uniqueIndex("media_edit_variants_object_key_unique").on(table.objectKey),
+    index("media_edit_variants_revision_verified_idx").on(table.editRevisionId, table.verified),
+  ],
+);
+
+export const mediaEditStates = pgTable("media_edit_states", {
+  mediaId: uuid("media_id")
+    .primaryKey()
+    .references(() => media.id, { onDelete: "cascade" }),
+  activeRevisionId: uuid("active_revision_id").references(() => mediaEditRevisions.id, {
+    onDelete: "set null",
+  }),
+  pendingRevisionId: uuid("pending_revision_id").references(() => mediaEditRevisions.id, {
+    onDelete: "set null",
+  }),
+  generation: integer("generation").notNull().default(0),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const uploadIntents = pgTable(
   "upload_intents",
