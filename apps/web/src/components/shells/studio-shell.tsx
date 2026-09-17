@@ -6,6 +6,7 @@ import {
   LayoutDashboardIcon,
   LoaderCircleIcon,
   LogOutIcon,
+  MessageSquareTextIcon,
   ScrollTextIcon,
   UsersIcon,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { useState } from "react";
 
+import { ViewerFeedbackMonitor } from "@/components/feedback/viewer-feedback-monitor";
 import { InternalProviders } from "@/components/internal-providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,12 @@ const navigation = [
     icon: ImagesIcon,
     roles: ["admin", "reviewer", "uploader"],
   },
+  {
+    href: "/studio/feedback",
+    label: "反馈",
+    icon: MessageSquareTextIcon,
+    roles: ["admin", "reviewer", "uploader"],
+  },
   { href: "/studio/users", label: "成员", icon: UsersIcon, roles: ["admin"] },
   { href: "/studio/audit", label: "审计", icon: ScrollTextIcon, roles: ["admin"] },
 ] as const satisfies ReadonlyArray<{
@@ -78,6 +86,7 @@ function isNavigationActive(pathname: string, href: string): boolean {
 function sectionTitle(pathname: string, fallback: string): string {
   if (pathname === "/studio") return "仪表盘";
   if (pathname.startsWith("/studio/albums")) return "活动管理";
+  if (pathname.startsWith("/studio/feedback")) return "观众反馈";
   if (pathname.startsWith("/studio/users")) return "成员管理";
   if (pathname.startsWith("/studio/audit")) return "审计日志";
   return fallback;
@@ -112,6 +121,7 @@ export function StudioShell({
 
   return (
     <InternalProviders>
+      <ViewerFeedbackMonitor />
       <div className="workbench-theme min-h-screen bg-sidebar text-foreground">
         <a
           className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
