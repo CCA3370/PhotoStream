@@ -11,7 +11,6 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   PanelRightOpenIcon,
-  SendIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -84,7 +83,7 @@ function distance(points: readonly Point[]): number {
 function stateLabel(status: string): string {
   if (status === "published") return "隐藏";
   if (status === "hidden") return "显示";
-  return "发布";
+  return "等待上传";
 }
 
 function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
@@ -105,7 +104,6 @@ export function ReviewLightbox({
   onClose,
   onDelete,
   onSelect,
-  onStateAction,
   onToggleFeatured,
   onToggleVisibility,
   onBibStateChange,
@@ -252,9 +250,7 @@ export function ReviewLightbox({
         if (event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
           onToggleVisibility(selected.key);
-          return;
         }
-        onStateAction(selected.key);
       } else if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
@@ -281,7 +277,6 @@ export function ReviewLightbox({
     fullscreenSupported,
     onClose,
     onDelete,
-    onStateAction,
     onToggleFeatured,
     onToggleVisibility,
     resetView,
@@ -372,6 +367,7 @@ export function ReviewLightbox({
 
   const published = selected.publicationStatus === "published";
   const hidden = selected.publicationStatus === "hidden";
+  const canToggleVisibility = published || hidden;
   const busy = selected.pendingAction !== null;
   const canNavigate = items.length > 1;
   const bibConfirmed = isBibReviewConfirmed(selected.bib);
@@ -394,8 +390,7 @@ export function ReviewLightbox({
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
           <DialogDescription className="sr-only">
-            左右键切换，滚轮、双击或加减键缩放，拖动查看；空格发布或切换显示状态，回车切换精选，连续两次
-            Delete 删除。
+            左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次 Delete 删除。
           </DialogDescription>
 
           <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
@@ -522,7 +517,7 @@ export function ReviewLightbox({
                   onClose={() => setInspectorOpen(false)}
                   onDelete={() => onDelete(selected.key)}
                   onOpenBib={() => setBibDialogOpen(true)}
-                  onStateAction={() => onStateAction(selected.key)}
+                  onStateAction={() => onToggleVisibility(selected.key)}
                   onToggleFeatured={() => onToggleFeatured(selected.key)}
                 />
               </div>
@@ -608,8 +603,8 @@ export function ReviewLightbox({
                       published &&
                         "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
                     )}
-                    disabled={busy}
-                    onClick={() => onStateAction(selected.key)}
+                    disabled={busy || !canToggleVisibility}
+                    onClick={() => onToggleVisibility(selected.key)}
                     size="icon-sm"
                     style={
                       hidden
@@ -620,18 +615,18 @@ export function ReviewLightbox({
                           }
                         : undefined
                     }
-                    title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "发布 (Space)"}
+                    title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "等待上传完成"}
                     type="button"
                     variant="outline"
                   >
                     {selected.pendingAction === "state" ? (
                       <LoaderCircleIcon className="animate-spin" />
                     ) : published ? (
-                      <EyeIcon />
-                    ) : hidden ? (
                       <EyeOffIcon />
+                    ) : hidden ? (
+                      <EyeIcon />
                     ) : (
-                      <SendIcon />
+                      <LoaderCircleIcon className="opacity-60" />
                     )}
                   </Button>
                   <Button
