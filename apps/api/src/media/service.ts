@@ -2183,15 +2183,19 @@ export class PhotoService {
       const baseVariants = byMedia.get(media.id) ?? [];
       const browserVariants =
         activeEditVariants.length === 0
-          ? baseVariants.filter((variant) => publicVariantKinds.has(variant.kind as PhotoVariantKind))
+          ? baseVariants.filter((variant) =>
+              publicVariantKinds.has(variant.kind as PhotoVariantKind),
+            )
           : activeEditVariants.filter((variant) => variant.kind !== "photo_download");
       const activeDownload =
         activeEditVariants.length === 0
           ? baseVariants.find(
-              (variant) => variant.kind === "photo_original" && variant.verified && variant.bytes !== null,
+              (variant) =>
+                variant.kind === "photo_original" && variant.verified && variant.bytes !== null,
             )
           : activeEditVariants.find(
-              (variant) => variant.kind === "photo_download" && variant.verified && variant.bytes !== null,
+              (variant) =>
+                variant.kind === "photo_download" && variant.verified && variant.bytes !== null,
             );
       return {
         id: media.id,
