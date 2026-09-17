@@ -15,8 +15,6 @@ export interface ViewerFeedbackList {
   readonly latestId: number;
 }
 
-export const viewerFeedbackCreatedEvent = "photostream:viewer-feedback-created";
-
 export function viewerFeedbackKindLabel(kind: ViewerFeedbackKind): string {
   if (kind === "problem") return "遇到问题";
   if (kind === "suggestion") return "改进建议";
