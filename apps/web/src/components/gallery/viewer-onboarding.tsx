@@ -712,8 +712,7 @@ export function ViewerOnboarding({
               <h2 className="text-base font-semibold leading-6" id="viewer-onboarding-title">
                 {welcome
                   ? "欢迎使用北航实验学校中学部照片实时直播系统"
-                  : (currentMainStep?.title ??
-                    (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
+                  : (currentMainStep?.title ?? (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
               </h2>
             </div>
 
