@@ -156,9 +156,7 @@ function complete(transaction: IDBTransaction): Promise<void> {
     transaction.addEventListener("abort", () =>
       reject(transaction.error ?? new Error("本地队列事务已取消")),
     );
-    transaction.addEventListener("error", () =>
-      reject(transaction.error ?? new Error("本地队列事务失败")),
-    );
+    transaction.addEventListener("error", () => reject(transaction.error ?? new Error("本地队列事务失败")));
   });
 }
 
@@ -229,6 +227,24 @@ export async function listLocalReviewPhotos(albumId: string): Promise<LocalRevie
     return rows
       .map(normalizeStoredPhoto)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  } finally {
+    database.close();
+  }
+}
+
+export async function findLocalReviewPhotoByMediaId(
+  mediaId: string,
+): Promise<LocalReviewPhoto | null> {
+  if (!localQueueSupported()) return null;
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(storeName, "readonly");
+    const rows = await requestResult(
+      transaction.objectStore(storeName).getAll() as IDBRequest<LocalReviewPhoto[]>,
+    );
+    await complete(transaction);
+    const row = rows.find((candidate) => candidate.mediaId === mediaId);
+    return row === undefined ? null : normalizeStoredPhoto(row);
   } finally {
     database.close();
   }
