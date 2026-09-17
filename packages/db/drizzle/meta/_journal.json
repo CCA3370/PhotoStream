@@ -190,6 +190,13 @@
       "when": 1789733700000,
       "tag": "0026_hidden_upload_default",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1789744200000,
+      "tag": "0027_media_edit_revisions",
+      "breakpoints": true
     }
   ]
 }
