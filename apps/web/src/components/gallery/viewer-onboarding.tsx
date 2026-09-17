@@ -22,7 +22,7 @@ interface ViewerOnboardingProps {
   readonly searchAvailable: boolean;
 }
 
-type MainTarget = "filters" | "gallery" | "search";
+type MainTarget = "filters" | "help" | "search";
 type TargetKind = MainTarget | "lightbox-navigation" | "lightbox-toolbar";
 
 interface MainStep {
@@ -111,9 +111,8 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
     );
   }
 
-  if (kind === "gallery") {
-    const gallery = document.querySelector<HTMLElement>('section[aria-label="活动照片网格"]');
-    return gallery?.querySelector<HTMLElement>("[data-media-id]") ?? gallery;
+  if (kind === "help") {
+    return document.querySelector<HTMLElement>("[data-viewer-help-trigger]");
   }
 
   if (kind === "lightbox-navigation") {
@@ -230,8 +229,6 @@ export function ViewerOnboarding({
   attributeFilterEnabled,
   bibSearchEnabled,
   faceSearchEnabled,
-  hasPhotos,
-  live,
   searchAvailable,
 }: ViewerOnboardingProps) {
   const [mounted, setMounted] = useState(false);
@@ -271,19 +268,14 @@ export function ViewerOnboarding({
     }
 
     steps.push({
-      target: "gallery",
-      title: hasPhotos ? "浏览活动照片" : "照片会显示在这里",
-      description: hasPhotos
-        ? live
-          ? "点击任意照片即可进入大图查看；活动进行期间，新照片还会持续更新。"
-          : "点击任意照片即可进入大图查看。"
-        : live
-          ? "活动照片发布后会持续出现在这里，你可以直接点击照片进入大图查看。"
-          : "活动照片发布后会显示在这里，你可以直接点击照片进入大图查看。",
+      target: "help",
+      title: "帮助与反馈",
+      description:
+        "点击右下角问号，可以随时重新查看使用引导，也可以提交遇到的问题或建议。我们会尽快查看并处理你的反馈，部分问题最快可在约 10 分钟内完成调整。",
     });
 
     return steps;
-  }, [hasPhotos, live, searchAvailable, searchMethods]);
+  }, [searchAvailable, searchMethods]);
 
   const beginMain = useCallback(() => {
     setSpotlightRect(null);
@@ -384,7 +376,7 @@ export function ViewerOnboarding({
       return;
     }
 
-    if (targetKind === "filters" || targetKind === "search" || targetKind === "gallery") {
+    if (targetKind === "filters" || targetKind === "search") {
       const bounds = targetBounds(targetKind, target);
       const obscuredTop = bounds.top < 124;
       const obscuredBottom = bounds.bottom > window.innerHeight - 160;
@@ -406,7 +398,7 @@ export function ViewerOnboarding({
         return;
       }
       const bounds = targetBounds(targetKind, current);
-      const padding = targetKind === "gallery" ? 5 : targetKind.startsWith("lightbox") ? 10 : 8;
+      const padding = targetKind.startsWith("lightbox") ? 10 : 8;
       const left = Math.max(8, bounds.left - padding);
       const top = Math.max(8, bounds.top - padding);
       const right = Math.min(window.innerWidth - 8, bounds.right + padding);
@@ -720,7 +712,8 @@ export function ViewerOnboarding({
               <h2 className="text-base font-semibold leading-6" id="viewer-onboarding-title">
                 {welcome
                   ? "欢迎使用北航实验学校中学部照片实时直播系统"
-                  : (currentMainStep?.title ?? (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
+                  : (currentMainStep?.title ??
+                    (lightboxToolbar ? "更多照片操作" : "继续浏览照片"))}
               </h2>
             </div>
 
