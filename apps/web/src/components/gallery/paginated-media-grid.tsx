@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MediaGrid } from "@/components/gallery/media-grid";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
-import { clientGet } from "@/lib/client-api";
+import { ClientApiError, clientGet } from "@/lib/client-api";
 import {
   getWarmDerivedImageUrl,
   isWarmDerivedImageDecoded,
@@ -31,7 +31,7 @@ interface GridPreviewVariant {
 const publicMediaPageSize = 60;
 const dataSaverMediaPageSize = 30;
 const publicMediaVisibilityDelayMs = 15_000;
-const livePreviewRetryDelays = [0, 400, 1_000] as const;
+const livePreviewRetryDelays = [0, 400, 1_000, 2_500, 5_000, 10_000, 30_000] as const;
 
 function mergeMedia(
   current: readonly PublicMediaView[],
@@ -122,6 +122,14 @@ function wait(delay: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, delay));
 }
 
+function livePreviewRetryDelay(attempt: number): number {
+  return (
+    livePreviewRetryDelays[Math.min(attempt, livePreviewRetryDelays.length - 1)] ??
+    livePreviewRetryDelays[livePreviewRetryDelays.length - 1] ??
+    30_000
+  );
+}
+
 export function PaginatedMediaGrid({
   categoryId,
   dataSaverEnabled = false,
@@ -155,6 +163,7 @@ export function PaginatedMediaGrid({
   const [visibilityNow, setVisibilityNow] = useState(initialVisibilityNow);
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
+  const cancelledLiveIds = useRef(new Set<string>());
   const pageSize = dataSaverEnabled ? dataSaverMediaPageSize : publicMediaPageSize;
 
   const allItems = useMemo(() => pages.flat(), [pages]);
@@ -205,6 +214,7 @@ export function PaginatedMediaGrid({
     const remove = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string") return;
+      cancelledLiveIds.current.add(detail.mediaId);
       setPages((current) =>
         current
           .map((page) => page.filter((item) => item.id !== detail.mediaId))
@@ -246,16 +256,19 @@ export function PaginatedMediaGrid({
     const preparePublishedMedia = async (mediaId: string): Promise<void> => {
       if (inFlightIds.has(mediaId)) return;
       inFlightIds.add(mediaId);
-      let lastError: unknown = null;
+      let attempt = 0;
+      let errorReported = false;
       try {
-        for (const delay of livePreviewRetryDelays) {
+        while (!disposed && !cancelledLiveIds.current.has(mediaId)) {
+          const delay = livePreviewRetryDelay(attempt);
           if (delay > 0) await wait(delay);
-          if (disposed) return;
+          if (disposed || cancelledLiveIds.current.has(mediaId)) return;
+
           try {
             const media = await resolvePublishedMedia(mediaId);
-            if (media === null || disposed) return;
+            if (media === null || disposed || cancelledLiveIds.current.has(mediaId)) return;
             await prepareGridPreview(media, slug);
-            if (disposed) return;
+            if (disposed || cancelledLiveIds.current.has(mediaId)) return;
 
             setPreparedLiveIds((current) => {
               if (current.has(media.id)) return current;
@@ -271,13 +284,20 @@ export function PaginatedMediaGrid({
             void refreshFeatured().catch(() => undefined);
             return;
           } catch (caught) {
-            lastError = caught;
+            if (
+              caught instanceof ClientApiError &&
+              caught.response?.code === "MEDIA_NOT_FOUND"
+            ) {
+              return;
+            }
+            attempt += 1;
+            if (!errorReported && attempt >= 3 && !disposed) {
+              errorReported = true;
+              setLiveError(
+                caught instanceof Error ? caught.message : "新照片缩略图加载失败，正在重试",
+              );
+            }
           }
-        }
-        if (!disposed) {
-          setLiveError(
-            lastError instanceof Error ? lastError.message : "新照片缩略图加载失败，请稍后重试",
-          );
         }
       } finally {
         inFlightIds.delete(mediaId);
@@ -287,6 +307,7 @@ export function PaginatedMediaGrid({
     const published = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string") return;
+      cancelledLiveIds.current.delete(detail.mediaId);
       void preparePublishedMedia(detail.mediaId);
     };
 
