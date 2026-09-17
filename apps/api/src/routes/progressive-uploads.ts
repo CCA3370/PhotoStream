@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
+import { requireInternalCsrf, type requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import type {
@@ -29,13 +29,21 @@ const progressiveUploadSchema = z
     categoryId: z.string().uuid().nullable().default(null),
     width: z.number().int().min(1).max(100_000),
     height: z.number().int().min(1).max(100_000),
-    totalBytes: z.number().int().min(1).max(50 * 1024 * 1024),
+    totalBytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(50 * 1024 * 1024),
     capturedAt: z.string().datetime().nullable().default(null),
     original: z
       .object({
         format: z.enum(["jpeg", "png", "webp"]),
         contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
-        bytes: z.number().int().min(1).max(50 * 1024 * 1024),
+        bytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(50 * 1024 * 1024),
       })
       .strict(),
   })
@@ -45,11 +53,20 @@ const progressiveUploadSchema = z
       context.addIssue({ code: "custom", message: "照片总像素不能超过 100MP", path: ["width"] });
     }
     if (value.original.bytes !== value.totalBytes) {
-      context.addIssue({ code: "custom", message: "原图字节数必须与照片声明一致", path: ["original", "bytes"] });
+      context.addIssue({
+        code: "custom",
+        message: "原图字节数必须与照片声明一致",
+        path: ["original", "bytes"],
+      });
     }
-    const expectedType = value.original.format === "jpeg" ? "image/jpeg" : `image/${value.original.format}`;
+    const expectedType =
+      value.original.format === "jpeg" ? "image/jpeg" : `image/${value.original.format}`;
     if (value.original.contentType !== expectedType) {
-      context.addIssue({ code: "custom", message: "原图格式与 Content-Type 不一致", path: ["original", "contentType"] });
+      context.addIssue({
+        code: "custom",
+        message: "原图格式与 Content-Type 不一致",
+        path: ["original", "contentType"],
+      });
     }
   });
 
@@ -60,7 +77,11 @@ const progressiveVariantSchema = z
     contentType: z.enum(["image/webp", "image/jpeg"]),
     width: z.number().int().min(1).max(1_920),
     height: z.number().int().min(1).max(1_920),
-    bytes: z.number().int().min(1).max(50 * 1024 * 1024),
+    bytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(50 * 1024 * 1024),
   })
   .strict();
 
