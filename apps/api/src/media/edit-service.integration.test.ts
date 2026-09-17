@@ -4,8 +4,8 @@ import { createDatabase, createPool, migrateDatabase, schema } from "@photostrea
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
 import { MediaEditService } from "./edit-service.js";
+import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (databaseUrl !== undefined && new URL(databaseUrl).pathname !== "/photostream_test") {
@@ -289,10 +289,11 @@ maybeDescribe("media edit revisions", () => {
       service.source({ id: reviewerId, role: "reviewer" }, mediaId),
     ).rejects.toMatchObject({ code: "DOWNLOAD_NOT_READY" });
 
-    storage.objects.set(
-      `media/albums/${albumId}/photos/${mediaId}/original.jpg`,
-      { bytes: 4_000_000, contentType: "image/jpeg", etag: "base-etag" },
-    );
+    storage.objects.set(`media/albums/${albumId}/photos/${mediaId}/original.jpg`, {
+      bytes: 4_000_000,
+      contentType: "image/jpeg",
+      etag: "base-etag",
+    });
     await database
       .update(schema.mediaVariants)
       .set({ verified: true, bytes: 4_000_000, etag: "base-etag", completedAt: new Date() })
