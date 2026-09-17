@@ -324,7 +324,7 @@ button[title="隐藏 (Space)"]:hover {
 }
 
 /* Desktop photo-search entry: compact utility pill instead of a full-width card. */
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
   .public-theme
     div.flex.items-center.gap-1:has(> button:first-child > span:first-child > svg.lucide-search) {
     width: max-content;
