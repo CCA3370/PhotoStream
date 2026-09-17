@@ -19,6 +19,7 @@ export interface PhotoEditRenderedOutput {
 type WorkerResponse =
   | { readonly id: string; readonly type: "analysis"; readonly analysis: PhotoEditAnalysis }
   | { readonly id: string; readonly type: "progress"; readonly progress: number }
+  | { readonly id: string; readonly type: "preview"; readonly blob: Blob }
   | {
       readonly id: string;
       readonly type: "rendered";
@@ -84,6 +85,18 @@ export function analyzeMediaEditSource(
   return runWorker(
     { type: "analyze", source },
     (message) => (message.type === "analysis" ? message.analysis : undefined),
+    options,
+  );
+}
+
+export function renderMediaEditPreview(
+  source: Blob,
+  recipe: PhotoEditRecipe,
+  options: { readonly signal?: AbortSignal } = {},
+): Promise<Blob> {
+  return runWorker(
+    { type: "preview", source, recipe },
+    (message) => (message.type === "preview" ? message.blob : undefined),
     options,
   );
 }
