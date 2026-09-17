@@ -282,9 +282,6 @@ export class ProgressiveUploadService {
       if (row.media.uploaderId !== options.actor.id && options.actor.role !== "admin") {
         throw new AppError({ code: "FORBIDDEN", message: "当前角色无权访问该上传任务", statusCode: 403 });
       }
-      if (row.intent.status !== "active" || row.intent.expiresAt <= new Date()) {
-        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
-      }
 
       const maxEdges = { photo_480: 480, photo_960: 960, photo_1920: 1_920 } as const;
       const expected = expectedDerivedDimensions(
@@ -323,6 +320,36 @@ export class ProgressiveUploadService {
         throw new AppError({
           code: "STATE_CONFLICT",
           message: "同一派生图已经使用不同规格登记",
+          statusCode: 409,
+        });
+      }
+      if (row.intent.status !== "active" || row.intent.expiresAt <= new Date()) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
+      }
+
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`uploader-upload-quota:${row.media.uploaderId}`}, 0))`,
+      );
+      const [uploaderQuota] = await transaction
+        .select({
+          outstandingBytes: sql<number>`coalesce(sum(case when ${schema.mediaVariants.verified} = false then ${schema.mediaVariants.expectedBytes} else 0 end), 0)::bigint`,
+        })
+        .from(schema.uploadIntents)
+        .innerJoin(schema.mediaVariants, eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId))
+        .where(
+          and(
+            eq(schema.uploadIntents.uploaderId, row.media.uploaderId),
+            eq(schema.uploadIntents.status, "active"),
+            gt(schema.uploadIntents.expiresAt, new Date()),
+          ),
+        );
+      if (
+        Number(uploaderQuota?.outstandingBytes ?? 0) + options.variant.bytes >
+        maxOutstandingUploadBytesPerUploader
+      ) {
+        throw new AppError({
+          code: "MEDIA_LIMIT_EXCEEDED",
+          message: "未完成上传占用已达到上限，请等待现有上传完成后重试",
           statusCode: 409,
         });
       }
