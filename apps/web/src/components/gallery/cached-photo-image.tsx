@@ -27,8 +27,23 @@ interface FallbackState {
   readonly mode: "direct" | "failed";
 }
 
+interface MicroPreviewDecision {
+  readonly identity: string;
+  readonly enabled: boolean;
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+function isInsideViewport(element: Element): boolean {
+  const bounds = element.getBoundingClientRect();
+  return (
+    bounds.bottom > 0 &&
+    bounds.right > 0 &&
+    bounds.top < window.innerHeight &&
+    bounds.left < window.innerWidth
+  );
 }
 
 export function CachedPhotoImage({
@@ -66,6 +81,9 @@ export function CachedPhotoImage({
   const [active, setActive] = useState(priority);
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
   const [failedMicroUrl, setFailedMicroUrl] = useState<string | null>(null);
+  const [microPreviewDecision, setMicroPreviewDecision] = useState<MicroPreviewDecision | null>(
+    null,
+  );
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
   const cacheRequest = { scope, mediaId, kind, bytes };
   const telemetryScope = scope === "public-media" ? undefined : scope;
@@ -77,8 +95,10 @@ export function CachedPhotoImage({
   const displayUrl =
     fallbackMode === "direct" ? sourceUrl : fallbackMode === "failed" ? null : resolvedUrl;
   const deferredGridThumbnail = kind === "photo_480" && !cacheOnly && !priority;
+  const microPreviewEnabled =
+    microPreviewDecision?.identity === identity && microPreviewDecision.enabled;
   const microUrl =
-    deferredGridThumbnail && scope !== "public-media"
+    deferredGridThumbnail && microPreviewEnabled && scope !== "public-media"
       ? `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/micro-preview`
       : null;
   const microFailed = microUrl !== null && failedMicroUrl === microUrl;
@@ -87,6 +107,13 @@ export function CachedPhotoImage({
     if (cacheOnly || priority) return;
     const host = hostRef.current;
     if (host === null) return;
+
+    if (deferredGridThumbnail) {
+      const initiallyVisible = isInsideViewport(host);
+      setMicroPreviewDecision({ identity, enabled: !initiallyVisible });
+      if (initiallyVisible) setActive(true);
+    }
+
     if (!("IntersectionObserver" in window)) {
       setActive(true);
       return;
@@ -125,7 +152,7 @@ export function CachedPhotoImage({
       clearTimer();
       observer.disconnect();
     };
-  }, [cacheOnly, deferredGridThumbnail, priority]);
+  }, [cacheOnly, deferredGridThumbnail, identity, priority]);
 
   useEffect(
     () =>
@@ -215,7 +242,7 @@ export function CachedPhotoImage({
 
   return (
     <span className="absolute inset-0" ref={hostRef}>
-      {microUrl !== null && !microFailed && displayUrl === null ? (
+      {microUrl !== null && !microFailed ? (
         <Image
           alt=""
           aria-hidden="true"
