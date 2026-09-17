@@ -26,7 +26,7 @@ import {
 import {
   applyMediaEditRecipe,
   getMediaEditContext,
-  revertMediaEditToBase,
+  switchMediaEditRevision,
 } from "@/lib/photo-edit/revision-client";
 import { analyzeMediaEditSource, renderMediaEditPreview } from "@/lib/photo-edit/runtime";
 import {
@@ -75,6 +75,17 @@ function RangeControl({
       <span className="text-right tabular-nums text-muted-foreground">{format(value)}</span>
     </label>
   );
+}
+
+function revisionTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "历史版本";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function sourceLabel(origin: MediaEditSourceOrigin | null): string {
@@ -227,13 +238,13 @@ export function PhotoEditorDialog({
     }
   }
 
-  async function revertToBase(): Promise<void> {
+  async function switchRevision(targetRevisionId: string | null): Promise<void> {
     if (
       mediaId === null ||
       context === null ||
-      context.state.activeRevisionId === null ||
       busy ||
-      context.state.pendingRevisionId !== null
+      context.state.pendingRevisionId !== null ||
+      context.state.activeRevisionId === targetRevisionId
     ) {
       return;
     }
@@ -241,19 +252,27 @@ export function PhotoEditorDialog({
     setError(null);
     setProgress(15);
     try {
-      const reverted = await revertMediaEditToBase({
+      const switched = await switchMediaEditRevision({
         mediaId,
         expectedGeneration: context.state.generation,
         expectedActiveRevisionId: context.state.activeRevisionId,
+        targetRevisionId,
       });
-      setContext(reverted);
-      setRecipe(defaultPhotoEditRecipe);
+      setContext(switched);
+      setRecipe(
+        switched.activeRevision === null
+          ? defaultPhotoEditRecipe
+          : photoEditRecipeFromUnknown(switched.activeRevision.recipeJson),
+      );
       setProgress(100);
-      toast.add({ title: "已恢复原始版本", type: "success" });
+      toast.add({
+        title: targetRevisionId === null ? "已恢复原始版本" : "已切换修图版本",
+        type: "success",
+      });
       await onApplied();
-      onOpenChange(false);
+      setStage("ready");
     } catch (cause) {
-      setError(userFacingErrorMessage(cause, "恢复原始版本失败。"));
+      setError(userFacingErrorMessage(cause, "切换照片版本失败。"));
       setStage("ready");
     }
   }
@@ -322,6 +341,42 @@ export function PhotoEditorDialog({
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
                   另一项修图版本正在处理中。当前参数可以查看，但在该版本完成或取消前不能应用新的版本。
                 </div>
+              ) : null}
+
+              {context !== null && context.history.length > 0 ? (
+                <section className="flex flex-col gap-2">
+                  <h3 className="text-xs font-semibold text-muted-foreground">版本</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      disabled={busy || context.state.pendingRevisionId !== null}
+                      onClick={() => void switchRevision(null)}
+                      size="sm"
+                      type="button"
+                      variant={context.state.activeRevisionId === null ? "default" : "outline"}
+                    >
+                      原始版本
+                    </Button>
+                    {context.history.map((revision, index) => (
+                      <Button
+                        disabled={busy || context.state.pendingRevisionId !== null}
+                        key={revision.id}
+                        onClick={() => void switchRevision(revision.id)}
+                        size="sm"
+                        type="button"
+                        variant={
+                          context.state.activeRevisionId === revision.id ? "default" : "outline"
+                        }
+                      >
+                        {context.state.activeRevisionId === revision.id
+                          ? "当前修图"
+                          : `版本 ${context.history.length - index}`}
+                        <span className="ml-1 text-[10px] opacity-70">
+                          {revisionTime(revision.createdAt)}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                </section>
               ) : null}
 
               <div className="grid grid-cols-2 gap-2">
@@ -461,7 +516,7 @@ export function PhotoEditorDialog({
           context?.state.activeRevisionId !== undefined ? (
             <Button
               disabled={busy || context.state.pendingRevisionId !== null}
-              onClick={() => void revertToBase()}
+              onClick={() => void switchRevision(null)}
               type="button"
               variant="outline"
             >
