@@ -59,9 +59,9 @@ function formatBytes(bytes: number): string {
 
 function taskLabel(status: LocalProcessingTaskStatus): string {
   if (status === "queued") return "等待处理";
-  if (status === "processing") return "本地处理中";
-  if (status === "staged") return "已进入本机审核队列";
-  return "处理失败";
+  if (status === "processing") return "处理中并上传";
+  if (status === "staged") return "已上传（默认隐藏）";
+  return "处理或上传失败";
 }
 
 export function UploadQueue({
@@ -108,8 +108,8 @@ export function UploadQueue({
     });
     void runtime.initialize().catch((error) => {
       toast.add({
-        title: "本地处理队列恢复失败",
-        description: error instanceof Error ? error.message : "无法恢复未完成的本地任务",
+        title: "上传队列恢复失败",
+        description: error instanceof Error ? error.message : "无法恢复未完成的上传任务",
         type: "error",
       });
     });
@@ -119,7 +119,7 @@ export function UploadQueue({
   async function enqueue(files: readonly File[]): Promise<void> {
     if (files.length === 0) return;
     if (!localQueueSupported()) {
-      toast.add({ title: "当前浏览器不支持本地审核队列", type: "error" });
+      toast.add({ title: "当前浏览器不支持本地上传队列", type: "error" });
       return;
     }
     const valid = files.filter((file) => acceptedTypes.has(file.type));
@@ -129,8 +129,9 @@ export function UploadQueue({
       if (valid.length > 0) {
         await runtime.enqueue(valid, selectedCategory);
         toast.add({
-          title: `已加入处理队列 ${valid.length} 张`,
-          description: "原始文件已保存在本机；切换页面或刷新后会继续处理。",
+          title: `已开始处理并上传 ${valid.length} 张`,
+          description:
+            "原图会立即开始上传，派生图生成后随即上传；完成后默认隐藏。原图同时保留在本机供管理端优先预览。",
           type: "success",
         });
       }
@@ -143,7 +144,7 @@ export function UploadQueue({
       }
     } catch (error) {
       toast.add({
-        title: "无法保存到本地处理队列",
+        title: "无法加入上传队列",
         description: error instanceof Error ? error.message : "浏览器本地存储空间可能不足，请释放空间后重试。",
         type: "error",
       });
@@ -204,7 +205,7 @@ export function UploadQueue({
     void runtime.retryFailed().catch((error) => {
       toast.add({
         title: "重试队列失败",
-        description: error instanceof Error ? error.message : "无法更新本地处理队列",
+        description: error instanceof Error ? error.message : "无法更新上传队列",
         type: "error",
       });
     });
@@ -316,14 +317,15 @@ export function UploadQueue({
           type="button"
         >
           <ImagePlusIcon className="size-5 text-muted-foreground" />
-          <span className="text-sm font-medium">拖入图片或点击选择</span>
+          <span className="text-sm font-medium">拖入图片即开始上传</span>
+          <span className="text-xs text-muted-foreground">上传完成后默认隐藏，可在审核页切换为显示</span>
         </button>
 
         {role === "uploader" && items.length > 0 ? (
           <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
-            <p className="font-medium">本机已有 {items.length} 张待审核照片</p>
+            <p className="font-medium">当前有 {items.length} 张照片仍在处理或等待重试</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              待审核数据只存在于当前浏览器，不做跨设备同步。需要审核时，请继续使用本设备并切换到审核员或管理员账号。
+              原图保留在当前浏览器用于管理端优先预览；远端上传完成后照片仍保持隐藏，需由审核员或管理员切换为显示。
             </p>
           </div>
         ) : null}
@@ -367,7 +369,7 @@ export function UploadQueue({
         {items.length === 0 ? null : (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-medium">本机待审核</h3>
+              <h3 className="text-sm font-medium">处理中 / 上传失败</h3>
               <span className="text-xs text-muted-foreground">{items.length} 张</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -401,7 +403,7 @@ export function UploadQueue({
                   <div className="p-2">
                     <p className="truncate text-xs font-medium">{photo.fileName}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {formatBytes(photo.totalBytes)} · OCR {photo.bib.ocrStatus}
+                      {formatBytes(photo.totalBytes)} · {photo.uploadState === "failed" ? "上传失败" : "上传中"}
                     </p>
                   </div>
                 </div>
