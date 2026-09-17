@@ -52,7 +52,7 @@ async function process(id: string, file: File): Promise<void> {
     if (bitmap.width * bitmap.height > 100_000_000) {
       throw new Error("照片总像素不能超过 100MP");
     }
-    const metadata: PhotoWorkerResponse = {
+    worker.postMessage({
       id,
       type: "metadata",
       metadata: {
@@ -62,40 +62,27 @@ async function process(id: string, file: File): Promise<void> {
         originalContentType: detected.contentType,
         capturedAt: detected.capturedAt,
       },
-    };
-    worker.postMessage(metadata);
+    } satisfies PhotoWorkerResponse);
 
-    const qualities = {
-      webp: [
-        ["photo_480", 480, 0.7],
-        ["photo_960", 960, 0.76],
-        ["photo_1920", 1_920, 0.82],
-      ],
-      jpeg: [
-        ["photo_480", 480, 0.72],
-        ["photo_960", 960, 0.78],
-        ["photo_1920", 1_920, 0.84],
-      ],
-    } as const;
-
-    let format: "webp" | "jpeg" = "webp";
-    for (let index = 0; index < qualities.webp.length; index += 1) {
+    const specs = [
+      ["photo_480", 480, 0.7, 0.72],
+      ["photo_960", 960, 0.76, 0.78],
+      ["photo_1920", 1_920, 0.82, 0.84],
+    ] as const;
+    let preferWebp = true;
+    for (const [kind, maxEdge, webpQuality, jpegQuality] of specs) {
       let variant: ProcessedPhotoVariant;
-      const [webpKind, webpEdge, webpQuality] = qualities.webp[index];
-      try {
-        variant = await encode(bitmap, webpKind, webpEdge, "webp", webpQuality);
-      } catch {
-        format = "jpeg";
-        break;
+      if (preferWebp) {
+        try {
+          variant = await encode(bitmap, kind, maxEdge, "webp", webpQuality);
+        } catch {
+          preferWebp = false;
+          variant = await encode(bitmap, kind, maxEdge, "jpeg", jpegQuality);
+        }
+      } else {
+        variant = await encode(bitmap, kind, maxEdge, "jpeg", jpegQuality);
       }
       worker.postMessage({ id, type: "variant", variant } satisfies PhotoWorkerResponse);
-    }
-
-    if (format === "jpeg") {
-      for (const [kind, maxEdge, quality] of qualities.jpeg) {
-        const variant = await encode(bitmap, kind, maxEdge, "jpeg", quality);
-        worker.postMessage({ id, type: "variant", variant } satisfies PhotoWorkerResponse);
-      }
     }
     worker.postMessage({ id, type: "complete" } satisfies PhotoWorkerResponse);
   } finally {
