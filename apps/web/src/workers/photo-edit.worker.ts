@@ -8,6 +8,12 @@ type Request =
   | { readonly id: string; readonly type: "analyze"; readonly source: Blob }
   | {
       readonly id: string;
+      readonly type: "preview";
+      readonly source: Blob;
+      readonly recipe: PhotoEditRecipe;
+    }
+  | {
+      readonly id: string;
       readonly type: "render";
       readonly source: Blob;
       readonly recipe: PhotoEditRecipe;
@@ -94,6 +100,35 @@ function processStripe(
   );
 }
 
+async function preview(
+  id: string,
+  source: Blob,
+  recipe: PhotoEditRecipe,
+): Promise<void> {
+  const bitmap = await createImageBitmap(source);
+  try {
+    const size = dimensions(bitmap.width, bitmap.height, 960);
+    const canvas = new OffscreenCanvas(size.width, size.height);
+    const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+    if (context === null) throw new Error("浏览器无法创建修图预览画布");
+    if (source.type === "image/jpeg") {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, size.width, size.height);
+    }
+    context.drawImage(bitmap, 0, 0, size.width, size.height);
+    const pixels = context.getImageData(0, 0, size.width, size.height);
+    applyPhotoEditRecipeToPixels(
+      { data: pixels.data, width: pixels.width, height: pixels.height },
+      recipe,
+    );
+    context.putImageData(pixels, 0, 0);
+    const result = await encoded(canvas, "webp", 0.84);
+    scope.postMessage({ id, type: "preview", blob: result.blob });
+  } finally {
+    bitmap.close();
+  }
+}
+
 async function render(
   id: string,
   source: Blob,
@@ -177,7 +212,9 @@ scope.addEventListener("message", (event: MessageEvent<Request>) => {
   const task =
     request.type === "analyze"
       ? analyze(request.id, request.source)
-      : render(request.id, request.source, request.recipe);
+      : request.type === "preview"
+        ? preview(request.id, request.source, request.recipe)
+        : render(request.id, request.source, request.recipe);
   void task.catch((error: unknown) => {
     scope.postMessage({
       id: request.id,
