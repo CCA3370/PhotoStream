@@ -12,7 +12,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import { liveEventChannel } from "./live-event-broker.js";
@@ -587,6 +587,21 @@ export class MediaEditService {
       normalizedState.pendingRevisionId === null
         ? null
         : await this.#revisionView(executor, mediaId, normalizedState.pendingRevisionId);
+    const historyRows = await executor
+      .select({ id: schema.mediaEditRevisions.id })
+      .from(schema.mediaEditRevisions)
+      .where(
+        and(
+          eq(schema.mediaEditRevisions.mediaId, mediaId),
+          inArray(schema.mediaEditRevisions.status, ["ready", "active"]),
+        ),
+      )
+      .orderBy(desc(schema.mediaEditRevisions.createdAt));
+    const history = (
+      await Promise.all(
+        historyRows.map((revision) => this.#revisionView(executor, mediaId, revision.id)),
+      )
+    ).filter((revision): revision is MediaEditRevisionView => revision !== null);
     return {
       mediaId,
       ingestStatus: media.ingestStatus,
@@ -600,6 +615,7 @@ export class MediaEditService {
       },
       activeRevision,
       pendingRevision,
+      history,
     };
   }
 
