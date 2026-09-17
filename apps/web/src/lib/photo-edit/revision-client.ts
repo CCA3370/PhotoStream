@@ -53,10 +53,11 @@ export async function getMediaEditContext(
   );
 }
 
-export async function revertMediaEditToBase(options: {
+export async function switchMediaEditRevision(options: {
   readonly mediaId: string;
   readonly expectedGeneration: number;
   readonly expectedActiveRevisionId: string | null;
+  readonly targetRevisionId: string | null;
   readonly signal?: AbortSignal;
 }): Promise<MediaEditContextView> {
   return clientMutation<MediaEditContextView>(
@@ -65,11 +66,20 @@ export async function revertMediaEditToBase(options: {
       body: {
         expectedGeneration: options.expectedGeneration,
         expectedActiveRevisionId: options.expectedActiveRevisionId,
-        targetRevisionId: null,
+        targetRevisionId: options.targetRevisionId,
       },
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     },
   );
+}
+
+export function revertMediaEditToBase(options: {
+  readonly mediaId: string;
+  readonly expectedGeneration: number;
+  readonly expectedActiveRevisionId: string | null;
+  readonly signal?: AbortSignal;
+}): Promise<MediaEditContextView> {
+  return switchMediaEditRevision({ ...options, targetRevisionId: null });
 }
 
 export async function applyMediaEditRecipe(options: {
