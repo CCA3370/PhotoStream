@@ -155,8 +155,7 @@ export function automaticPhotoEditRecipe(analysis: PhotoEditAnalysis): PhotoEdit
   let temperature = 0;
   let tint = 0;
   if (analysis.neutralConfidence >= 0.18) {
-    const average =
-      (analysis.neutralRed + analysis.neutralGreen + analysis.neutralBlue) / 3 || 1;
+    const average = (analysis.neutralRed + analysis.neutralGreen + analysis.neutralBlue) / 3 || 1;
     const redBias = analysis.neutralRed / average - 1;
     const greenBias = analysis.neutralGreen / average - 1;
     const blueBias = analysis.neutralBlue / average - 1;
