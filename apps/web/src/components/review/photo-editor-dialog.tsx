@@ -17,7 +17,7 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { toast } from "@/components/ui/toast";
 import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
-import { analyzePhotoPixels, automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
+import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import {
   defaultPhotoEditRecipe,
   normalizePhotoEditRecipe,
@@ -186,9 +186,15 @@ export function PhotoEditorDialog({
   useEffect(
     () => () => {
       if (originalUrl !== null) URL.revokeObjectURL(originalUrl);
+    },
+    [originalUrl],
+  );
+
+  useEffect(
+    () => () => {
       if (previewUrl !== null) URL.revokeObjectURL(previewUrl);
     },
-    [originalUrl, previewUrl],
+    [previewUrl],
   );
 
   const activeUrl = showBefore ? originalUrl : (previewUrl ?? originalUrl);
