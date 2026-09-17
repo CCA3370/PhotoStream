@@ -156,7 +156,9 @@ function complete(transaction: IDBTransaction): Promise<void> {
     transaction.addEventListener("abort", () =>
       reject(transaction.error ?? new Error("本地队列事务已取消")),
     );
-    transaction.addEventListener("error", () => reject(transaction.error ?? new Error("本地队列事务失败")));
+    transaction.addEventListener("error", () =>
+      reject(transaction.error ?? new Error("本地队列事务失败")),
+    );
   });
 }
 
