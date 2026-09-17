@@ -26,7 +26,7 @@ const helpTipStorageKey = "photostream:viewer-help-feedback-tip:v1";
 
 const feedbackKinds = [
   { value: "problem", label: "遇到问题" },
-  { value: "suggestion", label: "改进建议" },
+  { value: "suggestion", label: "建议" },
   { value: "other", label: "其他" },
 ] as const;
 
@@ -118,15 +118,15 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
       setKind("suggestion");
       setFeedbackOpen(false);
       toast.add({
-        title: "反馈已实时送达",
-        description: "感谢你的意见，我们会在活动期间持续查看并尽快改进。",
+        title: "反馈已发送",
+        description: "谢谢你的反馈，我们会尽快查看并处理。",
         type: "success",
         timeout: 4_500,
       });
     } catch (error) {
       toast.add({
-        title: "反馈暂时未能送达",
-        description: error instanceof Error ? error.message : "请稍后重试。",
+        title: "暂时发送失败",
+        description: error instanceof Error ? error.message : "请稍后再试。",
         type: "error",
         timeout: 5_000,
       });
@@ -149,8 +149,8 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
             <p className="text-xs font-medium text-primary">使用引导 · 最后一步</p>
             <p className="mt-1 text-sm font-semibold">帮助与反馈都在这里</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              点击右下角问号可重新查看功能引导或随时提交反馈。意见会实时送达管理端；明确的小改进最快约
-              10 分钟即可响应。
+              点击右下角问号，可以随时重新查看使用引导，也可以把遇到的问题或建议告诉我们。我们会尽快看到你的反馈，有些问题最快约
+              10 分钟就能看到变化。
             </p>
             <div className="mt-3 flex justify-end">
               <Button onClick={dismissGuideTip} size="sm" type="button">
@@ -172,7 +172,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
             <div className="px-2.5 pt-2 pb-1.5">
               <p className="text-sm font-semibold">帮助与反馈</p>
               <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                查看功能介绍，或把使用中的问题直接告诉我们。
+                查看功能介绍，或把使用中的问题和想法告诉我们。
               </p>
             </div>
             <div className="grid gap-1">
@@ -204,7 +204,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
                 <span className="min-w-0">
                   <span className="block text-sm font-medium">提交反馈</span>
                   <span className="block text-[11px] font-normal text-muted-foreground">
-                    意见会实时送达管理端
+                    遇到问题或有建议，随时告诉我们
                   </span>
                 </span>
               </Button>
@@ -232,9 +232,9 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
       <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
         <DialogContent className="public-theme sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>告诉我们哪里可以更好</DialogTitle>
+            <DialogTitle>告诉我们你的想法</DialogTitle>
             <DialogDescription>
-              反馈会实时送达管理端；明确的小改进最快约 10 分钟即可响应。
+              我们会尽快看到你的反馈并及时处理，有些问题最快约 10 分钟就能看到变化。
             </DialogDescription>
           </DialogHeader>
 
@@ -260,12 +260,12 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
                 autoFocus
                 maxLength={2_000}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="例如：切换照片时有卡顿；希望增加……"
+                placeholder="例如：切换照片时有点卡；希望增加……"
                 rows={5}
                 value={message}
               />
               <div className="flex items-start justify-between gap-3 text-[11px] leading-5 text-muted-foreground">
-                <p>仅附带当前页面路径用于定位问题，不提交设备指纹。</p>
+                <p>我们只会记录你当前所在的页面，方便了解问题，不会收集额外的设备信息。</p>
                 <span className="shrink-0 tabular-nums">{message.length}/2000</span>
               </div>
             </div>
