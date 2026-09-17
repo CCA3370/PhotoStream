@@ -5,7 +5,7 @@ import {
   ArrowUpRightIcon,
   HardDriveIcon,
   ImageIcon,
-  InboxIcon,
+  LoaderCircleIcon,
   SearchIcon,
   XIcon,
 } from "lucide-react";
@@ -178,7 +178,7 @@ export function AlbumManagementList({
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <span>{album.access === "password" ? "口令访问" : "公开访问"}</span>
                       <span aria-hidden="true">·</span>
-                      <span>{album.publishMode === "review" ? "审核后发布" : "自动发布"}</span>
+                      <span>上传后默认隐藏</span>
                       <span aria-hidden="true">·</span>
                       <span className="font-mono">/{album.slug}</span>
                     </div>
@@ -198,24 +198,22 @@ export function AlbumManagementList({
                     <div
                       className={cn(
                         "flex min-w-0 items-center gap-2",
-                        album.pendingReviewCount > 0 && "text-amber-700 dark:text-amber-400",
+                        album.incompleteCount > 0 && "text-amber-700 dark:text-amber-400",
                       )}
                     >
-                      <InboxIcon
+                      <LoaderCircleIcon
                         aria-hidden="true"
                         className={cn(
                           "size-3.5 shrink-0",
-                          album.pendingReviewCount === 0 && "text-muted-foreground",
+                          album.incompleteCount === 0 && "text-muted-foreground",
                         )}
                       />
                       <span className="truncate">
-                        <span className="font-medium tabular-nums">{album.pendingReviewCount}</span>{" "}
+                        <span className="font-medium tabular-nums">{album.incompleteCount}</span>{" "}
                         <span
-                          className={
-                            album.pendingReviewCount === 0 ? "text-muted-foreground" : undefined
-                          }
+                          className={album.incompleteCount === 0 ? "text-muted-foreground" : undefined}
                         >
-                          待审核
+                          处理中
                         </span>
                       </span>
                     </div>
