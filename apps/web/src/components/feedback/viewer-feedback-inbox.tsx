@@ -4,8 +4,7 @@ import { MessageSquareTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import type { ViewerFeedbackItem } from "@/lib/viewer-feedback";
-import { viewerFeedbackKindLabel } from "@/lib/viewer-feedback";
+import { type ViewerFeedbackItem, viewerFeedbackKindLabel } from "@/lib/viewer-feedback";
 
 function formatTime(value: string): string {
   const date = new Date(value);
@@ -60,7 +59,8 @@ export function ViewerFeedbackInbox({
       });
       source.addEventListener("error", () => {
         setConnected(false);
-        if (disposed || source?.readyState !== EventSource.CLOSED || reconnectTimer !== null) return;
+        if (disposed || source?.readyState !== EventSource.CLOSED || reconnectTimer !== null)
+          return;
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
           connect();
@@ -85,7 +85,7 @@ export function ViewerFeedbackInbox({
             <h2 className="text-sm font-semibold">观众反馈收件箱</h2>
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            观众提交后会直接出现在这里，无需刷新页面。当前保留最近 100 条用于快速处理。
+            观众提交后会直接出现在这里，无需刷新页面。当前列表展示最近 100 条反馈。
           </p>
         </div>
         <Badge className="w-fit gap-1.5" variant={connected ? "secondary" : "outline"}>
@@ -123,7 +123,9 @@ export function ViewerFeedbackInbox({
                   {formatTime(item.createdAt)}
                 </time>
               </div>
-              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{item.message}</p>
+              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">
+                {item.message}
+              </p>
               {item.pagePath === null ? null : (
                 <p className="mt-3 truncate rounded-md bg-muted/55 px-2 py-1 font-mono text-[10px] text-muted-foreground">
                   {item.pagePath}
