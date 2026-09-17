@@ -11,4 +11,4 @@ ALTER TABLE "viewer_feedback" ADD CONSTRAINT "viewer_feedback_album_id_albums_id
 --> statement-breakpoint
 CREATE INDEX "viewer_feedback_album_id_idx" ON "viewer_feedback" USING btree ("album_id","id");
 --> statement-breakpoint
-CREATE INDEX "viewer_feedback_created_idx" ON "viewer_feedback" USING btree ("id");
+CREATE INDEX "viewer_feedback_created_idx" ON "viewer_feedback" USING btree ("created_at");
