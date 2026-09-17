@@ -1,11 +1,7 @@
 import type { PhotoEditAnalysis } from "./analysis";
 import type { PhotoEditRecipe } from "./recipe";
 
-export type PhotoEditOutputKind =
-  | "photo_480"
-  | "photo_960"
-  | "photo_1920"
-  | "photo_download";
+export type PhotoEditOutputKind = "photo_480" | "photo_960" | "photo_1920" | "photo_download";
 
 export interface PhotoEditRenderedOutput {
   readonly kind: PhotoEditOutputKind;
