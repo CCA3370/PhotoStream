@@ -67,16 +67,18 @@ export async function processPhotoInWorkerStreaming(
           return;
         }
         if (event.data.type === "metadata") {
-          metadata = event.data.metadata;
+          const nextMetadata = event.data.metadata;
+          metadata = nextMetadata;
           callbackTail = callbackTail.then(async () => {
-            await handlers.onMetadata?.(event.data.metadata);
+            await handlers.onMetadata?.(nextMetadata);
           });
           return;
         }
         if (event.data.type === "variant") {
-          variants.push(event.data.variant);
+          const nextVariant = event.data.variant;
+          variants.push(nextVariant);
           callbackTail = callbackTail.then(async () => {
-            await handlers.onVariant?.(event.data.variant);
+            await handlers.onVariant?.(nextVariant);
           });
           return;
         }
