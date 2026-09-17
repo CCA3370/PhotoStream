@@ -151,6 +151,9 @@ maybeDescribe("stage 3 operations", () => {
     await database.delete(schema.mediaBatchRequests);
     await database.delete(schema.operationRequests);
     await database.delete(schema.uploadParts);
+    await database.delete(schema.mediaEditStates);
+    await database.delete(schema.mediaEditVariants);
+    await database.delete(schema.mediaEditRevisions);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);
     await database.delete(schema.media);
