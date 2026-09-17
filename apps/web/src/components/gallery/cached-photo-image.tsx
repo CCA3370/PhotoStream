@@ -98,7 +98,7 @@ export function CachedPhotoImage({
   const microPreviewEnabled =
     microPreviewDecision?.identity === identity && microPreviewDecision.enabled;
   const microUrl =
-    deferredGridThumbnail && microPreviewEnabled && scope !== "public-media"
+    deferredGridThumbnail && microPreviewEnabled && !warmDecoded && scope !== "public-media"
       ? `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/micro-preview`
       : null;
   const microFailed = microUrl !== null && failedMicroUrl === microUrl;
