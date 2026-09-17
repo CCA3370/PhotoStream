@@ -29,6 +29,7 @@ import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.
 import { OperationsService } from "./media/operations-service.js";
 import { PhotoService } from "./media/service.js";
 import { PhotoShareService } from "./media/share-service.js";
+import { ViewerFeedbackService } from "./media/viewer-feedback-service.js";
 import { RuntimeMetrics } from "./observability/runtime-metrics.js";
 
 const config = loadConfig(process.env);
@@ -84,6 +85,7 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
+const viewerFeedbackService = new ViewerFeedbackService({ database, photoService });
 const microPreviewService = new MicroPreviewService({ database, storage, photoService });
 const dataSaverService = new AlbumDataSaverService({ database });
 const likeService = new MediaLikeService({
@@ -139,6 +141,7 @@ const app = await buildApp({
   config,
   authStore,
   photoService,
+  viewerFeedbackService,
   photoShareService,
   dataSaverService,
   microPreviewService,
