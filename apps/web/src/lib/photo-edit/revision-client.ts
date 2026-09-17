@@ -8,7 +8,7 @@ import type {
 import { clientGet, clientMutation } from "../client-api";
 import type { PhotoEditRecipe } from "./recipe";
 import { photoEditPipelineVersion, photoEditRecipeVersion } from "./recipe";
-import { renderMediaEditOutputs, type PhotoEditRenderedOutput } from "./runtime";
+import { type PhotoEditRenderedOutput, renderMediaEditOutputs } from "./runtime";
 
 function outputByKind(
   outputs: readonly PhotoEditRenderedOutput[],
@@ -110,12 +110,7 @@ export async function applyMediaEditRecipe(options: {
   try {
     for (let index = 0; index < orderedKinds.length; index += 1) {
       const kind = orderedKinds[index] ?? "photo_480";
-      await uploadOutput(
-        options.mediaId,
-        revisionId,
-        outputByKind(outputs, kind),
-        options.signal,
-      );
+      await uploadOutput(options.mediaId, revisionId, outputByKind(outputs, kind), options.signal);
       options.onProgress?.(0.72 + ((index + 1) / orderedKinds.length) * 0.2);
     }
 
