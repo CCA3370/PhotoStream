@@ -34,6 +34,7 @@ import {
 
 import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
+import { PhotoEditorDialog } from "@/components/review/photo-editor-dialog";
 import {
   ReviewBatchInspector,
   ReviewInspector,
@@ -294,6 +295,7 @@ export function ReviewWorkspace({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [inspectorKey, setInspectorKey] = useState<string | null>(null);
   const [inspectorDeleteOpen, setInspectorDeleteOpen] = useState(false);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
@@ -747,6 +749,7 @@ export function ReviewWorkspace({
                 publicationStatus: item.publicationStatus,
                 ingestStatus: item.local.photo.uploadState,
                 editPending: false,
+                editActive: false,
                 width: item.local.photo.width,
                 height: item.local.photo.height,
                 totalBytes: item.local.photo.totalBytes,
@@ -767,6 +770,7 @@ export function ReviewWorkspace({
                 publicationStatus: item.publicationStatus,
                 ingestStatus: item.remote.ingestStatus,
                 editPending: item.remote.edit?.pendingRevisionId != null,
+                editActive: item.remote.edit?.activeRevisionId != null,
                 width: item.remote.width,
                 height: item.remote.height,
                 totalBytes: item.remote.totalBytes,
@@ -1585,6 +1589,7 @@ export function ReviewWorkspace({
             publicationStatus: inspectorSourceItem.publicationStatus,
             ingestStatus: inspectorSourceItem.local.photo.uploadState,
             editPending: false,
+            editActive: false,
             width: inspectorSourceItem.local.photo.width,
             height: inspectorSourceItem.local.photo.height,
             totalBytes: inspectorSourceItem.local.photo.totalBytes,
@@ -1608,6 +1613,7 @@ export function ReviewWorkspace({
             publicationStatus: inspectorSourceItem.publicationStatus,
             ingestStatus: inspectorSourceItem.remote.ingestStatus,
             editPending: inspectorSourceItem.remote.edit?.pendingRevisionId != null,
+            editActive: inspectorSourceItem.remote.edit?.activeRevisionId != null,
             width: inspectorSourceItem.remote.width,
             height: inspectorSourceItem.remote.height,
             totalBytes: inspectorSourceItem.remote.totalBytes,
@@ -2353,6 +2359,10 @@ export function ReviewWorkspace({
             onClose={() => setInspectorKey(null)}
             onDelete={() => setInspectorDeleteOpen(true)}
             onOpenBib={() => setBibDialogKey(inspectorSourceItem.key)}
+            onEdit={() => {
+              const mediaId = remoteId(inspectorSourceItem);
+              if (mediaId !== null) setEditingMediaId(mediaId);
+            }}
             onStateAction={() => void stateAction(inspectorSourceItem)}
             onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)}
           />
@@ -2389,6 +2399,17 @@ export function ReviewWorkspace({
           if (item !== null) void toggleVisibility(item);
         }}
         selectedKey={activeKey}
+      />
+
+      <PhotoEditorDialog
+        mediaId={editingMediaId}
+        onApplied={async () => {
+          await refreshRemote();
+        }}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditingMediaId(null);
+        }}
+        open={editingMediaId !== null}
       />
 
       <BibReviewDialog
