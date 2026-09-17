@@ -18,7 +18,6 @@ import {
   LoaderCircleIcon,
   PanelRightOpenIcon,
   RefreshCwIcon,
-  SendIcon,
   SquareIcon,
   StarIcon,
   Trash2Icon,
@@ -81,7 +80,6 @@ import {
   localBibOcrPending,
   patchLocalReviewPhoto,
 } from "@/lib/local-review-queue";
-import { publishLocalReviewPhoto } from "@/lib/publish-local-photo";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
@@ -100,7 +98,7 @@ type BibDecisionFilter =
 type BibOcrFilter = "all" | "completed" | "failed" | "not_started" | "processing" | "unsupported";
 type SortOrder = "newest" | "oldest";
 type GridDensity = "compact" | "standard" | "large";
-type RemoteBatchAction = "change_category" | "hide" | "publish" | "restore";
+type RemoteBatchAction = "change_category" | "hide" | "restore";
 
 type RemoteCursor = { readonly kind: "single"; readonly value: string };
 
@@ -153,7 +151,7 @@ type ReviewItem =
       readonly categoryId: string | null;
       readonly uploaderId: null;
       readonly featured: boolean;
-      readonly publicationStatus: "local" | "published";
+      readonly publicationStatus: "local";
       readonly bib: BibMediaState;
       readonly createdAt: string;
     }
@@ -462,7 +460,6 @@ export function ReviewWorkspace({
       const publicationStatus =
         filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
       const query = buildRemoteQuery(publicationStatus, pageCursor?.value);
-      if (filter === "local") query.set("publicationGroup", "unpublished");
       if (filter === "featured") query.set("featured", "true");
       const page = await clientGet<InternalMediaList>(
         `/api/v1/albums/${albumId}/media?${query.toString()}`,
@@ -616,16 +613,7 @@ export function ReviewWorkspace({
       items.filter((item) => {
         if (category !== "all" && item.categoryId !== category) return false;
         if (uploader !== "all" && item.uploaderId !== uploader) return false;
-        if (filter === "local") {
-          if (item.source === "local") {
-            if (item.publicationStatus !== "local") return false;
-          } else if (
-            item.publicationStatus !== "draft" &&
-            item.publicationStatus !== "pending_review"
-          ) {
-            return false;
-          }
-        }
+        if (filter === "local" && item.source !== "local") return false;
         if (filter === "featured" && !item.featured) return false;
         if (filter === "published" && item.publicationStatus !== "published") return false;
         if (filter === "hidden" && item.publicationStatus !== "hidden") return false;
@@ -762,7 +750,7 @@ export function ReviewWorkspace({
                 createdAt: item.createdAt,
                 capturedAt: item.local.photo.capturedAt,
                 bib: item.bib,
-                canDelete: item.publicationStatus === "local" || userRole === "admin",
+                canDelete: true,
               }
             : {
                 key: item.key,
@@ -794,10 +782,7 @@ export function ReviewWorkspace({
         publicationStatus: item.publicationStatus,
         mediaId: item.source === "remote" ? item.remote.id : item.local.photo.mediaId,
         bib: item.bib,
-        canDelete:
-          item.source === "local"
-            ? item.publicationStatus === "local" || userRole === "admin"
-            : userRole === "admin",
+        canDelete: item.source === "local" ? true : userRole === "admin",
         pendingAction: pendingActions.get(item.key) ?? null,
       })),
     [lightboxSourceItems, pendingActions, uploaders, userRole],
@@ -857,7 +842,6 @@ export function ReviewWorkspace({
 
   function canDeleteItem(item: ReviewItem): boolean {
     if (item.source === "remote") return userRole === "admin";
-    if (item.publicationStatus === "published") return userRole === "admin";
     return true;
   }
 
@@ -895,28 +879,24 @@ export function ReviewWorkspace({
   }
 
   const selectionStats = (() => {
-    let publishable = 0;
     let hideable = 0;
     let restorable = 0;
     let featureable = 0;
     let unfeatureable = 0;
     let deletable = 0;
     for (const item of selectedLocalItems) {
-      if (item.publicationStatus === "local") publishable += 1;
       if (item.featured) unfeatureable += 1;
       else featureable += 1;
       if (canDeleteItem(item)) deletable += 1;
     }
     for (const item of selectedRemoteItems) {
-      if (item.publicationStatus === "draft" || item.publicationStatus === "pending_review")
-        publishable += 1;
       if (item.publicationStatus === "published") hideable += 1;
       if (item.publicationStatus === "hidden") restorable += 1;
       if (item.featured) unfeatureable += 1;
       else featureable += 1;
       if (userRole === "admin") deletable += 1;
     }
-    return { publishable, hideable, restorable, featureable, unfeatureable, deletable };
+    return { hideable, restorable, featureable, unfeatureable, deletable };
   })();
 
   async function toggleFeatured(item: ReviewItem): Promise<void> {
@@ -925,15 +905,11 @@ export function ReviewWorkspace({
     try {
       const next = !item.featured;
       const mediaId = remoteId(item);
-      if (item.source === "local" && item.publicationStatus === "local") {
+      if (item.source === "local") {
         await patchLocalReviewPhoto(item.local.photo.id, { featured: next });
       } else if (mediaId !== null) {
         await clientMutation(`/api/v1/media/${mediaId}/featured`, { body: { featured: next } });
-        if (item.source === "remote" && item.local !== null) {
-          await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(
-            () => undefined,
-          );
-        } else if (item.source === "local") {
+        if (item.local !== null) {
           await patchLocalReviewPhoto(item.local.photo.id, { featured: next }).catch(
             () => undefined,
           );
@@ -949,39 +925,6 @@ export function ReviewWorkspace({
       await refreshLocal();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "精选状态修改失败");
-    } finally {
-      setPending(item.key, null);
-    }
-  }
-
-  async function publish(item: ReviewItem): Promise<void> {
-    if (isPending(item.key)) return;
-    setPending(item.key, "state");
-    try {
-      if (item.source === "local") {
-        if (item.publicationStatus === "published") return;
-        const result = await publishLocalReviewPhoto(item.local.photo);
-        await patchLocalReviewPhoto(item.local.photo.id, {
-          mediaId: result.mediaId,
-          uploadState: "published",
-          error: null,
-        });
-        await Promise.all([refreshRemote(), refreshFeatured()]);
-      } else {
-        await clientMutation<{ readonly ok: true }>(`/api/v1/media/${item.remote.id}/publish`, {
-          idempotencyKey: `review-publish-${crypto.randomUUID()}`,
-        });
-        setRemoteMedia((current) =>
-          current.map((candidate) =>
-            candidate.id === item.remote.id
-              ? { ...candidate, publicationStatus: "published" as const }
-              : candidate,
-          ),
-        );
-      }
-      showNotice("已发布");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "发布失败");
     } finally {
       setPending(item.key, null);
     }
@@ -1064,11 +1007,7 @@ export function ReviewWorkspace({
   }
 
   async function stateAction(item: ReviewItem): Promise<void> {
-    if (item.publicationStatus === "published" || item.publicationStatus === "hidden") {
-      await toggleVisibility(item);
-      return;
-    }
-    await publish(item);
+    await toggleVisibility(item);
   }
 
   const setSelectionForKey = useCallback(
@@ -1273,52 +1212,6 @@ export function ReviewWorkspace({
     lastSelectedIndexRef.current = null;
   }
 
-  async function batchPublish(): Promise<void> {
-    if (batchBusy || selectedCount === 0) return;
-    setBatchBusy(true);
-    const failures: BatchFailure[] = [];
-    let successCount = 0;
-    try {
-      for (const item of selectedLocalItems) {
-        setPending(item.key, "state");
-        try {
-          const result = await publishLocalReviewPhoto(item.local.photo);
-          await patchLocalReviewPhoto(item.local.photo.id, {
-            mediaId: result.mediaId,
-            uploadState: "published",
-            error: null,
-          });
-          successCount += 1;
-        } catch (cause) {
-          failures.push({
-            label: item.local.photo.fileName,
-            message: cause instanceof Error ? cause.message : "发布失败",
-          });
-        } finally {
-          setPending(item.key, null);
-        }
-      }
-      const remoteTargets = selectedRemoteItems.filter(
-        (item) => item.publicationStatus === "draft" || item.publicationStatus === "pending_review",
-      );
-      const remoteResult = await applyRemoteBatch(
-        "publish",
-        remoteTargets.map((item) => item.id),
-      );
-      successCount += remoteResult.okIds.length;
-      failures.push(...remoteResult.failures);
-      await Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]);
-      finishBatch(
-        "批量发布",
-        successCount,
-        failures,
-        selectedCount - selectedLocalItems.length - remoteTargets.length,
-      );
-    } finally {
-      setBatchBusy(false);
-    }
-  }
-
   async function batchHide(): Promise<void> {
     if (batchBusy || selectedCount === 0) return;
     setBatchBusy(true);
@@ -1355,7 +1248,7 @@ export function ReviewWorkspace({
           ok.has(item.id) ? { ...item, publicationStatus: "published" as const } : item,
         ),
       );
-      finishBatch("批量恢复", result.okIds.length, result.failures, selectedCount - targets.length);
+      finishBatch("批量显示", result.okIds.length, result.failures, selectedCount - targets.length);
     } finally {
       setBatchBusy(false);
     }
@@ -1591,7 +1484,6 @@ export function ReviewWorkspace({
   ): Promise<RemoteSelectionPage> {
     const query = buildRemoteQuery(publicationStatus, pageCursor);
     query.set("limit", "1000");
-    if (filter === "local") query.set("publicationGroup", "unpublished");
     if (filter === "featured") query.set("featured", "true");
     return clientGet<RemoteSelectionPage>(
       `/api/v1/albums/${albumId}/media-selection?${query.toString()}`,
@@ -1621,8 +1513,10 @@ export function ReviewWorkspace({
       const remote = new Map<string, RemoteSelectionItem>();
       const publicationStatus =
         filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
-      const selected = await collectSelection(publicationStatus);
-      for (const item of selected.values()) remote.set(item.id, item);
+      if (filter !== "local") {
+        const selected = await collectSelection(publicationStatus);
+        for (const item of selected.values()) remote.set(item.id, item);
+      }
       const localKeys = visibleItems
         .filter((item) => item.source === "local")
         .map((item) => item.key);
@@ -1652,8 +1546,8 @@ export function ReviewWorkspace({
 
   const filters: readonly { readonly id: FilterMode; readonly label: string }[] = [
     { id: "all", label: "全部" },
-    { id: "local", label: "待发布" },
-    { id: "published", label: "已发布" },
+    { id: "local", label: "处理中" },
+    { id: "published", label: "显示中" },
     { id: "hidden", label: "已隐藏" },
     { id: "featured", label: "精选" },
   ];
@@ -2047,22 +1941,18 @@ export function ReviewWorkspace({
           ) : (
             <>
               <span className="text-xs text-muted-foreground">
-                可发布 {selectionStats.publishable} · 可隐藏 {selectionStats.hideable} · 可恢复{" "}
-                {selectionStats.restorable} · 可删除 {selectionStats.deletable}
+                可显示 {selectionStats.restorable} · 可隐藏 {selectionStats.hideable} · 可删除{" "}
+                {selectionStats.deletable}
               </span>
               <Button
-                disabled={batchBusy || selectionStats.publishable === 0}
-                onClick={() => void batchPublish()}
+                disabled={batchBusy || selectionStats.restorable === 0}
+                onClick={() => void batchRestore()}
                 size="sm"
                 type="button"
                 variant="outline"
               >
-                {batchBusy ? (
-                  <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
-                ) : (
-                  <SendIcon data-icon="inline-start" />
-                )}
-                发布 {selectionStats.publishable}
+                <EyeIcon data-icon="inline-start" />
+                显示 {selectionStats.restorable}
               </Button>
               <Button
                 disabled={batchBusy || selectionStats.hideable === 0}
@@ -2073,16 +1963,6 @@ export function ReviewWorkspace({
               >
                 <EyeOffIcon data-icon="inline-start" />
                 隐藏 {selectionStats.hideable}
-              </Button>
-              <Button
-                disabled={batchBusy || selectionStats.restorable === 0}
-                onClick={() => void batchRestore()}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <EyeIcon data-icon="inline-start" />
-                恢复 {selectionStats.restorable}
               </Button>
               <Button
                 disabled={batchBusy || selectionStats.featureable === 0}
@@ -2222,11 +2102,12 @@ export function ReviewWorkspace({
             const pending = pendingAction !== null;
             const published = item.publicationStatus === "published";
             const hidden = item.publicationStatus === "hidden";
+            const canToggleVisibility = published || hidden;
             const selected = itemSelected(item);
             const bibConfirmed = isBibReviewConfirmed(item.bib);
             const ocrPending = bibOcrIsPending(item);
             const bibBlocked = !bibConfirmed && ocrPending;
-            const statusLabel = published ? "已发布" : hidden ? "已隐藏" : "待发布";
+            const statusLabel = published ? "显示中" : hidden ? "已隐藏" : "处理中";
             return (
               <div
                 className={cn(
@@ -2338,27 +2219,27 @@ export function ReviewWorkspace({
                       )}
                     </Button>
                     <Button
-                      aria-label={published ? "隐藏" : hidden ? "显示" : "发布"}
+                      aria-label={published ? "隐藏" : hidden ? "显示" : "等待上传完成"}
                       className={cn(
                         "size-8",
                         published &&
                           "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
                       )}
-                      disabled={pending || batchBusy}
-                      onClick={() => void stateAction(item)}
+                      disabled={pending || batchBusy || !canToggleVisibility}
+                      onClick={() => void toggleVisibility(item)}
                       size="icon"
-                      title={published ? "隐藏" : hidden ? "显示" : "发布"}
+                      title={published ? "隐藏" : hidden ? "显示" : "等待上传完成"}
                       type="button"
                       variant="ghost"
                     >
                       {pendingAction === "state" ? (
                         <LoaderCircleIcon className="size-4 animate-spin" />
                       ) : published ? (
-                        <EyeIcon className="size-4" />
-                      ) : hidden ? (
                         <EyeOffIcon className="size-4" />
+                      ) : hidden ? (
+                        <EyeIcon className="size-4" />
                       ) : (
-                        <SendIcon className="size-4" />
+                        <LoaderCircleIcon className="size-4 opacity-50" />
                       )}
                     </Button>
                     <Button
@@ -2441,7 +2322,6 @@ export function ReviewWorkspace({
             }}
             onFeature={() => void batchSetFeatured(true)}
             onHide={() => void batchHide()}
-            onPublish={() => void batchPublish()}
             onRestore={() => void batchRestore()}
             onUnfeature={() => void batchSetFeatured(false)}
             stats={selectionStats}
@@ -2519,7 +2399,7 @@ export function ReviewWorkspace({
           <AlertDialogHeader>
             <AlertDialogTitle>删除这张照片？</AlertDialogTitle>
             <AlertDialogDescription>
-              这是危险操作。远端照片会进入现有删除任务流程，本机照片会从本地审核队列移除。
+              这是危险操作。远端照片会进入现有删除任务流程，本机照片会从本地处理队列移除。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
