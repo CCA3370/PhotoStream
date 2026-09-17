@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderCircleIcon, Share2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
@@ -64,15 +64,6 @@ export function PhotoShareButton({
 }>) {
   const [pending, setPending] = useState(false);
   const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
-  const shareActionRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    const shareAction = shareActionRef.current;
-    const downloadAction = shareAction?.nextElementSibling;
-    if (!(downloadAction instanceof HTMLButtonElement)) return;
-    if (downloadAction.querySelector("svg.lucide-download") === null) return;
-    downloadAction.setAttribute("aria-label", "保存至相册");
-  }, [mediaId]);
 
   async function sharePhoto(): Promise<void> {
     if (pending) return;
@@ -170,7 +161,6 @@ export function PhotoShareButton({
         data-photo-share-action
         disabled={pending}
         onClick={() => void sharePhoto()}
-        ref={shareActionRef}
         type="button"
         variant="outline"
       >
