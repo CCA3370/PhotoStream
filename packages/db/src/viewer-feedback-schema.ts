@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid, varchar, bigserial } from "drizzle-orm/pg-core";
+import { bigserial, index, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 import { albums } from "./schema.js";
 
@@ -18,6 +18,6 @@ export const viewerFeedback = pgTable(
   },
   (table) => [
     index("viewer_feedback_album_id_idx").on(table.albumId, table.id),
-    index("viewer_feedback_created_idx").on(table.id),
+    index("viewer_feedback_created_idx").on(table.createdAt),
   ],
 );
