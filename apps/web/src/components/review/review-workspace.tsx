@@ -2385,6 +2385,7 @@ export function ReviewWorkspace({
         }}
         onLocalBibConfirmNoNumber={confirmLocalNoNumberByKey}
         onLocalBibConfirmNumbers={confirmLocalNumbersByKey}
+        onEdit={(mediaId) => setEditingMediaId(mediaId)}
         onSelect={setActiveKey}
         onStateAction={(key) => {
           const item = itemByKey(key);
