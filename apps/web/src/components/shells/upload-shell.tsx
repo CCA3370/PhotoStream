@@ -39,11 +39,11 @@ function QueueSummary({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>)
         <p className="mt-1 text-lg font-semibold tabular-nums">{queue.queued}</p>
       </div>
       <div className="rounded-lg border bg-muted/20 p-3">
-        <p className="text-xs text-muted-foreground">处理中</p>
+        <p className="text-xs text-muted-foreground">处理并上传</p>
         <p className="mt-1 text-lg font-semibold tabular-nums">{queue.processing}</p>
       </div>
       <div className="rounded-lg border bg-muted/20 p-3">
-        <p className="text-xs text-muted-foreground">本机待审核</p>
+        <p className="text-xs text-muted-foreground">本机未完成</p>
         <p className="mt-1 text-lg font-semibold tabular-nums">{queue.pendingReview}</p>
       </div>
       <div className="rounded-lg border bg-muted/20 p-3">
@@ -110,7 +110,7 @@ export function UploadShell({ children, queue }: UploadShellProps) {
             {queue.paused ? <Badge variant="outline">已暂停</Badge> : null}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            照片只在当前设备处理并进入本地审核队列；审核通过后才开始上传。
+            照片在当前设备生成派生图，并直接上传原图和派生图；上传完成后默认隐藏。
           </p>
         </div>
         <Drawer showSwipeHandle>
