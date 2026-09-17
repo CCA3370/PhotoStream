@@ -746,6 +746,7 @@ export function ReviewWorkspace({
                 featured: item.featured,
                 publicationStatus: item.publicationStatus,
                 ingestStatus: item.local.photo.uploadState,
+                editPending: false,
                 width: item.local.photo.width,
                 height: item.local.photo.height,
                 totalBytes: item.local.photo.totalBytes,
@@ -765,6 +766,7 @@ export function ReviewWorkspace({
                 featured: item.featured,
                 publicationStatus: item.publicationStatus,
                 ingestStatus: item.remote.ingestStatus,
+                editPending: item.remote.edit?.pendingRevisionId != null,
                 width: item.remote.width,
                 height: item.remote.height,
                 totalBytes: item.remote.totalBytes,
@@ -893,7 +895,7 @@ export function ReviewWorkspace({
     }
     for (const item of selectedRemoteItems) {
       if (item.publicationStatus === "published") hideable += 1;
-      if (item.publicationStatus === "hidden") restorable += 1;
+      if (item.publicationStatus === "hidden" && item.edit?.pendingRevisionId == null) restorable += 1;
       if (item.featured) unfeatureable += 1;
       else featureable += 1;
       if (userRole === "admin") deletable += 1;
@@ -935,6 +937,14 @@ export function ReviewWorkspace({
   async function toggleVisibility(item: ReviewItem): Promise<void> {
     if (isPending(item.key)) return;
     if (item.publicationStatus !== "published" && item.publicationStatus !== "hidden") return;
+    if (
+      item.source === "remote" &&
+      item.publicationStatus === "hidden" &&
+      item.remote.edit?.pendingRevisionId != null
+    ) {
+      showNotice("修图版本仍在处理中，完成或取消后才能显示");
+      return;
+    }
     const mediaId = remoteId(item);
     if (mediaId === null) return;
     setPending(item.key, "state");
@@ -1574,6 +1584,7 @@ export function ReviewWorkspace({
             featured: inspectorSourceItem.featured,
             publicationStatus: inspectorSourceItem.publicationStatus,
             ingestStatus: inspectorSourceItem.local.photo.uploadState,
+            editPending: false,
             width: inspectorSourceItem.local.photo.width,
             height: inspectorSourceItem.local.photo.height,
             totalBytes: inspectorSourceItem.local.photo.totalBytes,
@@ -1596,6 +1607,7 @@ export function ReviewWorkspace({
             featured: inspectorSourceItem.featured,
             publicationStatus: inspectorSourceItem.publicationStatus,
             ingestStatus: inspectorSourceItem.remote.ingestStatus,
+            editPending: inspectorSourceItem.remote.edit?.pendingRevisionId != null,
             width: inspectorSourceItem.remote.width,
             height: inspectorSourceItem.remote.height,
             totalBytes: inspectorSourceItem.remote.totalBytes,
