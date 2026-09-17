@@ -580,16 +580,17 @@ export function ReviewWorkspace({
       .map((item) => {
         const linkedLocal = localByMediaId.get(item.id) ?? null;
         const ordinaryUrl = ordinary(item);
+        const hasActiveEdit = item.edit?.activeRevisionId !== null && item.edit?.activeRevisionId !== undefined;
         return {
           key: linkedLocal === null ? `remote:${item.id}` : `local:${linkedLocal.photo.id}`,
           source: "remote" as const,
           remote: item,
           local: linkedLocal,
-          previewUrl: linkedLocal?.previewUrl ?? preview(item),
-          viewerUrl: linkedLocal?.originalUrl ?? ordinaryUrl,
-          viewerFallbackUrl: linkedLocal === null ? null : ordinaryUrl,
+          previewUrl: hasActiveEdit ? preview(item) : (linkedLocal?.previewUrl ?? preview(item)),
+          viewerUrl: hasActiveEdit ? ordinaryUrl : (linkedLocal?.originalUrl ?? ordinaryUrl),
+          viewerFallbackUrl: linkedLocal === null || hasActiveEdit ? null : ordinaryUrl,
           remoteOriginalUrl: remoteOriginal(item),
-          localPreferred: linkedLocal !== null,
+          localPreferred: linkedLocal !== null && !hasActiveEdit,
           categoryId: item.categoryId,
           uploaderId: item.uploaderId,
           featured: featuredIds.has(item.id),
