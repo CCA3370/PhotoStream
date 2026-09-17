@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 import { toast } from "@/components/ui/toast";
@@ -11,8 +10,6 @@ import {
 } from "@/lib/viewer-feedback";
 
 export function ViewerFeedbackMonitor() {
-  const pathname = usePathname();
-
   useEffect(() => {
     let disposed = false;
     let eventSource: EventSource | null = null;
@@ -28,7 +25,7 @@ export function ViewerFeedbackMonitor() {
         try {
           const item = JSON.parse((event as MessageEvent<string>).data) as ViewerFeedbackItem;
           window.dispatchEvent(new CustomEvent(viewerFeedbackCreatedEvent, { detail: item }));
-          if (pathname === "/studio/feedback") return;
+          if (window.location.pathname === "/studio/feedback") return;
           const preview = item.message.length > 68 ? `${item.message.slice(0, 68)}…` : item.message;
           toast.add({
             title: "收到新的观众反馈",
@@ -56,7 +53,7 @@ export function ViewerFeedbackMonitor() {
       eventSource?.close();
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     };
-  }, [pathname]);
+  }, []);
 
   return null;
 }
