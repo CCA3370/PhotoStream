@@ -1652,10 +1652,14 @@ export class PhotoService {
         editState?.activeRevisionId === null || editState?.activeRevisionId === undefined
           ? []
           : (editVariantsByRevision.get(editState.activeRevisionId) ?? []);
+      const baseMediaVariants = byMedia.get(media.id) ?? [];
       const resolvedVariants =
         activeEditVariants.length === 0
-          ? (byMedia.get(media.id) ?? [])
-          : activeEditVariants.filter((variant) => variant.kind !== "photo_download");
+          ? baseMediaVariants
+          : [
+              ...activeEditVariants.filter((variant) => variant.kind !== "photo_download"),
+              ...baseMediaVariants.filter((variant) => variant.kind === "photo_original"),
+            ];
       return {
         id: media.id,
         albumId: media.albumId,
