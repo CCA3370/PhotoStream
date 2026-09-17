@@ -107,6 +107,7 @@ export const apiErrorCodeSchema = z.enum([
   "UPLOAD_NOT_FOUND",
   "OBJECT_VERIFICATION_FAILED",
   "STATE_CONFLICT",
+  "EDIT_VERSION_CONFLICT",
   "MEDIA_LIMIT_EXCEEDED",
   "USER_NOT_FOUND",
   "MEDIA_NOT_FOUND",
@@ -426,6 +427,155 @@ export const signedUploadSchema = z
   .strict();
 export type SignedUpload = z.infer<typeof signedUploadSchema>;
 
+export const mediaEditRevisionStatusSchema = z.enum([
+  "rendering",
+  "uploading",
+  "ready",
+  "active",
+  "failed",
+  "discarded",
+]);
+export type MediaEditRevisionStatus = z.infer<typeof mediaEditRevisionStatusSchema>;
+
+export const mediaEditVariantKindSchema = z.enum([
+  "photo_480",
+  "photo_960",
+  "photo_1920",
+  "photo_download",
+]);
+export type MediaEditVariantKind = z.infer<typeof mediaEditVariantKindSchema>;
+
+export const mediaEditVariantInputSchema = z
+  .object({
+    kind: mediaEditVariantKindSchema,
+    format: z.enum(["webp", "jpeg"]),
+    contentType: z.enum(["image/webp", "image/jpeg"]),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    bytes: z.number().int().positive().max(50 * 1024 * 1024),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const expected = value.format === "jpeg" ? "image/jpeg" : "image/webp";
+    if (value.contentType !== expected) {
+      context.addIssue({
+        code: "custom",
+        message: "修图变体格式与 Content-Type 不一致",
+        path: ["contentType"],
+      });
+    }
+  });
+export type MediaEditVariantInput = z.infer<typeof mediaEditVariantInputSchema>;
+
+export const createMediaEditRevisionRequestSchema = z
+  .object({
+    basedOnRevisionId: z.string().uuid().nullable(),
+    basedOnGeneration: z.number().int().min(0),
+    pipelineVersion: z.string().trim().min(1).max(80),
+    recipeVersion: z.number().int().positive(),
+    recipeJson: z.record(z.string(), z.unknown()),
+    denoiseModel: z.string().trim().min(1).max(120).nullable().default(null),
+    denoiseModelVersion: z.string().trim().min(1).max(120).nullable().default(null),
+    deblurModel: z.string().trim().min(1).max(120).nullable().default(null),
+    deblurModelVersion: z.string().trim().min(1).max(120).nullable().default(null),
+    variants: z.array(mediaEditVariantInputSchema).length(4),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const kinds = new Set(value.variants.map((variant) => variant.kind));
+    for (const kind of mediaEditVariantKindSchema.options) {
+      if (!kinds.has(kind)) {
+        context.addIssue({
+          code: "custom",
+          message: "修图 revision 必须包含四个唯一输出",
+          path: ["variants"],
+        });
+        break;
+      }
+    }
+  });
+export type CreateMediaEditRevisionRequest = z.infer<typeof createMediaEditRevisionRequestSchema>;
+
+export const mediaEditVariantViewSchema = z
+  .object({
+    kind: mediaEditVariantKindSchema,
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    bytes: z.number().int().positive().nullable(),
+    expectedBytes: z.number().int().positive(),
+    contentType: z.string().min(1).max(80),
+    verified: z.boolean(),
+  })
+  .strict();
+export type MediaEditVariantView = z.infer<typeof mediaEditVariantViewSchema>;
+
+export const mediaEditRevisionViewSchema = z
+  .object({
+    id: z.string().uuid(),
+    mediaId: z.string().uuid(),
+    status: mediaEditRevisionStatusSchema,
+    basedOnRevisionId: z.string().uuid().nullable(),
+    basedOnGeneration: z.number().int().min(0),
+    pipelineVersion: z.string(),
+    recipeVersion: z.number().int().positive(),
+    recipeJson: z.record(z.string(), z.unknown()),
+    denoiseModel: z.string().nullable(),
+    denoiseModelVersion: z.string().nullable(),
+    deblurModel: z.string().nullable(),
+    deblurModelVersion: z.string().nullable(),
+    createdAt: z.string().datetime(),
+    readyAt: z.string().datetime().nullable(),
+    appliedAt: z.string().datetime().nullable(),
+    failureCode: z.string().nullable(),
+    variants: z.array(mediaEditVariantViewSchema),
+  })
+  .strict();
+export type MediaEditRevisionView = z.infer<typeof mediaEditRevisionViewSchema>;
+
+export const mediaEditStateViewSchema = z
+  .object({
+    activeRevisionId: z.string().uuid().nullable(),
+    pendingRevisionId: z.string().uuid().nullable(),
+    generation: z.number().int().min(0),
+    pendingStatus: mediaEditRevisionStatusSchema.nullable(),
+  })
+  .strict();
+export type MediaEditStateView = z.infer<typeof mediaEditStateViewSchema>;
+
+export const mediaEditContextViewSchema = z
+  .object({
+    mediaId: z.string().uuid(),
+    ingestStatus: ingestStatusSchema,
+    publicationStatus: publicationStatusSchema,
+    baseOriginalVerified: z.boolean(),
+    state: mediaEditStateViewSchema,
+    activeRevision: mediaEditRevisionViewSchema.nullable(),
+    pendingRevision: mediaEditRevisionViewSchema.nullable(),
+  })
+  .strict();
+export type MediaEditContextView = z.infer<typeof mediaEditContextViewSchema>;
+
+export const applyMediaEditRequestSchema = z
+  .object({
+    expectedGeneration: z.number().int().min(0),
+    expectedActiveRevisionId: z.string().uuid().nullable(),
+  })
+  .strict();
+export type ApplyMediaEditRequest = z.infer<typeof applyMediaEditRequestSchema>;
+
+export const revertMediaEditRequestSchema = applyMediaEditRequestSchema
+  .extend({ targetRevisionId: z.string().uuid().nullable() })
+  .strict();
+export type RevertMediaEditRequest = z.infer<typeof revertMediaEditRequestSchema>;
+
+export const mediaEditSourceViewSchema = z
+  .object({
+    url: z.string().url(),
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+export type MediaEditSourceView = z.infer<typeof mediaEditSourceViewSchema>;
+
 export const mediaVariantViewSchema = z
   .object({
     kind: photoVariantKindSchema,
@@ -480,6 +630,7 @@ export const internalMediaViewSchema = z
     publishSequence: z.number().int().positive().nullable(),
     publishedAt: z.string().datetime().nullable(),
     variants: z.array(mediaVariantViewSchema),
+    edit: mediaEditStateViewSchema.optional(),
     deletionTask: z
       .object({
         id: z.string().uuid(),
