@@ -98,9 +98,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
   function replayGuide(): void {
     dismissGuideTip();
     setMenuOpen(false);
-    document
-      .querySelector<HTMLButtonElement>('button[aria-label="重新查看使用引导"]')
-      ?.click();
+    document.querySelector<HTMLButtonElement>('button[aria-label="重新查看使用引导"]')?.click();
   }
 
   async function submitFeedback(): Promise<void> {
@@ -151,7 +149,8 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
             <p className="text-xs font-medium text-primary">使用引导 · 最后一步</p>
             <p className="mt-1 text-sm font-semibold">帮助与反馈都在这里</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              点击右下角问号可重新查看功能引导或随时提交反馈。意见会实时送达管理端；明确的小改进最快约 10 分钟即可响应。
+              点击右下角问号可重新查看功能引导或随时提交反馈。意见会实时送达管理端；明确的小改进最快约
+              10 分钟即可响应。
             </p>
             <div className="mt-3 flex justify-end">
               <Button onClick={dismissGuideTip} size="sm" type="button">
@@ -240,7 +239,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
           </DialogHeader>
 
           <div className="grid gap-4">
-            <div className="flex flex-wrap gap-2" aria-label="反馈类型">
+            <div aria-label="反馈类型" className="flex flex-wrap gap-2" role="group">
               {feedbackKinds.map((item) => (
                 <Button
                   aria-pressed={kind === item.value}
