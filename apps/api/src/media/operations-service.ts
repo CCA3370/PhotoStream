@@ -465,6 +465,30 @@ export class OperationsService {
         .where(eq(schema.deletionTasks.id, claimed.id));
       return;
     }
+    const editObjects = await this.#database
+      .select({
+        revisionId: schema.mediaEditVariants.editRevisionId,
+        objectKey: schema.mediaEditVariants.objectKey,
+      })
+      .from(schema.mediaEditVariants)
+      .innerJoin(
+        schema.mediaEditRevisions,
+        eq(schema.mediaEditRevisions.id, schema.mediaEditVariants.editRevisionId),
+      )
+      .where(eq(schema.mediaEditRevisions.mediaId, claimed.mediaId));
+    let editObjectFailure = false;
+    for (const object of editObjects) {
+      try {
+        await this.#storage.delete(object.objectKey);
+      } catch {
+        editObjectFailure = true;
+      }
+    }
+    if (editObjectFailure) {
+      await this.#failDeletionTask(claimed, "EDIT_OBJECT_DELETE_FAILED", now);
+      return;
+    }
+
     const objects = await this.#database
       .select()
       .from(schema.deletionTaskObjects)
@@ -509,9 +533,10 @@ export class OperationsService {
       .select()
       .from(schema.deletionTaskObjects)
       .where(eq(schema.deletionTaskObjects.taskId, taskId));
-    const paths = allObjects.flatMap((object) =>
-      object.objectKey === null ? [] : [object.objectKey],
-    );
+    const paths = [
+      ...allObjects.flatMap((object) => (object.objectKey === null ? [] : [object.objectKey])),
+      ...editObjects.map((object) => object.objectKey),
+    ];
     try {
       await this.#cdn.invalidate(paths);
     } catch {
@@ -523,6 +548,18 @@ export class OperationsService {
         sql`select pg_advisory_xact_lock(hashtextextended(${`delete-task:${taskId}`}, 0))`,
       );
       const completedAt = new Date();
+      const editRevisionIds = editObjects.map((object) => object.revisionId);
+      await transaction
+        .delete(schema.mediaEditStates)
+        .where(eq(schema.mediaEditStates.mediaId, claimed.mediaId));
+      if (editRevisionIds.length > 0) {
+        await transaction
+          .delete(schema.mediaEditVariants)
+          .where(inArray(schema.mediaEditVariants.editRevisionId, editRevisionIds));
+        await transaction
+          .delete(schema.mediaEditRevisions)
+          .where(inArray(schema.mediaEditRevisions.id, editRevisionIds));
+      }
       await transaction
         .delete(schema.mediaVariants)
         .where(eq(schema.mediaVariants.mediaId, claimed.mediaId));
@@ -573,7 +610,7 @@ export class OperationsService {
         actorId: claimed.requestedBy,
         action: "media.deletion.completed",
         targetId: claimed.mediaId,
-        changedFields: ["objects", "cdn", "bibData", "faceIndexTask", "publicationStatus"],
+        changedFields: ["objects", "editObjects", "cdn", "bibData", "faceIndexTask", "publicationStatus"],
         requestId: claimed.requestId,
       });
     });
