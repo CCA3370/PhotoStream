@@ -1,6 +1,7 @@
 import type { BibCandidateInput } from "@photostream/contracts";
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   bigserial,
   boolean,
@@ -15,7 +16,6 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "reviewer", "uploader"]);
@@ -378,7 +378,6 @@ export const mediaVariants = pgTable(
     index("media_variants_media_verified_idx").on(table.mediaId, table.verified),
   ],
 );
-
 
 export const mediaEditRevisions = pgTable(
   "media_edit_revisions",
