@@ -64,8 +64,7 @@ type PendingAction =
   | "originalDownload"
   | "password"
   | "previewDownload"
-  | "privacy"
-  | "publish";
+  | "privacy";
 type SettingsTab = "access" | "basic" | "categories" | "features" | "traffic";
 type FeatureTab = "bib" | "face";
 
@@ -79,7 +78,6 @@ function mergeAlbumUpdate(
     ...(input.title === undefined ? {} : { title: updated.title }),
     ...(input.description === undefined ? {} : { description: updated.description }),
     ...(input.access === undefined ? {} : { access: updated.access }),
-    ...(input.publishMode === undefined ? {} : { publishMode: updated.publishMode }),
     ...(input.previewDownloadEnabled === undefined
       ? {}
       : { previewDownloadEnabled: updated.previewDownloadEnabled }),
@@ -268,9 +266,7 @@ export function AlbumSettings({
             {galleryPath}
           </code>
           <Badge variant="outline">{album.access === "public" ? "公开访问" : "口令访问"}</Badge>
-          <Badge variant="outline">
-            {album.publishMode === "auto" ? "自动发布" : "审核后发布"}
-          </Badge>
+          <Badge variant="outline">上传后默认隐藏</Badge>
           {dirty ? <Badge variant="secondary">有未保存修改</Badge> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -316,7 +312,7 @@ export function AlbumSettings({
             基础信息
           </TabsTrigger>
           <TabsTrigger className="px-3" value="access">
-            访问与发布
+            访问
           </TabsTrigger>
           <TabsTrigger className="px-3" value="categories">
             分类
@@ -440,7 +436,7 @@ export function AlbumSettings({
           <div className="grid gap-3 xl:grid-cols-2">
             <Card className="overflow-hidden shadow-none">
               <CardHeader className="border-b py-3.5">
-                <CardTitle>访问与发布</CardTitle>
+                <CardTitle>访问</CardTitle>
               </CardHeader>
               <CardContent className="divide-y p-0">
                 <SettingRow
@@ -468,29 +464,11 @@ export function AlbumSettings({
                 </SettingRow>
 
                 <SettingRow
-                  description="关闭后照片进入审核列表，由审核员确认后才发布"
-                  status={
-                    <Badge variant="secondary">
-                      {album.publishMode === "auto" ? "自动" : "审核"}
-                    </Badge>
-                  }
-                  title="自动发布"
+                  description="照片完成上传后保持隐藏，由审核工作区选择是否向观众显示"
+                  status={<Badge variant="secondary">固定</Badge>}
+                  title="照片可见性"
                 >
-                  {isPending("publish") ? (
-                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
-                  ) : (
-                    <Switch
-                      aria-label="自动发布"
-                      checked={album.publishMode === "auto"}
-                      onCheckedChange={(checked) =>
-                        void update(
-                          { publishMode: checked ? "auto" : "review" },
-                          "发布方式已更新",
-                          "publish",
-                        )
-                      }
-                    />
-                  )}
+                  <Badge variant="outline">默认隐藏</Badge>
                 </SettingRow>
 
                 <SettingRow description="更换后旧访客会话立即失效" title="活动口令">
