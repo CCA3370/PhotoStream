@@ -167,6 +167,28 @@ export class PhotoShareService {
   }) {
     if (!publicVariantKinds.has(options.kind)) throw this.#notFound();
     const context = await this.#sharedContextById(options.shareId);
+    const activeRevisionId = await this.#activeRevisionId(context.media.id);
+    if (activeRevisionId !== null) {
+      const [editVariant] = await this.#database
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(
+          and(
+            eq(schema.mediaEditVariants.editRevisionId, activeRevisionId),
+            eq(schema.mediaEditVariants.kind, options.kind),
+            eq(schema.mediaEditVariants.verified, true),
+            isNotNull(schema.mediaEditVariants.bytes),
+          ),
+        )
+        .limit(1);
+      if (editVariant === undefined || editVariant.bytes === null) throw this.#notFound();
+      const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+      return {
+        url: this.#storage.signRead({ key: editVariant.objectKey, expiresAt, stable: true }),
+        expiresAt: expiresAt.toISOString(),
+        bytes: editVariant.bytes,
+      };
+    }
     const [variant] = await this.#database
       .select()
       .from(schema.mediaVariants)
@@ -196,29 +218,63 @@ export class PhotoShareService {
   }) {
     const context = await this.#sharedContextById(options.shareId);
     const variantKind = options.kind === "preview" ? "photo_1920" : "photo_original";
-    const [variant] = await this.#database
-      .select()
-      .from(schema.mediaVariants)
-      .where(
-        and(
-          eq(schema.mediaVariants.mediaId, context.media.id),
-          eq(schema.mediaVariants.kind, variantKind),
-          eq(schema.mediaVariants.verified, true),
-          isNotNull(schema.mediaVariants.bytes),
-        ),
-      )
-      .limit(1);
-    if (variant === undefined || variant.bytes === null) {
+    const activeRevisionId = await this.#activeRevisionId(context.media.id);
+    let selected:
+      | { readonly objectKey: string; readonly format: string; readonly bytes: number }
+      | undefined;
+    if (activeRevisionId !== null) {
+      const editKind = options.kind === "preview" ? "photo_1920" : "photo_download";
+      const [editVariant] = await this.#database
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(
+          and(
+            eq(schema.mediaEditVariants.editRevisionId, activeRevisionId),
+            eq(schema.mediaEditVariants.kind, editKind),
+            eq(schema.mediaEditVariants.verified, true),
+            isNotNull(schema.mediaEditVariants.bytes),
+          ),
+        )
+        .limit(1);
+      if (editVariant !== undefined && editVariant.bytes !== null) {
+        selected = {
+          objectKey: editVariant.objectKey,
+          format: editVariant.format,
+          bytes: editVariant.bytes,
+        };
+      }
+    } else {
+      const [baseVariant] = await this.#database
+        .select()
+        .from(schema.mediaVariants)
+        .where(
+          and(
+            eq(schema.mediaVariants.mediaId, context.media.id),
+            eq(schema.mediaVariants.kind, variantKind),
+            eq(schema.mediaVariants.verified, true),
+            isNotNull(schema.mediaVariants.bytes),
+          ),
+        )
+        .limit(1);
+      if (baseVariant !== undefined && baseVariant.bytes !== null) {
+        selected = {
+          objectKey: baseVariant.objectKey,
+          format: baseVariant.format,
+          bytes: baseVariant.bytes,
+        };
+      }
+    }
+    if (selected === undefined) {
       throw new AppError({
         code: "DOWNLOAD_NOT_READY",
-        message: "该文件尚未上传完成",
+        message: "当前版本的文件尚未准备完成",
         statusCode: 409,
         retryable: true,
       });
     }
 
     const expiresAt = new Date(Date.now() + 5 * 60 * 1_000);
-    const filename = `${safeFilenamePart(context.album.title)}-${context.media.id.slice(0, 8)}-${options.kind}.${variant.format === "jpeg" ? "jpg" : variant.format}`;
+    const filename = `${safeFilenamePart(context.album.title)}-${context.media.id.slice(0, 8)}-${options.kind}.${selected.format === "jpeg" ? "jpg" : selected.format}`;
     if (options.intent === "download" && options.visitorId !== undefined) {
       await this.#operationsService?.recordAnalytics({
         albumId: context.album.id,
@@ -229,9 +285,9 @@ export class PhotoShareService {
       });
     }
     return {
-      url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+      url: this.#storage.signRead({ key: selected.objectKey, expiresAt }),
       filename,
-      bytes: variant.bytes,
+      bytes: selected.bytes,
       expiresAt: expiresAt.toISOString(),
     };
   }
@@ -271,14 +327,54 @@ export class PhotoShareService {
 
   async #mediaView(albumId: string, mediaId: string): Promise<PublicMediaView> {
     const media = await this.#publishedMedia(albumId, mediaId);
+    if (media.publishSequence === null || media.publishedAt === null) throw this.#notFound();
+    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+    const activeRevisionId = await this.#activeRevisionId(media.id);
+
+    if (activeRevisionId !== null) {
+      const variants = await this.#database
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(
+          and(
+            eq(schema.mediaEditVariants.editRevisionId, activeRevisionId),
+            eq(schema.mediaEditVariants.verified, true),
+          ),
+        );
+      const download = variants.find(
+        (variant) => variant.kind === "photo_download" && variant.bytes !== null,
+      );
+      const browserVariants = variants.filter(
+        (variant) => variant.kind !== "photo_download" && variant.bytes !== null,
+      );
+      return {
+        id: media.id,
+        width: media.width,
+        height: media.height,
+        publishSequence: media.publishSequence,
+        publishedAt: iso(media.publishedAt),
+        variants: browserVariants.map((variant) => ({
+          kind: variant.kind as PhotoVariantKind,
+          url: this.#storage.signRead({ key: variant.objectKey, expiresAt, stable: true }),
+          width: variant.width,
+          height: variant.height,
+          bytes: variant.bytes as number,
+          contentType: variant.contentType,
+        })),
+        downloads: {
+          preview: browserVariants.some((variant) => variant.kind === "photo_1920"),
+          original: download !== undefined,
+          originalBytes: download?.bytes ?? null,
+        },
+      };
+    }
+
     const variants = await this.#database
       .select()
       .from(schema.mediaVariants)
       .where(
         and(eq(schema.mediaVariants.mediaId, media.id), eq(schema.mediaVariants.verified, true)),
       );
-    if (media.publishSequence === null || media.publishedAt === null) throw this.#notFound();
-    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
     const original = variants.find(
       (variant) => variant.kind === "photo_original" && variant.bytes !== null,
     );
@@ -310,6 +406,15 @@ export class PhotoShareService {
         originalBytes: original?.bytes ?? null,
       },
     };
+  }
+
+  async #activeRevisionId(mediaId: string): Promise<string | null> {
+    const [state] = await this.#database
+      .select({ activeRevisionId: schema.mediaEditStates.activeRevisionId })
+      .from(schema.mediaEditStates)
+      .where(eq(schema.mediaEditStates.mediaId, mediaId))
+      .limit(1);
+    return state?.activeRevisionId ?? null;
   }
 
   async #publishedMedia(albumId: string, mediaId: string) {
