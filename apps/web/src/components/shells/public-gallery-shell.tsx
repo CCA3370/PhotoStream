@@ -41,16 +41,6 @@ export function PublicGalleryShell({
         }
 
         button[aria-label="重新查看使用引导"] {
-          width: 2rem;
-          min-width: 2rem;
-          max-width: 2rem;
-          height: 2rem;
-          padding: 0;
-          gap: 0;
-          aspect-ratio: 1;
-        }
-
-        button[aria-label="重新查看使用引导"] > span {
           display: none;
         }
 
