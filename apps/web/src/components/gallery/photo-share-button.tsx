@@ -1,7 +1,7 @@
 "use client";
 
-import { LoaderCircleIcon, Share2Icon } from "lucide-react";
-import { useState } from "react";
+import { LinkIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,11 @@ export function PhotoShareButton({
 }>) {
   const [pending, setPending] = useState(false);
   const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
+  const [weChat, setWeChat] = useState(false);
+
+  useEffect(() => {
+    setWeChat(isWeChatBrowser());
+  }, []);
 
   async function sharePhoto(): Promise<void> {
     if (pending) return;
@@ -170,10 +175,12 @@ export function PhotoShareButton({
             className="animate-spin motion-reduce:animate-none"
             data-icon="inline-start"
           />
+        ) : weChat ? (
+          <LinkIcon data-icon="inline-start" />
         ) : (
           <Share2Icon data-icon="inline-start" />
         )}
-        分享
+        {weChat ? "复制链接" : "分享"}
       </Button>
 
       {copyNoticeOpen && typeof document !== "undefined"
