@@ -105,12 +105,9 @@ export async function registerViewerFeedbackRoutes(
     },
     async (request, reply) => {
       await requireInternalSession(request, options.authService, options.config);
-      const [items, latestId] = await Promise.all([
-        options.feedbackService.listRecent(request.query.limit),
-        options.feedbackService.latestId(),
-      ]);
+      const items = await options.feedbackService.listRecent(request.query.limit);
       void reply.header("cache-control", "no-store");
-      return { items, latestId };
+      return { items, latestId: items[0]?.id ?? 0 };
     },
   );
 
@@ -131,9 +128,10 @@ export async function registerViewerFeedbackRoutes(
         typeof lastEventHeader === "string" && /^\d+$/u.test(lastEventHeader)
           ? Number(lastEventHeader)
           : 0;
-      const requestedAfter = Math.max(headerEventId, request.query.after ?? 0);
-      let lastEventId =
-        requestedAfter === 0 ? await options.feedbackService.latestId() : requestedAfter;
+      const hasReplayCursor = request.query.after !== undefined || headerEventId > 0;
+      let lastEventId = hasReplayCursor
+        ? Math.max(headerEventId, request.query.after ?? 0)
+        : await options.feedbackService.latestId();
 
       reply.hijack();
       reply.raw.writeHead(200, {
