@@ -2,6 +2,7 @@
 
 import type { MediaEditContextView } from "@photostream/contracts";
 import { RotateCcwIcon, SparklesIcon } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,21 +16,20 @@ import {
 } from "@/components/ui/dialog";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
-import { userFacingErrorMessage } from "@/lib/user-facing-error";
-
 import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import {
   defaultPhotoEditRecipe,
   normalizePhotoEditRecipe,
-  photoEditRecipeFromUnknown,
   type PhotoEditRecipe,
+  photoEditRecipeFromUnknown,
 } from "@/lib/photo-edit/recipe";
 import { applyMediaEditRecipe, getMediaEditContext } from "@/lib/photo-edit/revision-client";
 import { analyzeMediaEditSource, renderMediaEditPreview } from "@/lib/photo-edit/runtime";
 import {
-  resolveMediaEditSource,
   type MediaEditSourceOrigin,
+  resolveMediaEditSource,
 } from "@/lib/photo-edit/source-resolver";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
 type EditorStage = "loading" | "ready" | "analyzing" | "applying" | "error";
 
@@ -104,11 +104,7 @@ export function PhotoEditorDialog({
 
   const busy = stage === "loading" || stage === "analyzing" || stage === "applying";
   const pendingElsewhere = context?.state.pendingRevisionId !== null;
-  const canApply =
-    stage === "ready" &&
-    context !== null &&
-    source !== null &&
-    !pendingElsewhere;
+  const canApply = stage === "ready" && context !== null && source !== null && !pendingElsewhere;
 
   useEffect(() => {
     if (!open || mediaId === null) return;
@@ -199,11 +195,13 @@ export function PhotoEditorDialog({
 
   const activeUrl = showBefore ? originalUrl : (previewUrl ?? originalUrl);
   const recipeChanged = useMemo(
-    () => JSON.stringify(recipe) !== JSON.stringify(
-      context?.activeRevision === null || context?.activeRevision === undefined
-        ? defaultPhotoEditRecipe
-        : photoEditRecipeFromUnknown(context.activeRevision.recipeJson),
-    ),
+    () =>
+      JSON.stringify(recipe) !==
+      JSON.stringify(
+        context?.activeRevision === null || context?.activeRevision === undefined
+          ? defaultPhotoEditRecipe
+          : photoEditRecipeFromUnknown(context.activeRevision.recipeJson),
+      ),
     [context, recipe],
   );
 
@@ -263,11 +261,14 @@ export function PhotoEditorDialog({
         <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="relative flex min-h-[18rem] items-center justify-center overflow-hidden bg-black/95 p-3 md:min-h-[32rem]">
             {activeUrl !== null ? (
-              <img
+              <Image
                 alt={showBefore ? "原始照片" : "修图预览"}
-                className="max-h-full max-w-full object-contain"
+                className="object-contain"
                 draggable={false}
+                fill
+                sizes="(max-width: 767px) 100vw, 70vw"
                 src={activeUrl}
+                unoptimized
               />
             ) : (
               <div className="text-sm text-white/60">正在准备照片…</div>
@@ -421,7 +422,12 @@ export function PhotoEditorDialog({
         </div>
 
         <DialogFooter className="px-5 py-4">
-          <Button disabled={busy} onClick={() => onOpenChange(false)} type="button" variant="outline">
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             取消
           </Button>
           <Button disabled={!canApply || !recipeChanged} onClick={() => void apply()} type="button">
