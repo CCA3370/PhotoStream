@@ -6,6 +6,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   HashIcon,
+  SlidersHorizontalIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -40,6 +41,7 @@ export interface ReviewInspectorItem {
   readonly publicationStatus: string;
   readonly ingestStatus: string;
   readonly editPending: boolean;
+  readonly editActive: boolean;
   readonly width: number;
   readonly height: number;
   readonly totalBytes: number;
@@ -95,6 +97,7 @@ export function ReviewInspector({
   onClose,
   onDelete,
   onOpenBib,
+  onEdit,
   onStateAction,
   onToggleFeatured,
 }: Readonly<{
@@ -105,6 +108,7 @@ export function ReviewInspector({
   onClose: () => void;
   onDelete: () => void;
   onOpenBib: () => void;
+  onEdit: () => void;
   onStateAction: () => void;
   onToggleFeatured: () => void;
 }>) {
@@ -126,6 +130,7 @@ export function ReviewInspector({
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">{statusLabel(item.publicationStatus)}</Badge>
             {item.featured ? <Badge variant="secondary">精选</Badge> : null}
+            {item.editActive ? <Badge variant="secondary">已修图</Badge> : null}
             {item.editPending ? <Badge variant="outline">修图处理中</Badge> : null}
             <Badge variant="outline">{item.sourceLabel}</Badge>
           </div>
@@ -197,6 +202,24 @@ export function ReviewInspector({
                   : stateActionLabel(item.publicationStatus)}
               </Button>
             </div>
+          </section>
+
+          <section className="flex flex-col gap-2.5 border-t pt-4">
+            <h3 className="text-xs font-semibold text-muted-foreground">照片处理</h3>
+            <Button
+              disabled={busy || item.mediaId === null}
+              onClick={onEdit}
+              type="button"
+              variant="outline"
+            >
+              <SlidersHorizontalIcon data-icon="inline-start" />
+              {item.editActive ? "继续修图" : "修图"}
+            </Button>
+            {item.mediaId === null ? (
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                正在建立远端媒体记录，稍后即可修图。
+              </p>
+            ) : null}
           </section>
 
           <section className="flex flex-col gap-2.5 border-t pt-4">
