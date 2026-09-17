@@ -30,7 +30,6 @@ function media(overrides: Record<string, unknown> = {}): InternalMediaList {
           },
         ],
         deletionTask: null,
-        bib: null,
         createdAt: "2026-09-18T00:00:00.000Z",
         ...overrides,
       },
@@ -64,13 +63,8 @@ describe("reviewSyncRevision", () => {
     expect(reviewSyncRevision(media({ ingestStatus: "ready" }), [])).not.toBe(base);
     expect(reviewSyncRevision(media({ publicationStatus: "published" }), [])).not.toBe(base);
     expect(
-      reviewSyncRevision(
-        media({ categoryId: "44444444-4444-4444-8444-444444444444" }),
-        [],
-      ),
+      reviewSyncRevision(media({ categoryId: "44444444-4444-4444-8444-444444444444" }), []),
     ).not.toBe(base);
-    expect(
-      reviewSyncRevision(media(), ["11111111-1111-4111-8111-111111111111"]),
-    ).not.toBe(base);
+    expect(reviewSyncRevision(media(), ["11111111-1111-4111-8111-111111111111"])).not.toBe(base);
   });
 });
