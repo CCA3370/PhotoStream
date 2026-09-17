@@ -9,9 +9,7 @@ export const viewerFeedback = pgTable(
     albumId: uuid("album_id")
       .notNull()
       .references(() => albums.id, { onDelete: "cascade" }),
-    kind: varchar("kind", { length: 24 })
-      .$type<"problem" | "suggestion" | "other">()
-      .notNull(),
+    kind: varchar("kind", { length: 24 }).$type<"problem" | "suggestion" | "other">().notNull(),
     message: text("message").notNull(),
     pagePath: varchar("page_path", { length: 512 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
