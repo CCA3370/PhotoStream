@@ -895,7 +895,7 @@ export function ReviewWorkspace({
     }
     for (const item of selectedRemoteItems) {
       if (item.publicationStatus === "published") hideable += 1;
-      if (item.publicationStatus === "hidden" && item.edit?.pendingRevisionId == null) restorable += 1;
+      if (item.publicationStatus === "hidden") restorable += 1;
       if (item.featured) unfeatureable += 1;
       else featureable += 1;
       if (userRole === "admin") deletable += 1;
