@@ -211,7 +211,9 @@ export function AlbumManagementList({
                       <span className="truncate">
                         <span className="font-medium tabular-nums">{album.incompleteCount}</span>{" "}
                         <span
-                          className={album.incompleteCount === 0 ? "text-muted-foreground" : undefined}
+                          className={
+                            album.incompleteCount === 0 ? "text-muted-foreground" : undefined
+                          }
                         >
                           处理中
                         </span>
