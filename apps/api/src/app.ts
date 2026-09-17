@@ -300,10 +300,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       config: options.config,
     });
   }
-  if (
-    options.photoService !== undefined &&
-    options.progressiveUploadService !== undefined
-  ) {
+  if (options.photoService !== undefined && options.progressiveUploadService !== undefined) {
     await registerProgressiveUploadRoutes(app, {
       authService,
       config: options.config,

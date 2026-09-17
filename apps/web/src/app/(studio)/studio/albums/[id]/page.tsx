@@ -133,11 +133,15 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">照片显示管理</p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums">{summary?.mediaCount ?? 0}</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">
+                    {summary?.mediaCount ?? 0}
+                  </p>
                 </div>
                 <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">查看全部照片，批量显示、隐藏或调整属性</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                查看全部照片，批量显示、隐藏或调整属性
+              </p>
             </Link>
             <Link
               className="group rounded-lg border p-4 transition-colors hover:bg-muted/30"

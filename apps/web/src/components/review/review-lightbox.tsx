@@ -390,7 +390,8 @@ export function ReviewLightbox({
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
           <DialogDescription className="sr-only">
-            左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次 Delete 删除。
+            左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次
+            Delete 删除。
           </DialogDescription>
 
           <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>

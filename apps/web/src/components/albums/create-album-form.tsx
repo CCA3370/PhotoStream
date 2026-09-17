@@ -94,7 +94,9 @@ export function CreateAlbumForm() {
           <DialogHeader>
             <DialogTitle>{result === null ? "创建活动" : "活动已创建"}</DialogTitle>
             <DialogDescription>
-              {result === null ? "填写活动信息。照片上传完成后默认保持隐藏，可在审核页选择显示。" : result.album.title}
+              {result === null
+                ? "填写活动信息。照片上传完成后默认保持隐藏，可在审核页选择显示。"
+                : result.album.title}
             </DialogDescription>
           </DialogHeader>
           {result === null ? (
