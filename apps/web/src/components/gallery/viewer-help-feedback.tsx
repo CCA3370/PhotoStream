@@ -149,8 +149,8 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
             <p className="text-xs font-medium text-primary">使用引导 · 最后一步</p>
             <p className="mt-1 text-sm font-semibold">帮助与反馈都在这里</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              点击右下角问号，可以随时重新查看使用引导，也可以把遇到的问题或建议告诉我们。我们会尽快看到你的反馈，有些问题最快约
-              10 分钟就能看到变化。
+              点击右下角问号，可以随时重新查看使用引导，也可以把遇到的问题或建议告诉我们。我们会尽快查看并处理你的反馈，部分问题最快可在约
+              10 分钟内完成调整。
             </p>
             <div className="mt-3 flex justify-end">
               <Button onClick={dismissGuideTip} size="sm" type="button">
@@ -234,7 +234,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
           <DialogHeader>
             <DialogTitle>告诉我们你的想法</DialogTitle>
             <DialogDescription>
-              我们会尽快看到你的反馈并及时处理，有些问题最快约 10 分钟就能看到变化。
+              我们会尽快查看并处理你的反馈，部分问题最快可在约 10 分钟内完成调整。
             </DialogDescription>
           </DialogHeader>
 
