@@ -904,7 +904,7 @@ export class OperationsService {
     readonly cursor: string | undefined;
     readonly limit: number;
   }) {
-    requirePermission(actor.role, "audit:read");
+    requirePermission(options.actor.role, "audit:read");
     const afterId = options.cursor === undefined ? null : this.#decodeAuditCursor(options.cursor);
     const rows = await this.#database
       .select()
