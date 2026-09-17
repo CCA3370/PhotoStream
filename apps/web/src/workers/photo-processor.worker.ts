@@ -39,30 +39,7 @@ async function encode(
   return { kind, format, contentType, width: size.width, height: size.height, blob };
 }
 
-async function encodeAll(
-  bitmap: ImageBitmap,
-  format: "webp" | "jpeg",
-): Promise<ProcessedPhotoVariant[]> {
-  const qualities =
-    format === "webp"
-      ? ([
-          ["photo_480", 480, 0.7],
-          ["photo_960", 960, 0.76],
-          ["photo_1920", 1_920, 0.82],
-        ] as const)
-      : ([
-          ["photo_480", 480, 0.72],
-          ["photo_960", 960, 0.78],
-          ["photo_1920", 1_920, 0.84],
-        ] as const);
-  const output: ProcessedPhotoVariant[] = [];
-  for (const [kind, maxEdge, quality] of qualities) {
-    output.push(await encode(bitmap, kind, maxEdge, format, quality));
-  }
-  return output;
-}
-
-async function process(file: File) {
+async function process(id: string, file: File): Promise<void> {
   if (file.size <= 0 || file.size > 50 * 1024 * 1024) {
     throw new Error("单张照片必须大于 0 且不超过 50MB");
   }
@@ -75,37 +52,64 @@ async function process(file: File) {
     if (bitmap.width * bitmap.height > 100_000_000) {
       throw new Error("照片总像素不能超过 100MP");
     }
-    let variants: ProcessedPhotoVariant[];
-    try {
-      variants = await encodeAll(bitmap, "webp");
-    } catch {
-      variants = await encodeAll(bitmap, "jpeg");
-    }
-    return {
-      width: bitmap.width,
-      height: bitmap.height,
-      originalFormat: detected.format,
-      originalContentType: detected.contentType,
-      capturedAt: detected.capturedAt,
-      variants,
+    const metadata: PhotoWorkerResponse = {
+      id,
+      type: "metadata",
+      metadata: {
+        width: bitmap.width,
+        height: bitmap.height,
+        originalFormat: detected.format,
+        originalContentType: detected.contentType,
+        capturedAt: detected.capturedAt,
+      },
     };
+    worker.postMessage(metadata);
+
+    const qualities = {
+      webp: [
+        ["photo_480", 480, 0.7],
+        ["photo_960", 960, 0.76],
+        ["photo_1920", 1_920, 0.82],
+      ],
+      jpeg: [
+        ["photo_480", 480, 0.72],
+        ["photo_960", 960, 0.78],
+        ["photo_1920", 1_920, 0.84],
+      ],
+    } as const;
+
+    let format: "webp" | "jpeg" = "webp";
+    for (let index = 0; index < qualities.webp.length; index += 1) {
+      let variant: ProcessedPhotoVariant;
+      const [webpKind, webpEdge, webpQuality] = qualities.webp[index];
+      try {
+        variant = await encode(bitmap, webpKind, webpEdge, "webp", webpQuality);
+      } catch {
+        format = "jpeg";
+        break;
+      }
+      worker.postMessage({ id, type: "variant", variant } satisfies PhotoWorkerResponse);
+    }
+
+    if (format === "jpeg") {
+      for (const [kind, maxEdge, quality] of qualities.jpeg) {
+        const variant = await encode(bitmap, kind, maxEdge, "jpeg", quality);
+        worker.postMessage({ id, type: "variant", variant } satisfies PhotoWorkerResponse);
+      }
+    }
+    worker.postMessage({ id, type: "complete" } satisfies PhotoWorkerResponse);
   } finally {
     bitmap.close();
   }
 }
 
 worker.addEventListener("message", (event: MessageEvent<PhotoWorkerRequest>) => {
-  void process(event.data.file)
-    .then((photo) => {
-      const response: PhotoWorkerResponse = { id: event.data.id, ok: true, photo };
-      worker.postMessage(response);
-    })
-    .catch((error: unknown) => {
-      const response: PhotoWorkerResponse = {
-        id: event.data.id,
-        ok: false,
-        message: error instanceof Error ? error.message : "照片处理失败",
-      };
-      worker.postMessage(response);
-    });
+  void process(event.data.id, event.data.file).catch((error: unknown) => {
+    const response: PhotoWorkerResponse = {
+      id: event.data.id,
+      type: "error",
+      message: error instanceof Error ? error.message : "照片处理失败",
+    };
+    worker.postMessage(response);
+  });
 });
