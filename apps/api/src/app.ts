@@ -29,6 +29,7 @@ import type { MediaLikeService } from "./media/like-service.js";
 import type { LiveEventBroker } from "./media/live-event-broker.js";
 import type { MicroPreviewService } from "./media/micro-preview-service.js";
 import type { OperationsService } from "./media/operations-service.js";
+import type { ProgressiveUploadService } from "./media/progressive-upload-service.js";
 import type { PhotoService } from "./media/service.js";
 import type { PhotoShareService } from "./media/share-service.js";
 import type { ViewerFeedbackService } from "./media/viewer-feedback-service.js";
@@ -43,6 +44,7 @@ import { registerLikeRoutes } from "./routes/likes.js";
 import { registerMicroPreviewRoutes } from "./routes/micro-preview.js";
 import { registerOperationsRoutes } from "./routes/operations.js";
 import { registerPhotoRoutes } from "./routes/photos.js";
+import { registerProgressiveUploadRoutes } from "./routes/progressive-uploads.js";
 import { registerRuntimeRoutes } from "./routes/runtime.js";
 import { registerShareRoutes } from "./routes/shares.js";
 import { registerUserRoutes } from "./routes/users.js";
@@ -53,6 +55,7 @@ export interface BuildAppOptions {
   readonly authStore: AuthStore;
   readonly passwordHasher?: PasswordHasher;
   readonly photoService?: PhotoService;
+  readonly progressiveUploadService?: ProgressiveUploadService;
   readonly photoShareService?: PhotoShareService;
   readonly dataSaverService?: AlbumDataSaverService;
   readonly microPreviewService?: MicroPreviewService;
@@ -295,6 +298,17 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       authService,
       microPreviewService: options.microPreviewService,
       config: options.config,
+    });
+  }
+  if (
+    options.photoService !== undefined &&
+    options.progressiveUploadService !== undefined
+  ) {
+    await registerProgressiveUploadRoutes(app, {
+      authService,
+      config: options.config,
+      photoService: options.photoService,
+      progressiveUploadService: options.progressiveUploadService,
     });
   }
   if (options.photoService !== undefined && options.broker !== undefined) {
