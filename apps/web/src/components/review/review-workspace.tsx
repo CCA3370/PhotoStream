@@ -580,7 +580,8 @@ export function ReviewWorkspace({
       .map((item) => {
         const linkedLocal = localByMediaId.get(item.id) ?? null;
         const ordinaryUrl = ordinary(item);
-        const hasActiveEdit = item.edit?.activeRevisionId !== null && item.edit?.activeRevisionId !== undefined;
+        const hasActiveEdit =
+          item.edit?.activeRevisionId !== null && item.edit?.activeRevisionId !== undefined;
         return {
           key: linkedLocal === null ? `remote:${item.id}` : `local:${linkedLocal.photo.id}`,
           source: "remote" as const,
