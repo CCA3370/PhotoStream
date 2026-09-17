@@ -22,6 +22,7 @@ const apiErrorMessages = {
   UPLOAD_NOT_FOUND: "未找到这次上传任务，请重新选择照片。",
   OBJECT_VERIFICATION_FAILED: "照片上传未完成，请重新上传。",
   STATE_CONFLICT: "当前内容已发生变化，请刷新后重试。",
+  EDIT_VERSION_CONFLICT: "这张照片已在其他设备更新，请刷新最新版本后重试。",
   MEDIA_LIMIT_EXCEEDED: "本次照片数量超过允许范围，请减少后重试。",
   USER_NOT_FOUND: "未找到该成员。",
   MEDIA_NOT_FOUND: "未找到这张照片，可能已被删除。",
