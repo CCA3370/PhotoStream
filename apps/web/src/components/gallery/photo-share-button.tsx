@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRightIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
+import { LoaderCircleIcon, Share2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -21,6 +21,36 @@ function isWeChatBrowser(): boolean {
   return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
 }
 
+async function copyShareLink(value: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText !== undefined) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+  } catch {
+    // Fall through to the selection-based copy path for WebViews with restricted clipboard APIs.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.width = "1px";
+  textarea.style.height = "1px";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.append(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, value.length);
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) throw new Error("分享链接复制失败，请稍后重试。");
+}
+
 export function PhotoShareButton({
   className,
   mediaId,
@@ -33,28 +63,16 @@ export function PhotoShareButton({
   slug: string;
 }>) {
   const [pending, setPending] = useState(false);
-  const [weChatGuideOpen, setWeChatGuideOpen] = useState(false);
-  const previousUrlRef = useRef<string | null>(null);
+  const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
+  const shareActionRef = useRef<HTMLButtonElement | null>(null);
 
-  function closeWeChatGuide(): void {
-    const previousUrl = previousUrlRef.current;
-    if (previousUrl !== null) {
-      window.history.replaceState(window.history.state, "", previousUrl);
-      previousUrlRef.current = null;
-    }
-    setWeChatGuideOpen(false);
-  }
-
-  useEffect(
-    () => () => {
-      const previousUrl = previousUrlRef.current;
-      if (previousUrl !== null) {
-        window.history.replaceState(window.history.state, "", previousUrl);
-        previousUrlRef.current = null;
-      }
-    },
-    [],
-  );
+  useEffect(() => {
+    const shareAction = shareActionRef.current;
+    const downloadAction = shareAction?.nextElementSibling;
+    if (!(downloadAction instanceof HTMLButtonElement)) return;
+    if (downloadAction.querySelector("svg.lucide-download") === null) return;
+    downloadAction.setAttribute("aria-label", "保存至相册");
+  }, [mediaId]);
 
   async function sharePhoto(): Promise<void> {
     if (pending) return;
@@ -74,9 +92,8 @@ export function PhotoShareButton({
       ).toString();
 
       if (isWeChatBrowser()) {
-        previousUrlRef.current ??= window.location.href;
-        window.history.replaceState(window.history.state, "", shareUrl);
-        setWeChatGuideOpen(true);
+        await copyShareLink(shareUrl);
+        setCopyNoticeOpen(true);
         return;
       }
 
@@ -96,7 +113,7 @@ export function PhotoShareButton({
         }
       }
 
-      await navigator.clipboard.writeText(shareUrl);
+      await copyShareLink(shareUrl);
       toast.add({
         title: "分享链接已复制",
         description: "对方打开链接即可直接查看这张照片，无需输入相册口令。",
@@ -118,10 +135,42 @@ export function PhotoShareButton({
 
   return (
     <>
+      <style>{`
+        button[data-photo-share-action] + button:has(svg.lucide-download) {
+          font-size: 0 !important;
+        }
+
+        button[data-photo-share-action] + button:has(svg.lucide-download)::after {
+          content: "保存至相册";
+          font-size: 0.875rem;
+          line-height: 1.25rem;
+          white-space: nowrap;
+        }
+
+        @media (max-width: 639px) {
+          button[data-photo-share-action] {
+            flex: 0.85 1 0% !important;
+            padding-inline: 0.625rem !important;
+          }
+
+          button[data-photo-share-action] + button:has(svg.lucide-download) {
+            flex: 1.15 1 0% !important;
+            padding-inline: 0.75rem !important;
+          }
+
+          button[data-photo-share-action] + button:has(svg.lucide-download)::after {
+            font-size: 0.8125rem;
+            line-height: 1rem;
+          }
+        }
+      `}</style>
+
       <Button
         className={cn(className)}
+        data-photo-share-action
         disabled={pending}
         onClick={() => void sharePhoto()}
+        ref={shareActionRef}
         type="button"
         variant="outline"
       >
@@ -137,44 +186,30 @@ export function PhotoShareButton({
         分享
       </Button>
 
-      {weChatGuideOpen && typeof document !== "undefined"
+      {copyNoticeOpen && typeof document !== "undefined"
         ? createPortal(
             <div
-              aria-describedby="wechat-share-guide-description"
-              aria-labelledby="wechat-share-guide-title"
+              aria-describedby="wechat-copy-notice-description"
+              aria-labelledby="wechat-copy-notice-title"
               aria-modal="true"
-              className="dark public-theme fixed inset-0 z-[300] bg-black/40 text-white transition-opacity duration-150"
-              role="dialog"
+              className="dark public-theme fixed inset-0 z-[400] grid place-items-center bg-black/45 px-5"
+              role="alertdialog"
             >
-              <button
-                aria-label="关闭分享提示"
-                className="absolute inset-0 cursor-pointer"
-                onClick={closeWeChatGuide}
-                type="button"
-              />
-
-              <div className="pointer-events-none absolute top-[max(0.55rem,env(safe-area-inset-top))] right-2.5 flex max-w-[calc(100vw-1.25rem)] flex-col items-end sm:right-4">
-                <ArrowUpRightIcon
-                  aria-hidden="true"
-                  className="mr-1 size-10 shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)]"
-                />
-                <div className="mt-1 max-w-[17rem] rounded-2xl border border-white/12 bg-black/78 px-4 py-3 text-right shadow-2xl shadow-black/35 backdrop-blur-md">
-                  <p className="text-[15px] font-semibold leading-5" id="wechat-share-guide-title">
-                    点击右上角 ··· 分享
-                  </p>
-                  <p
-                    className="mt-1 text-xs leading-5 text-white/68"
-                    id="wechat-share-guide-description"
-                  >
-                    选择「转发给朋友」或「分享到朋友圈」
-                  </p>
+              <div className="w-full max-w-[20rem] rounded-2xl border border-white/10 bg-background p-5 text-foreground shadow-2xl shadow-black/35">
+                <p className="text-base font-semibold" id="wechat-copy-notice-title">
+                  链接已复制
+                </p>
+                <p
+                  className="mt-2 text-sm leading-6 text-muted-foreground"
+                  id="wechat-copy-notice-description"
+                >
+                  分享链接已复制，可直接粘贴发送给其他人。
+                </p>
+                <div className="mt-5 flex justify-end">
+                  <Button autoFocus onClick={() => setCopyNoticeOpen(false)} type="button">
+                    OK
+                  </Button>
                 </div>
-              </div>
-
-              <div className="pointer-events-none absolute inset-x-0 top-[62%] flex justify-center px-5">
-                <span className="rounded-full border border-white/10 bg-black/42 px-4 py-2 text-sm text-white/72 shadow-lg shadow-black/20 backdrop-blur-md">
-                  点击任意位置关闭提示
-                </span>
               </div>
             </div>,
             document.body,
