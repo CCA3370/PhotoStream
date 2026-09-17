@@ -27,6 +27,7 @@ import { LiveEventBroker } from "./media/live-event-broker.js";
 import { MicroPreviewService } from "./media/micro-preview-service.js";
 import { AliyunObjectStorage, LocalObjectStorage } from "./media/object-storage.js";
 import { OperationsService } from "./media/operations-service.js";
+import { ProgressiveUploadService } from "./media/progressive-upload-service.js";
 import { PhotoService } from "./media/service.js";
 import { PhotoShareService } from "./media/share-service.js";
 import { ViewerFeedbackService } from "./media/viewer-feedback-service.js";
@@ -85,6 +86,7 @@ const photoService = new PhotoService({
   config,
   cdnInvalidator,
 });
+const progressiveUploadService = new ProgressiveUploadService(database);
 const viewerFeedbackService = new ViewerFeedbackService({ database, photoService });
 const microPreviewService = new MicroPreviewService({ database, storage, photoService });
 const dataSaverService = new AlbumDataSaverService({ database });
@@ -141,6 +143,7 @@ const app = await buildApp({
   config,
   authStore,
   photoService,
+  progressiveUploadService,
   viewerFeedbackService,
   photoShareService,
   dataSaverService,

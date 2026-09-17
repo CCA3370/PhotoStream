@@ -35,9 +35,9 @@ interface CategoryView {
 }
 
 const publicationLabels: Record<InternalMediaView["publicationStatus"], string> = {
-  draft: "待发布",
-  pending_review: "待审核",
-  published: "已发布",
+  draft: "已隐藏",
+  pending_review: "已隐藏",
+  published: "显示中",
   hidden: "已隐藏",
   deleted: "已删除",
 };
@@ -68,9 +68,8 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
     serverApi<DataSaverSettingView>(`/api/v1/albums/${id}/data-saver`),
   ]);
   const summary = summaries.find((item) => item.id === id);
-  const pendingReview = summary?.pendingReviewCount ?? 0;
   const incomplete = summary?.incompleteCount ?? 0;
-  const hasAttention = pendingReview > 0 || incomplete > 0;
+  const hasAttention = incomplete > 0;
 
   return (
     <section aria-labelledby="album-heading" className="flex flex-col gap-4">
@@ -95,8 +94,8 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
             ? undefined
             : [
                 { label: "张照片", value: summary.mediaCount },
-                { label: "待审核", value: pendingReview },
-                { label: "处理异常", value: incomplete },
+                { label: "处理中", value: incomplete },
+                { label: "逻辑存储", value: formatBytes(summary.logicalBytes) },
               ]
         }
         section="概览"
@@ -106,7 +105,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
 
       <AlbumContextNav
         albumId={id}
-        counts={{ pendingReview, uploadIssues: incomplete }}
+        counts={{ uploadIssues: incomplete }}
         current="overview"
         role={session.user.role}
       />
@@ -116,13 +115,13 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
           <CardHeader className="border-b py-3.5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <CardTitle>当前待处理</CardTitle>
+                <CardTitle>当前工作</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  优先展示会阻塞发布或影响现场工作的事项。
+                  上传完成的照片默认隐藏；在审核工作区选择需要向观众显示的照片。
                 </p>
               </div>
               <Badge variant={hasAttention ? "secondary" : "outline"}>
-                {hasAttention ? "需要处理" : "状态正常"}
+                {hasAttention ? "有任务未完成" : "状态正常"}
               </Badge>
             </div>
           </CardHeader>
@@ -133,14 +132,12 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">待审核照片</p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums">{pendingReview}</p>
+                  <p className="text-sm font-medium">照片显示管理</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">{summary?.mediaCount ?? 0}</p>
                 </div>
                 <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {pendingReview > 0 ? "进入审核工作区处理待发布照片" : "当前没有待审核照片"}
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">查看全部照片，批量显示、隐藏或调整属性</p>
             </Link>
             <Link
               className="group rounded-lg border p-4 transition-colors hover:bg-muted/30"
@@ -148,7 +145,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">处理异常</p>
+                  <p className="text-sm font-medium">上传处理中</p>
                   <p className="mt-1 text-2xl font-semibold tabular-nums">{incomplete}</p>
                 </div>
                 {incomplete > 0 ? (
@@ -158,7 +155,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
                 )}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                {incomplete > 0 ? "检查未完成或失败的媒体处理任务" : "当前没有处理异常"}
+                {incomplete > 0 ? "检查未完成或失败的媒体处理任务" : "当前没有未完成的处理任务"}
               </p>
             </Link>
           </CardContent>
@@ -201,7 +198,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
               className={buttonVariants({ size: "sm", variant: "ghost" })}
               href={`/studio/albums/${id}/review`}
             >
-              查看审核
+              查看照片
               <ArrowRightIcon data-icon="inline-end" />
             </Link>
           </CardHeader>
@@ -271,10 +268,8 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="text-muted-foreground">发布方式</span>
-              <span className="font-medium">
-                {album.publishMode === "review" ? "审核后发布" : "自动发布"}
-              </span>
+              <span className="text-muted-foreground">照片可见性</span>
+              <span className="font-medium">上传后默认隐藏</span>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="text-muted-foreground">省流模式</span>

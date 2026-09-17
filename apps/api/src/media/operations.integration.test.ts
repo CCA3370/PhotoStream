@@ -240,7 +240,7 @@ maybeDescribe("stage 3 operations", () => {
         {
           albumId,
           uploaderId,
-          ingestStatus: "preview_ready",
+          ingestStatus: "ready",
           publicationStatus: "pending_review",
           width: 100,
           height: 100,
@@ -335,7 +335,7 @@ maybeDescribe("stage 3 operations", () => {
       .values({
         albumId,
         uploaderId,
-        ingestStatus: "preview_ready",
+        ingestStatus: "ready",
         publicationStatus: "pending_review",
         width: 100,
         height: 100,

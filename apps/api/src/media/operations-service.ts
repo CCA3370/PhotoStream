@@ -1034,6 +1034,9 @@ export class OperationsService {
     actorId: string,
     requestId: string,
   ): Promise<void> {
+    if (media.ingestStatus !== "ready") {
+      throw this.#stateConflict("照片尚未上传完成，不能显示");
+    }
     const now = new Date();
     const [album] = await transaction
       .update(schema.albums)
@@ -1088,6 +1091,9 @@ export class OperationsService {
     actorId: string,
     requestId: string,
   ): Promise<void> {
+    if (media.ingestStatus !== "ready") {
+      throw this.#stateConflict("照片尚未上传完成，不能显示");
+    }
     if (media.publishSequence === null || media.publishedAt === null) {
       await this.#publishInTransaction(transaction, media, actorId, requestId);
       return;
