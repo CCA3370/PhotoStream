@@ -53,6 +53,25 @@ export async function getMediaEditContext(
   );
 }
 
+export async function revertMediaEditToBase(options: {
+  readonly mediaId: string;
+  readonly expectedGeneration: number;
+  readonly expectedActiveRevisionId: string | null;
+  readonly signal?: AbortSignal;
+}): Promise<MediaEditContextView> {
+  return clientMutation<MediaEditContextView>(
+    `/api/v1/media/${encodeURIComponent(options.mediaId)}/edits/revert`,
+    {
+      body: {
+        expectedGeneration: options.expectedGeneration,
+        expectedActiveRevisionId: options.expectedActiveRevisionId,
+        targetRevisionId: null,
+      },
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    },
+  );
+}
+
 export async function applyMediaEditRecipe(options: {
   readonly mediaId: string;
   readonly recipe: PhotoEditRecipe;
