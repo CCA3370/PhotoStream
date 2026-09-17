@@ -31,6 +31,7 @@ import type { MicroPreviewService } from "./media/micro-preview-service.js";
 import type { OperationsService } from "./media/operations-service.js";
 import type { PhotoService } from "./media/service.js";
 import type { PhotoShareService } from "./media/share-service.js";
+import type { ViewerFeedbackService } from "./media/viewer-feedback-service.js";
 import type { RuntimeMetrics } from "./observability/runtime-metrics.js";
 import { registerAlbumDataSaverRoutes } from "./routes/album-data-saver.js";
 import { registerAuthRoutes } from "./routes/auth.js";
@@ -45,6 +46,7 @@ import { registerPhotoRoutes } from "./routes/photos.js";
 import { registerRuntimeRoutes } from "./routes/runtime.js";
 import { registerShareRoutes } from "./routes/shares.js";
 import { registerUserRoutes } from "./routes/users.js";
+import { registerViewerFeedbackRoutes } from "./routes/viewer-feedback.js";
 
 export interface BuildAppOptions {
   readonly config: AppConfig;
@@ -57,6 +59,7 @@ export interface BuildAppOptions {
   readonly likeService?: MediaLikeService;
   readonly featuredService?: FeaturedService;
   readonly broker?: LiveEventBroker;
+  readonly viewerFeedbackService?: ViewerFeedbackService;
   readonly userAdminService?: UserAdminService;
   readonly operationsService?: OperationsService;
   readonly dashboardService?: DashboardService;
@@ -304,6 +307,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         ? {}
         : { operationsService: options.operationsService }),
       ...(options.bibService === undefined ? {} : { bibService: options.bibService }),
+    });
+  }
+  if (options.viewerFeedbackService !== undefined && options.broker !== undefined) {
+    await registerViewerFeedbackRoutes(app, {
+      authService,
+      config: options.config,
+      feedbackService: options.viewerFeedbackService,
+      broker: options.broker,
     });
   }
   if (options.photoShareService !== undefined) {
