@@ -23,15 +23,19 @@ interface CategoryDetails {
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin", "reviewer"]);
   const { id } = await params;
-  const [album, media, categories, uploaders, bibConfig, summaries, featured] = await Promise.all([
-    serverApi<AlbumView>(`/api/v1/albums/${id}`),
-    serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=60`),
-    serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
-    serverApi<AlbumUploaderView[]>(`/api/v1/albums/${id}/uploaders`),
-    serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
-    serverApi<AlbumSummaryView[]>("/api/v1/albums"),
-    serverApi<{ readonly mediaIds: readonly string[] }>(`/api/v1/albums/${id}/featured`),
-  ]);
+  const [album, media, categories, uploaders, bibConfig, summaries, featured, reviewQueue] =
+    await Promise.all([
+      serverApi<AlbumView>(`/api/v1/albums/${id}`),
+      serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=60`),
+      serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
+      serverApi<AlbumUploaderView[]>(`/api/v1/albums/${id}/uploaders`),
+      serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
+      serverApi<AlbumSummaryView[]>("/api/v1/albums"),
+      serverApi<{ readonly mediaIds: readonly string[] }>(`/api/v1/albums/${id}/featured`),
+      serverApi<{ readonly total: number }>(
+        `/api/v1/albums/${id}/media-selection?publicationStatus=hidden&ingestStatus=ready&limit=1`,
+      ),
+    ]);
   const summary = summaries.find((item) => item.id === id);
   const syncRevision = reviewSyncRevision(media, featured.mediaIds);
 
@@ -46,7 +50,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
             ? undefined
             : [
                 { label: "张照片", value: summary.mediaCount },
-                { label: "待审核", value: summary.pendingReviewCount },
+                { label: "待审核", value: reviewQueue.total },
                 { label: "处理异常", value: summary.incompleteCount },
               ]
         }
@@ -57,7 +61,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       <AlbumContextNav
         albumId={id}
         counts={{
-          pendingReview: summary?.pendingReviewCount,
+          pendingReview: reviewQueue.total,
           uploadIssues: summary?.incompleteCount,
         }}
         current="review"
