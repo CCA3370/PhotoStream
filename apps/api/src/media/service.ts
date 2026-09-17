@@ -1363,6 +1363,37 @@ export class PhotoService {
 
   async #refreshVariant(mediaId: string, kind: DerivedPhotoVariantKind, ttlMilliseconds: number) {
     if (!publicVariantKinds.has(kind)) throw this.#albumNotFound();
+    const [editState] = await this.#database
+      .select({ activeRevisionId: schema.mediaEditStates.activeRevisionId })
+      .from(schema.mediaEditStates)
+      .where(eq(schema.mediaEditStates.mediaId, mediaId))
+      .limit(1);
+    if (editState?.activeRevisionId !== null && editState?.activeRevisionId !== undefined) {
+      const [editVariant] = await this.#database
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(
+          and(
+            eq(schema.mediaEditVariants.editRevisionId, editState.activeRevisionId),
+            eq(schema.mediaEditVariants.kind, kind),
+            eq(schema.mediaEditVariants.verified, true),
+            isNotNull(schema.mediaEditVariants.bytes),
+          ),
+        )
+        .limit(1);
+      if (editVariant !== undefined && editVariant.bytes !== null) {
+        const expiresAt = previewExpiresAt(ttlMilliseconds);
+        return {
+          url: this.#storage.signRead({
+            key: editVariant.objectKey,
+            expiresAt,
+            stable: true,
+          }),
+          expiresAt: expiresAt.toISOString(),
+          bytes: editVariant.bytes,
+        };
+      }
+    }
     const [variant] = await this.#database
       .select()
       .from(schema.mediaVariants)
@@ -1381,7 +1412,7 @@ export class PhotoService {
       url: this.#storage.signRead({
         key: variant.objectKey,
         expiresAt,
-        stable: variant.kind !== "photo_original",
+        stable: true,
       }),
       expiresAt: expiresAt.toISOString(),
       bytes: variant.bytes,
@@ -1553,6 +1584,52 @@ export class PhotoService {
                 isNotNull(schema.mediaVariants.bytes),
               ),
             );
+    const editStates =
+      mediaIds.length === 0
+        ? []
+        : await this.#database
+            .select()
+            .from(schema.mediaEditStates)
+            .where(inArray(schema.mediaEditStates.mediaId, mediaIds));
+    const activeEditRevisionIds = editStates
+      .map((state) => state.activeRevisionId)
+      .filter((id): id is string => id !== null);
+    const pendingEditRevisionIds = editStates
+      .map((state) => state.pendingRevisionId)
+      .filter((id): id is string => id !== null);
+    const editVariants =
+      activeEditRevisionIds.length === 0
+        ? []
+        : await this.#database
+            .select()
+            .from(schema.mediaEditVariants)
+            .where(
+              and(
+                inArray(schema.mediaEditVariants.editRevisionId, activeEditRevisionIds),
+                eq(schema.mediaEditVariants.verified, true),
+                isNotNull(schema.mediaEditVariants.bytes),
+              ),
+            );
+    const pendingEditRevisions =
+      pendingEditRevisionIds.length === 0
+        ? []
+        : await this.#database
+            .select({
+              id: schema.mediaEditRevisions.id,
+              status: schema.mediaEditRevisions.status,
+            })
+            .from(schema.mediaEditRevisions)
+            .where(inArray(schema.mediaEditRevisions.id, pendingEditRevisionIds));
+    const editStateByMedia = new Map(editStates.map((state) => [state.mediaId, state]));
+    const pendingStatusByRevision = new Map(
+      pendingEditRevisions.map((revision) => [revision.id, revision.status]),
+    );
+    const editVariantsByRevision = new Map<string, typeof editVariants>();
+    for (const variant of editVariants) {
+      const current = editVariantsByRevision.get(variant.editRevisionId) ?? [];
+      current.push(variant);
+      editVariantsByRevision.set(variant.editRevisionId, current);
+    }
     const deletionTasks =
       mediaIds.length === 0
         ? []
@@ -1570,6 +1647,15 @@ export class PhotoService {
     const expiresAt = previewExpiresAt(15 * 60 * 1_000);
     const items = page.map((media) => {
       const deletion = deletionByMedia.get(media.id) ?? null;
+      const editState = editStateByMedia.get(media.id);
+      const activeEditVariants =
+        editState?.activeRevisionId === null || editState?.activeRevisionId === undefined
+          ? []
+          : (editVariantsByRevision.get(editState.activeRevisionId) ?? []);
+      const resolvedVariants =
+        activeEditVariants.length === 0
+          ? (byMedia.get(media.id) ?? [])
+          : activeEditVariants.filter((variant) => variant.kind !== "photo_download");
       return {
         id: media.id,
         albumId: media.albumId,
@@ -1583,20 +1669,34 @@ export class PhotoService {
         capturedAt: media.capturedAt === null ? null : iso(media.capturedAt),
         publishSequence: media.publishSequence,
         publishedAt: media.publishedAt === null ? null : iso(media.publishedAt),
-        variants: (byMedia.get(media.id) ?? [])
-          .filter((variant) => photoVariantKinds.includes(variant.kind as PhotoVariantKind))
+        variants: resolvedVariants
+          .filter(
+            (variant) =>
+              variant.kind !== "photo_download" &&
+              publicVariantKinds.has(variant.kind as PhotoVariantKind) &&
+              variant.bytes !== null,
+          )
           .map((variant) => ({
             kind: variant.kind as PhotoVariantKind,
             url: this.#storage.signRead({
               key: variant.objectKey,
               expiresAt,
-              stable: variant.kind !== "photo_original",
+              stable: true,
             }),
             width: variant.width,
             height: variant.height,
             bytes: variant.bytes as number,
             contentType: variant.contentType,
           })),
+        edit: {
+          activeRevisionId: editState?.activeRevisionId ?? null,
+          pendingRevisionId: editState?.pendingRevisionId ?? null,
+          generation: editState?.generation ?? 0,
+          pendingStatus:
+            editState?.pendingRevisionId === null || editState?.pendingRevisionId === undefined
+              ? null
+              : (pendingStatusByRevision.get(editState.pendingRevisionId) ?? null),
+        },
         deletionTask:
           deletion === null
             ? null
@@ -2029,6 +2129,37 @@ export class PhotoService {
                 eq(schema.mediaVariants.verified, true),
               ),
             );
+    const publicMediaIds = page.map((media) => media.id);
+    const publicEditStates =
+      publicMediaIds.length === 0
+        ? []
+        : await this.#database
+            .select()
+            .from(schema.mediaEditStates)
+            .where(inArray(schema.mediaEditStates.mediaId, publicMediaIds));
+    const publicActiveRevisionIds = publicEditStates
+      .map((state) => state.activeRevisionId)
+      .filter((id): id is string => id !== null);
+    const publicEditVariants =
+      publicActiveRevisionIds.length === 0
+        ? []
+        : await this.#database
+            .select()
+            .from(schema.mediaEditVariants)
+            .where(
+              and(
+                inArray(schema.mediaEditVariants.editRevisionId, publicActiveRevisionIds),
+                eq(schema.mediaEditVariants.verified, true),
+                isNotNull(schema.mediaEditVariants.bytes),
+              ),
+            );
+    const publicEditStateByMedia = new Map(publicEditStates.map((state) => [state.mediaId, state]));
+    const publicEditVariantsByRevision = new Map<string, typeof publicEditVariants>();
+    for (const variant of publicEditVariants) {
+      const current = publicEditVariantsByRevision.get(variant.editRevisionId) ?? [];
+      current.push(variant);
+      publicEditVariantsByRevision.set(variant.editRevisionId, current);
+    }
     const byMedia = new Map<string, typeof variants>();
     for (const variant of variants) {
       const current = byMedia.get(variant.mediaId) ?? [];
@@ -2040,40 +2171,51 @@ export class PhotoService {
       if (media.publishSequence === null || media.publishedAt === null) {
         throw new Error("Published media lacks publication metadata");
       }
+      const editState = publicEditStateByMedia.get(media.id);
+      const activeEditVariants =
+        editState?.activeRevisionId === null || editState?.activeRevisionId === undefined
+          ? []
+          : (publicEditVariantsByRevision.get(editState.activeRevisionId) ?? []);
+      const baseVariants = byMedia.get(media.id) ?? [];
+      const browserVariants =
+        activeEditVariants.length === 0
+          ? baseVariants.filter((variant) => publicVariantKinds.has(variant.kind as PhotoVariantKind))
+          : activeEditVariants.filter((variant) => variant.kind !== "photo_download");
+      const activeDownload =
+        activeEditVariants.length === 0
+          ? baseVariants.find(
+              (variant) => variant.kind === "photo_original" && variant.verified && variant.bytes !== null,
+            )
+          : activeEditVariants.find(
+              (variant) => variant.kind === "photo_download" && variant.verified && variant.bytes !== null,
+            );
       return {
         id: media.id,
         width: media.width,
         height: media.height,
         publishSequence: media.publishSequence,
         publishedAt: iso(media.publishedAt),
-        variants: (byMedia.get(media.id) ?? [])
-          .filter((variant) => publicVariantKinds.has(variant.kind as PhotoVariantKind))
-          .map((variant) => {
-            if (variant.bytes === null) throw new Error("Verified variant lacks size");
-            return {
-              kind: variant.kind as PhotoVariantKind,
-              url: this.#storage.signRead({
-                key: variant.objectKey,
-                expiresAt,
-                stable: variant.kind !== "photo_original",
-              }),
-              width: variant.width,
-              height: variant.height,
-              bytes: variant.bytes,
-              contentType: variant.contentType,
-            };
-          }),
+        variants: browserVariants.map((variant) => {
+          if (variant.bytes === null) throw new Error("Verified variant lacks size");
+          return {
+            kind: variant.kind as PhotoVariantKind,
+            url: this.#storage.signRead({
+              key: variant.objectKey,
+              expiresAt,
+              stable: true,
+            }),
+            width: variant.width,
+            height: variant.height,
+            bytes: variant.bytes,
+            contentType: variant.contentType,
+          };
+        }),
         downloads: {
-          preview: (byMedia.get(media.id) ?? []).some(
+          preview: browserVariants.some(
             (variant) => variant.kind === "photo_1920" && variant.verified,
           ),
-          original: (byMedia.get(media.id) ?? []).some(
-            (variant) => variant.kind === "photo_original" && variant.verified,
-          ),
-          originalBytes:
-            (byMedia.get(media.id) ?? []).find(
-              (variant) => variant.kind === "photo_original" && variant.verified,
-            )?.bytes ?? null,
+          original: activeDownload !== undefined,
+          originalBytes: activeDownload?.bytes ?? null,
         },
       };
     });
