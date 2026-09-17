@@ -6,7 +6,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   HashIcon,
-  SendIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -77,18 +76,15 @@ function dateTime(value: string | null): string {
 }
 
 function statusLabel(status: string): string {
-  if (status === "published") return "已发布";
+  if (status === "published") return "显示中";
   if (status === "hidden") return "已隐藏";
-  if (status === "local") return "本机待发布";
-  if (status === "pending_review") return "待审核";
-  if (status === "draft") return "草稿";
+  if (status === "local") return "处理中";
+  if (status === "pending_review" || status === "draft") return "待迁移";
   return status;
 }
 
 function stateActionLabel(status: string): string {
-  if (status === "published") return "隐藏";
-  if (status === "hidden") return "恢复显示";
-  return "发布";
+  return status === "published" ? "隐藏" : "显示";
 }
 
 export function ReviewInspector({
@@ -118,6 +114,8 @@ export function ReviewInspector({
       .filter((tag) => tag.status === "confirmed")
       .map((tag) => tag.number)
       .filter((number, index, values) => values.indexOf(number) === index) ?? [];
+  const canToggleVisibility =
+    item.publicationStatus === "published" || item.publicationStatus === "hidden";
 
   return (
     <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -181,13 +179,16 @@ export function ReviewInspector({
                 />
                 {item.featured ? "取消精选" : "设为精选"}
               </Button>
-              <Button disabled={busy} onClick={onStateAction} type="button" variant="outline">
+              <Button
+                disabled={busy || !canToggleVisibility}
+                onClick={onStateAction}
+                type="button"
+                variant="outline"
+              >
                 {item.publicationStatus === "published" ? (
                   <EyeOffIcon data-icon="inline-start" />
-                ) : item.publicationStatus === "hidden" ? (
-                  <EyeIcon data-icon="inline-start" />
                 ) : (
-                  <SendIcon data-icon="inline-start" />
+                  <EyeIcon data-icon="inline-start" />
                 )}
                 {stateActionLabel(item.publicationStatus)}
               </Button>
@@ -284,7 +285,6 @@ export function ReviewBatchInspector({
   onCategoryValueChange,
   onApplyCategory,
   onBibNumberChange,
-  onPublish,
   onHide,
   onRestore,
   onFeature,
@@ -341,16 +341,16 @@ export function ReviewBatchInspector({
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-2.5">
-            <h3 className="text-xs font-semibold text-muted-foreground">发布状态</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <h3 className="text-xs font-semibold text-muted-foreground">显示状态</h3>
+            <div className="grid grid-cols-2 gap-2">
               <Button
-                disabled={busy || stats.publishable === 0}
-                onClick={onPublish}
+                disabled={busy || stats.restorable === 0}
+                onClick={onRestore}
                 type="button"
                 variant="outline"
               >
-                <SendIcon data-icon="inline-start" />
-                发布 {stats.publishable}
+                <EyeIcon data-icon="inline-start" />
+                显示 {stats.restorable}
               </Button>
               <Button
                 disabled={busy || stats.hideable === 0}
@@ -360,15 +360,6 @@ export function ReviewBatchInspector({
               >
                 <EyeOffIcon data-icon="inline-start" />
                 隐藏 {stats.hideable}
-              </Button>
-              <Button
-                disabled={busy || stats.restorable === 0}
-                onClick={onRestore}
-                type="button"
-                variant="outline"
-              >
-                <EyeIcon data-icon="inline-start" />
-                恢复 {stats.restorable}
               </Button>
             </div>
           </section>
