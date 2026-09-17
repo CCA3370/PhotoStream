@@ -36,15 +36,16 @@ PhotoStream 管理端增加一套完全在浏览器本机运行的非破坏性�
 2. **零云 AI 推理费用**：A+B 不调用任何云 AI API，也不要求 PhotoStream 服务器配置 GPU。
 3. **照片不发送给 AI 服务商**：推理数据只存在于管理员浏览器本机内存/GPU。
 4. **本地源绝对优先**：只要该照片的完整上传源在当前设备可访问，就禁止为了修图再次从 CDN/OSS 下载同一源文件。
-5. **非破坏性**：真正上传的 `photo_original` 永不覆盖；编辑作为独立 revision 存在。
-6. **当前版本一致**：观众看到的 480/960/1920 和“原图下载”都必须属于同一个 active revision。
-7. **首次发布一致**：如果照片在首次发布前已经应用修图，观众第一次看到的就必须是修图版本，禁止先暴露未修图版本再切换。
-8. **可回滚**：应用编辑只切换 active revision；恢复原始版本不重新编码真正原图。
-9. **不阻塞未使用修图的照片**：没有应用修图的照片继续走现有上传/发布路径，不增加额外等待。
-10. **故障隔离**：A/B 失败不得破坏上传队列、审核、发布、隐藏、精选、号码 OCR、人脸找图或普通浏览。
-11. **适合高频审核**：绝大多数照片应通过“智能优化 → 应用”完成，不把管理端变成复杂专业修图软件。
-12. **资源隔离**：AI 推理默认单并发、分块执行、可取消、失败隔离，不允许造成页面 OOM 或白屏。
-13. **不可变对象**：编辑版本使用新的不可变 OSS object key，不覆盖已缓存对象。
+5. **双版本完整保留**：上传前已经应用修图，也必须完整上传基础原始版本的 `480/960/1920/original`，同时完整上传修图 revision 的 `480/960/1920/photo_download`；修图不得替代、跳过或覆盖基础归档链路。
+6. **非破坏性**：真正上传的 `photo_original` 永不覆盖；编辑作为独立 revision 存在。
+7. **当前版本一致**：观众看到的 480/960/1920 和“原图下载”都必须属于同一个 active revision。
+8. **首次发布一致**：如果照片在首次发布前已经应用修图，观众第一次看到的就必须是修图版本，禁止先暴露未修图版本再切换。
+9. **可回滚**：应用编辑只切换 active revision；恢复原始版本不重新编码真正原图。
+10. **不阻塞未使用修图的照片**：没有应用修图的照片继续走现有上传/发布路径，不增加额外等待。
+11. **故障隔离**：A/B 失败不得破坏上传队列、审核、发布、隐藏、精选、号码 OCR、人脸找图或普通浏览。
+12. **适合高频审核**：绝大多数照片应通过“智能优化 → 应用”完成，不把管理端变成复杂专业修图软件。
+13. **资源隔离**：AI 推理默认单并发、分块执行、可取消、失败隔离，不允许造成页面 OOM 或白屏。
+14. **不可变对象**：编辑版本使用新的不可变 OSS object key，不覆盖已缓存对象。
 
 ## 3. 与现有本地照片队列的关系
 
@@ -168,17 +169,42 @@ local edit becomes desired active version
 
 ### 5.2 开始上传时同步本地编辑
 
-如果上传开始时存在 `applied_local`：
+如果上传开始时存在 `applied_local`，**基础上传链路和修图上传链路必须同时完整执行**。
+
+基础版本必须完整上传：
+
+```text
+base photo_480
+base photo_960
+base photo_1920
+base photo_original
+```
+
+修图版本另外完整上传：
+
+```text
+edit photo_480
+edit photo_960
+edit photo_1920
+edit photo_download
+```
+
+也就是说，一张在上传前已经应用修图的照片最终至少保留 **8 个长期媒体对象**（不计历史 revision）。不得因为观众默认显示修图版，就省略基础 480/960/1920 或真正 `photo_original`；也不得用修图输出覆盖基础对象。
+
+同步顺序：
 
 1. 现有基础上传意图照常创建 Media，取得 `mediaId`；
-2. 将本地 edit draft 绑定到 `mediaId`；
-3. 创建对应服务端 edit revision；
-4. 直接从本地原图渲染并上传 edit 480/960；
-5. edit 480/960 HEAD 验证后，该 revision 达到 `preview_ready`；
-6. 将它设置为该 Media 的目标 active revision；
-7. 首次发布时直接发布修图版；
-8. edit 1920 / `photo_download` 后续继续生成和上传；
-9. 基础原始 480/960/1920/original 仍按基础链路保留，用于恢复原始版本。
+2. 基础 `480/960/1920/original` 按原上传协议完整执行；
+3. 将本地 edit draft 绑定到 `mediaId`；
+4. 创建对应服务端 edit revision；
+5. 直接从本地原图渲染并上传 edit 480/960；
+6. edit 480/960 HEAD 验证后，该 revision 达到 `preview_ready`；
+7. 将它设置为该 Media 的目标 active revision；
+8. 首次发布时直接发布修图版；
+9. edit 1920 / `photo_download` 继续生成和上传至 `ready`；
+10. 基础上传即使此时尚未全部完成，也继续在后台补齐，直至四个基础对象完整。
+
+**active revision 只决定观众看到哪个版本，不决定基础归档对象是否上传。**
 
 ### 5.3 禁止首次发布闪现未修图版
 
@@ -191,14 +217,7 @@ base 480/960 ready
 
 发布门禁必须知道该照片存在 `desired active edit`。只有 edit revision 的公开预览层已经可用并完成 active 绑定后，才允许该照片首次公开。
 
-否则会出现：
-
-```text
-观众先看到未修图版
-→ 几秒后突然变成修图版
-```
-
-这是禁止的。
+这条门禁只控制“公开哪个版本”，**不停止基础原图和基础派生图上传**。
 
 没有应用编辑的照片完全不受此门禁影响，仍按现有 480/960 `preview_ready` 路径发布。
 
@@ -206,6 +225,7 @@ base 480/960 ready
 
 如果照片正在上传时管理员又修改 recipe：
 
+- 基础 `480/960/1920/original` 上传继续进行，不重启、不取消；
 - 不能覆盖已经上传的 edit revision 对象；
 - 当前尚未公开的旧 revision 可以标记 superseded/discarded；
 - 创建新的本地 draft/revision version；
@@ -226,7 +246,7 @@ SourceResolver
 → Apply
 ```
 
-如果媒体尚未发布，则该 revision 可以成为首次发布版本；如果媒体已经发布，则通过 `media.updated` 切换，不重新分配 `publishSequence`，不移动列表位置。
+基础 `480/960/1920/original` 已经存在，不受后续任何 edit revision 影响。如果媒体尚未发布，则新 revision 可以成为首次发布版本；如果媒体已经发布，则通过 `media.updated` 切换，不重新分配 `publishSequence`，不移动列表位置。
 
 ## 6. Edit revision 就绪层级
 
@@ -247,10 +267,11 @@ failed
 其中：
 
 - `preview_ready`：edit 480 + 960 已验证，可以作为首次发布/当前公共预览版本；
-- `ready`：1920 + `photo_download` 也已经验证；
+- `ready`：edit 1920 + `photo_download` 也已经验证；
 - `applied`：该 revision 是当前 active revision；
 - active revision 可以在 `preview_ready` 阶段先提供 480/960，1920 未完成时灯箱退到 edit 960；
-- `photo_download` 未完成时隐藏/禁用当前版本最高质量下载入口，而不是回退暴露基础原图。
+- `photo_download` 未完成时隐藏/禁用当前版本最高质量下载入口，而不是回退暴露基础原图；
+- edit revision 的阶段性就绪不改变“基础四对象必须最终完整上传”的要求。
 
 ## 7. 总体处理链路
 
@@ -263,19 +284,24 @@ LocalReviewPhoto 创建
         │
         └─ 上传开始 → 建立 mediaId
                        │
-                       ├─ 无本地已应用 edit → 原上传路径
+                       ├──────── 基础链路（始终完整）
+                       │          base 480
+                       │          base 960
+                       │          base 1920
+                       │          base original
                        │
-                       └─ 有本地已应用 edit
-                              ↓
-                         同步 edit revision
-                              ↓
-                    本地源生成 edit 480/960
-                              ↓
-                         preview_ready
-                              ↓
-                      active + 首次发布
-                              ↓
-                    1920 / photo_download
+                       └──────── 修图链路（若已应用 edit）
+                                  edit 480
+                                  edit 960
+                                    ↓
+                               preview_ready
+                                    ↓
+                              active + 首次发布
+                                    ↓
+                                  edit 1920
+                                  edit download
+                                    ↓
+                                  ready
 
 上传后/发布后再次修图：
 本地源仍存在？
@@ -498,6 +524,7 @@ photo_download
 
 真正的 `photo_original`：
 
+- **即使照片在上传前已经应用修图，也必须照常上传并长期保留**；
 - 永不覆盖；
 - active edit 存在时不再作为观众端“原图下载”目标；
 - 仅保留给管理端恢复原始版本、Before/After、重新编辑和审计；
@@ -579,11 +606,11 @@ updated_at
 
 客户端本地还需要表达“尚未有 mediaId 但已经应用”的 `desired edit`。取得 mediaId 后自动同步为正式 revision。
 
-对于尚未发布的 Media，如果 edit 已应用但服务器 revision 尚未达到 `preview_ready`，发布事务必须知道“存在 desired edit”，不能绕过它发布 base 版本。
+对于尚未发布的 Media，如果 edit 已应用但服务器 revision 尚未达到 `preview_ready`，发布事务必须知道“存在 desired edit”，不能绕过它发布 base 版本；但基础四对象上传必须继续进行。
 
 ## 15. OSS 对象
 
-基础对象保持：
+一张没有修图的照片最终至少保留基础四对象：
 
 ```text
 media/albums/{albumId}/photos/{mediaId}/
@@ -593,7 +620,7 @@ media/albums/{albumId}/photos/{mediaId}/
   original.jpg
 ```
 
-编辑对象：
+一张存在已保留 edit revision 的照片，在此基础上额外保留：
 
 ```text
 media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/
@@ -601,6 +628,12 @@ media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/
   960.webp
   1920.webp
   download.{jpg|webp}
+```
+
+因此首次上传前已经应用修图时，正常目标是：
+
+```text
+4 个 base 对象 + 4 个 edit 对象 = 8 个对象
 ```
 
 所有 revision 对象不可变，不覆盖基础 480/960/1920/original。
@@ -617,7 +650,7 @@ media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/
 POST /api/v1/media/:mediaId/edits
 ```
 
-请求包含 recipe 和 pipeline/model metadata。若浏览器已有本地完整源，API **不需要签发源文件 GET**，只提供 revision 与目标上传能力。
+请求包含 recipe 和 pipeline/model metadata。若浏览器已有本地完整源，API **不需要签发源文件 GET**，只提供 revision 与目标上传能力。基础 UploadIntent 仍完整维护四个 base 对象，edit API 不得把其标记为可省略。
 
 ### 16.3 Preview complete
 
@@ -635,7 +668,7 @@ POST /api/v1/media/:mediaId/edits/:revisionId/preview-complete
 POST /api/v1/media/:mediaId/edits/:revisionId/complete
 ```
 
-HEAD 校验 1920/download，并将 revision 标为 `ready`。
+HEAD 校验 edit 1920/download，并将 revision 标为 `ready`。这不替代基础 UploadIntent 对 base 1920/original 的完成校验。
 
 ### 16.5 应用
 
@@ -645,7 +678,8 @@ POST /api/v1/media/:mediaId/edits/:revisionId/apply
 
 - 已发布媒体：切换 active revision，发送 `media.updated`；
 - 未发布媒体：标记为首次发布应使用的 active revision；
-- 如果 revision 只有 `preview_ready`，允许先提供 480/960，1920/download 稍后补齐。
+- 如果 revision 只有 `preview_ready`，允许先提供 edit 480/960，edit 1920/download 稍后补齐；
+- 无论 active edit 状态如何，基础四对象仍按基础上传协议补齐。
 
 ### 16.6 回退/切换
 
@@ -678,6 +712,8 @@ active edit 存在但 photo_download 尚未 ready
 ```
 
 active edit 存在时**禁止**因为 edit download 尚未完成而回退给观众真正 `photo_original`，否则会造成“页面是修图版、下载却是未修图版”的版本错配。
+
+基础四对象是否完整上传属于归档/回滚完整性；active revision 属于公开版本选择。两者必须分开建模。
 
 应用修图后只发送 `media.updated` 或等价事件；不得重新 `media.published`、不得改变发布时间、不得让照片跳到列表顶部。
 
@@ -714,7 +750,14 @@ A+B 不改变 Media 身份，因此：
 修图同步失败
 ```
 
-上传进度和修图状态是两个独立状态轴，不能压成一个枚举。
+上传进度和修图状态是两个独立状态轴，不能压成一个枚举。对于上传前已应用修图的照片，上传详情应能分别显示：
+
+```text
+基础版本：480 / 960 / 1920 / 原图
+修图版本：480 / 960 / 1920 / 最高质量
+```
+
+避免用户误以为“修图后只上传修图版”。
 
 ### 19.2 编辑器
 
@@ -746,7 +789,7 @@ AI 修复
 
 ### 19.4 AI 状态
 
-首次加载模型显示下载/准备进度；推理显示本地进度。失败只影响照片处理区，不产生全局错误页，也不暂停正在进行的上传。
+首次加载模型显示下载/准备进度；推理显示本地进度。失败只影响照片处理区，不产生全局错误页，也不暂停正在进行的基础上传。
 
 ## 20. 批量工作流
 
@@ -780,7 +823,7 @@ failed
 cancelled
 ```
 
-复用现有 IndexedDB、任务恢复、失败重试和资源压力设计经验，但上传任务与编辑任务隔离。
+复用现有 IndexedDB、任务恢复、失败重试和资源压力设计经验，但基础上传任务与编辑任务隔离。edit upload 失败不能把已经完成的 base upload 回滚；base upload 失败也不能删除本地 edit recipe。
 
 编辑任务记录/暴露：
 
@@ -801,6 +844,7 @@ sourceOrigin = local-file | local-original | local-variant | cache | remote-orig
 - 已上传照片只要本地源存在，同样不得出现原图 GET；
 - 首次 B 使用可以出现模型加载；
 - 同步 edit 时只出现 edit PUT、complete/apply 等必要请求；
+- 对上传前已应用 edit 的照片，必须能观察到 base 四对象和 edit 四对象都完成上传；
 - 换设备/清本地数据的测试才允许出现远端源 GET。
 
 ## 23. 安全、隐私与日志
@@ -821,11 +865,20 @@ sourceOrigin = local-file | local-original | local-variant | cache | remote-orig
 
 A+B 不产生 AI 推理账单，不需要服务器 GPU。
 
+一张上传前已经应用修图且保留一个 edit revision 的照片，正常会上传并长期保留：
+
+```text
+base: 480 + 960 + 1920 + original
+edit: 480 + 960 + 1920 + photo_download
+= 8 个媒体对象
+```
+
 允许新增成本：
 
 - 自托管模型静态文件；
-- 每个被保留 edit revision 的 480/960/1920/full-resolution download 四个对象；
-- **仅当本地完整源不存在时**，管理端按需读取远端源产生的普通媒体流量/请求。
+- edit revision 的四个额外对象；
+- 双版本长期存储容量；
+- 仅当本地完整源不存在时，管理端按需读取远端源产生的普通媒体流量/请求。
 
 照片上传前或上传后只要 `originalBlob` 仍在本地，修图都不应产生照片源 CDN 流量。
 
@@ -836,6 +889,7 @@ A+B 不产生 AI 推理账单，不需要服务器 GPU。
 不设独立模型 PoC 阶段。实现完成后直接部署到当前生产环境，由管理员在正式对外投产前使用真实工作流验证并调整：
 
 - 上传前修图；
+- 上传前应用 edit 后，base 四对象和 edit 四对象均完整上传；
 - 上传过程中修改/重新应用；
 - 上传后本地源仍存在时的零远端读取；
 - 清理本地源后的远端 fallback；
@@ -905,11 +959,11 @@ E2E 至少覆盖：
 applied_local edit
 → 开始上传
 → 建立 mediaId
-→ 自动同步 edit revision
-→ edit 480/960 preview_ready
-→ 首次发布直接显示修图版
+→ base 480/960/1920/original 全部上传
+→ edit 480/960/1920/download 全部上传
+→ edit 480/960 preview_ready 后首次发布直接显示修图版
 → 从未公开 base 未修图版
-→ 1920/download 后续补齐
+→ 最终断言 8 个预期对象全部 verified
 ```
 
 ### Case C：上传过程中修图
@@ -918,9 +972,10 @@ applied_local edit
 base upload in progress
 → 打开编辑器
 → 应用 edit
+→ base upload 不取消
 → desired active revision 更新
 → publication gate 使用最新 edit
-→ 上传本身继续进行
+→ 两套对象最终各自完整
 ```
 
 ### Case D：上传/发布后，本地源仍在
@@ -956,7 +1011,7 @@ active edit
 → viewer 恢复 base original
 ```
 
-还需覆盖 WebGPU 不可用、inference OOM/device lost、模型加载失败、edit upload 部分失败、apply 并发冲突、刷新后的 local/synced 状态恢复和孤立 revision 清理。
+还需覆盖 WebGPU 不可用、inference OOM/device lost、模型加载失败、edit upload 部分失败、base upload 部分失败、apply 并发冲突、刷新后的 local/synced 状态恢复和孤立 revision 清理。
 
 ## 28. 预计代码区域
 
@@ -1008,8 +1063,8 @@ packages/db/src/.../
 - contracts；
 - `media_edit_revisions` / `media_edit_variants` / active revision；
 - local draft → media revision 同步；
+- base 四对象与 edit 四对象并行但独立的完整上传状态；
 - preview_ready 与 complete；
-- 四种 edit 输出：480/960/1920/download；
 - 公共浏览与下载解析；
 - 首次发布门禁与实时更新。
 
@@ -1057,6 +1112,7 @@ packages/db/src/.../
 - 上传后/发布后继续可修图；
 - 四个阶段统一优先本地源；
 - 上传前应用的修图版本可作为首次公开版本；
+- 上传前已应用修图仍必须完整上传 base 四对象 + edit 四对象；
 - 禁止首次公开时短暂显示未修图 base 版本。
 
 ### A
@@ -1117,17 +1173,18 @@ packages/db/src/.../
 5. 只要当前设备有完整本地上传源，就禁止为了修图从 CDN/OSS 重新获取原图，与照片是否已经上传无关。
 6. 现有 `LocalReviewPhoto.originalBlob` 是同设备编辑时的首选最终导出源；上传完成后不得无条件立即清理。
 7. mediaId 尚不存在时，编辑以本地 draft/applied_local 保存；mediaId 建立后自动同步为服务端 revision。
-8. 如果首次发布前已经应用修图，首次公开必须直接使用修图版本，禁止先公开 base 版本再切换。
-9. 真正上传的 `photo_original` 永不覆盖，只用于管理端恢复/重新编辑和无 active edit 时的公共最高质量下载。
-10. 每个 edit revision 生成 `photo_480`、`photo_960`、`photo_1920` 和全分辨率 `photo_download`。
-11. active edit 存在时，观众端“原图下载”必须解析到该 revision 的 `photo_download`；尚未 ready 时暂时不提供，不能回退 base `photo_original`。
-12. 编辑版本使用独立 revision 和不可变 OSS key。
-13. 公共端只感知当前 active 版本，不需要理解编辑器内部历史结构。
-14. WebGPU 是 B 首选执行后端；缺少 WebGPU 时 A 仍完整可用。
-15. AI 推理单并发、可取消、失败隔离；上传网络队列与 AI GPU 队列互不阻塞。
-16. 模型只自托管、懒加载、长缓存，不使用第三方运行时模型 CDN。
-17. 已发布媒体应用编辑只发媒体更新，不重新发布时间、不改变列表排序。
-18. OCR 与人脸结果继续绑定 Media，不因普通修图重新计算。
-19. 所有模型/参数变化通过明确 model/pipeline version 记录，允许在当前生产环境持续调整而不破坏旧 revision。
+8. **上传前即使已经应用修图，也必须完整上传基础 `480/960/1920/original`，并额外完整上传修图 `480/960/1920/photo_download`。**
+9. 如果首次发布前已经应用修图，首次公开必须直接使用修图版本，禁止先公开 base 版本再切换；这不影响基础四对象继续后台补齐。
+10. 真正上传的 `photo_original` 永不覆盖，只用于管理端恢复/重新编辑和无 active edit 时的公共最高质量下载。
+11. 每个 edit revision 生成 `photo_480`、`photo_960`、`photo_1920` 和全分辨率 `photo_download`。
+12. active edit 存在时，观众端“原图下载”必须解析到该 revision 的 `photo_download`；尚未 ready 时暂时不提供，不能回退 base `photo_original`。
+13. 编辑版本使用独立 revision 和不可变 OSS key。
+14. 公共端只感知当前 active 版本，不需要理解编辑器内部历史结构。
+15. WebGPU 是 B 首选执行后端；缺少 WebGPU 时 A 仍完整可用。
+16. AI 推理单并发、可取消、失败隔离；上传网络队列与 AI GPU 队列互不阻塞。
+17. 模型只自托管、懒加载、长缓存，不使用第三方运行时模型 CDN。
+18. 已发布媒体应用编辑只发媒体更新，不重新发布时间、不改变列表排序。
+19. OCR 与人脸结果继续绑定 Media，不因普通修图重新计算。
+20. 所有模型/参数变化通过明确 model/pipeline version 记录，允许在当前生产环境持续调整而不破坏旧 revision。
 
 第一轮代码工作从 **Phase 0 → Phase 1 → Phase 2** 连续推进；不再插入独立模型 PoC 阶段。
