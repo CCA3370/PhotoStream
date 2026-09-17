@@ -1,7 +1,7 @@
 import type { MediaEditSourceView } from "@photostream/contracts";
 
-import { clientMutation } from "@/lib/client-api";
-import { findLocalReviewPhotoByMediaId } from "@/lib/local-review-queue";
+import { clientMutation } from "../client-api";
+import { findLocalReviewPhotoByMediaId } from "../local-review-queue";
 
 export type MediaEditSourceOrigin = "local-original" | "remote-original";
 
