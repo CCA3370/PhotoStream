@@ -69,7 +69,8 @@ export function GalleryFilterNav({
 
         if (searchToolbar !== undefined && searchToolbar !== null) {
           const searchRect = searchToolbar.getBoundingClientRect();
-          const overlapsFilterBar = searchRect.bottom > navRect.top && searchRect.top < navRect.bottom;
+          const overlapsFilterBar =
+            searchRect.bottom > navRect.top && searchRect.top < navRect.bottom;
           if (overlapsFilterBar && searchRect.width > 0) {
             contentRight = Math.min(contentRight, searchRect.left - 4);
           }
@@ -103,7 +104,8 @@ export function GalleryFilterNav({
         )
       : undefined;
     const searchToolbar = searchButton?.parentElement ?? searchButton;
-    if (searchToolbar !== undefined && searchToolbar !== null) resizeObserver.observe(searchToolbar);
+    if (searchToolbar !== undefined && searchToolbar !== null)
+      resizeObserver.observe(searchToolbar);
 
     window.addEventListener("resize", measure);
     return () => {
@@ -111,7 +113,7 @@ export function GalleryFilterNav({
       resizeObserver.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [items, reserveSearchSpace]);
+  }, [reserveSearchSpace]);
 
   return (
     <nav
