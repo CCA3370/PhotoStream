@@ -555,6 +555,7 @@ export const mediaEditContextViewSchema = z
     state: mediaEditStateViewSchema,
     activeRevision: mediaEditRevisionViewSchema.nullable(),
     pendingRevision: mediaEditRevisionViewSchema.nullable(),
+    history: z.array(mediaEditRevisionViewSchema),
   })
   .strict();
 export type MediaEditContextView = z.infer<typeof mediaEditContextViewSchema>;
