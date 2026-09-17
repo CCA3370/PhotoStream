@@ -36,9 +36,7 @@ export function LiveUpdates({
       currentSlug.current = slug;
       lastEventId.current = initialEventId;
       knownIds.current = new Set(knownMediaIds);
-      return;
     }
-    for (const id of knownMediaIds) knownIds.current.add(id);
   }, [initialEventId, knownMediaIds, slug]);
 
   useEffect(() => {
