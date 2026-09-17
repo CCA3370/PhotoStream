@@ -20,9 +20,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
-import { viewerOnboardingStorageKey } from "@/lib/viewer-onboarding";
-
-const helpTipStorageKey = "photostream:viewer-help-feedback-tip:v1";
 
 const feedbackKinds = [
   { value: "problem", label: "遇到问题" },
@@ -32,43 +29,13 @@ const feedbackKinds = [
 
 type FeedbackKind = (typeof feedbackKinds)[number]["value"];
 
-function storageSeen(key: string): boolean {
-  try {
-    return window.localStorage.getItem(key) === "seen";
-  } catch {
-    return false;
-  }
-}
-
-function markStorageSeen(key: string): void {
-  try {
-    window.localStorage.setItem(key, "seen");
-  } catch {
-    // The help remains usable when browser storage is unavailable.
-  }
-}
-
 export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [guideTipOpen, setGuideTipOpen] = useState(false);
   const [kind, setKind] = useState<FeedbackKind>("suggestion");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (storageSeen(helpTipStorageKey)) return;
-
-    const revealWhenOnboardingFinishes = () => {
-      if (!storageSeen(viewerOnboardingStorageKey)) return;
-      window.setTimeout(() => setGuideTipOpen(true), 180);
-      window.clearInterval(timer);
-    };
-    const timer = window.setInterval(revealWhenOnboardingFinishes, 250);
-    revealWhenOnboardingFinishes();
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -90,13 +57,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
     };
   }, [menuOpen]);
 
-  function dismissGuideTip(): void {
-    markStorageSeen(helpTipStorageKey);
-    setGuideTipOpen(false);
-  }
-
   function replayGuide(): void {
-    dismissGuideTip();
     setMenuOpen(false);
     document.querySelector<HTMLButtonElement>('button[aria-label="重新查看使用引导"]')?.click();
   }
@@ -141,29 +102,6 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
         className="fixed right-2.5 bottom-[calc(2.5rem+env(safe-area-inset-bottom))] z-30 sm:right-4"
         ref={menuRef}
       >
-        {guideTipOpen && !menuOpen ? (
-          <section
-            aria-live="polite"
-            className="absolute right-0 bottom-11 w-[min(18rem,calc(100vw-1.25rem))] rounded-2xl border border-border/80 bg-background/98 p-3.5 shadow-xl shadow-black/10 backdrop-blur-xl"
-          >
-            <p className="text-xs font-medium text-primary">使用引导 · 最后一步</p>
-            <p className="mt-1 text-sm font-semibold">帮助与反馈都在这里</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              点击右下角问号，可以随时重新查看使用引导，也可以把遇到的问题或建议告诉我们。我们会尽快查看并处理你的反馈，部分问题最快可在约
-              10 分钟内完成调整。
-            </p>
-            <div className="mt-3 flex justify-end">
-              <Button onClick={dismissGuideTip} size="sm" type="button">
-                知道了
-              </Button>
-            </div>
-            <span
-              aria-hidden="true"
-              className="absolute right-3.5 -bottom-1.5 size-3 rotate-45 border-r border-b border-border/80 bg-background"
-            />
-          </section>
-        ) : null}
-
         {menuOpen ? (
           <section
             aria-label="帮助与反馈"
@@ -193,7 +131,6 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
               <Button
                 className="h-auto justify-start gap-3 rounded-xl px-2.5 py-2.5 text-left"
                 onClick={() => {
-                  dismissGuideTip();
                   setMenuOpen(false);
                   setFeedbackOpen(true);
                 }}
@@ -217,10 +154,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
           aria-label="帮助与反馈"
           className="size-8 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground"
           data-viewer-help-trigger
-          onClick={() => {
-            dismissGuideTip();
-            setMenuOpen((open) => !open);
-          }}
+          onClick={() => setMenuOpen((open) => !open)}
           size="icon-sm"
           type="button"
           variant="outline"
