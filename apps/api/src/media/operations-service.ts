@@ -643,39 +643,84 @@ export class OperationsService {
       original: "photo_original",
     } satisfies Record<DownloadKind, (typeof schema.variantKindEnum.enumValues)[number]>;
     const variantKind = downloadSelection[options.kind];
-    const [variant] = await this.#database
-      .select()
-      .from(schema.mediaVariants)
-      .where(
-        and(
-          eq(schema.mediaVariants.mediaId, media.id),
-          eq(schema.mediaVariants.kind, variantKind),
-          eq(schema.mediaVariants.verified, true),
-          isNotNull(schema.mediaVariants.bytes),
-        ),
-      )
+    const [editState] = await this.#database
+      .select({ activeRevisionId: schema.mediaEditStates.activeRevisionId })
+      .from(schema.mediaEditStates)
+      .where(eq(schema.mediaEditStates.mediaId, media.id))
       .limit(1);
-    if (variant === undefined || variant.bytes === null) {
+
+    let selected:
+      | {
+          readonly objectKey: string;
+          readonly format: string;
+          readonly bytes: number;
+        }
+      | undefined;
+
+    if (editState?.activeRevisionId !== null && editState?.activeRevisionId !== undefined) {
+      const editKind = options.kind === "preview" ? "photo_1920" : "photo_download";
+      const [editVariant] = await this.#database
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(
+          and(
+            eq(schema.mediaEditVariants.editRevisionId, editState.activeRevisionId),
+            eq(schema.mediaEditVariants.kind, editKind),
+            eq(schema.mediaEditVariants.verified, true),
+            isNotNull(schema.mediaEditVariants.bytes),
+          ),
+        )
+        .limit(1);
+      if (editVariant !== undefined && editVariant.bytes !== null) {
+        selected = {
+          objectKey: editVariant.objectKey,
+          format: editVariant.format,
+          bytes: editVariant.bytes,
+        };
+      }
+    } else {
+      const [baseVariant] = await this.#database
+        .select()
+        .from(schema.mediaVariants)
+        .where(
+          and(
+            eq(schema.mediaVariants.mediaId, media.id),
+            eq(schema.mediaVariants.kind, variantKind),
+            eq(schema.mediaVariants.verified, true),
+            isNotNull(schema.mediaVariants.bytes),
+          ),
+        )
+        .limit(1);
+      if (baseVariant !== undefined && baseVariant.bytes !== null) {
+        selected = {
+          objectKey: baseVariant.objectKey,
+          format: baseVariant.format,
+          bytes: baseVariant.bytes,
+        };
+      }
+    }
+
+    if (selected === undefined) {
       throw new AppError({
         code: "DOWNLOAD_NOT_READY",
-        message: "该文件尚未上传完成",
+        message: "当前版本的下载文件尚未准备完成",
         statusCode: 409,
         retryable: true,
       });
     }
     const expiresAt = new Date(Date.now() + 5 * 60 * 1_000);
-    const filename = `${safeFilenamePart(album.title)}-${media.id.slice(0, 8)}-${options.kind}.${variant.format === "jpeg" ? "jpg" : variant.format}`;
+    const filename = `${safeFilenamePart(album.title)}-${media.id.slice(0, 8)}-${options.kind}.${selected.format === "jpeg" ? "jpg" : selected.format}`;
     const record = {
-      objectKey: variant.objectKey,
+      objectKey: selected.objectKey,
       filename,
-      bytes: variant.bytes,
+      bytes: selected.bytes,
       expiresAt: expiresAt.toISOString(),
     };
     if (options.intent === "view") {
       return {
-        url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+        url: this.#storage.signRead({ key: selected.objectKey, expiresAt }),
         filename,
-        bytes: variant.bytes,
+        bytes: selected.bytes,
         expiresAt: expiresAt.toISOString(),
       };
     }
@@ -718,9 +763,9 @@ export class OperationsService {
       variantKind,
     });
     return {
-      url: this.#storage.signRead({ key: variant.objectKey, expiresAt }),
+      url: this.#storage.signRead({ key: selected.objectKey, expiresAt }),
       filename,
-      bytes: variant.bytes,
+      bytes: selected.bytes,
       expiresAt: expiresAt.toISOString(),
     };
   }
