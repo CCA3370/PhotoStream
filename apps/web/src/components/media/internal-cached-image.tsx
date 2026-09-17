@@ -3,6 +3,7 @@
 import Image, { type ImageProps } from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { clientGet } from "@/lib/client-api";
+import { findLocalReviewPhotoByMediaId } from "@/lib/local-review-queue";
 import { loadMediaBlob } from "@/lib/media-blob-cache";
 
 // Keep internal media separate from public album caches. Only the rotating CDN
@@ -65,31 +66,47 @@ export function InternalCachedImage({
     if (direct || (!visible && !eager)) return;
     let disposed = false;
     let objectUrl: string | null = null;
-    void loadMediaBlob({
-      cacheName: "photostream-internal-images-v1",
-      key: stableSource,
-      expectedBytes: null,
-      sourceUrl: sourceRef.current,
-      ...(mediaId && variantKind && variantKind !== "photo_original"
-        ? {
-            refreshUrl: async () => {
-              const result = await clientGet<{ url: string }>(
-                `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${encodeURIComponent(variantKind)}`,
-              );
-              return result.url;
-            },
+
+    const resolveImage = async (): Promise<void> => {
+      if (mediaId) {
+        try {
+          const localPhoto = await findLocalReviewPhotoByMediaId(mediaId);
+          if (localPhoto !== null && !disposed) {
+            objectUrl = URL.createObjectURL(localPhoto.originalBlob);
+            setResolved({ source: stableSource, url: objectUrl });
+            setFallback((current) => (current?.source === stableSource ? null : current));
+            return;
           }
-        : {}),
-    })
-      .then((blob) => {
-        if (disposed) return;
-        objectUrl = URL.createObjectURL(blob);
-        setResolved({ source: stableSource, url: objectUrl });
-        setFallback((current) => (current?.source === stableSource ? null : current));
-      })
-      .catch(() => {
-        if (!disposed) setFallback({ source: stableSource, failed: false });
+        } catch {
+          // Local IndexedDB is an optimization. Fall through to the remote source.
+        }
+      }
+
+      const blob = await loadMediaBlob({
+        cacheName: "photostream-internal-images-v1",
+        key: stableSource,
+        expectedBytes: null,
+        sourceUrl: sourceRef.current,
+        ...(mediaId && variantKind && variantKind !== "photo_original"
+          ? {
+              refreshUrl: async () => {
+                const result = await clientGet<{ url: string }>(
+                  `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${encodeURIComponent(variantKind)}`,
+                );
+                return result.url;
+              },
+            }
+          : {}),
       });
+      if (disposed) return;
+      objectUrl = URL.createObjectURL(blob);
+      setResolved({ source: stableSource, url: objectUrl });
+      setFallback((current) => (current?.source === stableSource ? null : current));
+    };
+
+    void resolveImage().catch(() => {
+      if (!disposed) setFallback({ source: stableSource, failed: false });
+    });
     return () => {
       disposed = true;
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
