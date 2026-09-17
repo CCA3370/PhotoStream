@@ -1,6 +1,6 @@
 # 照片处理与上传链路
 
-状态：已批准的实施基线；人脸索引旁路已本地实现并默认关闭；管理端本地智能修图作为审核后独立链路直接接入生产代码
+状态：已批准的实施基线；人脸索引旁路已本地实现并默认关闭；管理端本地智能修图可在上传前、上传中和上传后使用
 更新日期：2026-09-17
 
 ## 1. 目标
@@ -9,7 +9,7 @@
 
 首版选择在上传者浏览器本地生成固定派生图。AVIF 不进入首版；WebP 在当前目标浏览器中具备更可靠的原生编码路径，且编码速度和设备内存风险更适合现场批量上传。
 
-管理端本地智能修图不进入上传关键路径。它复用已经保存在当前管理设备上的 `LocalReviewPhoto.originalBlob`/本地变体作为首选源；只要本地完整源仍可访问，就不得为了修图再次从 CDN/OSS 获取真正原图。完整编辑设计见[管理端本地智能修图](16-local-photo-editing.md)。
+管理端本地智能修图与上传状态解耦：照片完成本地基础处理并进入 `LocalReviewPhoto` 队列后即可修图，不要求上传开始、上传完成或发布。上传中、上传完成和发布后仍使用同一编辑器。只要当前设备还能访问上传时保存的 `originalBlob`/本地变体，修图就必须优先使用本地源，不得重新从 CDN/OSS 获取真正原图。完整编辑设计见[管理端本地智能修图](16-local-photo-editing.md)。
 
 ## 2. 输入限制
 
@@ -32,13 +32,16 @@
 2. 将单个文件交给专用 Web Worker；同一设备默认只处理一张照片，防止批量解码撑爆内存。
 3. 解析方向、像素尺寸和拍摄时间；忽略 GPS、相机序列号、作者、版权注释等字段。
 4. 使用 `createImageBitmap`/浏览器解码器按正确方向生成最大 1920 长边的工作位图，不放大较小图片。
-5. 从工作位图依次生成 1920、960、480 派生图，将 480/960 Blob 交回主线程立即开始上传。
-6. 相册启用号码识别时，将 1920 工作图交给独立 OCR Worker；未启用时立即释放工作位图。未来人脸找图不在上传设备运行模型，也不延长工作位图生命周期。
-7. 将宽高、拍摄时间、派生文件大小和本地队列状态发送回主线程；OCR 结果通过独立号码接口提交。
+5. 从工作位图生成 1920、960、480 基础派生图。
+6. 创建 `LocalReviewPhoto`，保存真正原始 `originalBlob`、本地 480/960/1920、格式、尺寸和本地任务状态。
+7. 从此时开始照片即可进入修图，不要求已经创建上传意图或 `mediaId`。
+8. 用户开始上传后，基础 480/960 优先上传；如果用户暂未上传，可继续在本地队列中审核、OCR 和修图。
+9. 相册启用号码识别时，将 1920 工作图交给独立 OCR Worker；OCR 与修图均不得阻塞基础上传。
+10. 将宽高、拍摄时间、派生文件大小和本地队列状态发送回主线程；OCR 结果通过独立号码接口提交。
 
-处理任务必须支持取消；取消后关闭所有 Bitmap、撤销 Object URL 并清理仅属于当前处理过程的临时 Blob 引用。用于审核/后续本地修图的 `LocalReviewPhoto.originalBlob` 与本地变体按审核队列生命周期管理，不得因为远端上传完成就无条件立即删除。
+处理任务必须支持取消；取消后关闭所有 Bitmap、撤销 Object URL 并清理只属于当前处理过程的临时引用。用于审核/修图的 `LocalReviewPhoto.originalBlob` 与本地变体按本地审核队列生命周期管理，**不得因为远端上传完成就无条件立即删除**。
 
-### 3.2 固定派生规格
+### 3.2 固定基础派生规格
 
 | 变体 | 最大长边 | 默认质量 | 用途 |
 | --- | ---: | ---: | --- |
@@ -69,7 +72,7 @@
 - 自动候选为 `suggested`，人工确认后才可被观众搜索；
 - 确认号码后由服务端按当前映射版本自动派生年级/班级，不由客户端自行提交属性；
 - OCR 无候选、失败或候选全被拒绝仍保持待复核，绝不自动添加号码或标记无号码；
-- 旧照片不从 CDN 自动补扫，只允许人工添加；
+- 旧照片不从 CDN 自动补扫，只允许人工添加。
 
 规则、模型、加密和搜索细节见[号码牌识别与筛选](12-bib-recognition.md)。
 
@@ -86,9 +89,30 @@
 
 完整流程见[人脸候选找图](14-face-search.md)。
 
-### 3.6 管理端本地智能修图旁路
+### 3.6 管理端本地智能修图
 
-管理端修图发生在照片进入本地审核工作区之后，与上传发布事务解耦。SourceResolver 固定优先使用：当前 File/内存源 → `LocalReviewPhoto.originalBlob` → 其他本地完整源；只有这些都不可用时才允许请求远端真正 `photo_original`。
+修图入口从 `LocalReviewPhoto` 创建后就可用，覆盖整个生命周期：
+
+```text
+local（未上传）
+→ uploading
+→ uploaded / waiting review
+→ published
+```
+
+四种状态都复用同一个 SourceResolver：
+
+```text
+当前 File
+→ 当前内存 originalBlob
+→ IndexedDB LocalReviewPhoto.originalBlob
+→ 其他本地完整源
+→ 以上都不存在时才允许 remote photo_original fallback
+```
+
+因此“上传后修图”不等于“从 CDN 修图”。只要本地源还在，已经上传甚至已经发布的照片仍然从本地原图重新渲染。
+
+在 `mediaId` 尚未建立时，编辑以本地 draft 保存；用户点击“应用”后状态为 `applied_local`。一旦上传开始并取得 `mediaId`，客户端自动把本地 draft 同步为正式 edit revision。
 
 每个完整 edit revision 生成四个不可变对象：
 
@@ -97,75 +121,125 @@
 - `photo_1920`；
 - `photo_download`：与处理源保持完整分辨率的当前修图版本最高质量下载对象。
 
-真正上传的 `photo_original` 永不覆盖。存在 active edit 时，观众端“原图下载”解析到该 revision 的 `photo_download`；只有没有 active edit 时才解析到基础 `photo_original`。因此“原图下载”面向观众的语义是“当前照片版本的最高质量下载”。
+**上传前已经应用修图时，基础四对象仍必须完整上传，同时额外完整上传上述四个 edit 对象。** 因此一张这种照片至少形成 8 个长期对象；active revision 只控制观众看到哪个版本，不允许省略基础归档对象。
 
-A 类确定性优化与 B 类 ONNX/WebGPU 本地 AI 都直接接入正常生产代码路径；PhotoStream 当前未正式对外投产，因此不设置独立模型 PoC/晋级阶段，模型与参数在当前生产环境中持续验证和调整。
+edit revision 允许分阶段就绪：480/960 完成后为 `preview_ready`，1920/download 完成后为 `ready`。这样修图版仍可沿用“小图先公开、大图后补”的直播策略。
+
+真正上传的 `photo_original` 永不覆盖。存在 active edit 时，观众端“原图下载”解析到该 revision 的 `photo_download`；只有没有 active edit 时才解析到基础 `photo_original`。
+
+A 类确定性优化与 B 类 ONNX/WebGPU 本地 AI 都直接接入正常生产代码路径；不设置独立模型 PoC/晋级阶段。
 
 ## 4. 对象命名
 
-基础对象路径由 API 生成，不包含学校名称、活动标题、上传者或原始文件名：
+基础对象路径：
 
 - `media/albums/{albumId}/photos/{mediaId}/480.webp`
 - `media/albums/{albumId}/photos/{mediaId}/960.webp`
 - `media/albums/{albumId}/photos/{mediaId}/1920.webp`
 - `media/albums/{albumId}/photos/{mediaId}/original.{safeExtension}`
 
-如果该照片退化为 JPEG，三个基础派生扩展名统一为 `.jpg`。对象 key 一经签发不可更改，所有 PUT 使用禁止覆盖语义。
-
-编辑对象位于独立不可变 revision 路径，例如：
+编辑对象使用独立不可变 revision 路径：
 
 - `media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/480.webp`
 - `media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/960.webp`
 - `media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/1920.webp`
 - `media/albums/{albumId}/photos/{mediaId}/edits/{revisionId}/download.{safeExtension}`
 
-编辑对象不得覆盖基础对象。完整契约以 `16-local-photo-editing.md` 为准。
+对象 key 一经签发不可更改，所有 PUT 使用禁止覆盖语义。编辑对象不得覆盖基础对象。
 
 ## 5. 上传协议
 
 ### 5.1 创建上传意图
 
-浏览器完成本地派生后调用 API，提交相册、分类、媒体种类、声明格式、各对象精确字节数、宽高、拍摄时间和客户端幂等键。不得提交 Bucket 或自定义 object key。号码候选走独立幂等接口，不影响上传意图是否成功。
+浏览器完成本地基础派生后，可以进入本地队列而不立即上传。用户开始上传时调用 API 创建上传意图，提交相册、分类、媒体种类、声明格式、各基础对象精确字节数、宽高、拍摄时间和客户端幂等键。不得提交 Bucket 或自定义 object key。
 
-API 校验角色、相册状态、配额和输入范围，然后创建 `Media`、`UploadIntent` 与预期 `MediaVariant`。
+API 校验角色、相册状态、配额和输入范围，然后创建 `Media`、`UploadIntent` 与预期基础 `MediaVariant`。
+
+如果本地存在 `applied_local` 修图，取得 `mediaId` 后额外创建 edit revision；**基础 UploadIntent 仍完整维护 `480/960/1920/original` 四对象，不因 edit 存在而删除或跳过任何一项。**
 
 ### 5.2 上传优先级
 
-1. 480 与 960 派生图并发上传，优先级最高。
-2. 两者完成并经 HEAD 验证后，照片进入 `preview_ready`。
-3. 1920 派生图上传。
+#### 未应用修图
+
+1. 基础 480 与 960 并发上传，优先级最高；
+2. 两者完成并经 HEAD 验证后，照片进入基础 `preview_ready`；
+3. 基础 1920 上传；
 4. 真正原图后台上传。
 
-自动发布相册在步骤 2 后发布；审核相册在步骤 2 后进入待审核。1920 尚未就绪时灯箱使用 960。没有 active edit 且真正原图尚未就绪时，最高质量下载入口不可用；如果已有完整 active edit，则其 `photo_download` 可独立提供最高质量下载。
+#### 上传前已经应用修图
+
+基础链路完整执行：
+
+1. base 480；
+2. base 960；
+3. base 1920；
+4. base original。
+
+同时增加修图链路：
+
+1. edit 480；
+2. edit 960；
+3. edit 1920；
+4. edit `photo_download`。
+
+调度可以交错，以尽快满足首次发布；但最终完成条件必须包含 8 个目标对象全部完成。建议优先级：
+
+```text
+edit 480/960
+≈ base 480/960
+> base/edit 1920
+> base original / edit photo_download
+```
+
+如果已应用 edit，base 480/960 ready **不能直接公开 base 版本**；必须等待 edit 480/960 达到 `preview_ready` 并绑定为 active 后再首次发布。与此同时，base 1920/original 继续后台上传，不得取消。
+
+1920 尚未就绪时灯箱使用当前 active revision 的 960。active edit 的 `photo_download` 尚未就绪时，最高质量下载入口暂不可用，不能回退暴露 base original。
 
 ### 5.3 PUT 与 Multipart
 
-- 480、960、1920 基础派生图始终使用单次 V4 预签名 PUT。
-- 真正原图不超过 16MiB 时使用单次 PUT。
-- 真正原图大于 16MiB 时使用 multipart，part 大小固定为 8MiB，最后一片可更小。
-- 预签名默认有效 15 分钟；过期后为同一对象重新签名，不创建新媒体。
+- base/edit 480、960、1920 派生图始终使用单次 V4 预签名 PUT；
+- 真正原图不超过 16MiB 时使用单次 PUT；
+- 真正原图大于 16MiB 时使用 multipart，part 大小固定为 8MiB，最后一片可更小；
+- edit `photo_download` 若实现层判定适合单 PUT，则使用单 PUT；超过配置阈值时可与 original 复用 multipart 策略；
+- 预签名默认有效 15 分钟；过期后为同一对象重新签名，不创建新媒体或新 revision；
 - 每个完成请求都带幂等键，API 通过 HEAD 确认对象大小与元数据后才更新状态。
 
-默认网络并发为桌面 4 个 PUT、移动端 2 个 PUT。本地处理并发保持 1。连续出现超时或 429/5xx 时降低并发并使用带随机抖动的指数退避。
+默认网络并发为桌面 4 个 PUT、移动端 2 个 PUT。本地处理并发保持 1。base 和 edit 共用总网络并发预算，不能各自开一套并发导致现场网络被打满；B 的 GPU 推理队列独立于网络 PUT 调度。
 
 ## 6. 队列恢复
 
-IndexedDB 保存：媒体 ID、文件指纹、对象完成情况、multipart upload ID、已完成 part ETag、OCR 阶段、照片级复核结论、重试次数和最后错误。号码候选只在提交/确认所需期间保存在当前设备，并随本地任务清理。不得保存账号会话、AccessKey、CDN/号码数据密钥或过期预签名 URL。
+IndexedDB 保存：媒体 ID、文件指纹、基础对象完成情况、edit draft/revision 同步状态、multipart upload ID、已完成 part ETag、OCR 阶段、照片级复核结论、重试次数和最后错误。号码候选只在提交/确认所需期间保存在当前设备，并随本地任务清理。不得保存账号会话、AccessKey、CDN/号码数据密钥或过期预签名 URL。
 
-- 页面刷新后，从 API 拉取权威上传状态并合并本地队列。
-- 支持 File System Access API 的桌面浏览器可保留文件句柄，但恢复时仍需重新授权。
-- 无法持久化文件句柄的浏览器提示重新选择文件，通过大小、最后修改时间和本地指纹匹配原任务。
-- 浏览器被系统关闭后不能承诺后台继续上传；重新打开后只重传未完成对象/分片。
-- 上传处理任务完成后可以删除仅属于上传 runtime 的任务记录、multipart 状态和临时工作位图；但只要 `LocalReviewPhoto` 仍属于当前审核工作区，其 `originalBlob` 与用于审核/修图的本地变体不得因为远端上传完成就自动清理。
+- 页面刷新后，从 API 拉取权威基础上传和 edit revision 状态并合并本地队列；
+- 尚无 `mediaId` 的本地 edit draft 完全从 IndexedDB 恢复；
+- 支持 File System Access API 的桌面浏览器可保留文件句柄，但恢复时仍需重新授权；
+- 无法持久化文件句柄的浏览器提示重新选择文件，通过大小、最后修改时间和本地指纹匹配原任务；
+- 浏览器被系统关闭后不能承诺后台继续上传；重新打开后只重传未完成对象/分片；
+- 上传 runtime 完成后可以删除 multipart 状态和临时工作位图，但只要 `LocalReviewPhoto` 仍属于当前审核工作区，其 `originalBlob` 与用于审核/修图的本地变体不得因为远端上传完成就自动清理；
 - 管理员显式清理本地审核缓存、浏览器存储被回收或换设备后，修图 SourceResolver 才退化到远端源。
 
 ## 7. 发布与更新
 
 发布事务分配相册内单调 `publishSequence` 并写入 outbox。观众端收到新媒体事件后请求最新表示。
 
-当 1920 或真正原图稍后完成时发送 `media.updated`，只更新灯箱/下载能力，不把照片重新插入顶部。这样不会破坏观众已经看到的排序。
+没有已应用 edit 时，基础 480/960 ready 后沿用现有发布规则。
 
-应用、切换或撤销 edit revision 同样只发送 `media.updated` 或等价更新事件；不得重新发布，不修改 `publishSequence`，不得让照片跳回列表顶部。
+存在首次发布前已应用 edit 时，发布门禁改为：
+
+```text
+base 480/960 可以已 ready
++
+edit 480/960 必须 preview_ready
++
+edit 必须已绑定为 desired/active revision
+→ 才允许首次发布
+```
+
+这只决定首次公开版本，不改变基础四对象必须继续完整上传的要求。
+
+当 1920、真正原图、edit 1920 或 edit `photo_download` 稍后完成时发送 `media.updated`，只更新灯箱/下载能力，不把照片重新插入顶部。
+
+应用、切换或撤销已发布媒体的 edit revision 同样只发送 `media.updated` 或等价更新事件；不得重新发布，不修改 `publishSequence`，不得让照片跳回列表顶部。
 
 未来启用人脸找图时，基础 `photo_1920 + published` 触发私有持久索引任务，但不向相册 SSE 发送人物、聚类或搜索结果。索引可用性只能通过不含个人信息的相册配置状态表达。
 
@@ -184,23 +258,28 @@ IndexedDB 保存：媒体 ID、文件指纹、对象完成情况、multipart upl
 | 属性映射缺失 | 号码仍可确认并精确搜索；只派生可确定属性，后台提示缺失，不能猜测 |
 | IMM 索引/聚类失败 | 普通照片继续发布；仅人脸找图显示延迟/降级并由持久任务重试 |
 | 预签名过期 | 保留媒体和完成分片，重新签名 |
-| 普通 PUT 网络失败 | 指数退避后整对象重传 |
+| base 普通 PUT 网络失败 | 指数退避后重传该对象；edit 状态独立 |
+| edit PUT 网络失败 | 不删除已完成 base 对象；保持 edit 同步失败并允许重试 |
 | Multipart 单片失败 | 只重传该 part |
-| HEAD 大小不符 | 不发布该变体，标记校验失败并重新上传 |
-| 480/960 仅一项完成 | 不进入审核/发布，继续补齐 |
-| 真正原图长期失败 | 已发布照片保留浏览能力；无 active edit 时最高质量下载不可用，有完整 active edit 时仍可下载其 `photo_download` |
+| HEAD 大小不符 | 不确认该变体，标记校验失败并重新上传 |
+| base 480/960 仅一项完成 | 不进入基础 preview_ready，继续补齐 |
+| edit 480/960 仅一项完成 | edit 不进入 preview_ready；若是 desired edit，则首次发布继续等待 |
+| 真正原图长期失败 | 基础归档不完整，后台持续提示/重试；不能把 edit download 当成 base original 已完成 |
+| edit download 长期失败 | active edit 仍可浏览 480/960/1920，但最高质量下载暂不可用；不能回退给观众 base original |
 | 本地修图源缺失 | SourceResolver 才允许远端真正原图 fallback；不影响普通审核/发布 |
-| 本地 AI 失败/OOM/device lost | 只终止当前 B 操作；A、审核、发布和已有版本保持可用 |
+| 本地 AI 失败/OOM/device lost | 只终止当前 B 操作；A、基础上传、审核、发布和已有版本保持可用 |
 
 ## 9. 性能与验收
 
-- 本地处理不得阻塞主线程造成超过 200ms 的连续长任务。
-- 移动端同时只持有一张工作位图；完成后可观测内存必须回落。
-- 首屏只请求可视区域 480/960，不预取最高质量下载对象；灯箱只预取相邻一张 1920。
-- 省流量模式不预取相邻照片。
-- 典型照片在输出视觉可接受的前提下，三个基础派生图合计目标不超过原始 JPEG 的 30%；该值是验收指标而非拒绝上传条件。
-- 自动发布照片从 480/960 开始上传到 SSE 发布事件的目标为正常上行网络下 5 秒级，不把真正原图完成时间计入。
-- OCR 模型和运行时只在启用功能的内部页面加载，压缩总量预算不超过 35MB并缓存一年；OCR 不能推迟 480/960 上传或造成主线程长任务。
-- 未来人脸索引和搜索不得改变 5 秒级发布目标或上传端内存预算；观众端只做参考照去 EXIF/JPEG 编码，不加载人脸模型。
-- 本地智能修图在当前设备存在 `originalBlob` 时，执行 A/B 不应产生远端真正原图 GET；网络只应出现首次模型加载、edit PUT 与 edit API 请求。远端原图 GET 仅允许本地源缺失的 fallback 场景。
+- 本地处理不得阻塞主线程造成超过 200ms 的连续长任务；
+- 移动端同时只持有一张工作位图；完成后可观测内存必须回落；
+- 首屏只请求可视区域 480/960，不预取最高质量下载对象；灯箱只预取相邻一张 1920；
+- 省流量模式不预取相邻照片；
+- 典型照片在输出视觉可接受的前提下，三个基础派生图合计目标不超过原始 JPEG 的 30%；该值是验收指标而非拒绝上传条件；
+- 没有已应用 edit 的自动发布照片继续争取从 480/960 开始上传到 SSE 发布事件为正常上行网络下 5 秒级；
+- 有上传前已应用 edit 的照片，首次发布可以等待 edit 480/960，但不能等待 base original、edit 1920 或 edit download；
+- 上传前已应用 edit 的照片最终必须验证 **base 四对象 + edit 四对象共 8 个目标对象**全部存在并通过校验；
+- OCR 模型和运行时只在启用功能的内部页面加载，压缩总量预算不超过 35MB并缓存一年；OCR 不能推迟基础 480/960 上传；
+- 未来人脸索引和搜索不得改变上传端内存预算；观众端只做参考照去 EXIF/JPEG 编码，不加载人脸模型；
+- 本地智能修图在当前设备存在 `originalBlob` 时，执行 A/B 不应产生远端真正原图 GET；远端原图 GET 仅允许本地源缺失的 fallback 场景；
 - active edit 存在时，观众 480/960/1920 与最高质量下载必须来自同一 revision；最高质量下载命中 `photo_download`，不能绕过 active revision 获取真正上传原图。
