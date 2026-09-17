@@ -3,9 +3,10 @@
 import { useEffect } from "react";
 
 import { toast } from "@/components/ui/toast";
+import { clientGet } from "@/lib/client-api";
 import {
   type ViewerFeedbackItem,
-  viewerFeedbackCreatedEvent,
+  type ViewerFeedbackList,
   viewerFeedbackKindLabel,
 } from "@/lib/viewer-feedback";
 
@@ -14,17 +15,18 @@ export function ViewerFeedbackMonitor() {
     let disposed = false;
     let eventSource: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastEventId = 0;
 
     const connect = () => {
       if (disposed) return;
       eventSource?.close();
-      const source = new EventSource("/api/v1/feedback/events");
+      const source = new EventSource(`/api/v1/feedback/events?after=${lastEventId}`);
       eventSource = source;
 
       source.addEventListener("viewer.feedback.created", (event) => {
         try {
           const item = JSON.parse((event as MessageEvent<string>).data) as ViewerFeedbackItem;
-          window.dispatchEvent(new CustomEvent(viewerFeedbackCreatedEvent, { detail: item }));
+          lastEventId = Math.max(lastEventId, item.id);
           if (window.location.pathname === "/studio/feedback") return;
           const preview = item.message.length > 68 ? `${item.message.slice(0, 68)}…` : item.message;
           toast.add({
@@ -47,7 +49,21 @@ export function ViewerFeedbackMonitor() {
       });
     };
 
-    connect();
+    void (async () => {
+      try {
+        const initial = await clientGet<ViewerFeedbackList>("/api/v1/feedback?limit=1");
+        if (disposed) return;
+        lastEventId = initial.latestId;
+        connect();
+      } catch {
+        if (disposed) return;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect();
+        }, 1_000);
+      }
+    })();
+
     return () => {
       disposed = true;
       eventSource?.close();
