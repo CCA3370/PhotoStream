@@ -452,7 +452,11 @@ export const mediaEditVariantInputSchema = z
     contentType: z.enum(["image/webp", "image/jpeg"]),
     width: z.number().int().positive(),
     height: z.number().int().positive(),
-    bytes: z.number().int().positive().max(50 * 1024 * 1024),
+    bytes: z
+      .number()
+      .int()
+      .positive()
+      .max(100 * 1024 * 1024),
   })
   .strict()
   .superRefine((value, context) => {
