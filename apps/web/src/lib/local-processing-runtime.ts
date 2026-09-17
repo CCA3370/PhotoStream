@@ -9,10 +9,7 @@ import {
   putLocalReviewPhoto,
   updateLocalReviewPhoto,
 } from "@/lib/local-review-queue";
-import {
-  type ProcessedPhotoMetadata,
-  processPhotoInWorkerStreaming,
-} from "@/lib/photo-processing";
+import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
 import {
   createProgressiveUpload,
   registerAndUploadProgressiveVariant,
@@ -166,7 +163,9 @@ function openDatabase(): Promise<IDBDatabase> {
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.addEventListener("success", () => resolve(request.result));
-    request.addEventListener("error", () => reject(request.error ?? new Error("本地处理队列操作失败")));
+    request.addEventListener("error", () =>
+      reject(request.error ?? new Error("本地处理队列操作失败")),
+    );
   });
 }
 
@@ -406,7 +405,9 @@ class LocalProcessingRuntime {
             uploadState: "uploading" as const,
             bib: {
               ...created.bib,
-              ocrStatus: bibConfig.recognitionEnabled ? ("not_started" as const) : ("disabled" as const),
+              ocrStatus: bibConfig.recognitionEnabled
+                ? ("not_started" as const)
+                : ("disabled" as const),
               modelVersion: bibConfig.modelVersion,
               ruleVersion: bibConfig.ruleVersion,
             },
