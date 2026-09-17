@@ -6,6 +6,7 @@ import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { GalleryBrowser } from "@/components/gallery/gallery-browser";
 import { LiveUpdates } from "@/components/gallery/live-updates";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
+import { ViewerHelpFeedback } from "@/components/gallery/viewer-help-feedback";
 import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
@@ -188,6 +189,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
         live={album.state === "live"}
         searchAvailable={inlineSearch}
       />
+      <ViewerHelpFeedback slug={slug} />
 
       <GalleryBrowser
         attributeFilterEnabled={album.bibAttributeFilterEnabled}
