@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPhotoEditRecipeToPixels } from "./renderer";
 import { normalizePhotoEditRecipe } from "./recipe";
+import { applyPhotoEditRecipeToPixels } from "./renderer";
 
 describe("photo edit renderer", () => {
   it("increases luminance when exposure is raised", () => {
     const data = new Uint8ClampedArray([
-      64, 64, 64, 255,
-      64, 64, 64, 255,
-      64, 64, 64, 255,
-      64, 64, 64, 255,
+      64, 64, 64, 255, 64, 64, 64, 255, 64, 64, 64, 255, 64, 64, 64, 255,
     ]);
     applyPhotoEditRecipeToPixels(
       { data, width: 2, height: 2 },
