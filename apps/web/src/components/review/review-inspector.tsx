@@ -39,6 +39,7 @@ export interface ReviewInspectorItem {
   readonly featured: boolean;
   readonly publicationStatus: string;
   readonly ingestStatus: string;
+  readonly editPending: boolean;
   readonly width: number;
   readonly height: number;
   readonly totalBytes: number;
@@ -114,7 +115,8 @@ export function ReviewInspector({
       .map((tag) => tag.number)
       .filter((number, index, values) => values.indexOf(number) === index) ?? [];
   const canToggleVisibility =
-    item.publicationStatus === "published" || item.publicationStatus === "hidden";
+    item.publicationStatus === "published" ||
+    (item.publicationStatus === "hidden" && !item.editPending);
 
   return (
     <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -124,6 +126,7 @@ export function ReviewInspector({
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">{statusLabel(item.publicationStatus)}</Badge>
             {item.featured ? <Badge variant="secondary">精选</Badge> : null}
+            {item.editPending ? <Badge variant="outline">修图处理中</Badge> : null}
             <Badge variant="outline">{item.sourceLabel}</Badge>
           </div>
         </div>
@@ -189,7 +192,9 @@ export function ReviewInspector({
                 ) : (
                   <EyeIcon data-icon="inline-start" />
                 )}
-                {stateActionLabel(item.publicationStatus)}
+                {item.publicationStatus === "hidden" && item.editPending
+                  ? "修图处理中"
+                  : stateActionLabel(item.publicationStatus)}
               </Button>
             </div>
           </section>
