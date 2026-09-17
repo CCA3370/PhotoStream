@@ -11,6 +11,11 @@ interface PublicChange {
   readonly mediaId: string | null;
 }
 
+const changeBatchSize = 100;
+const fallbackPollIntervalMs = 15_000;
+const safetyReconcileIntervalMs = 60_000;
+const reconnectDebounceMs = 150;
+
 export function LiveUpdates({
   initialEventId,
   knownMediaIds,
@@ -24,19 +29,33 @@ export function LiveUpdates({
   const [, startTransition] = useTransition();
   const lastEventId = useRef(initialEventId);
   const knownIds = useRef(new Set(knownMediaIds));
+  const currentSlug = useRef(slug);
 
   useEffect(() => {
-    lastEventId.current = Math.max(lastEventId.current, initialEventId);
+    if (currentSlug.current !== slug) {
+      currentSlug.current = slug;
+      lastEventId.current = initialEventId;
+      knownIds.current = new Set(knownMediaIds);
+      return;
+    }
     for (const id of knownMediaIds) knownIds.current.add(id);
-  }, [initialEventId, knownMediaIds]);
+  }, [initialEventId, knownMediaIds, slug]);
 
   useEffect(() => {
-    let polling: ReturnType<typeof setInterval> | null = null;
+    let fallbackPolling: ReturnType<typeof setInterval> | null = null;
+    let safetyReconcile: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let eventSource: EventSource | null = null;
     let disposed = false;
+    let catchUpRunning = false;
+    let catchUpQueued = false;
+    let reconciliationRequired = true;
+    const pendingSse = new Map<number, PublicChange>();
 
-    const receive = (event: PublicChange) => {
+    const applyChange = (event: PublicChange) => {
       if (event.id <= lastEventId.current) return;
       lastEventId.current = event.id;
+
       if (event.type === "media.published") {
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
@@ -85,61 +104,157 @@ export function LiveUpdates({
       }
     };
 
-    const poll = async () => {
-      try {
-        const result = await clientGet<{ readonly events: readonly PublicChange[] }>(
-          `/api/v1/public/albums/${slug}/changes?after=${lastEventId.current}`,
-        );
-        for (const event of result.events) receive(event);
-      } catch {
-        // EventSource reconnect and the next bounded poll both remain available.
-      }
-    };
-    const startPolling = () => {
-      if (polling !== null || disposed) return;
-      void poll();
-      polling = setInterval(() => void poll(), 15_000);
-    };
-    const stopPolling = () => {
-      if (polling === null) return;
-      clearInterval(polling);
-      polling = null;
+    const flushPendingSse = () => {
+      const pending = [...pendingSse.values()].sort((left, right) => left.id - right.id);
+      pendingSse.clear();
+      for (const event of pending) applyChange(event);
     };
 
-    const events = new EventSource(
-      `/api/v1/public/albums/${slug}/events?after=${lastEventId.current}`,
-    );
+    const drainChanges = async (): Promise<void> => {
+      while (!disposed) {
+        const after = lastEventId.current;
+        const result = await clientGet<{ readonly events: readonly PublicChange[] }>(
+          `/api/v1/public/albums/${encodeURIComponent(slug)}/changes?after=${after}`,
+        );
+        if (disposed) return;
+
+        const ordered = [...result.events].sort((left, right) => left.id - right.id);
+        let progressed = false;
+        for (const event of ordered) {
+          if (event.id <= lastEventId.current) continue;
+          applyChange(event);
+          progressed = true;
+        }
+
+        if (!progressed || result.events.length < changeBatchSize) return;
+      }
+    };
+
+    const stopFallbackPolling = () => {
+      if (fallbackPolling === null) return;
+      clearInterval(fallbackPolling);
+      fallbackPolling = null;
+    };
+
+    const requestCatchUp = () => {
+      if (disposed) return;
+      reconciliationRequired = true;
+      catchUpQueued = true;
+      if (catchUpRunning) return;
+
+      catchUpRunning = true;
+      void (async () => {
+        try {
+          while (catchUpQueued && !disposed) {
+            catchUpQueued = false;
+            await drainChanges();
+          }
+          if (disposed) return;
+          reconciliationRequired = false;
+          flushPendingSse();
+        } catch {
+          if (disposed || fallbackPolling !== null) return;
+          fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
+        } finally {
+          catchUpRunning = false;
+          if (catchUpQueued && !disposed) requestCatchUp();
+        }
+      })();
+    };
+
     const receiveSse = (type: string, event: Event) => {
       const message = event as MessageEvent<string>;
       try {
         const parsed = JSON.parse(message.data) as PublicChange;
-        receive({ ...parsed, type });
+        const change = { ...parsed, type };
+        if (reconciliationRequired || catchUpRunning) {
+          pendingSse.set(change.id, change);
+          requestCatchUp();
+          return;
+        }
+        applyChange(change);
       } catch {
-        startPolling();
+        requestCatchUp();
       }
     };
-    const published = (event: Event) => receiveSse("media.published", event);
-    const updated = (event: Event) => receiveSse("media.updated", event);
-    const likesUpdated = (event: Event) => receiveSse("media.likes.updated", event);
-    const featuredUpdated = (event: Event) => receiveSse("media.featured.updated", event);
-    const hidden = (event: Event) => receiveSse("media.hidden", event);
-    const deleted = (event: Event) => receiveSse("media.deleted", event);
-    const restored = (event: Event) => receiveSse("media.restored", event);
-    const bibUpdated = (event: Event) => receiveSse("media.bib.updated", event);
-    events.addEventListener("media.published", published);
-    events.addEventListener("media.updated", updated);
-    events.addEventListener("media.likes.updated", likesUpdated);
-    events.addEventListener("media.featured.updated", featuredUpdated);
-    events.addEventListener("media.hidden", hidden);
-    events.addEventListener("media.deleted", deleted);
-    events.addEventListener("media.restored", restored);
-    events.addEventListener("media.bib.updated", bibUpdated);
-    events.addEventListener("open", stopPolling);
-    events.addEventListener("error", startPolling);
+
+    const closeEventSource = () => {
+      eventSource?.close();
+      eventSource = null;
+    };
+
+    const scheduleReconnect = () => {
+      if (disposed || reconnectTimer !== null) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectEventSource();
+      }, reconnectDebounceMs);
+    };
+
+    function connectEventSource() {
+      if (disposed) return;
+      closeEventSource();
+      const source = new EventSource(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}/events?after=${lastEventId.current}`,
+      );
+      eventSource = source;
+
+      const published = (event: Event) => receiveSse("media.published", event);
+      const updated = (event: Event) => receiveSse("media.updated", event);
+      const likesUpdated = (event: Event) => receiveSse("media.likes.updated", event);
+      const featuredUpdated = (event: Event) => receiveSse("media.featured.updated", event);
+      const hidden = (event: Event) => receiveSse("media.hidden", event);
+      const deleted = (event: Event) => receiveSse("media.deleted", event);
+      const restored = (event: Event) => receiveSse("media.restored", event);
+      const bibUpdated = (event: Event) => receiveSse("media.bib.updated", event);
+
+      source.addEventListener("media.published", published);
+      source.addEventListener("media.updated", updated);
+      source.addEventListener("media.likes.updated", likesUpdated);
+      source.addEventListener("media.featured.updated", featuredUpdated);
+      source.addEventListener("media.hidden", hidden);
+      source.addEventListener("media.deleted", deleted);
+      source.addEventListener("media.restored", restored);
+      source.addEventListener("media.bib.updated", bibUpdated);
+      source.addEventListener("open", () => {
+        stopFallbackPolling();
+        requestCatchUp();
+      });
+      source.addEventListener("error", () => {
+        requestCatchUp();
+        if (fallbackPolling === null) {
+          fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
+        }
+        if (source.readyState === EventSource.CLOSED) scheduleReconnect();
+      });
+    }
+
+    const recoverAfterPause = () => {
+      requestCatchUp();
+      scheduleReconnect();
+    };
+    const visibilityChanged = () => {
+      if (document.visibilityState === "visible") recoverAfterPause();
+    };
+
+    connectEventSource();
+    requestCatchUp();
+    safetyReconcile = setInterval(requestCatchUp, safetyReconcileIntervalMs);
+    document.addEventListener("visibilitychange", visibilityChanged);
+    window.addEventListener("focus", recoverAfterPause);
+    window.addEventListener("online", recoverAfterPause);
+    window.addEventListener("pageshow", recoverAfterPause);
+
     return () => {
       disposed = true;
-      stopPolling();
-      events.close();
+      stopFallbackPolling();
+      if (safetyReconcile !== null) clearInterval(safetyReconcile);
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      window.removeEventListener("focus", recoverAfterPause);
+      window.removeEventListener("online", recoverAfterPause);
+      window.removeEventListener("pageshow", recoverAfterPause);
+      closeEventSource();
     };
   }, [router, slug]);
 
