@@ -1037,6 +1037,7 @@ export class OperationsService {
     if (media.ingestStatus !== "ready") {
       throw this.#stateConflict("照片尚未上传完成，不能显示");
     }
+    await this.#assertNoPendingEdit(transaction, media.id);
     const now = new Date();
     const [album] = await transaction
       .update(schema.albums)
@@ -1094,6 +1095,7 @@ export class OperationsService {
     if (media.ingestStatus !== "ready") {
       throw this.#stateConflict("照片尚未上传完成，不能显示");
     }
+    await this.#assertNoPendingEdit(transaction, media.id);
     if (media.publishSequence === null || media.publishedAt === null) {
       await this.#publishInTransaction(transaction, media, actorId, requestId);
       return;
@@ -1111,6 +1113,17 @@ export class OperationsService {
       changedFields: ["publicationStatus", "hiddenAt"],
       requestId,
     });
+  }
+
+  async #assertNoPendingEdit(transaction: Transaction, mediaId: string): Promise<void> {
+    const [editState] = await transaction
+      .select({ pendingRevisionId: schema.mediaEditStates.pendingRevisionId })
+      .from(schema.mediaEditStates)
+      .where(eq(schema.mediaEditStates.mediaId, mediaId))
+      .limit(1);
+    if (editState?.pendingRevisionId !== null && editState?.pendingRevisionId !== undefined) {
+      throw this.#stateConflict("修图版本仍在处理中，完成或取消后才能显示");
+    }
   }
 
   async #lockedMedia(transaction: Transaction, mediaId: string) {
