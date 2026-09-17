@@ -154,7 +154,10 @@ export class ProgressiveUploadService {
           outstandingBytes: sql<number>`coalesce(sum(case when ${schema.mediaVariants.verified} = false then ${schema.mediaVariants.expectedBytes} else 0 end), 0)::bigint`,
         })
         .from(schema.uploadIntents)
-        .innerJoin(schema.mediaVariants, eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId))
+        .innerJoin(
+          schema.mediaVariants,
+          eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId),
+        )
         .where(
           and(
             eq(schema.uploadIntents.uploaderId, options.actor.id),
@@ -191,7 +194,10 @@ export class ProgressiveUploadService {
             sql`${schema.media.publicationStatus} <> 'deleted'`,
           ),
         );
-      if (Number(albumQuota?.reservedBytes ?? 0) + options.input.original.bytes > maxAlbumReservedBytes) {
+      if (
+        Number(albumQuota?.reservedBytes ?? 0) + options.input.original.bytes >
+        maxAlbumReservedBytes
+      ) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
           message: "相册已达到 256 GiB 上传配额",
@@ -277,10 +283,18 @@ export class ProgressiveUploadService {
         .where(eq(schema.uploadIntents.id, options.intentId))
         .limit(1);
       if (row === undefined) {
-        throw new AppError({ code: "UPLOAD_NOT_FOUND", message: "上传任务不存在", statusCode: 404 });
+        throw new AppError({
+          code: "UPLOAD_NOT_FOUND",
+          message: "上传任务不存在",
+          statusCode: 404,
+        });
       }
       if (row.media.uploaderId !== options.actor.id && options.actor.role !== "admin") {
-        throw new AppError({ code: "FORBIDDEN", message: "当前角色无权访问该上传任务", statusCode: 403 });
+        throw new AppError({
+          code: "FORBIDDEN",
+          message: "当前角色无权访问该上传任务",
+          statusCode: 403,
+        });
       }
 
       const maxEdges = { photo_480: 480, photo_960: 960, photo_1920: 1_920 } as const;
@@ -290,11 +304,19 @@ export class ProgressiveUploadService {
         maxEdges[options.variant.kind],
       );
       if (options.variant.width !== expected.width || options.variant.height !== expected.height) {
-        throw new AppError({ code: "BAD_REQUEST", message: "派生图尺寸不符合固定规格", statusCode: 400 });
+        throw new AppError({
+          code: "BAD_REQUEST",
+          message: "派生图尺寸不符合固定规格",
+          statusCode: 400,
+        });
       }
       const expectedType = options.variant.format === "jpeg" ? "image/jpeg" : "image/webp";
       if (options.variant.contentType !== expectedType) {
-        throw new AppError({ code: "BAD_REQUEST", message: "派生图格式与 Content-Type 不一致", statusCode: 400 });
+        throw new AppError({
+          code: "BAD_REQUEST",
+          message: "派生图格式与 Content-Type 不一致",
+          statusCode: 400,
+        });
       }
 
       const [existing] = await transaction
@@ -335,7 +357,10 @@ export class ProgressiveUploadService {
           outstandingBytes: sql<number>`coalesce(sum(case when ${schema.mediaVariants.verified} = false then ${schema.mediaVariants.expectedBytes} else 0 end), 0)::bigint`,
         })
         .from(schema.uploadIntents)
-        .innerJoin(schema.mediaVariants, eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId))
+        .innerJoin(
+          schema.mediaVariants,
+          eq(schema.mediaVariants.mediaId, schema.uploadIntents.mediaId),
+        )
         .where(
           and(
             eq(schema.uploadIntents.uploaderId, row.media.uploaderId),

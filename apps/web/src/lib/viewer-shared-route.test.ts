@@ -16,7 +16,9 @@ describe("shared photo route isolation", () => {
     expect(source).toContain("<SharedPhotoViewer");
     expect(source).not.toContain("<ViewerServiceNotice");
     expect(source).not.toContain("<ViewerOnboarding");
-    expect(source).toContain("/api/v1/public/shares/${encodeURIComponent(shareId)}");
+    expect(source).toContain(
+      ["/api/v1/public/shares/", "$", "{encodeURIComponent(shareId)}"].join(""),
+    );
   });
 
   it("does not keep the legacy share entrypoint in the gallery route", () => {

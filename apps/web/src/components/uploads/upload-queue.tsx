@@ -145,7 +145,8 @@ export function UploadQueue({
     } catch (error) {
       toast.add({
         title: "无法加入上传队列",
-        description: error instanceof Error ? error.message : "浏览器本地存储空间可能不足，请释放空间后重试。",
+        description:
+          error instanceof Error ? error.message : "浏览器本地存储空间可能不足，请释放空间后重试。",
         type: "error",
       });
     } finally {
@@ -318,7 +319,9 @@ export function UploadQueue({
         >
           <ImagePlusIcon className="size-5 text-muted-foreground" />
           <span className="text-sm font-medium">拖入图片即开始上传</span>
-          <span className="text-xs text-muted-foreground">上传完成后默认隐藏，可在审核页切换为显示</span>
+          <span className="text-xs text-muted-foreground">
+            上传完成后默认隐藏，可在审核页切换为显示
+          </span>
         </button>
 
         {role === "uploader" && items.length > 0 ? (
@@ -403,7 +406,8 @@ export function UploadQueue({
                   <div className="p-2">
                     <p className="truncate text-xs font-medium">{photo.fileName}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {formatBytes(photo.totalBytes)} · {photo.uploadState === "failed" ? "上传失败" : "上传中"}
+                      {formatBytes(photo.totalBytes)} ·{" "}
+                      {photo.uploadState === "failed" ? "上传失败" : "上传中"}
                     </p>
                   </div>
                 </div>
