@@ -49,21 +49,22 @@ export function ViewerFeedbackMonitor() {
       });
     };
 
-    void (async () => {
+    const initialize = async (): Promise<void> => {
       try {
         const initial = await clientGet<ViewerFeedbackList>("/api/v1/feedback?limit=1");
         if (disposed) return;
         lastEventId = initial.latestId;
         connect();
       } catch {
-        if (disposed) return;
+        if (disposed || reconnectTimer !== null) return;
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
-          connect();
+          void initialize();
         }, 1_000);
       }
-    })();
+    };
 
+    void initialize();
     return () => {
       disposed = true;
       eventSource?.close();
