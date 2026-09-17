@@ -8,6 +8,12 @@ import { MediaGrid } from "@/components/gallery/media-grid";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
+import {
+  getWarmDerivedImageUrl,
+  isWarmDerivedImageDecoded,
+  loadDerivedImage,
+  markDerivedImageDecoded,
+} from "@/lib/derived-image-cache";
 import { orderFeaturedMedia } from "@/lib/featured-order";
 
 interface MediaPage {
@@ -16,9 +22,16 @@ interface MediaPage {
   readonly eventCursor: number;
 }
 
+interface GridPreviewVariant {
+  readonly kind: "photo_480" | "photo_960";
+  readonly bytes: number;
+  readonly url: string;
+}
+
 const publicMediaPageSize = 60;
 const dataSaverMediaPageSize = 30;
 const publicMediaVisibilityDelayMs = 15_000;
+const livePreviewRetryDelays = [0, 400, 1_000] as const;
 
 function mergeMedia(
   current: readonly PublicMediaView[],
@@ -51,6 +64,64 @@ function visibleAt(item: PublicMediaView): number | null {
   return Number.isFinite(publishedAt) ? publishedAt + publicMediaVisibilityDelayMs : null;
 }
 
+function gridPreviewVariant(media: PublicMediaView): GridPreviewVariant | null {
+  const preview480 = media.variants.find((candidate) => candidate.kind === "photo_480");
+  if (preview480?.kind === "photo_480") {
+    return { kind: preview480.kind, bytes: preview480.bytes, url: preview480.url };
+  }
+  const preview960 = media.variants.find((candidate) => candidate.kind === "photo_960");
+  if (preview960?.kind === "photo_960") {
+    return { kind: preview960.kind, bytes: preview960.bytes, url: preview960.url };
+  }
+  return null;
+}
+
+async function decodeImage(url: string): Promise<void> {
+  const image = new window.Image();
+  if (typeof image.decode === "function") {
+    image.src = url;
+    await image.decode();
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("缩略图解码失败"));
+    image.src = url;
+  });
+}
+
+async function prepareGridPreview(media: PublicMediaView, slug: string): Promise<void> {
+  const preview = gridPreviewVariant(media);
+  if (preview === null) throw new Error("新照片没有可用的列表缩略图");
+
+  const request = {
+    scope: slug,
+    mediaId: media.id,
+    kind: preview.kind,
+    bytes: preview.bytes,
+  };
+  await loadDerivedImage({
+    ...request,
+    sourceUrl: preview.url,
+    refreshUrl: async () => {
+      const result = await clientGet<{ readonly url: string }>(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(media.id)}/variants/${preview.kind}`,
+      );
+      return result.url;
+    },
+  });
+  if (isWarmDerivedImageDecoded(request)) return;
+
+  const warmUrl = getWarmDerivedImageUrl(request);
+  if (warmUrl === null) throw new Error("新照片缩略图未能进入本地缓存");
+  await decodeImage(warmUrl);
+  markDerivedImageDecoded(request);
+}
+
+function wait(delay: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, delay));
+}
+
 export function PaginatedMediaGrid({
   categoryId,
   dataSaverEnabled = false,
@@ -76,6 +147,7 @@ export function PaginatedMediaGrid({
   const [featuredIds, setFeaturedIds] = useState<ReadonlySet<string>>(
     () => new Set(initialFeaturedIds),
   );
+  const [preparedLiveIds, setPreparedLiveIds] = useState<ReadonlySet<string>>(() => new Set());
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loading, setLoading] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
@@ -111,6 +183,7 @@ export function PaginatedMediaGrid({
   useEffect(() => {
     let nextVisibleAt: number | null = null;
     for (const item of allItems) {
+      if (preparedLiveIds.has(item.id)) continue;
       const deadline = visibleAt(item);
       if (deadline === null || deadline <= visibilityNow) continue;
       nextVisibleAt = nextVisibleAt === null ? deadline : Math.min(nextVisibleAt, deadline);
@@ -119,7 +192,7 @@ export function PaginatedMediaGrid({
     const delay = Math.max(0, nextVisibleAt - Date.now()) + 50;
     const timer = window.setTimeout(() => setVisibilityNow(Date.now()), delay);
     return () => window.clearTimeout(timer);
-  }, [allItems, visibilityNow]);
+  }, [allItems, preparedLiveIds, visibilityNow]);
 
   useEffect(() => {
     if (!dataSaverEnabled) void refreshFeatured().catch(() => undefined);
@@ -142,6 +215,12 @@ export function PaginatedMediaGrid({
         next.delete(detail.mediaId as string);
         return next;
       });
+      setPreparedLiveIds((current) => {
+        if (!current.has(detail.mediaId as string)) return current;
+        const next = new Set(current);
+        next.delete(detail.mediaId as string);
+        return next;
+      });
     };
     window.addEventListener("photostream:media-removed", remove);
     return () => window.removeEventListener("photostream:media-removed", remove);
@@ -149,44 +228,66 @@ export function PaginatedMediaGrid({
 
   useEffect(() => {
     let disposed = false;
-    let refreshInFlight = false;
-    let refreshQueued = false;
+    const inFlightIds = new Set<string>();
 
-    const refreshPublishedMedia = async (): Promise<void> => {
-      if (refreshInFlight) {
-        refreshQueued = true;
-        return;
+    const resolvePublishedMedia = async (mediaId: string): Promise<PublicMediaView | null> => {
+      if (categoryId === undefined) {
+        return clientGet<PublicMediaView>(
+          `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}`,
+        );
       }
-      refreshInFlight = true;
-      do {
-        refreshQueued = false;
-        try {
-          const query = new URLSearchParams({ limit: String(pageSize) });
-          if (categoryId !== undefined) query.set("categoryId", categoryId);
-          const page = await clientGet<MediaPage>(
-            `/api/v1/public/albums/${slug}/media?${query.toString()}`,
-          );
-          if (!disposed) {
+      const query = new URLSearchParams({ limit: String(pageSize), categoryId });
+      const page = await clientGet<MediaPage>(
+        `/api/v1/public/albums/${encodeURIComponent(slug)}/media?${query.toString()}`,
+      );
+      return page.items.find((item) => item.id === mediaId) ?? null;
+    };
+
+    const preparePublishedMedia = async (mediaId: string): Promise<void> => {
+      if (inFlightIds.has(mediaId)) return;
+      inFlightIds.add(mediaId);
+      let lastError: unknown = null;
+      try {
+        for (const delay of livePreviewRetryDelays) {
+          if (delay > 0) await wait(delay);
+          if (disposed) return;
+          try {
+            const media = await resolvePublishedMedia(mediaId);
+            if (media === null || disposed) return;
+            await prepareGridPreview(media, slug);
+            if (disposed) return;
+
+            setPreparedLiveIds((current) => {
+              if (current.has(media.id)) return current;
+              const next = new Set(current);
+              next.add(media.id);
+              return next;
+            });
             setPages((current) => {
               const firstPage = current[0] ?? [];
-              return [mergeMedia(firstPage, page.items), ...current.slice(1)];
+              return [mergeMedia(firstPage, [media]), ...current.slice(1)];
             });
             setLiveError(null);
             void refreshFeatured().catch(() => undefined);
-          }
-        } catch (caught) {
-          if (!disposed) {
-            setLiveError(caught instanceof Error ? caught.message : "无法同步新照片");
+            return;
+          } catch (caught) {
+            lastError = caught;
           }
         }
-      } while (refreshQueued && !disposed);
-      refreshInFlight = false;
+        if (!disposed) {
+          setLiveError(
+            lastError instanceof Error ? lastError.message : "新照片缩略图加载失败，请稍后重试",
+          );
+        }
+      } finally {
+        inFlightIds.delete(mediaId);
+      }
     };
 
     const published = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string") return;
-      void refreshPublishedMedia();
+      void preparePublishedMedia(detail.mediaId);
     };
 
     window.addEventListener("photostream:media-published", published);
@@ -240,11 +341,12 @@ export function PaginatedMediaGrid({
     () =>
       pages.map((page) =>
         page.filter((item) => {
+          if (preparedLiveIds.has(item.id)) return true;
           const deadline = visibleAt(item);
           return deadline === null || deadline <= visibilityNow;
         }),
       ),
-    [pages, visibilityNow],
+    [pages, preparedLiveIds, visibilityNow],
   );
   const visibleItems = useMemo(
     () =>
