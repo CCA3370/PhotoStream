@@ -1,5 +1,4 @@
-import type { Database } from "@photostream/db";
-import { schema } from "@photostream/db";
+import { schema, type Database } from "@photostream/db";
 import { asc, desc, eq, gt, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
@@ -72,7 +71,7 @@ export class ViewerFeedbackService {
     return row?.id ?? 0;
   }
 
-  async listRecent(limit: number): Promise<readonly ViewerFeedbackView[]> {
+  async listRecent(limit: number): Promise<ViewerFeedbackView[]> {
     const rows = await this.#database
       .select({
         id: schema.viewerFeedback.id,
@@ -90,7 +89,7 @@ export class ViewerFeedbackService {
     return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
   }
 
-  async listAfter(afterId: number, limit = 100): Promise<readonly ViewerFeedbackView[]> {
+  async listAfter(afterId: number, limit = 100): Promise<ViewerFeedbackView[]> {
     const rows = await this.#database
       .select({
         id: schema.viewerFeedback.id,
