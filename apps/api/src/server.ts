@@ -21,6 +21,7 @@ import {
 import { FaceService } from "./face/service.js";
 import { AlbumDataSaverService } from "./media/album-data-saver-service.js";
 import { AliyunCdnInvalidator, LocalCdnInvalidator } from "./media/cdn-invalidator.js";
+import { MediaEditService } from "./media/edit-service.js";
 import { FeaturedService } from "./media/featured-service.js";
 import { MediaLikeService } from "./media/like-service.js";
 import { LiveEventBroker } from "./media/live-event-broker.js";
@@ -87,6 +88,7 @@ const photoService = new PhotoService({
   cdnInvalidator,
 });
 const progressiveUploadService = new ProgressiveUploadService(database);
+const mediaEditService = new MediaEditService({ database, storage });
 const viewerFeedbackService = new ViewerFeedbackService({ database, photoService });
 const microPreviewService = new MicroPreviewService({ database, storage, photoService });
 const dataSaverService = new AlbumDataSaverService({ database });
@@ -144,6 +146,7 @@ const app = await buildApp({
   authStore,
   photoService,
   progressiveUploadService,
+  mediaEditService,
   viewerFeedbackService,
   photoShareService,
   dataSaverService,
