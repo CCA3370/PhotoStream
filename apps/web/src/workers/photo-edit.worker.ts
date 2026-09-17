@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 
 import { analyzePhotoPixels } from "../lib/photo-edit/analysis";
-import { applyPhotoEditRecipeToPixels } from "../lib/photo-edit/renderer";
 import type { PhotoEditRecipe } from "../lib/photo-edit/recipe";
+import { applyPhotoEditRecipeToPixels } from "../lib/photo-edit/renderer";
 
 type Request =
   | { readonly id: string; readonly type: "analyze"; readonly source: Blob }
@@ -89,22 +89,10 @@ function processStripe(
     recipe,
   );
   const centerOffset = startY - sourceY;
-  context.putImageData(
-    pixels,
-    0,
-    sourceY,
-    0,
-    centerOffset,
-    width,
-    outputRows,
-  );
+  context.putImageData(pixels, 0, sourceY, 0, centerOffset, width, outputRows);
 }
 
-async function preview(
-  id: string,
-  source: Blob,
-  recipe: PhotoEditRecipe,
-): Promise<void> {
+async function preview(id: string, source: Blob, recipe: PhotoEditRecipe): Promise<void> {
   const bitmap = await createImageBitmap(source);
   try {
     const size = dimensions(bitmap.width, bitmap.height, 960);
@@ -129,11 +117,7 @@ async function preview(
   }
 }
 
-async function render(
-  id: string,
-  source: Blob,
-  recipe: PhotoEditRecipe,
-): Promise<void> {
+async function render(id: string, source: Blob, recipe: PhotoEditRecipe): Promise<void> {
   const bitmap = await createImageBitmap(source);
   try {
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
