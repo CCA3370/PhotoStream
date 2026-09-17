@@ -1,4 +1,4 @@
-import { schema, type Database } from "@photostream/db";
+import { type Database, schema } from "@photostream/db";
 import { asc, desc, eq, gt, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
