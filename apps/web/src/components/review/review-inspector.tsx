@@ -49,7 +49,6 @@ export interface ReviewInspectorItem {
 }
 
 export interface ReviewBatchInspectorStats {
-  readonly publishable: number;
   readonly hideable: number;
   readonly restorable: number;
   readonly featureable: number;
@@ -304,7 +303,6 @@ export function ReviewBatchInspector({
   onCategoryValueChange: (value: string) => void;
   onApplyCategory: () => void;
   onBibNumberChange: (value: string) => void;
-  onPublish: () => void;
   onHide: () => void;
   onRestore: () => void;
   onFeature: () => void;
