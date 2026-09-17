@@ -239,7 +239,8 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
           </DialogHeader>
 
           <div className="grid gap-4">
-            <div aria-label="反馈类型" className="flex flex-wrap gap-2" role="group">
+            <fieldset className="flex flex-wrap gap-2">
+              <legend className="sr-only">反馈类型</legend>
               {feedbackKinds.map((item) => (
                 <Button
                   aria-pressed={kind === item.value}
@@ -252,7 +253,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
                   {item.label}
                 </Button>
               ))}
-            </div>
+            </fieldset>
 
             <div className="grid gap-1.5">
               <Textarea
