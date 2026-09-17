@@ -7,11 +7,11 @@ import { requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import type { LiveEventBroker } from "../media/live-event-broker.js";
-import { visitorSessionToken } from "../media/visitor-http.js";
 import {
   type ViewerFeedbackService,
   viewerFeedbackTopic,
 } from "../media/viewer-feedback-service.js";
+import { visitorSessionToken } from "../media/visitor-http.js";
 
 const slugParamsSchema = z.object({ slug: z.string().min(12).max(32) }).strict();
 const feedbackKindSchema = z.enum(["problem", "suggestion", "other"]);
