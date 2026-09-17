@@ -23,7 +23,11 @@ import {
   type PhotoEditRecipe,
   photoEditRecipeFromUnknown,
 } from "@/lib/photo-edit/recipe";
-import { applyMediaEditRecipe, getMediaEditContext } from "@/lib/photo-edit/revision-client";
+import {
+  applyMediaEditRecipe,
+  getMediaEditContext,
+  revertMediaEditToBase,
+} from "@/lib/photo-edit/revision-client";
 import { analyzeMediaEditSource, renderMediaEditPreview } from "@/lib/photo-edit/runtime";
 import {
   type MediaEditSourceOrigin,
@@ -219,6 +223,37 @@ export function PhotoEditorDialog({
       setStage("ready");
     } catch (cause) {
       setError(userFacingErrorMessage(cause, "智能优化分析失败。"));
+      setStage("ready");
+    }
+  }
+
+  async function revertToBase(): Promise<void> {
+    if (
+      mediaId === null ||
+      context === null ||
+      context.state.activeRevisionId === null ||
+      busy ||
+      context.state.pendingRevisionId !== null
+    ) {
+      return;
+    }
+    setStage("applying");
+    setError(null);
+    setProgress(15);
+    try {
+      const reverted = await revertMediaEditToBase({
+        mediaId,
+        expectedGeneration: context.state.generation,
+        expectedActiveRevisionId: context.state.activeRevisionId,
+      });
+      setContext(reverted);
+      setRecipe(defaultPhotoEditRecipe);
+      setProgress(100);
+      toast.add({ title: "已恢复原始版本", type: "success" });
+      await onApplied();
+      onOpenChange(false);
+    } catch (cause) {
+      setError(userFacingErrorMessage(cause, "恢复原始版本失败。"));
       setStage("ready");
     }
   }
@@ -422,6 +457,17 @@ export function PhotoEditorDialog({
         </div>
 
         <DialogFooter className="px-5 py-4">
+          {context?.state.activeRevisionId !== null &&
+          context?.state.activeRevisionId !== undefined ? (
+            <Button
+              disabled={busy || context.state.pendingRevisionId !== null}
+              onClick={() => void revertToBase()}
+              type="button"
+              variant="outline"
+            >
+              恢复原图
+            </Button>
+          ) : null}
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}
