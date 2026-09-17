@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import {
   CameraIcon,
   DownloadIcon,
@@ -7,6 +6,7 @@ import {
   LinkIcon,
   ScanFaceIcon,
 } from "lucide-react";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "影像直播",
@@ -48,14 +48,19 @@ export default function HomePage() {
               <CameraIcon aria-hidden="true" className="size-[18px] lg:size-5" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold tracking-tight lg:text-[15px]">中学部影像直播</p>
+              <p className="truncate text-sm font-semibold tracking-tight lg:text-[15px]">
+                中学部影像直播
+              </p>
               <p className="hidden truncate text-[11px] text-muted-foreground sm:block">
                 北航实验学校中学部暨北航实验学校分校
               </p>
             </div>
           </div>
 
-          <nav aria-label="首页导航" className="hidden items-center gap-7 text-sm text-muted-foreground sm:flex">
+          <nav
+            aria-label="首页导航"
+            className="hidden items-center gap-7 text-sm text-muted-foreground sm:flex"
+          >
             <a className="transition-colors hover:text-foreground" href="#access">
               活动相册
             </a>
@@ -82,7 +87,10 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-7" id="access">
+            <div
+              className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-7"
+              id="access"
+            >
               <div className="flex items-start gap-4">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
                   <LinkIcon aria-hidden="true" className="size-5" />
