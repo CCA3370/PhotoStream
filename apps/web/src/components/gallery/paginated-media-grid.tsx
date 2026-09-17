@@ -284,10 +284,7 @@ export function PaginatedMediaGrid({
             void refreshFeatured().catch(() => undefined);
             return;
           } catch (caught) {
-            if (
-              caught instanceof ClientApiError &&
-              caught.response?.code === "MEDIA_NOT_FOUND"
-            ) {
+            if (caught instanceof ClientApiError && caught.response?.code === "MEDIA_NOT_FOUND") {
               return;
             }
             attempt += 1;
