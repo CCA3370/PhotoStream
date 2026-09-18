@@ -14,7 +14,7 @@ export const viewerFeedback = pgTable(
       .$type<"problem" | "suggestion" | "other" | "report">()
       .notNull(),
     reportReason: varchar("report_reason", { length: 32 }).$type<
-      "privacy" | "inappropriate" | "copyright" | "inaccurate" | "other"
+      "privacy" | "inappropriate" | "copyright" | "inaccurate" | "malicious_spread" | "other"
     >(),
     message: text("message").notNull(),
     pagePath: varchar("page_path", { length: 512 }),
