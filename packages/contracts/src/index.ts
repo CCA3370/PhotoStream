@@ -504,9 +504,7 @@ export const prepareMediaEditRevisionRequestSchema = z
       }
     }
   });
-export type PrepareMediaEditRevisionRequest = z.infer<
-  typeof prepareMediaEditRevisionRequestSchema
->;
+export type PrepareMediaEditRevisionRequest = z.infer<typeof prepareMediaEditRevisionRequestSchema>;
 
 export const mediaEditVariantViewSchema = z
   .object({
