@@ -10,6 +10,7 @@ import {
   updateLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
+import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
   createProgressiveUpload,
   registerAndUploadProgressiveVariant,
@@ -427,6 +428,7 @@ class LocalProcessingRuntime {
             uploadState: "uploading",
             error: null,
           });
+          void syncLocalPhotoEditDraft(task.localPhotoId).catch(() => undefined);
           uploads.push(uploadProgressiveOriginal(intent, task.file));
         },
         onVariant: async (variant) => {
