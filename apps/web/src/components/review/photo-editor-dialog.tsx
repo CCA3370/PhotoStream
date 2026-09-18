@@ -157,6 +157,8 @@ export function PhotoEditorDialog({
     !pendingElsewhere &&
     !aiPreviewLoading &&
     (context !== null || localPhotoId !== null);
+  const draftBasedOnGeneration = context?.state.generation ?? null;
+  const draftBasedOnRevisionId = context?.state.activeRevisionId ?? null;
 
   useEffect(() => {
     if (!open || (mediaId === null && localPhotoId === null)) return;
@@ -273,8 +275,8 @@ export function PhotoEditorDialog({
             mediaId: photo.mediaId,
             recipe,
             sourceFingerprint: localSourceFingerprint,
-            basedOnGeneration: context?.state.generation ?? null,
-            basedOnRevisionId: context?.state.activeRevisionId ?? null,
+            basedOnGeneration: draftBasedOnGeneration,
+            basedOnRevisionId: draftBasedOnRevisionId,
             editState: "draft",
           });
         })
@@ -284,7 +286,15 @@ export function PhotoEditorDialog({
         .catch(() => undefined);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [localPhotoId, localSourceFingerprint, open, recipe, stage]);
+  }, [
+    draftBasedOnGeneration,
+    draftBasedOnRevisionId,
+    localPhotoId,
+    localSourceFingerprint,
+    open,
+    recipe,
+    stage,
+  ]);
 
   useEffect(() => {
     if (!open || source === null) return;
