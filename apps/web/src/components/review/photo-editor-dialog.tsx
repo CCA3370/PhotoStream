@@ -504,7 +504,7 @@ export function PhotoEditorDialog({
               {stage === "applying" ? (
                 <Progress value={progress}>
                   <ProgressLabel>正在生成并同步修图版本</ProgressLabel>
-                  <ProgressValue>{progress}%</ProgressValue>
+                  <ProgressValue />
                 </Progress>
               ) : null}
             </div>
