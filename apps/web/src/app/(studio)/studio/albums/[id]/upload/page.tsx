@@ -26,6 +26,7 @@ export default async function UploadPage({ params }: { params: Promise<{ id: str
   return (
     <section aria-labelledby="upload-title" className="flex flex-col gap-4">
       <AlbumWorkspaceHeader
+        albumHref={session.user.role === "uploader" ? null : undefined}
         albumId={id}
         headingId="upload-title"
         metrics={
