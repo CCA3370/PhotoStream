@@ -148,9 +148,10 @@ export function automaticPhotoEditRecipe(analysis: PhotoEditAnalysis): PhotoEdit
   exposureEv = clamp(exposureEv, -1.2, 1.2);
 
   const highlightPressure = clamp((analysis.p95 - 0.78) / 0.2, 0, 1);
-  const shadowPressure = clamp((0.22 - analysis.p05) / 0.22, 0, 1);
+  const shadowDepth = clamp((0.24 - analysis.p05) / 0.24, 0, 1);
+  const sceneDarkness = clamp((0.42 - analysis.p50) / 0.3, 0, 1);
   const highlights = Math.round(-35 * highlightPressure);
-  const shadows = Math.round(40 * shadowPressure);
+  const shadows = Math.round(22 * shadowDepth * sceneDarkness);
 
   let temperature = 0;
   let tint = 0;

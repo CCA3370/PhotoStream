@@ -77,64 +77,73 @@ async function cachedBytes(options: {
 }): Promise<Uint8Array> {
   const absolute = new URL(options.url, scope.location.origin).toString();
   const cacheName = `photostream-photo-edit-${PHOTO_EDIT_MODEL_ASSET_VERSION}`;
+  let cache: Cache | null = null;
 
   try {
-    const cache = await caches.open(cacheName);
+    cache = await caches.open(cacheName);
     const cached = await cache.match(absolute);
     if (cached !== undefined) {
       const bytes = new Uint8Array(await cached.arrayBuffer());
-      options.onProgress(bytes.byteLength);
-      return bytes;
+      if (bytes.byteLength === options.expectedBytes) {
+        options.onProgress(bytes.byteLength);
+        return bytes;
+      }
+      await cache.delete(absolute).catch(() => false);
     }
-
-    const response = await fetch(absolute, {
-      cache: "force-cache",
-      credentials: "same-origin",
-    });
-    if (!response.ok || response.body === null) {
-      throw new Error(`模型资源读取失败（HTTP ${response.status}）`);
-    }
-
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let loadedBytes = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      loadedBytes += value.byteLength;
-      options.onProgress(loadedBytes);
-    }
-
-    if (loadedBytes !== options.expectedBytes) {
-      throw new Error(
-        `模型资源大小不匹配：期望 ${options.expectedBytes} bytes，实际 ${loadedBytes} bytes`,
-      );
-    }
-
-    const bytes = new Uint8Array(loadedBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-
-    const headers = new Headers(response.headers);
-    headers.delete("content-encoding");
-    headers.set("content-length", String(bytes.byteLength));
-    await cache.put(
-      absolute,
-      new Response(bytes, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      }),
-    );
-    return bytes;
-  } catch (error) {
-    if (error instanceof Error) throw error;
-    throw new Error("模型资源读取失败");
+  } catch {
+    cache = null;
   }
+
+  const response = await fetch(absolute, {
+    cache: "force-cache",
+    credentials: "same-origin",
+  });
+  if (!response.ok || response.body === null) {
+    throw new Error(`模型资源读取失败（HTTP ${response.status}）`);
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loadedBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loadedBytes += value.byteLength;
+    options.onProgress(loadedBytes);
+  }
+
+  if (loadedBytes !== options.expectedBytes) {
+    throw new Error(
+      `模型资源大小不匹配：期望 ${options.expectedBytes} bytes，实际 ${loadedBytes} bytes`,
+    );
+  }
+
+  const bytes = new Uint8Array(loadedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  if (cache !== null) {
+    try {
+      const headers = new Headers(response.headers);
+      headers.delete("content-encoding");
+      headers.set("content-length", String(bytes.byteLength));
+      await cache.put(
+        absolute,
+        new Response(bytes, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        }),
+      );
+    } catch {
+      // Cache API is an optimization only; a successful model download must remain usable.
+    }
+  }
+  return bytes;
 }
 
 function releaseSession(operation: PhotoEditAiOperation): void {

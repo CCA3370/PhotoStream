@@ -21,6 +21,22 @@ describe("photo edit analysis", () => {
     expect(recipe.exposureEv).toBeGreaterThan(0);
     expect(recipe.exposureEv).toBeLessThanOrEqual(1.2);
     expect(recipe.shadows).toBeGreaterThan(0);
+    expect(recipe.shadows).toBeLessThanOrEqual(22);
+  });
+
+  it("preserves deep natural shadows when the overall scene is already bright", () => {
+    const width = 100;
+    const height = 100;
+    const buffer = solid(145, width, height);
+    const darkPixels = Math.ceil(width * height * 0.08);
+    for (let pixel = 0; pixel < darkPixels; pixel += 1) {
+      const offset = pixel * 4;
+      buffer.data[offset] = 12;
+      buffer.data[offset + 1] = 12;
+      buffer.data[offset + 2] = 12;
+    }
+    const recipe = automaticPhotoEditRecipe(analyzePhotoPixels(buffer));
+    expect(recipe.shadows).toBeLessThanOrEqual(2);
   });
 
   it("does not increase exposure when highlights are clipped", () => {

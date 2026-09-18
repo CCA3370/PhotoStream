@@ -629,9 +629,9 @@ export function ReviewLightbox({
                     {selected.pendingAction === "state" ? (
                       <LoaderCircleIcon className="animate-spin" />
                     ) : published ? (
-                      <EyeOffIcon />
-                    ) : hidden ? (
                       <EyeIcon />
+                    ) : hidden ? (
+                      <EyeOffIcon />
                     ) : (
                       <LoaderCircleIcon className="opacity-60" />
                     )}

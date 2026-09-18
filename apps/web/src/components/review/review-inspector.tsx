@@ -195,9 +195,9 @@ export function ReviewInspector({
                 variant="outline"
               >
                 {item.publicationStatus === "published" ? (
-                  <EyeOffIcon data-icon="inline-start" />
-                ) : (
                   <EyeIcon data-icon="inline-start" />
+                ) : (
+                  <EyeOffIcon data-icon="inline-start" />
                 )}
                 {item.publicationStatus === "hidden" && item.editPending
                   ? "修图处理中"
