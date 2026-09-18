@@ -20,6 +20,8 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
   if (photo === null || draft === null || photo.mediaId === null) return;
   if (draft.editState === "synced" && draft.mediaId === photo.mediaId) return;
 
+  try {
+
   const fingerprint = photoEditSourceFingerprint({
     bytes: photo.totalBytes,
     width: photo.width,
@@ -63,7 +65,6 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
     error: null,
   });
 
-  try {
     const applied = await applyMediaEditRecipe({
       mediaId: photo.mediaId,
       recipe: draft.recipe,
@@ -90,8 +91,14 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
     await patchLocalPhotoEditDraft(localPhotoId, {
       mediaId: photo.mediaId,
       editState: "failed",
-      error: error instanceof Error ? error.message : "修图版本同步失败",
+      error:
+        error instanceof DOMException && error.name === "AbortError"
+          ? "修图版本同步已取消，可重新应用以继续同步。"
+          : error instanceof Error
+            ? error.message
+            : "修图版本同步失败",
     });
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
   }
 }
 
