@@ -657,269 +657,268 @@ export function PhotoEditorPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
+  <div className="flex flex-col gap-5">
+        {context?.state.pendingRevisionId !== null &&
+        context?.state.pendingRevisionId !== undefined ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
+            <p>
+              {context.state.pendingStatus === "failed"
+                ? "待处理修图已失败。当前照片仍保留发布门禁；重试或显式取消前不会退回基础版本公开。"
+                : pendingElsewhere
+                  ? "另一项修图版本正在处理中。完成或取消前不能应用新的版本。"
+                  : "当前修图版本仍待完成；再次应用会重试此修图。"}
+            </p>
+            <Button
+              disabled={busy}
+              onClick={() => void cancelPendingEdit()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              取消待处理修图
+            </Button>
+          </div>
+        ) : null}
 
-            <div className="flex flex-col gap-5">
-              {context?.state.pendingRevisionId !== null &&
-              context?.state.pendingRevisionId !== undefined ? (
-                <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
-                  <p>
-                    {context.state.pendingStatus === "failed"
-                      ? "待处理修图已失败。当前照片仍保留发布门禁；重试或显式取消前不会退回基础版本公开。"
-                      : pendingElsewhere
-                        ? "另一项修图版本正在处理中。完成或取消前不能应用新的版本。"
-                        : "当前修图版本仍待完成；再次应用会重试此修图。"}
-                  </p>
-                  <Button
-                    disabled={busy}
-                    onClick={() => void cancelPendingEdit()}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    取消待处理修图
-                  </Button>
-                </div>
-              ) : null}
-
-              {context !== null && context.history.length > 0 ? (
-                <section className="flex flex-col gap-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground">版本</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    <Button
-                      disabled={busy || context.state.pendingRevisionId !== null}
-                      onClick={() => void switchRevision(null)}
-                      size="sm"
-                      type="button"
-                      variant={context.state.activeRevisionId === null ? "default" : "outline"}
-                    >
-                      原始版本
-                    </Button>
-                    {context.history.map((revision, index) => (
-                      <Button
-                        disabled={busy || context.state.pendingRevisionId !== null}
-                        key={revision.id}
-                        onClick={() => void switchRevision(revision.id)}
-                        size="sm"
-                        type="button"
-                        variant={
-                          context.state.activeRevisionId === revision.id ? "default" : "outline"
-                        }
-                      >
-                        {context.state.activeRevisionId === revision.id
-                          ? "当前修图"
-                          : `版本 ${context.history.length - index}`}
-                        <span className="ml-1 text-[10px] opacity-70">
-                          {revisionTime(revision.createdAt)}
-                        </span>
-                      </Button>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              <div className="grid grid-cols-2 gap-2">
+        {context !== null && context.history.length > 0 ? (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-xs font-semibold text-muted-foreground">版本</h3>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                disabled={busy || context.state.pendingRevisionId !== null}
+                onClick={() => void switchRevision(null)}
+                size="sm"
+                type="button"
+                variant={context.state.activeRevisionId === null ? "default" : "outline"}
+              >
+                原始版本
+              </Button>
+              {context.history.map((revision, index) => (
                 <Button
-                  disabled={busy || source === null}
-                  onClick={() => void smartOptimize()}
+                  disabled={busy || context.state.pendingRevisionId !== null}
+                  key={revision.id}
+                  onClick={() => void switchRevision(revision.id)}
+                  size="sm"
                   type="button"
+                  variant={
+                    context.state.activeRevisionId === revision.id ? "default" : "outline"
+                  }
                 >
-                  <SparklesIcon data-icon="inline-start" />
-                  智能优化
+                  {context.state.activeRevisionId === revision.id
+                    ? "当前修图"
+                    : `版本 ${context.history.length - index}`}
+                  <span className="ml-1 text-[10px] opacity-70">
+                    {revisionTime(revision.createdAt)}
+                  </span>
                 </Button>
-                <Button
-                  disabled={busy}
-                  onClick={() => setRecipe(defaultPhotoEditRecipe)}
-                  type="button"
-                  variant="outline"
-                >
-                  <RotateCcwIcon data-icon="inline-start" />
-                  重置
-                </Button>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <RangeControl
-                  disabled={busy}
-                  format={(value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)} EV`}
-                  label="曝光"
-                  maximum={2}
-                  minimum={-2}
-                  onChange={(value) => patchRecipe({ exposureEv: value })}
-                  step={0.05}
-                  value={recipe.exposureEv}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="色温"
-                  maximum={1}
-                  minimum={-1}
-                  onChange={(value) => patchRecipe({ temperature: value })}
-                  step={0.02}
-                  value={recipe.temperature}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="色调"
-                  maximum={1}
-                  minimum={-1}
-                  onChange={(value) => patchRecipe({ tint: value })}
-                  step={0.02}
-                  value={recipe.tint}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="高光"
-                  maximum={100}
-                  minimum={-100}
-                  onChange={(value) => patchRecipe({ highlights: value })}
-                  step={1}
-                  value={recipe.highlights}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="阴影"
-                  maximum={100}
-                  minimum={-100}
-                  onChange={(value) => patchRecipe({ shadows: value })}
-                  step={1}
-                  value={recipe.shadows}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="对比度"
-                  maximum={100}
-                  minimum={-100}
-                  onChange={(value) => patchRecipe({ contrast: value })}
-                  step={1}
-                  value={recipe.contrast}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="自然饱和度"
-                  maximum={100}
-                  minimum={-100}
-                  onChange={(value) => patchRecipe({ vibrance: value })}
-                  step={1}
-                  value={recipe.vibrance}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="饱和度"
-                  maximum={100}
-                  minimum={-100}
-                  onChange={(value) => patchRecipe({ saturation: value })}
-                  step={1}
-                  value={recipe.saturation}
-                />
-                <RangeControl
-                  disabled={busy}
-                  label="锐化"
-                  maximum={100}
-                  minimum={0}
-                  onChange={(value) => patchRecipe({ sharpen: value })}
-                  step={1}
-                  value={recipe.sharpen}
-                />
-              </div>
-
-              <section className="flex flex-col gap-3 border-t pt-4">
-                <div>
-                  <h3 className="text-xs font-semibold text-muted-foreground">AI 修复</h3>
-                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                    WebGPU 本机推理，不上传至 AI 服务。模型首次使用时从本站加载并长期缓存。
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    disabled={busy || !aiAvailable}
-                    onClick={() =>
-                      patchRecipe({
-                        denoiseStrength: recipe.denoiseStrength > 0 ? 0 : 0.55,
-                      })
-                    }
-                    type="button"
-                    variant={recipe.denoiseStrength > 0 ? "default" : "outline"}
-                  >
-                    AI 降噪
-                  </Button>
-                  <Button
-                    disabled={busy || !aiAvailable}
-                    onClick={() =>
-                      patchRecipe({
-                        deblurStrength: recipe.deblurStrength > 0 ? 0 : 0.28,
-                      })
-                    }
-                    type="button"
-                    variant={recipe.deblurStrength > 0 ? "default" : "outline"}
-                  >
-                    AI 清晰化
-                  </Button>
-                </div>
-                {!aiAvailable ? (
-                  <p className="text-[11px] leading-4 text-muted-foreground">
-                    当前浏览器或设备未提供 WebGPU，确定性调色仍可正常使用。
-                  </p>
-                ) : null}
-                {recipe.denoiseStrength > 0 ? (
-                  <RangeControl
-                    disabled={busy}
-                    format={(value) => `${Math.round(value * 100)}%`}
-                    label="降噪强度"
-                    maximum={1}
-                    minimum={0}
-                    onChange={(value) => patchRecipe({ denoiseStrength: value })}
-                    step={0.05}
-                    value={recipe.denoiseStrength}
-                  />
-                ) : null}
-                {recipe.deblurStrength > 0 ? (
-                  <RangeControl
-                    disabled={busy}
-                    format={(value) => `${Math.round(value * 100)}%`}
-                    label="清晰强度"
-                    maximum={0.6}
-                    minimum={0}
-                    onChange={(value) => patchRecipe({ deblurStrength: value })}
-                    step={0.04}
-                    value={recipe.deblurStrength}
-                  />
-                ) : null}
-                {aiPreviewLoading && aiPreviewProgress !== null ? (
-                  aiPreviewProgress.phase === "downloading-model" ? (
-                    <Progress value={Math.round(aiPreviewProgress.progress * 100)}>
-                      <ProgressLabel>
-                        正在下载{aiOperationLabel(aiPreviewProgress.operation)}模型
-                      </ProgressLabel>
-                      <span className="ml-auto text-sm tabular-nums text-muted-foreground">
-                        {aiPreviewProgress.loadedBytes !== undefined &&
-                        aiPreviewProgress.totalBytes !== undefined
-                          ? `${formatModelBytes(aiPreviewProgress.loadedBytes)} / ${formatModelBytes(aiPreviewProgress.totalBytes)}`
-                          : `${Math.round(aiPreviewProgress.progress * 100)}%`}
-                      </span>
-                    </Progress>
-                  ) : (
-                    <p className="text-[11px] leading-4 text-muted-foreground">
-                      {aiPreviewProgress.phase === "initializing-model"
-                        ? `正在初始化${aiOperationLabel(aiPreviewProgress.operation)}模型…`
-                        : "正在生成 AI 预览…"}
-                    </p>
-                  )
-                ) : null}
-              </section>
-
-              {error !== null ? (
-                <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
-                  {error}
-                </div>
-              ) : null}
-
-              {stage === "applying" ? (
-                <Progress value={progress}>
-                  <ProgressLabel>正在生成并同步修图版本</ProgressLabel>
-                  <ProgressValue />
-                </Progress>
-              ) : null}
+              ))}
             </div>
+          </section>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            disabled={busy || source === null}
+            onClick={() => void smartOptimize()}
+            type="button"
+          >
+            <SparklesIcon data-icon="inline-start" />
+            智能优化
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() => setRecipe(defaultPhotoEditRecipe)}
+            type="button"
+            variant="outline"
+          >
+            <RotateCcwIcon data-icon="inline-start" />
+            重置
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <RangeControl
+            disabled={busy}
+            format={(value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)} EV`}
+            label="曝光"
+            maximum={2}
+            minimum={-2}
+            onChange={(value) => patchRecipe({ exposureEv: value })}
+            step={0.05}
+            value={recipe.exposureEv}
+          />
+          <RangeControl
+            disabled={busy}
+            label="色温"
+            maximum={1}
+            minimum={-1}
+            onChange={(value) => patchRecipe({ temperature: value })}
+            step={0.02}
+            value={recipe.temperature}
+          />
+          <RangeControl
+            disabled={busy}
+            label="色调"
+            maximum={1}
+            minimum={-1}
+            onChange={(value) => patchRecipe({ tint: value })}
+            step={0.02}
+            value={recipe.tint}
+          />
+          <RangeControl
+            disabled={busy}
+            label="高光"
+            maximum={100}
+            minimum={-100}
+            onChange={(value) => patchRecipe({ highlights: value })}
+            step={1}
+            value={recipe.highlights}
+          />
+          <RangeControl
+            disabled={busy}
+            label="阴影"
+            maximum={100}
+            minimum={-100}
+            onChange={(value) => patchRecipe({ shadows: value })}
+            step={1}
+            value={recipe.shadows}
+          />
+          <RangeControl
+            disabled={busy}
+            label="对比度"
+            maximum={100}
+            minimum={-100}
+            onChange={(value) => patchRecipe({ contrast: value })}
+            step={1}
+            value={recipe.contrast}
+          />
+          <RangeControl
+            disabled={busy}
+            label="自然饱和度"
+            maximum={100}
+            minimum={-100}
+            onChange={(value) => patchRecipe({ vibrance: value })}
+            step={1}
+            value={recipe.vibrance}
+          />
+          <RangeControl
+            disabled={busy}
+            label="饱和度"
+            maximum={100}
+            minimum={-100}
+            onChange={(value) => patchRecipe({ saturation: value })}
+            step={1}
+            value={recipe.saturation}
+          />
+          <RangeControl
+            disabled={busy}
+            label="锐化"
+            maximum={100}
+            minimum={0}
+            onChange={(value) => patchRecipe({ sharpen: value })}
+            step={1}
+            value={recipe.sharpen}
+          />
+        </div>
+
+        <section className="flex flex-col gap-3 border-t pt-4">
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground">AI 修复</h3>
+            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+              WebGPU 本机推理，不上传至 AI 服务。模型首次使用时从本站加载并长期缓存。
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              disabled={busy || !aiAvailable}
+              onClick={() =>
+                patchRecipe({
+                  denoiseStrength: recipe.denoiseStrength > 0 ? 0 : 0.55,
+                })
+              }
+              type="button"
+              variant={recipe.denoiseStrength > 0 ? "default" : "outline"}
+            >
+              AI 降噪
+            </Button>
+            <Button
+              disabled={busy || !aiAvailable}
+              onClick={() =>
+                patchRecipe({
+                  deblurStrength: recipe.deblurStrength > 0 ? 0 : 0.28,
+                })
+              }
+              type="button"
+              variant={recipe.deblurStrength > 0 ? "default" : "outline"}
+            >
+              AI 清晰化
+            </Button>
+          </div>
+          {!aiAvailable ? (
+            <p className="text-[11px] leading-4 text-muted-foreground">
+              当前浏览器或设备未提供 WebGPU，确定性调色仍可正常使用。
+            </p>
+          ) : null}
+          {recipe.denoiseStrength > 0 ? (
+            <RangeControl
+              disabled={busy}
+              format={(value) => `${Math.round(value * 100)}%`}
+              label="降噪强度"
+              maximum={1}
+              minimum={0}
+              onChange={(value) => patchRecipe({ denoiseStrength: value })}
+              step={0.05}
+              value={recipe.denoiseStrength}
+            />
+          ) : null}
+          {recipe.deblurStrength > 0 ? (
+            <RangeControl
+              disabled={busy}
+              format={(value) => `${Math.round(value * 100)}%`}
+              label="清晰强度"
+              maximum={0.6}
+              minimum={0}
+              onChange={(value) => patchRecipe({ deblurStrength: value })}
+              step={0.04}
+              value={recipe.deblurStrength}
+            />
+          ) : null}
+          {aiPreviewLoading && aiPreviewProgress !== null ? (
+            aiPreviewProgress.phase === "downloading-model" ? (
+              <Progress value={Math.round(aiPreviewProgress.progress * 100)}>
+                <ProgressLabel>
+                  正在下载{aiOperationLabel(aiPreviewProgress.operation)}模型
+                </ProgressLabel>
+                <span className="ml-auto text-sm tabular-nums text-muted-foreground">
+                  {aiPreviewProgress.loadedBytes !== undefined &&
+                  aiPreviewProgress.totalBytes !== undefined
+                    ? `${formatModelBytes(aiPreviewProgress.loadedBytes)} / ${formatModelBytes(aiPreviewProgress.totalBytes)}`
+                    : `${Math.round(aiPreviewProgress.progress * 100)}%`}
+                </span>
+              </Progress>
+            ) : (
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                {aiPreviewProgress.phase === "initializing-model"
+                  ? `正在初始化${aiOperationLabel(aiPreviewProgress.operation)}模型…`
+                  : "正在生成 AI 预览…"}
+              </p>
+            )
+          ) : null}
+        </section>
+
+        {error !== null ? (
+          <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
+            {error}
+          </div>
+        ) : null}
+
+        {stage === "applying" ? (
+          <Progress value={progress}>
+            <ProgressLabel>正在生成并同步修图版本</ProgressLabel>
+            <ProgressValue />
+          </Progress>
+        ) : null}
+      </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3">

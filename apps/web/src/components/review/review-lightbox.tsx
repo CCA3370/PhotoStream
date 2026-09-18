@@ -216,6 +216,7 @@ export function ReviewLightbox({
   }, []);
 
   useEffect(() => {
+    if (selectedKey === null) return;
     setBibDialogOpen(false);
     setInspectorOpen(false);
     setEditMode(false);
@@ -224,7 +225,7 @@ export function ReviewLightbox({
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
-  }, [resetView, selected?.key]);
+  }, [resetView, selectedKey]);
 
   useEffect(() => {
     if (editMode) return;
@@ -434,7 +435,9 @@ export function ReviewLightbox({
                 "absolute inset-0 touch-none select-none",
                 zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
               )}
-              onDoubleClick={editMode ? undefined : () => (zoom === 1 ? changeZoom(2.5) : resetView())}
+              onDoubleClick={
+                editMode ? undefined : () => (zoom === 1 ? changeZoom(2.5) : resetView())
+              }
               onPointerCancel={editMode ? undefined : finishPointer}
               onPointerDown={editMode ? undefined : onPointerDown}
               onPointerMove={editMode ? undefined : onPointerMove}

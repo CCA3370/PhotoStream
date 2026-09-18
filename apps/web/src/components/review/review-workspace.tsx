@@ -795,7 +795,8 @@ export function ReviewWorkspace({
         featured: item.featured,
         publicationStatus: item.publicationStatus,
         mediaId: item.source === "remote" ? item.remote.id : item.local.photo.mediaId,
-        localPhotoId: item.source === "local" ? item.local.photo.id : (item.local?.photo.id ?? null),
+        localPhotoId:
+          item.source === "local" ? item.local.photo.id : (item.local?.photo.id ?? null),
         bib: item.bib,
         canDelete: item.source === "local" ? true : userRole === "admin",
         pendingAction: pendingActions.get(item.key) ?? null,
