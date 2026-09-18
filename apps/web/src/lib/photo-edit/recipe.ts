@@ -1,4 +1,4 @@
-export const photoEditPipelineVersion = "local-edit-v1";
+export const photoEditPipelineVersion = "local-edit-v2";
 export const photoEditRecipeVersion = 2;
 
 export interface PhotoEditRecipe {
