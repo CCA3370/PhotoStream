@@ -8,6 +8,7 @@ import { PostgresAuthStore } from "../auth/postgres-store.js";
 import type { PasswordHasher } from "../auth/types.js";
 import { UserAdminService } from "../auth/user-admin-service.js";
 import { loadConfig } from "../config.js";
+import { MediaEditService } from "./edit-service.js";
 import { LiveEventBroker } from "./live-event-broker.js";
 import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
 import { OperationsService } from "./operations-service.js";
@@ -186,6 +187,7 @@ maybeDescribe("photo vertical slice transactions", () => {
   const database = createDatabase(pool);
   const storage = new FakeObjectStorage();
   const service = new PhotoService({ database, storage, passwordHasher: fakeHasher, config });
+  const editService = new MediaEditService({ database, storage });
   const operationsService = new OperationsService({ database, storage, config });
   const userAdminService = new UserAdminService({ database, passwordHasher: fakeHasher, config });
   let adminId = "";
@@ -366,6 +368,90 @@ maybeDescribe("photo vertical slice transactions", () => {
       afterId: 0,
     });
     expect(replay.events.map((event) => event.type)).toEqual(["media.published", "media.updated"]);
+  });
+
+  it("defers auto publication while a local edit revision is pending", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "修图发布门禁", description: "", publishMode: "auto" },
+      idempotencyKey: "album-idempotency-edit-gate",
+      requestId: "request-album-edit-gate",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      requestId: "request-start-edit-gate",
+    });
+    const intent = await service.createPhotoUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: photoRequest(album.album.id),
+      idempotencyKey: "photo-idempotency-edit-gate",
+    });
+
+    const reserved = await editService.createRevision({
+      actor: { id: uploaderId, role: "uploader" },
+      mediaId: intent.mediaId,
+      input: {
+        basedOnRevisionId: null,
+        basedOnGeneration: 0,
+        pipelineVersion: "local-edit-v2",
+        recipeVersion: 2,
+        recipeJson: { exposureEv: 0.2, denoiseStrength: 0, deblurStrength: 0 },
+        denoiseModel: null,
+        denoiseModelVersion: null,
+        deblurModel: null,
+        deblurModelVersion: null,
+      },
+      requestId: "request-reserve-edit-gate",
+    });
+    const revisionId = reserved.state.pendingRevisionId;
+    if (revisionId === null) throw new Error("pending edit revision missing");
+
+    const complete = async (kind: "photo_480" | "photo_960") => {
+      const object = intent.objects.find((candidate) => candidate.kind === kind);
+      if (object === undefined) throw new Error(`Missing ${kind}`);
+      storage.objects.set(object.objectKey, {
+        bytes: object.expectedBytes,
+        contentType: object.contentType,
+        etag: `etag-${kind}`,
+      });
+      return service.completeUploadObject({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: intent.id,
+        kind,
+      });
+    };
+
+    expect((await complete("photo_480")).publicationStatus).toBe("draft");
+    const previewReady = await complete("photo_960");
+    expect(previewReady.ingestStatus).toBe("preview_ready");
+    expect(previewReady.publicationStatus).toBe("pending_review");
+
+    await expect(
+      service.publishMedia({
+        actor: { id: reviewerId, role: "reviewer" },
+        mediaId: intent.mediaId,
+        requestId: "request-publish-edit-gate-blocked",
+        idempotencyKey: "publish-edit-gate-blocked",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+
+    await editService.cancelPending({
+      actor: { id: uploaderId, role: "uploader" },
+      mediaId: intent.mediaId,
+      revisionId,
+      requestId: "request-cancel-edit-gate",
+    });
+    await service.publishMedia({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId: intent.mediaId,
+      requestId: "request-publish-edit-gate",
+      idempotencyKey: "publish-edit-gate",
+    });
+    expect(
+      (await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id))
+        .publicationStatus,
+    ).toBe("published");
   });
 
   it("rejects another uploader and verifies exact object metadata", async () => {
