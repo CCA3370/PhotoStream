@@ -134,9 +134,7 @@ export function PhotoEditorDialog({
   const deblurStrength = recipe.deblurStrength;
   const aiEnabled = denoiseStrength > 0 || deblurStrength > 0;
   const aiPreExposure =
-    denoiseStrength > 0 && recipe.exposureEv >= 0.75
-      ? Math.min(0.75, recipe.exposureEv * 0.5)
-      : 0;
+    denoiseStrength > 0 && recipe.exposureEv >= 0.75 ? Math.min(0.75, recipe.exposureEv * 0.5) : 0;
   const canApply =
     stage === "ready" &&
     context !== null &&
@@ -256,15 +254,7 @@ export function PhotoEditorDialog({
       });
 
     return () => controller.abort();
-  }, [
-    aiAvailable,
-    aiEnabled,
-    aiPreExposure,
-    open,
-    deblurStrength,
-    denoiseStrength,
-    source,
-  ]);
+  }, [aiAvailable, aiEnabled, aiPreExposure, open, deblurStrength, denoiseStrength, source]);
 
   useEffect(() => {
     if (!open || source === null || stage === "loading" || stage === "error") return;
