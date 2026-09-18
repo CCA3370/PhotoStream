@@ -199,10 +199,10 @@ export async function applyMediaEditRecipe(options: {
   );
   const revisionId = reserved.state.pendingRevisionId;
   if (revisionId === null) throw new Error("修图版本预留失败");
-  await options.onReserved?.(revisionId);
-  options.onProgress?.(0.02);
 
   try {
+    await options.onReserved?.(revisionId);
+    options.onProgress?.(0.02);
     const outputs = await renderRecipeOutputs({
       source: options.source,
       recipe: options.recipe,
