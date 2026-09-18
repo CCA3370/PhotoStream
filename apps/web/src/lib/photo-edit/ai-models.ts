@@ -33,8 +33,8 @@ export const photoEditAiModels: Readonly<Record<PhotoEditAiOperation, PhotoEditA
     tileSize: 256,
     overlap: 32,
     inputDivisor: 8,
-    inputName: "image",
-    outputName: "denoised",
+    inputName: null,
+    outputName: null,
     license: "Apache-2.0",
   },
   deblur: {
