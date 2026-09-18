@@ -124,14 +124,11 @@ async function createSession(spec: PhotoEditAiModelSpec): Promise<InferenceSessi
         ];
 
   try {
-    const session = await ort.InferenceSession.create(
-      model,
-      {
-        executionProviders: ["webgpu"],
-        graphOptimizationLevel: "all",
-        ...(externalData === undefined ? {} : { externalData }),
-      } as InferenceSession.SessionOptions,
-    );
+    const session = await ort.InferenceSession.create(model, {
+      executionProviders: ["webgpu"],
+      graphOptimizationLevel: "all",
+      ...(externalData === undefined ? {} : { externalData }),
+    } as InferenceSession.SessionOptions);
     sessions.set(spec.operation, session);
     return session;
   } catch (error) {
@@ -370,8 +367,7 @@ async function runOperation(options: {
         for (let x = 0; x < tile.contributionWidth; x += 1) {
           const globalX = tile.contributionX + x;
           if (globalX >= source.width) continue;
-          const tileIndex =
-            (y + tile.cropOffset) * spec.tileSize + (x + tile.cropOffset);
+          const tileIndex = (y + tile.cropOffset) * spec.tileSize + (x + tile.cropOffset);
           const rowIndex = y * source.width + globalX;
           const weight = photoEditFeatherWeight({
             local: x,
@@ -402,8 +398,7 @@ async function runOperation(options: {
     }
 
     const topOverlap = rowY === 0 ? 0 : Math.min(spec.overlap, rowHeight);
-    const bottomOverlap =
-      rowY + rowHeight >= source.height ? 0 : Math.min(spec.overlap, rowHeight);
+    const bottomOverlap = rowY + rowHeight >= source.height ? 0 : Math.min(spec.overlap, rowHeight);
     const writeCount = rowHeight - bottomOverlap;
 
     writeRowSegment({
