@@ -1,10 +1,17 @@
 "use client";
 
-import { MessageSquareTextIcon } from "lucide-react";
+import { EyeOffIcon, LoaderCircleIcon, MessageSquareTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { type ViewerFeedbackItem, viewerFeedbackKindLabel } from "@/lib/viewer-feedback";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import { clientMutation } from "@/lib/client-api";
+import {
+  type ViewerFeedbackItem,
+  viewerFeedbackKindLabel,
+  viewerReportReasonLabel,
+} from "@/lib/viewer-feedback";
 
 function formatTime(value: string): string {
   const date = new Date(value);
@@ -28,14 +35,17 @@ function mergeFeedback(
 }
 
 export function ViewerFeedbackInbox({
+  canModerate,
   initialItems,
   initialLatestId,
 }: Readonly<{
+  canModerate: boolean;
   initialItems: readonly ViewerFeedbackItem[];
   initialLatestId: number;
 }>) {
   const [items, setItems] = useState<readonly ViewerFeedbackItem[]>(initialItems);
   const [connected, setConnected] = useState(false);
+  const [hidingMediaId, setHidingMediaId] = useState<string | null>(null);
   const lastEventId = useRef(initialLatestId);
 
   useEffect(() => {
@@ -76,16 +86,42 @@ export function ViewerFeedbackInbox({
     };
   }, []);
 
+  async function hideReportedPhoto(mediaId: string): Promise<void> {
+    if (!canModerate || hidingMediaId !== null) return;
+    setHidingMediaId(mediaId);
+    try {
+      await clientMutation<{ readonly ok: true }>(`/api/v1/media/${encodeURIComponent(mediaId)}/hide`, {
+        idempotencyKey: `feedback-hide-${crypto.randomUUID()}`,
+      });
+      setItems((current) =>
+        current.map((item) => (item.mediaId === mediaId ? { ...item, mediaStatus: "hidden" } : item)),
+      );
+      toast.add({
+        title: "图片已下架",
+        description: "该图片已从公共相册中隐藏。",
+        type: "success",
+      });
+    } catch (error) {
+      toast.add({
+        title: "下架失败",
+        description: error instanceof Error ? error.message : "请稍后重试。",
+        type: "error",
+      });
+    } finally {
+      setHidingMediaId(null);
+    }
+  }
+
   return (
     <div className="grid gap-3">
       <section className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <MessageSquareTextIcon className="size-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">观众反馈收件箱</h2>
+            <h2 className="text-sm font-semibold">观众反馈与图片投诉</h2>
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            观众提交后会直接出现在这里，无需刷新页面。当前列表展示最近 100 条反馈。
+            普通反馈和图片投诉会实时出现在这里。图片投诉会标出目标图片，并可直接执行下架处理。
           </p>
         </div>
         <Badge className="w-fit gap-1.5" variant={connected ? "secondary" : "outline"}>
@@ -102,37 +138,84 @@ export function ViewerFeedbackInbox({
           <div>
             <MessageSquareTextIcon className="mx-auto size-7 text-muted-foreground/60" />
             <p className="mt-3 text-sm font-medium">暂时没有反馈</p>
-            <p className="mt-1 text-xs text-muted-foreground">新的观众意见会实时显示在这里。</p>
+            <p className="mt-1 text-xs text-muted-foreground">新的观众意见或图片投诉会实时显示在这里。</p>
           </div>
         </section>
       ) : (
         <div className="grid gap-2.5">
-          {items.map((item) => (
-            <article className="rounded-xl border bg-card p-4 shadow-xs" key={item.id}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <Badge variant={item.kind === "problem" ? "destructive" : "secondary"}>
-                    {viewerFeedbackKindLabel(item.kind)}
-                  </Badge>
-                  <span className="truncate text-sm font-medium">{item.albumTitle}</span>
+          {items.map((item) => {
+            const isReport = item.kind === "report" && item.mediaId !== null;
+            const mediaHidden = item.mediaStatus === "hidden";
+            const hiding = item.mediaId !== null && hidingMediaId === item.mediaId;
+            return (
+              <article
+                className={`rounded-xl border bg-card p-4 shadow-xs ${isReport ? "border-destructive/30" : ""}`}
+                key={item.id}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <Badge variant={isReport || item.kind === "problem" ? "destructive" : "secondary"}>
+                      {viewerFeedbackKindLabel(item.kind)}
+                    </Badge>
+                    {isReport && item.reportReason !== null ? (
+                      <Badge variant="outline">{viewerReportReasonLabel(item.reportReason)}</Badge>
+                    ) : null}
+                    <span className="truncate text-sm font-medium">{item.albumTitle}</span>
+                    {isReport ? (
+                      <Badge variant={mediaHidden ? "secondary" : "outline"}>
+                        {mediaHidden ? "图片已隐藏" : "图片仍显示"}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <time
+                    className="shrink-0 text-[11px] tabular-nums text-muted-foreground"
+                    dateTime={item.createdAt}
+                  >
+                    {formatTime(item.createdAt)}
+                  </time>
                 </div>
-                <time
-                  className="shrink-0 text-[11px] tabular-nums text-muted-foreground"
-                  dateTime={item.createdAt}
-                >
-                  {formatTime(item.createdAt)}
-                </time>
-              </div>
-              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">
-                {item.message}
-              </p>
-              {item.pagePath === null ? null : (
-                <p className="mt-3 truncate rounded-md bg-muted/55 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                  {item.pagePath}
+
+                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">
+                  {item.message}
                 </p>
-              )}
-            </article>
-          ))}
+
+                {isReport ? (
+                  <div className="mt-3 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">目标图片</p>
+                      <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                        {item.mediaId}
+                      </p>
+                    </div>
+                    {canModerate ? (
+                      <Button
+                        className="shrink-0"
+                        disabled={mediaHidden || hiding}
+                        onClick={() => void hideReportedPhoto(item.mediaId as string)}
+                        size="sm"
+                        variant={mediaHidden ? "secondary" : "destructive"}
+                      >
+                        {hiding ? (
+                          <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                        ) : (
+                          <EyeOffIcon data-icon="inline-start" />
+                        )}
+                        {mediaHidden ? "已下架" : "一键下架图片"}
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">仅管理员或审核员可下架图片</span>
+                    )}
+                  </div>
+                ) : null}
+
+                {item.pagePath === null ? null : (
+                  <p className="mt-3 truncate rounded-md bg-muted/55 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    {item.pagePath}
+                  </p>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
     </div>
