@@ -2,9 +2,9 @@
 
 import type { MediaEditContextView } from "@photostream/contracts";
 import { RotateCcwIcon, SparklesIcon } from "lucide-react";
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PhotoBeforeAfterSlider } from "@/components/review/photo-before-after-slider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,7 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { toast } from "@/components/ui/toast";
 import { getLocalReviewPhoto } from "@/lib/local-review-queue";
 import {
-  type PhotoEditAiPhase,
+  type PhotoEditAiProgress,
   photoEditAiAvailable,
   restoreMediaEditPreview,
 } from "@/lib/photo-edit/ai-runtime";
@@ -110,6 +110,17 @@ function sourceLabel(origin: MediaEditSourceOrigin | null): string {
   return "正在解析";
 }
 
+function formatModelBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function aiOperationLabel(operation: PhotoEditAiProgress["operation"]): string {
+  if (operation === "denoise") return "AI 降噪";
+  if (operation === "deblur") return "AI 清晰化";
+  return "AI 模型";
+}
+
 export function PhotoEditorDialog({
   mediaId,
   localPhotoId = null,
@@ -129,13 +140,12 @@ export function PhotoEditorDialog({
   const [recipe, setRecipe] = useState<PhotoEditRecipe>(defaultPhotoEditRecipe);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [showBefore, setShowBefore] = useState(false);
   const [stage, setStage] = useState<EditorStage>("loading");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [aiPreviewSource, setAiPreviewSource] = useState<Blob | null>(null);
   const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
-  const [aiPreviewPhase, setAiPreviewPhase] = useState<PhotoEditAiPhase | null>(null);
+  const [aiPreviewProgress, setAiPreviewProgress] = useState<PhotoEditAiProgress | null>(null);
   const [ownedPendingRevisionId, setOwnedPendingRevisionId] = useState<string | null>(null);
   const [localSourceFingerprint, setLocalSourceFingerprint] = useState<string | null>(null);
   const persistedRecipeKey = useRef<string | null>(null);
@@ -174,13 +184,12 @@ export function PhotoEditorDialog({
     setRecipe(defaultPhotoEditRecipe);
     setOriginalUrl(null);
     setPreviewUrl(null);
-    setShowBefore(false);
     setStage("loading");
     setError(null);
     setProgress(0);
     setAiPreviewSource(null);
     setAiPreviewLoading(false);
-    setAiPreviewPhase(null);
+    setAiPreviewProgress(null);
     setOwnedPendingRevisionId(null);
     setLocalSourceFingerprint(null);
     persistedRecipeKey.current = null;
@@ -304,13 +313,13 @@ export function PhotoEditorDialog({
     if (!aiEnabled) {
       setAiPreviewSource(null);
       setAiPreviewLoading(false);
-      setAiPreviewPhase(null);
+      setAiPreviewProgress(null);
       return;
     }
     if (!aiAvailable) {
       setAiPreviewSource(null);
       setAiPreviewLoading(false);
-      setAiPreviewPhase(null);
+      setAiPreviewProgress(null);
       return;
     }
 
@@ -319,7 +328,10 @@ export function PhotoEditorDialog({
     const controller = new AbortController();
     setAiPreviewSource(null);
     setAiPreviewLoading(true);
-    setAiPreviewPhase("loading-model");
+    setAiPreviewProgress({
+      phase: "downloading-model",
+      progress: 0,
+    });
 
     const run = async () => {
       let aiInput = source;
@@ -340,7 +352,7 @@ export function PhotoEditorDialog({
       });
       return restoreMediaEditPreview(aiInput, aiRecipe, {
         signal: controller.signal,
-        onProgress: ({ phase }) => setAiPreviewPhase(phase),
+        onProgress: (nextProgress) => setAiPreviewProgress(nextProgress),
       });
     };
 
@@ -348,12 +360,12 @@ export function PhotoEditorDialog({
       .then((blob) => {
         if (controller.signal.aborted || aiPreviewSequence.current !== sequence) return;
         setAiPreviewSource(blob);
-        setAiPreviewPhase(null);
+        setAiPreviewProgress(null);
       })
       .catch((cause) => {
         if (controller.signal.aborted) return;
         setError(userFacingErrorMessage(cause, "本地 AI 预览失败。"));
-        setAiPreviewPhase(null);
+        setAiPreviewProgress(null);
       })
       .finally(() => {
         if (!controller.signal.aborted && aiPreviewSequence.current === sequence) {
@@ -414,7 +426,6 @@ export function PhotoEditorDialog({
     [previewUrl],
   );
 
-  const activeUrl = showBefore ? originalUrl : (previewUrl ?? originalUrl);
   const recipeChanged = useMemo(
     () =>
       JSON.stringify(recipe) !==
@@ -634,22 +645,20 @@ export function PhotoEditorDialog({
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="relative flex min-h-[18rem] items-center justify-center overflow-hidden bg-black/95 p-3 md:min-h-[32rem]">
-            {activeUrl !== null ? (
-              <Image
-                alt={showBefore ? "原始照片" : "修图预览"}
-                className="object-contain"
-                draggable={false}
-                fill
-                sizes="(max-width: 767px) 100vw, 70vw"
-                src={activeUrl}
-                unoptimized
+          <div className="relative min-h-[18rem] overflow-hidden bg-black/95 md:min-h-[32rem]">
+            {originalUrl !== null ? (
+              <PhotoBeforeAfterSlider
+                afterUrl={previewUrl}
+                beforeUrl={originalUrl}
+                disabled={stage === "loading"}
               />
             ) : (
-              <div className="text-sm text-white/60">正在准备照片…</div>
+              <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+                正在准备照片…
+              </div>
             )}
             {stage === "loading" ? (
-              <div className="absolute inset-0 grid place-items-center bg-black/40 text-sm text-white">
+              <div className="absolute inset-0 z-20 grid place-items-center bg-black/40 text-sm text-white">
                 正在读取原图…
               </div>
             ) : null}
@@ -882,25 +891,28 @@ export function PhotoEditorDialog({
                     value={recipe.deblurStrength}
                   />
                 ) : null}
-                {aiPreviewLoading ? (
-                  <p className="text-[11px] leading-4 text-muted-foreground">
-                    {aiPreviewPhase === "loading-model"
-                      ? "正在加载本地 AI 模型…"
-                      : "正在生成 AI 预览…"}
-                  </p>
+                {aiPreviewLoading && aiPreviewProgress !== null ? (
+                  aiPreviewProgress.phase === "downloading-model" ? (
+                    <Progress value={Math.round(aiPreviewProgress.progress * 100)}>
+                      <ProgressLabel>
+                        正在下载{aiOperationLabel(aiPreviewProgress.operation)}模型
+                      </ProgressLabel>
+                      <ProgressValue>
+                        {aiPreviewProgress.loadedBytes !== undefined &&
+                        aiPreviewProgress.totalBytes !== undefined
+                          ? `${formatModelBytes(aiPreviewProgress.loadedBytes)} / ${formatModelBytes(aiPreviewProgress.totalBytes)}`
+                          : `${Math.round(aiPreviewProgress.progress * 100)}%`}
+                      </ProgressValue>
+                    </Progress>
+                  ) : (
+                    <p className="text-[11px] leading-4 text-muted-foreground">
+                      {aiPreviewProgress.phase === "initializing-model"
+                        ? `正在初始化${aiOperationLabel(aiPreviewProgress.operation)}模型…`
+                        : "正在生成 AI 预览…"}
+                    </p>
+                  )
                 ) : null}
               </section>
-
-              <Button
-                disabled={stage === "loading" || originalUrl === null}
-                onPointerDown={() => setShowBefore(true)}
-                onPointerLeave={() => setShowBefore(false)}
-                onPointerUp={() => setShowBefore(false)}
-                type="button"
-                variant="outline"
-              >
-                按住查看原始照片
-              </Button>
 
               {error !== null ? (
                 <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
