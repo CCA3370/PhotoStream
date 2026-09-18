@@ -1,11 +1,9 @@
 "use client";
 
-import type { InternalMediaList } from "@photostream/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
 import { clientGet } from "@/lib/client-api";
-import { reviewSyncRevision } from "@/lib/review-sync";
 
 const pollIntervalMs = 4_000;
 
@@ -32,16 +30,11 @@ export function ReviewRemoteSync({
       if (disposed || pollingRef.current || document.visibilityState !== "visible") return;
       pollingRef.current = true;
       try {
-        const [media, featured] = await Promise.all([
-          clientGet<InternalMediaList>(
-            `/api/v1/albums/${encodeURIComponent(albumId)}/media?limit=60`,
-          ),
-          clientGet<{ readonly mediaIds: readonly string[] }>(
-            `/api/v1/albums/${encodeURIComponent(albumId)}/featured`,
-          ),
-        ]);
+        const result = await clientGet<{ readonly revision: string }>(
+          `/api/v1/albums/${encodeURIComponent(albumId)}/review-revision`,
+        );
         if (disposed) return;
-        const nextRevision = reviewSyncRevision(media, featured.mediaIds);
+        const nextRevision = result.revision;
         if (nextRevision === revisionRef.current) return;
         revisionRef.current = nextRevision;
         startTransition(() => router.refresh());
