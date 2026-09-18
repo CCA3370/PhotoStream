@@ -354,8 +354,13 @@ class LocalProcessingRuntime {
         deleteLocalPhotoEditDraft(task.localPhotoId),
       ]);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "取消上传失败";
       task.status = "failed";
-      task.error = error instanceof Error ? error.message : "取消上传失败";
+      task.error = message;
+      await patchLocalReviewPhoto(task.localPhotoId, {
+        uploadState: "failed",
+        error: message,
+      }).catch(() => undefined);
       await putPersistedTasks([persistedTask(task)]).catch(() => undefined);
       this.#emit();
       throw error;
