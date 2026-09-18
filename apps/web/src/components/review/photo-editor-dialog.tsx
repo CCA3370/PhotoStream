@@ -492,7 +492,7 @@ export function PhotoEditorDialog({
           localPhotoId,
           mediaId: photo.mediaId,
           recipe,
-          basedOnGeneration: context?.state.generation ?? null,
+          basedOnGeneration: context?.state.generation ?? 0,
           basedOnRevisionId: context?.state.activeRevisionId ?? null,
           sourceFingerprint: photoEditSourceFingerprint({
             bytes: photo.totalBytes,
