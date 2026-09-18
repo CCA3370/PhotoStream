@@ -415,7 +415,7 @@ export function UploadQueue({
               <span className="text-xs text-muted-foreground">{items.length} 张</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-              {items.map(({ photo, url }) => (
+              {items.map(({ photo, url, editDraft }) => (
                 <div
                   className="group overflow-hidden rounded-lg border bg-card"
                   data-local-photo-id={photo.id}
