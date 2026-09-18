@@ -3,6 +3,7 @@
 import { getLocalReviewPhoto } from "../local-review-queue";
 import {
   getLocalPhotoEditDraft,
+  localPhotoEditDraftConflictsWithRemote,
   patchLocalPhotoEditDraft,
   photoEditSourceFingerprint,
 } from "./local-drafts";
@@ -66,9 +67,10 @@ async function syncOnce(
 
     if (
       !retryingOwnedPending &&
-      draft.basedOnGeneration !== null &&
-      (context.state.generation !== draft.basedOnGeneration ||
-        context.state.activeRevisionId !== draft.basedOnRevisionId)
+      localPhotoEditDraftConflictsWithRemote(draft, {
+        generation: context.state.generation,
+        activeRevisionId: context.state.activeRevisionId,
+      })
     ) {
       await patchLocalPhotoEditDraft(localPhotoId, {
         mediaId: photo.mediaId,
