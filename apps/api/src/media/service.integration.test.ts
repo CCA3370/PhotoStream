@@ -697,6 +697,78 @@ maybeDescribe("photo vertical slice transactions", () => {
       }
     }
 
+    const edit = await editService.createRevision({
+      actor: { id: uploaderId, role: "uploader" },
+      mediaId: intent.mediaId,
+      input: {
+        basedOnRevisionId: null,
+        basedOnGeneration: 0,
+        pipelineVersion: "local-edit-v2",
+        recipeVersion: 2,
+        recipeJson: { exposureEv: 0.1, denoiseStrength: 0, deblurStrength: 0 },
+        denoiseModel: null,
+        denoiseModelVersion: null,
+        deblurModel: null,
+        deblurModelVersion: null,
+      },
+      requestId: "cancel-upload-edit-create",
+    });
+    const editRevisionId = edit.state.pendingRevisionId;
+    if (editRevisionId === null) throw new Error("Missing edit revision fixture");
+    await editService.prepareRevision({
+      actor: { id: uploaderId, role: "uploader" },
+      mediaId: intent.mediaId,
+      revisionId: editRevisionId,
+      input: {
+        variants: [
+          {
+            kind: "photo_480",
+            format: "webp",
+            contentType: "image/webp",
+            width: 480,
+            height: 360,
+            bytes: 24_000,
+          },
+          {
+            kind: "photo_960",
+            format: "webp",
+            contentType: "image/webp",
+            width: 960,
+            height: 720,
+            bytes: 80_000,
+          },
+          {
+            kind: "photo_1920",
+            format: "webp",
+            contentType: "image/webp",
+            width: 1_920,
+            height: 1_440,
+            bytes: 320_000,
+          },
+          {
+            kind: "photo_download",
+            format: "jpeg",
+            contentType: "image/jpeg",
+            width: 4_000,
+            height: 3_000,
+            bytes: 3_500_000,
+          },
+        ],
+      },
+      requestId: "cancel-upload-edit-prepare",
+    });
+    const editObjects = await database
+      .select()
+      .from(schema.mediaEditVariants)
+      .where(eq(schema.mediaEditVariants.editRevisionId, editRevisionId));
+    for (const object of editObjects) {
+      storage.objects.set(object.objectKey, {
+        bytes: object.expectedBytes,
+        contentType: object.contentType,
+        etag: `etag-edit-${object.kind}`,
+      });
+    }
+
     const cancelled = await service.cancelUpload({
       actor: { id: uploaderId, role: "uploader" },
       intentId: intent.id,
@@ -726,6 +798,9 @@ maybeDescribe("photo vertical slice transactions", () => {
     );
     expect(await database.select().from(schema.uploadParts)).toHaveLength(0);
     expect(await database.select().from(schema.mediaVariants)).toHaveLength(0);
+    expect(await database.select().from(schema.mediaEditStates)).toHaveLength(0);
+    expect(await database.select().from(schema.mediaEditVariants)).toHaveLength(0);
+    expect(await database.select().from(schema.mediaEditRevisions)).toHaveLength(0);
     await service.processUploadCleanup(
       intent.id,
       new Date(firstSweep.getTime() + 24 * 60 * 60 * 1_000 + 1),
