@@ -1,8 +1,8 @@
 import type {
   CreateMediaEditRevisionRequest,
   MediaEditContextView,
-  PrepareMediaEditRevisionRequest,
   MediaEditVariantKind,
+  PrepareMediaEditRevisionRequest,
   SignedUpload,
 } from "@photostream/contracts";
 
