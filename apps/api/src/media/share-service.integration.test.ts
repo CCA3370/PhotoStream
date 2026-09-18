@@ -87,6 +87,9 @@ maybeDescribe("single-photo sharing", () => {
     await database.delete(schema.operationRequests);
     await database.delete(schema.photoShares);
     await database.delete(schema.mediaLikes);
+    await database.delete(schema.mediaEditStates);
+    await database.delete(schema.mediaEditVariants);
+    await database.delete(schema.mediaEditRevisions);
     await database.delete(schema.uploadParts);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);
@@ -234,6 +237,51 @@ maybeDescribe("single-photo sharing", () => {
     });
     expect(refreshed.bytes).toBe(400_000);
     expect(refreshed.url).toContain("http://127.0.0.1:3002");
+
+    const sourceVariantId = (
+      await database
+        .select({ id: schema.mediaVariants.id, kind: schema.mediaVariants.kind })
+        .from(schema.mediaVariants)
+        .where(eq(schema.mediaVariants.mediaId, media.id))
+    ).find((variant) => variant.kind === "photo_original")?.id;
+    if (sourceVariantId === undefined) throw new Error("Missing share base original fixture");
+    const [brokenActive] = await database
+      .insert(schema.mediaEditRevisions)
+      .values({
+        mediaId: media.id,
+        createdBy: adminId,
+        status: "active",
+        basedOnRevisionId: null,
+        basedOnGeneration: 0,
+        pipelineVersion: "local-edit-v2",
+        recipeVersion: 2,
+        recipeJson: { exposureEv: 0.1 },
+        sourceVariantId,
+        appliedAt: now,
+      })
+      .returning({ id: schema.mediaEditRevisions.id });
+    if (brokenActive === undefined) throw new Error("Missing share active edit fixture");
+    await database.insert(schema.mediaEditStates).values({
+      mediaId: media.id,
+      activeRevisionId: brokenActive.id,
+      pendingRevisionId: null,
+      generation: 1,
+      updatedBy: adminId,
+    });
+
+    const fallbackShared = await shareService.getShareView({ shareId: share.shareId });
+    expect(fallbackShared.media.variants.map((variant) => variant.kind).sort()).toEqual([
+      "photo_1920",
+      "photo_960",
+    ]);
+    expect(fallbackShared.media.downloads).toEqual({
+      preview: true,
+      original: true,
+      originalBytes: 4_000_000,
+    });
+    expect(
+      (await shareService.refreshSharedVariant({ shareId: share.shareId, kind: "photo_1920" })).bytes,
+    ).toBe(400_000);
 
     const initialLike = await shareService.getSharedLikeState({
       shareId: share.shareId,
