@@ -409,6 +409,7 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       this.#assertExpectedState(state, options.input);
       if (state.pendingRevisionId !== options.revisionId) {
@@ -803,10 +804,7 @@ export class MediaEditService {
     });
   }
 
-  #assertEditAccess(
-    actor: InternalActor,
-    media: typeof schema.media.$inferSelect,
-  ): void {
+  #assertEditAccess(actor: InternalActor, media: typeof schema.media.$inferSelect): void {
     if (hasPermission(actor.role, "media:review")) return;
     if (actor.role === "uploader" && media.uploaderId === actor.id) return;
     throw new AppError({
