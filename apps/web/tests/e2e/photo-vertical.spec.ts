@@ -422,9 +422,7 @@ test("queue pause state and explicit cancel remove local recovery", async () => 
   const cancelledTask = page
     .locator("[data-upload-task-id]")
     .filter({ hasText: "synthetic-cancel.png" });
-  await cancelledTask
-    .getByRole("button", { name: "取消 synthetic-cancel.png" })
-    .click();
+  await cancelledTask.getByRole("button", { name: "取消 synthetic-cancel.png" }).click();
   releaseCancel();
   await expect(cancelledTask.getByText("已取消", { exact: true }).first()).toBeVisible({
     timeout: 15_000,
