@@ -96,7 +96,7 @@ export function PhotoReportButton({
         }
       >
         <FlagIcon className="size-4" />
-        <span className="hidden sm:inline">投诉</span>
+        <span>投诉</span>
       </DialogTrigger>
       <DialogContent className="public-theme dark max-w-md bg-background text-foreground">
         <DialogHeader>
