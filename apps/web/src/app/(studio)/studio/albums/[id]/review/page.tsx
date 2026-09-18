@@ -11,7 +11,6 @@ import { AlbumWorkspaceHeader } from "@/components/albums/album-workspace-header
 import { ReviewRemoteSync } from "@/components/review/review-remote-sync";
 import { ReviewWorkspace } from "@/components/review/review-workspace";
 import { serverApi } from "@/lib/api";
-import { reviewSyncRevision } from "@/lib/review-sync";
 import { requireInternalSession } from "@/lib/server-auth";
 
 interface CategoryDetails {
@@ -23,7 +22,7 @@ interface CategoryDetails {
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin", "reviewer"]);
   const { id } = await params;
-  const [album, media, categories, uploaders, bibConfig, summaries, featured, reviewQueue] =
+  const [album, media, categories, uploaders, bibConfig, summaries, reviewRevision, reviewQueue] =
     await Promise.all([
       serverApi<AlbumView>(`/api/v1/albums/${id}`),
       serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=60`),
@@ -31,13 +30,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       serverApi<AlbumUploaderView[]>(`/api/v1/albums/${id}/uploaders`),
       serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
       serverApi<AlbumSummaryView[]>("/api/v1/albums"),
-      serverApi<{ readonly mediaIds: readonly string[] }>(`/api/v1/albums/${id}/featured`),
+      serverApi<{ readonly revision: string }>(`/api/v1/albums/${id}/review-revision`),
       serverApi<{ readonly total: number }>(
         `/api/v1/albums/${id}/media-selection?publicationStatus=hidden&ingestStatus=ready&limit=1`,
       ),
     ]);
   const summary = summaries.find((item) => item.id === id);
-  const syncRevision = reviewSyncRevision(media, featured.mediaIds);
+  const syncRevision = reviewRevision.revision;
 
   return (
     <section aria-labelledby="review-title" className="flex flex-col gap-4">
