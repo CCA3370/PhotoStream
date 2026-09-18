@@ -550,7 +550,6 @@ export function UploadQueue({
           </div>
         )}
       </div>
-
     </UploadShell>
   );
 }
