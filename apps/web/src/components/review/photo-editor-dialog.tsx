@@ -273,6 +273,8 @@ export function PhotoEditorDialog({
             mediaId: photo.mediaId,
             recipe,
             sourceFingerprint: localSourceFingerprint,
+            basedOnGeneration: context?.state.generation ?? null,
+            basedOnRevisionId: context?.state.activeRevisionId ?? null,
             editState: "draft",
           });
         })
@@ -490,6 +492,8 @@ export function PhotoEditorDialog({
           localPhotoId,
           mediaId: photo.mediaId,
           recipe,
+          basedOnGeneration: context?.state.generation ?? null,
+          basedOnRevisionId: context?.state.activeRevisionId ?? null,
           sourceFingerprint: photoEditSourceFingerprint({
             bytes: photo.totalBytes,
             width: photo.width,
