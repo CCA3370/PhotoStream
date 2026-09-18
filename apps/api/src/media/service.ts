@@ -1202,7 +1202,10 @@ export class PhotoService {
       if (previewReady && publicationStatus === "draft") {
         const album = await this.#albumById(transaction, currentMedia.albumId);
         if (album === null) throw this.#albumNotFound();
-        if (album.publishMode === "auto") {
+        if (
+          album.publishMode === "auto" &&
+          !(await this.#hasPendingEdit(transaction, currentMedia.id))
+        ) {
           const published = await this.#allocatePublication(
             transaction,
             album.id,
@@ -2486,6 +2489,15 @@ export class PhotoService {
       .where(and(eq(schema.media.id, mediaId), eq(schema.media.ingestStatus, "preview_ready")));
   }
 
+  async #hasPendingEdit(transaction: Transaction, mediaId: string): Promise<boolean> {
+    const [state] = await transaction
+      .select({ pendingRevisionId: schema.mediaEditStates.pendingRevisionId })
+      .from(schema.mediaEditStates)
+      .where(eq(schema.mediaEditStates.mediaId, mediaId))
+      .limit(1);
+    return state?.pendingRevisionId !== null && state?.pendingRevisionId !== undefined;
+  }
+
   #assertUploadAccess(actor: InternalActor, uploaderId: string): void {
     if (actor.id === uploaderId) return;
     if (actor.role === "admin" || actor.role === "reviewer") return;
@@ -2498,6 +2510,13 @@ export class PhotoService {
     mediaId: string,
     now: Date,
   ) {
+    if (await this.#hasPendingEdit(transaction, mediaId)) {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "修图版本仍在处理中，完成或取消后才能发布",
+        statusCode: 409,
+      });
+    }
     const [album] = await transaction
       .update(schema.albums)
       .set({
