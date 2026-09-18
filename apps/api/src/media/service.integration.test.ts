@@ -419,24 +419,12 @@ maybeDescribe("photo vertical slice transactions", () => {
       idempotencyKey: "publish-active-edit-fail-closed",
     });
 
-    const [baseOriginal] = await database
-      .select({ id: schema.mediaVariants.id })
-      .from(schema.mediaVariants)
-      .where(
-        eq(
-          schema.mediaVariants.id,
-          intent.objects.find((object) => object.kind === "photo_original")?.variantId ?? "",
-        ),
-      )
-      .limit(1);
-    const originalId =
-      baseOriginal?.id ??
-      (
-        await database
-          .select({ id: schema.mediaVariants.id })
-          .from(schema.mediaVariants)
-          .where(eq(schema.mediaVariants.mediaId, intent.mediaId))
-      ).find((variant) => variant.id)?.id;
+    const originalId = (
+      await database
+        .select({ id: schema.mediaVariants.id, kind: schema.mediaVariants.kind })
+        .from(schema.mediaVariants)
+        .where(eq(schema.mediaVariants.mediaId, intent.mediaId))
+    ).find((variant) => variant.kind === "photo_original")?.id;
     if (originalId === undefined) throw new Error("Missing base original fixture");
 
     const [revision] = await database
