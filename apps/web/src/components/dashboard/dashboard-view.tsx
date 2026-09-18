@@ -580,10 +580,10 @@ export function DashboardView({
           </CardHeader>
           <CardContent className="p-0">
             <TabsContent value="downloads">
-              <RankingList items={downloadRanking.slice(0, 5)} unit="次" />
+              <RankingList items={downloadRanking.slice(0, 5)} unit="次" userRole={userRole} />
             </TabsContent>
             <TabsContent value="likes">
-              <RankingList items={likeRanking.slice(0, 5)} unit="赞" />
+              <RankingList items={likeRanking.slice(0, 5)} unit="赞" userRole={userRole} />
             </TabsContent>
           </CardContent>
         </Tabs>
