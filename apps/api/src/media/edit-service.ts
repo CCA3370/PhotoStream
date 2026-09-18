@@ -521,6 +521,7 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       this.#assertExpectedState(state, options.input);
       if (state.pendingRevisionId !== null) {
