@@ -31,10 +31,7 @@ function lowLightPreExposure(recipe: PhotoEditRecipe): number {
   return Math.min(0.75, recipe.exposureEv * 0.5);
 }
 
-function aOnlyRecipe(
-  recipe: PhotoEditRecipe,
-  exposureEv = recipe.exposureEv,
-): PhotoEditRecipe {
+function aOnlyRecipe(recipe: PhotoEditRecipe, exposureEv = recipe.exposureEv): PhotoEditRecipe {
   return normalizePhotoEditRecipe({
     ...recipe,
     exposureEv,
@@ -188,8 +185,7 @@ export async function applyMediaEditRecipe(options: {
     denoiseModelVersion:
       options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.version : null,
     deblurModel: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.id : null,
-    deblurModelVersion:
-      options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
+    deblurModelVersion: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
     variants: orderedKinds.map((kind) => {
       const output = outputByKind(outputs, kind);
       return {
