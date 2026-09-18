@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserRole } from "@photostream/contracts";
 import {
   ArrowUpRightIcon,
   CalendarRangeIcon,
@@ -31,6 +32,7 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { parseShanghaiInputValue, shanghaiInputValue } from "@/lib/dashboard-range";
 import { cn } from "@/lib/utils";
 
 export interface DashboardStatistics {
@@ -170,11 +172,6 @@ function formatBytes(bytes: number): string {
   return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
 }
 
-function localInputValue(date: Date): string {
-  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return shifted.toISOString().slice(0, 16);
-}
-
 function fillPoints(data: DashboardStatistics) {
   const interval = bucketMs[data.bucket];
   const start = Math.floor(new Date(data.from).getTime() / interval) * interval;
@@ -223,9 +220,11 @@ function rangeText(data: DashboardStatistics): string {
 function RankingList({
   items,
   unit,
+  userRole,
 }: Readonly<{
   items: readonly RankingItem[];
   unit: string;
+  userRole: UserRole;
 }>) {
   if (items.length === 0) {
     return <div className="py-12 text-center text-sm text-muted-foreground">暂无排行数据</div>;
@@ -236,7 +235,11 @@ function RankingList({
       {items.map((photo, index) => (
         <Link
           className="group grid grid-cols-[1.5rem_3.5rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-2.5 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/40 sm:grid-cols-[1.75rem_4rem_minmax(0,1fr)_auto] sm:gap-3"
-          href={`/studio/albums/${photo.albumId}`}
+          href={
+            userRole === "uploader"
+              ? `/studio/albums/${photo.albumId}/upload`
+              : `/studio/albums/${photo.albumId}`
+          }
           key={photo.mediaId}
         >
           <span className="text-center text-xs font-semibold tabular-nums text-muted-foreground">
@@ -307,8 +310,10 @@ async function fetchDashboard(from: Date, to: Date): Promise<DashboardStatistics
 
 export function DashboardView({
   initialData,
+  userRole,
 }: Readonly<{
   initialData: DashboardStatistics;
+  userRole: UserRole;
 }>) {
   const [data, setData] = useState(initialData);
   const [activePreset, setActivePreset] = useState<PresetKey>("30d");
@@ -317,8 +322,8 @@ export function DashboardView({
   const [customOpen, setCustomOpen] = useState(false);
   const [rankingMode, setRankingMode] = useState<RankingMode>("downloads");
   const [rankingOpen, setRankingOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState(() => localInputValue(new Date(initialData.from)));
-  const [customTo, setCustomTo] = useState(() => localInputValue(new Date(initialData.to)));
+  const [customFrom, setCustomFrom] = useState(() => shanghaiInputValue(new Date(initialData.from)));
+  const [customTo, setCustomTo] = useState(() => shanghaiInputValue(new Date(initialData.to)));
   const points = useMemo(() => fillPoints(data), [data]);
   const searchUsagePoints = useMemo(() => fillSearchUsagePoints(data), [data]);
   const downloadRanking = useMemo<RankingItem[]>(
@@ -366,8 +371,8 @@ export function DashboardView({
   }
 
   async function applyCustomRange(): Promise<void> {
-    const from = new Date(customFrom);
-    const to = new Date(customTo);
+    const from = parseShanghaiInputValue(customFrom);
+    const to = parseShanghaiInputValue(customTo);
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       setError("请选择完整的开始和结束时间");
       return;
@@ -473,8 +478,8 @@ export function DashboardView({
                 aria-pressed={activePreset === "custom"}
                 disabled={pending}
                 onClick={() => {
-                  setCustomFrom(localInputValue(new Date(data.from)));
-                  setCustomTo(localInputValue(new Date(data.to)));
+                  setCustomFrom(shanghaiInputValue(new Date(data.from)));
+                  setCustomTo(shanghaiInputValue(new Date(data.to)));
                   setCustomOpen(true);
                 }}
                 size="sm"
@@ -593,7 +598,7 @@ export function DashboardView({
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 overflow-y-auto border-t overscroll-contain">
-            <RankingList items={activeRanking} unit={activeRankingUnit} />
+            <RankingList items={activeRanking} unit={activeRankingUnit} userRole={userRole} />
           </div>
         </DialogContent>
       </Dialog>
