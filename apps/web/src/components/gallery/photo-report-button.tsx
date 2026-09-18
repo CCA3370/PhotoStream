@@ -126,13 +126,21 @@ export function PhotoReportButton({
               }}
               value={reason}
             >
-              <SelectTrigger id="photo-report-reason">
+              <SelectTrigger className="w-full" id="photo-report-reason">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent positionerClassName="z-[80]">
+              <SelectContent
+                align="start"
+                className="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)]"
+                positionerClassName="z-[80]"
+              >
                 <SelectGroup>
                   {reportReasons.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
+                    <SelectItem
+                      className="py-2 [&>span:first-child]:min-w-0 [&>span:first-child]:whitespace-normal [&>span:first-child]:leading-5"
+                      key={item.value}
+                      value={item.value}
+                    >
                       {item.label}
                     </SelectItem>
                   ))}
