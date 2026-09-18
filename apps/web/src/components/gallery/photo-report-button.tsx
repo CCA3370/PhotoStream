@@ -99,7 +99,11 @@ export function PhotoReportButton({
         <FlagIcon className="size-4" />
         <span>投诉</span>
       </DialogTrigger>
-      <DialogContent className="public-theme dark max-w-md bg-background text-foreground">
+      <DialogContent
+        className="public-theme dark z-[70] max-w-md bg-background text-foreground"
+        forceOverlay
+        overlayClassName="z-[60] bg-black/55"
+      >
         <DialogHeader>
           <DialogTitle>投诉这张图片</DialogTitle>
           <DialogDescription>
@@ -129,7 +133,7 @@ export function PhotoReportButton({
               <SelectTrigger id="photo-report-reason">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent positionerClassName="z-[80]">
                 <SelectGroup>
                   {reportReasons.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
