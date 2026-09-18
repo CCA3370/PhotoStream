@@ -8,14 +8,12 @@ import {
   FolderOpenIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
-  SlidersHorizontalIcon,
   Trash2Icon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { PhotoEditorDialog } from "@/components/review/photo-editor-dialog";
 import { UploadShell } from "@/components/shells/upload-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -106,7 +104,6 @@ export function UploadQueue({
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showUploaded, setShowUploaded] = useState(false);
-  const [editingLocalPhotoId, setEditingLocalPhotoId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const allRows = await listLocalReviewPhotos(albumId);
@@ -409,7 +406,7 @@ export function UploadQueue({
                 : `当前有 ${items.length} 张照片仍在处理或等待重试`}
             </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              原图保留在当前浏览器，可在上传前、上传中或上传后继续修图；远端照片保持隐藏，需由审核员或管理员切换为显示。
+              原图保留在当前浏览器；远端照片保持隐藏，可在审核页打开大图后进入右侧修图栏处理。
             </p>
           </div>
         ) : null}
@@ -494,16 +491,6 @@ export function UploadQueue({
                       src={url}
                       unoptimized
                     />
-                    <Button
-                      aria-label="修图"
-                      className="absolute left-1 top-1 size-8 shadow-sm"
-                      onClick={() => setEditingLocalPhotoId(photo.id)}
-                      size="icon"
-                      type="button"
-                      variant="secondary"
-                    >
-                      <SlidersHorizontalIcon className="size-3.5" />
-                    </Button>
                     {photo.uploadState === "published" || photo.uploadState === "local" ? (
                       <Button
                         aria-label="删除本机照片副本"
@@ -564,15 +551,6 @@ export function UploadQueue({
         )}
       </div>
 
-      <PhotoEditorDialog
-        localPhotoId={editingLocalPhotoId}
-        mediaId={null}
-        onApplied={refresh}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setEditingLocalPhotoId(null);
-        }}
-        open={editingLocalPhotoId !== null}
-      />
     </UploadShell>
   );
 }

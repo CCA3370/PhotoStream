@@ -110,7 +110,7 @@ export function ReviewInspector({
   onClose: () => void;
   onDelete: () => void;
   onOpenBib: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onStateAction: () => void;
   onToggleFeatured: () => void;
 }>) {
@@ -206,23 +206,15 @@ export function ReviewInspector({
             </div>
           </section>
 
-          <section className="flex flex-col gap-2.5 border-t pt-4">
-            <h3 className="text-xs font-semibold text-muted-foreground">照片处理</h3>
-            <Button
-              disabled={busy || item.mediaId === null}
-              onClick={onEdit}
-              type="button"
-              variant="outline"
-            >
-              <SlidersHorizontalIcon data-icon="inline-start" />
-              {item.editActive ? "继续修图" : "修图"}
-            </Button>
-            {item.mediaId === null ? (
-              <p className="text-[11px] leading-4 text-muted-foreground">
-                正在建立远端媒体记录，稍后即可修图。
-              </p>
-            ) : null}
-          </section>
+          {onEdit !== undefined ? (
+            <section className="flex flex-col gap-2.5 border-t pt-4">
+              <h3 className="text-xs font-semibold text-muted-foreground">照片处理</h3>
+              <Button disabled={busy} onClick={onEdit} type="button" variant="outline">
+                <SlidersHorizontalIcon data-icon="inline-start" />
+                {item.editActive ? "继续修图" : "修图"}
+              </Button>
+            </section>
+          ) : null}
 
           <section className="flex flex-col gap-2.5 border-t pt-4">
             <div className="flex items-center justify-between gap-2">

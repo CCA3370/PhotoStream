@@ -1,19 +1,10 @@
 "use client";
 
 import type { MediaEditContextView } from "@photostream/contracts";
-import { RotateCcwIcon, SparklesIcon } from "lucide-react";
+import { RotateCcwIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { PhotoBeforeAfterSlider } from "@/components/review/photo-before-after-slider";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
 import { getLocalReviewPhoto } from "@/lib/local-review-queue";
@@ -121,18 +112,24 @@ function aiOperationLabel(operation: PhotoEditAiProgress["operation"]): string {
   return "AI 模型";
 }
 
-export function PhotoEditorDialog({
+export interface PhotoEditorPreviewState {
+  readonly beforeUrl: string | null;
+  readonly afterUrl: string | null;
+  readonly loading: boolean;
+}
+
+export function PhotoEditorPanel({
   mediaId,
   localPhotoId = null,
-  open,
-  onOpenChange,
   onApplied,
+  onClose,
+  onPreviewChange,
 }: Readonly<{
   mediaId: string | null;
   localPhotoId?: string | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   onApplied: () => void | Promise<void>;
+  onClose: () => void;
+  onPreviewChange: (preview: PhotoEditorPreviewState) => void;
 }>) {
   const [context, setContext] = useState<MediaEditContextView | null>(null);
   const [source, setSource] = useState<Blob | null>(null);
@@ -174,7 +171,7 @@ export function PhotoEditorDialog({
   const draftBasedOnRevisionId = context?.state.activeRevisionId ?? null;
 
   useEffect(() => {
-    if (!open || (mediaId === null && localPhotoId === null)) return;
+    if (mediaId === null && localPhotoId === null) return;
     const controller = new AbortController();
     let disposed = false;
 
@@ -270,10 +267,10 @@ export function PhotoEditorDialog({
       disposed = true;
       controller.abort();
     };
-  }, [localPhotoId, mediaId, open]);
+  }, [localPhotoId, mediaId]);
 
   useEffect(() => {
-    if (!open || localPhotoId === null || localSourceFingerprint === null || stage !== "ready") {
+    if (localPhotoId === null || localSourceFingerprint === null || stage !== "ready") {
       return;
     }
     const recipeKey = JSON.stringify(recipe);
@@ -303,13 +300,12 @@ export function PhotoEditorDialog({
     draftBasedOnRevisionId,
     localPhotoId,
     localSourceFingerprint,
-    open,
     recipe,
     stage,
   ]);
 
   useEffect(() => {
-    if (!open || source === null) return;
+    if (source === null) return;
     if (!aiEnabled) {
       setAiPreviewSource(null);
       setAiPreviewLoading(false);
@@ -374,10 +370,10 @@ export function PhotoEditorDialog({
       });
 
     return () => controller.abort();
-  }, [aiAvailable, aiEnabled, aiPreExposure, open, deblurStrength, denoiseStrength, source]);
+  }, [aiAvailable, aiEnabled, aiPreExposure, deblurStrength, denoiseStrength, source]);
 
   useEffect(() => {
-    if (!open || source === null || stage === "loading" || stage === "error") return;
+    if (source === null || stage === "loading" || stage === "error") return;
     if (aiEnabled && aiPreviewSource === null) return;
 
     const previewSource = aiPreviewSource ?? source;
@@ -410,7 +406,7 @@ export function PhotoEditorDialog({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [aiEnabled, aiPreExposure, aiPreviewSource, open, recipe, source, stage]);
+  }, [aiEnabled, aiPreExposure, aiPreviewSource, recipe, source, stage]);
 
   useEffect(
     () => () => {
@@ -425,6 +421,14 @@ export function PhotoEditorDialog({
     },
     [previewUrl],
   );
+
+  useEffect(() => {
+    onPreviewChange({
+      beforeUrl: originalUrl,
+      afterUrl: previewUrl,
+      loading: stage === "loading",
+    });
+  }, [onPreviewChange, originalUrl, previewUrl, stage]);
 
   const recipeChanged = useMemo(
     () =>
@@ -561,7 +565,6 @@ export function PhotoEditorDialog({
             type: "success",
           });
           await onApplied();
-          onOpenChange(false);
           return;
         }
 
@@ -575,8 +578,7 @@ export function PhotoEditorDialog({
         setProgress(100);
         toast.add({ title: "修图版本已同步并应用", type: "success" });
         await onApplied();
-        onOpenChange(false);
-        return;
+          return;
       }
 
       if (mediaId === null || context === null) return;
@@ -615,7 +617,6 @@ export function PhotoEditorDialog({
       setProgress(100);
       toast.add({ title: "修图版本已应用", type: "success" });
       await onApplied();
-      onOpenChange(false);
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setOwnedPendingRevisionId(null);
@@ -635,36 +636,28 @@ export function PhotoEditorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !busy && onOpenChange(nextOpen)}>
-      <DialogContent className="flex max-h-[92dvh] w-[min(96vw,72rem)] max-w-none flex-col overflow-hidden p-0 sm:max-w-5xl">
-        <DialogHeader className="border-b px-5 py-4 pr-12">
-          <DialogTitle>照片处理</DialogTitle>
-          <DialogDescription>
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl">
+      <div className="flex items-start gap-3 border-b px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold">修图</h2>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
             本机处理 · 图片不会发送至 AI 服务 · {sourceLabel(sourceOrigin)}
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
+        <Button
+          aria-label="退出修图"
+          disabled={busy}
+          onClick={onClose}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <XIcon />
+        </Button>
+      </div>
 
-        <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="relative min-h-[18rem] overflow-hidden bg-black/95 md:min-h-[32rem]">
-            {originalUrl !== null ? (
-              <PhotoBeforeAfterSlider
-                afterUrl={previewUrl}
-                beforeUrl={originalUrl}
-                disabled={stage === "loading"}
-              />
-            ) : (
-              <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                正在准备照片…
-              </div>
-            )}
-            {stage === "loading" ? (
-              <div className="absolute inset-0 z-20 grid place-items-center bg-black/40 text-sm text-white">
-                正在读取原图…
-              </div>
-            ) : null}
-          </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
 
-          <div className="min-h-0 overflow-y-auto border-l bg-card p-4">
             <div className="flex flex-col gap-5">
               {context?.state.pendingRevisionId !== null &&
               context?.state.pendingRevisionId !== undefined ? (
@@ -927,10 +920,10 @@ export function PhotoEditorDialog({
                 </Progress>
               ) : null}
             </div>
-          </div>
-        </div>
+      </div>
 
-        <DialogFooter className="px-5 py-4">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3">
+
           {context?.state.activeRevisionId !== null &&
           context?.state.activeRevisionId !== undefined ? (
             <Button
@@ -953,11 +946,11 @@ export function PhotoEditorDialog({
           ) : (
             <Button
               disabled={busy}
-              onClick={() => onOpenChange(false)}
+              onClick={onClose}
               type="button"
               variant="outline"
             >
-              取消
+              退出修图
             </Button>
           )}
           <Button disabled={!canApply || !recipeChanged} onClick={() => void apply()} type="button">
@@ -965,8 +958,7 @@ export function PhotoEditorDialog({
               ? "重试修图"
               : "应用修图"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </aside>
   );
 }

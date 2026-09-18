@@ -11,7 +11,6 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   PanelRightOpenIcon,
-  SlidersHorizontalIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -30,6 +29,11 @@ import {
   isBibReviewConfirmed,
 } from "@/components/bib/bib-review-editor";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
+import { PhotoBeforeAfterSlider } from "@/components/review/photo-before-after-slider";
+import {
+  PhotoEditorPanel,
+  type PhotoEditorPreviewState,
+} from "@/components/review/photo-editor-dialog";
 import {
   ReviewInspector,
   type ReviewInspectorCategory,
@@ -66,6 +70,7 @@ export interface ReviewLightboxItem {
   readonly featured: boolean;
   readonly publicationStatus: string;
   readonly mediaId: string | null;
+  readonly localPhotoId: string | null;
   readonly bib: BibMediaState | null;
   readonly canDelete: boolean;
   readonly pendingAction: ReviewPendingAction | null;
@@ -104,7 +109,7 @@ export function ReviewLightbox({
   selectedKey,
   onClose,
   onDelete,
-  onEdit,
+  onEditApplied,
   onSelect,
   onToggleFeatured,
   onToggleVisibility,
@@ -119,7 +124,7 @@ export function ReviewLightbox({
   selectedKey: string | null;
   onClose: () => void;
   onDelete: (key: string) => void;
-  onEdit: (mediaId: string) => void;
+  onEditApplied: () => void | Promise<void>;
   onSelect: (key: string) => void;
   onStateAction: (key: string) => void;
   onToggleFeatured: (key: string) => void;
@@ -148,6 +153,12 @@ export function ReviewLightbox({
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editPreview, setEditPreview] = useState<PhotoEditorPreviewState>({
+    beforeUrl: null,
+    afterUrl: null,
+    loading: false,
+  });
 
   const clampPan = useCallback(
     (next: Point, nextZoom: number): Point => {
@@ -205,16 +216,26 @@ export function ReviewLightbox({
   }, []);
 
   useEffect(() => {
-    setDisplaySrc(selected?.src ?? null);
-    setLoaded(false);
-    setLoadFailed(false);
     setBibDialogOpen(false);
     setInspectorOpen(false);
+    setEditMode(false);
+    setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
-  }, [resetView, selected?.src]);
+  }, [resetView, selected?.key]);
+
+  useEffect(() => {
+    if (editMode) return;
+    setDisplaySrc(selected?.src ?? null);
+    setLoaded(false);
+    setLoadFailed(false);
+  }, [editMode, selected?.src]);
+
+  const handleEditPreviewChange = useCallback((preview: PhotoEditorPreviewState) => {
+    setEditPreview(preview);
+  }, []);
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
@@ -227,6 +248,14 @@ export function ReviewLightbox({
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isInteractiveKeyboardTarget(event.target)) return;
+      if (editMode) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setEditMode(false);
+          setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
+        }
+        return;
+      }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         event.stopPropagation();
@@ -277,6 +306,7 @@ export function ReviewLightbox({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
     changeZoom,
+    editMode,
     fullscreenSupported,
     onClose,
     onDelete,
@@ -404,16 +434,36 @@ export function ReviewLightbox({
                 "absolute inset-0 touch-none select-none",
                 zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
               )}
-              onDoubleClick={() => (zoom === 1 ? changeZoom(2.5) : resetView())}
-              onPointerCancel={finishPointer}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={finishPointer}
-              onWheel={onWheel}
+              onDoubleClick={editMode ? undefined : () => (zoom === 1 ? changeZoom(2.5) : resetView())}
+              onPointerCancel={editMode ? undefined : finishPointer}
+              onPointerDown={editMode ? undefined : onPointerDown}
+              onPointerMove={editMode ? undefined : onPointerMove}
+              onPointerUp={editMode ? undefined : finishPointer}
+              onWheel={editMode ? undefined : onWheel}
               ref={stageRef}
               role="application"
             >
-              {displaySrc === null ? (
+              {editMode ? (
+                editPreview.beforeUrl !== null ? (
+                  <>
+                    <PhotoBeforeAfterSlider
+                      afterUrl={editPreview.afterUrl}
+                      beforeUrl={editPreview.beforeUrl}
+                      disabled={editPreview.loading}
+                    />
+                    {editPreview.loading ? (
+                      <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black/35 text-sm text-white">
+                        正在准备修图源…
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
+                    正在准备修图源…
+                  </div>
+                )
+              ) : (
+                {displaySrc === null ? (
                 <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
                   暂无可预览图片
                 </div>
@@ -459,6 +509,7 @@ export function ReviewLightbox({
                   </div>
                 </>
               )}
+              )}
             </div>
 
             <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between bg-gradient-to-b from-black/70 via-black/20 to-transparent p-3 pb-14 sm:p-4 sm:pb-16">
@@ -493,7 +544,7 @@ export function ReviewLightbox({
               </div>
             </div>
 
-            {!bibConfirmed ? (
+            {!bibConfirmed && !editMode ? (
               <div className="pointer-events-none absolute inset-x-3 top-16 z-30 sm:left-auto sm:right-4 sm:w-[22rem]">
                 <div className="pointer-events-auto rounded-2xl border border-white/10 bg-black/60 p-3 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-4">
                   <BibReviewEditor
@@ -512,25 +563,40 @@ export function ReviewLightbox({
             ) : null}
 
             {inspectorOpen ? (
-              <div className="absolute inset-y-0 right-0 z-40 w-[min(92vw,22rem)] p-3 sm:p-4">
-                <ReviewInspector
-                  busy={busy}
-                  categories={categories}
-                  item={selected.inspector}
-                  onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
-                  onClose={() => setInspectorOpen(false)}
-                  onDelete={() => onDelete(selected.key)}
-                  onOpenBib={() => setBibDialogOpen(true)}
-                  onEdit={() => {
-                    if (selected.mediaId !== null) onEdit(selected.mediaId);
-                  }}
-                  onStateAction={() => onToggleVisibility(selected.key)}
-                  onToggleFeatured={() => onToggleFeatured(selected.key)}
-                />
+              <div className="absolute inset-y-0 right-0 z-40 w-[min(96vw,24rem)] p-3 sm:p-4">
+                {editMode ? (
+                  <PhotoEditorPanel
+                    localPhotoId={selected.localPhotoId}
+                    mediaId={selected.mediaId}
+                    onApplied={onEditApplied}
+                    onClose={() => {
+                      setEditMode(false);
+                      setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
+                    }}
+                    onPreviewChange={handleEditPreviewChange}
+                  />
+                ) : (
+                  <ReviewInspector
+                    busy={busy}
+                    categories={categories}
+                    item={selected.inspector}
+                    onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
+                    onClose={() => setInspectorOpen(false)}
+                    onDelete={() => onDelete(selected.key)}
+                    onOpenBib={() => setBibDialogOpen(true)}
+                    onEdit={() => {
+                      resetView();
+                      setEditMode(true);
+                      setEditPreview({ beforeUrl: null, afterUrl: null, loading: true });
+                    }}
+                    onStateAction={() => onToggleVisibility(selected.key)}
+                    onToggleFeatured={() => onToggleFeatured(selected.key)}
+                  />
+                )}
               </div>
             ) : null}
 
-            {canNavigate ? (
+            {canNavigate && !editMode ? (
               <>
                 <Button
                   aria-label="上一张照片"
@@ -635,20 +701,6 @@ export function ReviewLightbox({
                     ) : (
                       <LoaderCircleIcon className="opacity-60" />
                     )}
-                  </Button>
-                  <Button
-                    aria-label="修图"
-                    className={cn(toolbarButtonClass, "size-8")}
-                    disabled={busy || selected.mediaId === null}
-                    onClick={() => {
-                      if (selected.mediaId !== null) onEdit(selected.mediaId);
-                    }}
-                    size="icon-sm"
-                    title={selected.inspector.editActive ? "继续修图" : "修图"}
-                    type="button"
-                    variant="outline"
-                  >
-                    <SlidersHorizontalIcon />
                   </Button>
                   <Button
                     aria-label="照片属性"

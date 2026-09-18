@@ -34,7 +34,6 @@ import {
 
 import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
-import { PhotoEditorDialog } from "@/components/review/photo-editor-dialog";
 import {
   ReviewBatchInspector,
   ReviewInspector,
@@ -303,7 +302,6 @@ export function ReviewWorkspace({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [inspectorKey, setInspectorKey] = useState<string | null>(null);
   const [inspectorDeleteOpen, setInspectorDeleteOpen] = useState(false);
-  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
@@ -797,6 +795,7 @@ export function ReviewWorkspace({
         featured: item.featured,
         publicationStatus: item.publicationStatus,
         mediaId: item.source === "remote" ? item.remote.id : item.local.photo.mediaId,
+        localPhotoId: item.source === "local" ? item.local.photo.id : (item.local?.photo.id ?? null),
         bib: item.bib,
         canDelete: item.source === "local" ? true : userRole === "admin",
         pendingAction: pendingActions.get(item.key) ?? null,
@@ -2375,10 +2374,6 @@ export function ReviewWorkspace({
             onClose={() => setInspectorKey(null)}
             onDelete={() => setInspectorDeleteOpen(true)}
             onOpenBib={() => setBibDialogKey(inspectorSourceItem.key)}
-            onEdit={() => {
-              const mediaId = remoteId(inspectorSourceItem);
-              if (mediaId !== null) setEditingMediaId(mediaId);
-            }}
             onStateAction={() => void stateAction(inspectorSourceItem)}
             onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)}
           />
@@ -2401,7 +2396,9 @@ export function ReviewWorkspace({
         }}
         onLocalBibConfirmNoNumber={confirmLocalNoNumberByKey}
         onLocalBibConfirmNumbers={confirmLocalNumbersByKey}
-        onEdit={(mediaId) => setEditingMediaId(mediaId)}
+        onEditApplied={async () => {
+          await Promise.all([refreshRemote(), refreshLocal()]);
+        }}
         onSelect={setActiveKey}
         onStateAction={(key) => {
           const item = itemByKey(key);
@@ -2416,17 +2413,6 @@ export function ReviewWorkspace({
           if (item !== null) void toggleVisibility(item);
         }}
         selectedKey={activeKey}
-      />
-
-      <PhotoEditorDialog
-        mediaId={editingMediaId}
-        onApplied={async () => {
-          await refreshRemote();
-        }}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setEditingMediaId(null);
-        }}
-        open={editingMediaId !== null}
       />
 
       <BibReviewDialog
