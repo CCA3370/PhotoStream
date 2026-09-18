@@ -382,22 +382,22 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(replay.events.map((event) => event.type)).toEqual(["media.published"]);
   });
 
-  it("never falls back to base variants while an active edit is authoritative", async () => {
+  it("falls back to base variants if active edit assets are unexpectedly unavailable", async () => {
     const album = await service.createAlbum({
       actor: { id: adminId, role: "admin" },
-      input: { title: "Active Edit Fail Closed", description: "", publishMode: "review" },
-      idempotencyKey: "album-active-edit-fail-closed",
-      requestId: "album-active-edit-fail-closed",
+      input: { title: "Active Edit Fallback", description: "", publishMode: "review" },
+      idempotencyKey: "album-active-edit-fallback",
+      requestId: "album-active-edit-fallback",
     });
     await service.startAlbum({
       actor: { id: adminId, role: "admin" },
       albumId: album.album.id,
-      requestId: "start-active-edit-fail-closed",
+      requestId: "start-active-edit-fallback",
     });
     const intent = await service.createPhotoUpload({
       actor: { id: uploaderId, role: "uploader" },
       input: photoRequest(album.album.id),
-      idempotencyKey: "photo-active-edit-fail-closed",
+      idempotencyKey: "photo-active-edit-fallback",
     });
 
     for (const object of intent.objects) {
@@ -415,8 +415,8 @@ maybeDescribe("photo vertical slice transactions", () => {
     await service.publishMedia({
       actor: { id: reviewerId, role: "reviewer" },
       mediaId: intent.mediaId,
-      requestId: "publish-active-edit-fail-closed",
-      idempotencyKey: "publish-active-edit-fail-closed",
+      requestId: "publish-active-edit-fallback",
+      idempotencyKey: "publish-active-edit-fallback",
     });
 
     const originalId = (
@@ -427,6 +427,8 @@ maybeDescribe("photo vertical slice transactions", () => {
     ).find((variant) => variant.kind === "photo_original")?.id;
     if (originalId === undefined) throw new Error("Missing base original fixture");
 
+    // Simulate abnormal state corruption after a previously valid edit became active:
+    // activeRevisionId exists, but its edit variant rows are unexpectedly unavailable.
     const [revision] = await database
       .insert(schema.mediaEditRevisions)
       .values({
@@ -460,32 +462,39 @@ maybeDescribe("photo vertical slice transactions", () => {
       limit: 60,
     });
     expect(publicMedia.items).toHaveLength(1);
-    expect(publicMedia.items[0]).toMatchObject({
-      id: intent.mediaId,
-      variants: [],
-      downloads: { preview: false, original: false, originalBytes: null },
+    expect(publicMedia.items[0]?.variants.map((variant) => variant.kind).sort()).toEqual([
+      "photo_1920",
+      "photo_480",
+      "photo_960",
+    ]);
+    expect(publicMedia.items[0]?.downloads).toMatchObject({
+      preview: true,
+      original: true,
     });
 
-    await expect(
-      service.refreshPublicVariant({
-        slug: album.album.slug,
-        visitorToken: visitor.rawToken,
-        mediaId: intent.mediaId,
-        kind: "photo_1920",
-      }),
-    ).rejects.toMatchObject({ code: "DOWNLOAD_NOT_READY" });
+    const public1920 = await service.refreshPublicVariant({
+      slug: album.album.slug,
+      visitorToken: visitor.rawToken,
+      mediaId: intent.mediaId,
+      kind: "photo_1920",
+    });
+    expect(public1920.bytes).toBe(
+      intent.objects.find((object) => object.kind === "photo_1920")?.expectedBytes,
+    );
 
     const internal = await service.listInternalMedia(
       { id: reviewerId, role: "reviewer" },
       { albumId: album.album.id, limit: 60 },
     );
-    expect(internal.items.find((item) => item.id === intent.mediaId)?.variants).toEqual([]);
-    await expect(
-      service.refreshInternalVariant(
-        { id: reviewerId, role: "reviewer" },
-        { mediaId: intent.mediaId, kind: "photo_1920" },
-      ),
-    ).rejects.toMatchObject({ code: "DOWNLOAD_NOT_READY" });
+    expect(
+      internal.items.find((item) => item.id === intent.mediaId)?.variants.map((variant) => variant.kind).sort(),
+    ).toEqual(["photo_1920", "photo_480", "photo_960"]);
+
+    const internal1920 = await service.refreshInternalVariant(
+      { id: reviewerId, role: "reviewer" },
+      { mediaId: intent.mediaId, kind: "photo_1920" },
+    );
+    expect(internal1920.bytes).toBe(public1920.bytes);
   });
 
   it("defers auto publication while a local edit revision is pending", async () => {
