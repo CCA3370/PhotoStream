@@ -102,12 +102,14 @@ export function UploadQueue({
   const [tasks, setTasks] = useState<readonly LocalProcessingTaskView[]>([]);
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [showUploaded, setShowUploaded] = useState(false);
   const [editingLocalPhotoId, setEditingLocalPhotoId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const rows = (await listLocalReviewPhotos(albumId)).filter(
-      (photo) => photo.uploadState !== "published",
-    );
+    const allRows = await listLocalReviewPhotos(albumId);
+    const rows = showUploaded
+      ? allRows
+      : allRows.filter((photo) => photo.uploadState !== "published");
     for (const url of previewUrls.current) URL.revokeObjectURL(url);
     const next = await Promise.all(
       rows.map(async (photo) => {
@@ -122,7 +124,7 @@ export function UploadQueue({
     );
     previewUrls.current = next.map((item) => item.url);
     setItems(next);
-  }, [albumId]);
+  }, [albumId, showUploaded]);
 
   useEffect(() => {
     runtime.configure(bibConfig);
@@ -249,7 +251,7 @@ export function UploadQueue({
         processing: queueCounts.processing,
         failed: queueCounts.failed,
         retryableFailed: queueCounts.failed,
-        pendingReview: items.length,
+        pendingReview: items.filter((item) => item.photo.uploadState !== "published").length,
         completed: queueCounts.completed,
         total: tasks.length,
         onTogglePause: () => runtime.togglePause(),
@@ -293,6 +295,14 @@ export function UploadQueue({
           >
             <FolderOpenIcon data-icon="inline-start" />
             选择文件夹
+          </Button>
+          <Button
+            onClick={() => setShowUploaded((current) => !current)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {showUploaded ? "只看进行中" : "显示已上传"}
           </Button>
           {role === "admin" ? (
             <Link
@@ -399,7 +409,9 @@ export function UploadQueue({
         {items.length === 0 ? null : (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-medium">处理中 / 上传失败</h3>
+              <h3 className="text-sm font-medium">
+                {showUploaded ? "本机照片" : "处理中 / 上传失败"}
+              </h3>
               <span className="text-xs text-muted-foreground">{items.length} 张</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -449,7 +461,11 @@ export function UploadQueue({
                     <p className="truncate text-xs font-medium">{photo.fileName}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {formatBytes(photo.totalBytes)} ·{" "}
-                      {photo.uploadState === "failed" ? "上传失败" : "上传中"}
+                      {photo.uploadState === "failed"
+                        ? "上传失败"
+                        : photo.uploadState === "published"
+                          ? "已上传"
+                          : "上传中"}
                     </p>
                     <p
                       className={cn(
