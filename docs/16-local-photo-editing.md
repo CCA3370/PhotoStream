@@ -88,7 +88,7 @@ pending edit = uploading
 
 ## 3. 固定原则
 
-1. 修图长期身份使用 mediaId，不使用 localPhotoId 作为服务端业务身份。
+1. 服务端修图长期身份使用 mediaId；mediaId 尚未建立前，本机 draft 以 localPhotoId 为临时身份，回填 mediaId 后绑定并同步。
 2. 本地 originalBlob 是最高优先级处理源，但不是审核/当前版本权威。
 3. base 480/960/1920/photo_original 永远完整保留。
 4. 每个 edit revision 另外完整保留 edit 480/960/1920/photo_download。
@@ -169,20 +169,29 @@ metadata
 → ready
 ~~~
 
-如果审核员此时应用修图：
+如果用户此时应用修图：
 
 ~~~text
-create edit revision
-→ 本地处理
-→ edit photo_download
-→ edit 1920
-→ edit 960
-→ edit 480
+mediaId 已存在：
+reserve edit revision
+→ server 立即写 pending/rendering
+→ 本地 A/B 处理
+→ prepare 四个 edit variant
 → 上传四对象
 → complete
 → ready
-→ apply
+→ CAS apply
+
+mediaId 尚未存在：
+写 localPhotoId draft = applied_local
+→ create progressive Media 后回填 mediaId
+→ 在任何 base preview 可发布前 reserve pending revision
+→ 立即放行 base 上传继续
+→ 本地 A/B 与 base 上传并行
+→ prepare / upload / ready / apply
 ~~~
+
+reserve 只等待一次轻量控制面请求，不等待 AI 推理。edit 渲染或上传失败不会删除 base 对象；对于已明确 Apply 的未发布照片，失败的 edit gate 会保留，避免自动发布 base 造成首次闪烁。
 
 对象数量：
 
@@ -226,27 +235,39 @@ AI GPU queue 独立，B inference 仍单并发。
 
 ### 8.1 Draft
 
-打开编辑器后的滑杆/AI 参数只形成本机 draft：
+打开编辑器后的滑杆/AI 参数先形成本机 draft。
 
-- 内存为主；
-- 可选 IndexedDB crash recovery，key=mediaId；
-- 不同步给其他设备；
-- 不阻塞显示；
-- 不算当前版本。
+实现规则：
+
+- 上传队列照片使用 IndexedDB `photostream-local-photo-edit-drafts` 持久化；
+- mediaId 尚未建立时 key 为 localPhotoId；
+- draft 保存 recipe、pipeline/model versions、sourceFingerprint、remoteRevisionId 和同步状态；
+- 状态为 `draft / applied_local / syncing / synced / failed`；
+- 仅拖参数、未点击“应用”的 draft 不同步给其他设备，也不阻塞显示；
+- 点击“应用”但 mediaId 尚未建立时进入 `applied_local`，Media 建立后自动绑定 mediaId 并同步；
+- local original 仍存在时同步必须直接使用 `LocalReviewPhoto.originalBlob`，不得重新 GET 远端原图。
 
 ### 8.2 点击“应用”
 
 点击应用后：
 
 ~~~text
-POST create revision
-→ server 写 pending revision
+mediaId 已存在
+→ POST reserve revision
+→ server 立即写 pending + status=rendering
 → 当前浏览器渲染
+→ POST prepare（登记四个 immutable 输出）
 → PUT 四个对象
-→ complete
+→ HEAD/complete 校验
 → revision ready
 → CAS apply
 → active revision 切换
+
+mediaId 尚未存在
+→ local draft = applied_local
+→ mediaId 回填
+→ reserve pending（必须早于 base 首次公开）
+→ 后续与上面相同
 ~~~
 
 ### 8.3 Hidden Media
@@ -311,6 +332,8 @@ expectedActiveRevisionId
 - 不允许静默覆盖其他设备已经应用的 revision。
 
 同一 Media 默认只允许一个服务器 pending revision。另一设备已有 pending 时，新 Apply 返回冲突。
+
+权限不通过扩大全局角色 permission 实现：admin/reviewer 按既有 `media:review` 权限修图；uploader 只能读取、创建、上传、应用、取消或回退自己上传的 Media 的 edit，访问其他 uploader 的 Media 返回 403。
 
 以后可以增加“某某正在编辑”的软提示，但不是正确性基础。
 
@@ -414,6 +437,9 @@ base photo_original
 ~~~text
 GET  /api/v1/media/:mediaId/edit-context
 POST /api/v1/media/:mediaId/edits
+POST /api/v1/media/:mediaId/edits/:revisionId/prepare
+POST /api/v1/media/:mediaId/edits/:revisionId/variants/:kind/sign
+POST /api/v1/media/:mediaId/edits/:revisionId/variants/:kind/complete
 POST /api/v1/media/:mediaId/edit-source
 POST /api/v1/media/:mediaId/edits/:revisionId/complete
 POST /api/v1/media/:mediaId/edits/:revisionId/apply
@@ -421,7 +447,7 @@ POST /api/v1/media/:mediaId/edits/:revisionId/cancel
 POST /api/v1/media/:mediaId/edits/revert
 ~~~
 
-create revision 请求包含 recipe、pipeline/model metadata、basedOnRevisionId、basedOnGeneration。
+create revision 是 reserve 请求，只包含 recipe、pipeline/model metadata、basedOnRevisionId、basedOnGeneration；四个输出的尺寸、格式和字节数由后续 prepare 请求登记。
 
 客户端已有 local original 时，创建 revision 不应顺手签发原图 GET。只有客户端明确没有本地真正原图，并且 base original 已 verified 时，才请求 edit-source。
 
@@ -458,8 +484,10 @@ otherwise
 
 - base ready、无 edit：可显示 base；
 - base ready、edit ready+active：可显示 edit；
-- base ready、pending edit uploading：暂不能显示；
-- edit ready 但 base 未 ready：仍不能显示。
+- base ready、pending edit rendering/uploading：暂不能显示；
+- edit ready 但 base 未 ready：仍不能显示；
+- auto publish 相册在 base preview ready 时如果仍有 pending edit，不报上传失败，也不发布 base，而是停在 pending_review；
+- pending edit apply 或明确取消后，才允许首次公开。
 
 ## 15. 公共解析与下载
 
@@ -487,13 +515,15 @@ active edit 存在时，真正 base photo_original 只供管理端恢复、重�
 
 ## 16. UI
 
-审核卡片/Inspector 分别表达：
+上传队列、审核卡片和 Inspector 分别表达：
 
 ~~~text
-上传：上传中 / 已完成 / 失败
-可见性：已隐藏 / 显示中
-修图：无 / 草稿（本机）/ 处理中 / 已修图 / 失败
+上传：上传中 / 已上传 / 失败
+可见性：待审核或已隐藏 / 显示中
+修图：未修图 / 已应用·本地 / 正在同步修图版本 / 修图版本已同步 / 修图同步失败
 ~~~
+
+上传队列照片一进入本地队列即可打开同一个 PhotoEditor。默认只显示进行中/失败项，按需“显示已上传”后可继续编辑本机仍保留 originalBlob 的已上传照片，避免默认一次创建大量 Object URL。
 
 其他设备看到上传中的 Media：
 
@@ -558,7 +588,7 @@ failed
 cancelled
 ~~~
 
-以 mediaId 为主键。
+服务端运行以 mediaId 为主身份；pre-mediaId 本地 draft 以 localPhotoId 为 key，mediaId 回填后绑定。
 
 诊断字段：
 
@@ -600,6 +630,10 @@ pendingRevisionId
 10. 本机 stale base preview 不得覆盖服务器 active edit。
 11. base ingest failed 时即使 edit ready 也不能显示。
 12. pending edit 取消后可继续显示当前旧 active/base。
+13. pre-mediaId 已应用本地 edit：mediaId 建立后必须先 reserve pending，再允许 base preview 进入可发布阶段，不能闪 base。
+14. edit 渲染/上传失败：base ingest 独立继续，但已应用的首次发布 gate 不得静默丢失。
+15. uploader 只能修自己的 Media；对其他 uploader Media 的 get/apply/revert 均返回 403。
+16. auto publish + pending edit：480/960 完成后进入 pending_review，不把上传标失败，也不发布 base。
 
 ## 21. 实施顺序
 
@@ -661,11 +695,13 @@ pendingRevisionId
 5. 编辑始终以 base original 为语义源，不继续压上一版 edit 输出。
 6. base 四对象无论是否修图都完整保留。
 7. 每个 edit revision 额外完整保留四对象。
-8. 只有点击 Apply 后才创建服务器 pending revision；纯本地 draft 不影响其他审核员。
-9. pending edit 存在时 hidden Media 暂不能显示，除非取消 pending。
+8. 只有点击 Apply 才表达“期望当前版本切到此 edit”：mediaId 存在时立即 reserve 服务器 pending；mediaId 尚未存在时先写 applied_local，回填 mediaId 后必须在 base preview 可公开前 reserve。
+9. 纯参数 draft 不影响其他设备；已 Apply 的 pending edit 存在时 hidden/pending_review Media 暂不能显示 base，除非 edit apply 成功或明确取消 pending。
 10. published Media 在新 revision ready 前继续显示旧版本；ready 后原子切换。
 11. active/pending/generation 全由服务器同步；多端冲突用 CAS/409。
 12. DisplayResolver 必须尊重服务器 active revision，不能被本机 stale base preview 覆盖。
 13. active edit 时观众最高质量下载固定指向 edit photo_download。
 14. 修图不改变 publishSequence、OCR、人脸标签或 Media 身份。
 15. A+B 不使用云 AI；B 直接正常接入生产代码，在当前未正式投产环境中验证和调整。
+16. uploader 不获得全局 media:review；修图服务按资源所有权允许 uploader 仅编辑自己上传的 Media。
+17. base upload 与 edit 同步状态独立；edit 同步失败不能把已成功的 base 对象回滚或删除。
