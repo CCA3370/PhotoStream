@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createPhotoEditTiles,
-  photoEditFeatherWeight,
-  reflectPhotoEditIndex,
-} from "./ai-tiling";
+import { createPhotoEditTiles, photoEditFeatherWeight, reflectPhotoEditIndex } from "./ai-tiling";
 
 describe("photo edit AI tiling", () => {
   it("covers a large image with bounded overlapping tiles", () => {
@@ -37,9 +33,9 @@ describe("photo edit AI tiling", () => {
   });
 
   it("feathers only internal overlap edges", () => {
-    expect(
-      photoEditFeatherWeight({ local: 0, start: 0, size: 224, total: 500, overlap: 32 }),
-    ).toBe(1);
+    expect(photoEditFeatherWeight({ local: 0, start: 0, size: 224, total: 500, overlap: 32 })).toBe(
+      1,
+    );
     const internalLeft = photoEditFeatherWeight({
       local: 0,
       start: 192,
