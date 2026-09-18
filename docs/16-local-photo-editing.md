@@ -1,6 +1,6 @@
 # 管理端本地智能修图
 
-状态：已批准实施计划；已按 PR #112“及时上传 + 多端审核”架构重新设计；B 模型直接接入生产代码并在当前未正式投产环境中调参
+状态：核心链路已实施；已按 PR #112“及时上传 + 多端审核”架构落地；A+B 已进入生产代码，当前未正式投产环境继续调参
 更新日期：2026-09-18
 
 ## 1. 新架构基线
@@ -554,19 +554,24 @@ active edit 存在时，真正 base photo_original 只供管理端恢复、重�
 
 A 继续使用确定性本地处理：曝光、白平衡、高光/阴影、对比度/Tone Curve、Vibrance、Saturation、基础锐化；全部保存为版本化 recipe。
 
-B 继续：
+B 已按以下生产方案接入：
 
-- ONNX Runtime Web；
-- WebGPU 优先；
-- 自托管模型；
-- denoise；
-- mild deblur；
-- tile inference；
+- ONNX Runtime Web 1.24.3；
+- WebGPU-only，不对大图静默回退到 CPU；
+- 默认降噪：SCUNet blind real-world color PSNR，固定上游 commit；
+- 默认轻度去模糊：NAFNet deblurring，固定上游 commit；
+- 模型和 ORT JSEP/WASM 由生产构建下载、校验 SHA-256 后放入本站版本化静态目录；
+- 浏览器运行时只访问本站 `/assets/models/photo-edit/<version>/...`，不访问 Hugging Face/GitHub Raw；
+- 模型按功能懒加载并使用 immutable 长缓存；
+- 256×256 tile、32px overlap、reflect padding、feather merge；
 - AI concurrency=1；
-- OOM/device lost 隔离；
-- 不使用云 AI；
-- 不使用服务器 GPU；
-- 不做生成式内容修改。
+- denoise/deblur 都使用 strength blend，避免强制全量恢复；
+- 低光链路使用 A 预曝光 → B → 剩余 A；
+- 推理失败释放对应 session；下一次操作只允许重建一次，再失败则禁用本页面会话 B；
+- OOM/device lost/取消只影响 B/edit，不影响 base ingest；
+- 不使用云 AI、服务器 GPU或生成式内容修改。
+
+专用 `Photo edit model validation` workflow 已真实验证固定模型下载、字节数/SHA-256、生产 Web Docker 构建、镜像内模型文件，以及模型静态响应的 `Cache-Control: public, max-age=31536000, immutable`。
 
 ## 18. LocalPhotoEditRuntime
 
@@ -669,14 +674,15 @@ pendingRevisionId
 - Before/After；
 - conflict UI。
 
-### Phase 3：B
+### Phase 3：B（已实施，待生产样片调参）
 
 - ONNX/WebGPU；
-- denoise/deblur；
-- tile；
-- model cache；
+- SCUNet denoise / NAFNet deblur；
+- tile / overlap / feather；
+- model cache 与固定 SHA-256 供应链；
 - progress/cancel；
-- GPU 失败隔离。
+- GPU 失败隔离；
+- 生产 Docker 模型资产验证。
 
 ### Phase 4：效率
 
