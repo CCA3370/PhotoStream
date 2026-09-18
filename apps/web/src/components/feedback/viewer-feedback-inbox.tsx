@@ -91,11 +91,16 @@ export function ViewerFeedbackInbox({
     if (!canModerate || hidingMediaId !== null) return;
     setHidingMediaId(mediaId);
     try {
-      await clientMutation<{ readonly ok: true }>(`/api/v1/media/${encodeURIComponent(mediaId)}/hide`, {
-        idempotencyKey: `feedback-hide-${crypto.randomUUID()}`,
-      });
+      await clientMutation<{ readonly ok: true }>(
+        `/api/v1/media/${encodeURIComponent(mediaId)}/hide`,
+        {
+          idempotencyKey: `feedback-hide-${crypto.randomUUID()}`,
+        },
+      );
       setItems((current) =>
-        current.map((item) => (item.mediaId === mediaId ? { ...item, mediaStatus: "hidden" } : item)),
+        current.map((item) =>
+          item.mediaId === mediaId ? { ...item, mediaStatus: "hidden" } : item,
+        ),
       );
       toast.add({
         title: "图片已下架",
@@ -139,7 +144,9 @@ export function ViewerFeedbackInbox({
           <div>
             <MessageSquareTextIcon className="mx-auto size-7 text-muted-foreground/60" />
             <p className="mt-3 text-sm font-medium">暂时没有反馈</p>
-            <p className="mt-1 text-xs text-muted-foreground">新的观众意见或图片投诉会实时显示在这里。</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              新的观众意见或图片投诉会实时显示在这里。
+            </p>
           </div>
         </section>
       ) : (
@@ -157,7 +164,9 @@ export function ViewerFeedbackInbox({
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge variant={isReport || item.kind === "problem" ? "destructive" : "secondary"}>
+                    <Badge
+                      variant={isReport || item.kind === "problem" ? "destructive" : "secondary"}
+                    >
                       {viewerFeedbackKindLabel(item.kind)}
                     </Badge>
                     {isReport && item.reportReason !== null ? (
@@ -218,7 +227,9 @@ export function ViewerFeedbackInbox({
                     ) : canModerate ? (
                       <span className="text-xs text-muted-foreground">无需继续下架</span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">仅管理员或审核员可下架图片</span>
+                      <span className="text-xs text-muted-foreground">
+                        仅管理员或审核员可下架图片
+                      </span>
                     )}
                   </div>
                 ) : null}
