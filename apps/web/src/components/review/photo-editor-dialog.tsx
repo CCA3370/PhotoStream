@@ -26,6 +26,7 @@ import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
   getLocalPhotoEditDraft,
+  patchLocalPhotoEditDraft,
   photoEditSourceFingerprint,
   putAppliedLocalPhotoEditDraft,
   putLocalPhotoEditDraft,
@@ -38,6 +39,7 @@ import {
 } from "@/lib/photo-edit/recipe";
 import {
   applyMediaEditRecipe,
+  cancelPendingMediaEditRevision,
   getMediaEditContext,
   switchMediaEditRevision,
 } from "@/lib/photo-edit/revision-client";
@@ -139,12 +141,12 @@ export function PhotoEditorDialog({
   const previewSequence = useRef(0);
   const aiPreviewSequence = useRef(0);
   const applyController = useRef<AbortController | null>(null);
+  const applyReservedRevisionId = useRef<string | null>(null);
 
   const busy = stage === "loading" || stage === "analyzing" || stage === "applying";
   const pendingRevisionId = context?.state.pendingRevisionId ?? null;
   const pendingElsewhere =
-    pendingRevisionId !== null &&
-    (localPhotoId === null || pendingRevisionId !== ownedPendingRevisionId);
+    pendingRevisionId !== null && pendingRevisionId !== ownedPendingRevisionId;
   const aiAvailable = photoEditAiAvailable();
   const denoiseStrength = recipe.denoiseStrength;
   const deblurStrength = recipe.deblurStrength;
@@ -487,6 +489,33 @@ export function PhotoEditorDialog({
     }
   }
 
+  async function cancelPendingEdit(): Promise<void> {
+    if (context === null || context.state.pendingRevisionId === null || busy) return;
+    setStage("applying");
+    setError(null);
+    try {
+      const cancelled = await cancelPendingMediaEditRevision({
+        mediaId: context.mediaId,
+        revisionId: context.state.pendingRevisionId,
+      });
+      setContext(cancelled);
+      setOwnedPendingRevisionId(null);
+      if (localPhotoId !== null) {
+        await patchLocalPhotoEditDraft(localPhotoId, {
+          editState: "draft",
+          remoteRevisionId: null,
+          error: null,
+        });
+      }
+      toast.add({ title: "已取消待处理修图", type: "success" });
+      await onApplied();
+    } catch (cause) {
+      setError(userFacingErrorMessage(cause, "取消待处理修图失败。"));
+    } finally {
+      setStage("ready");
+    }
+  }
+
   async function apply(): Promise<void> {
     if (!canApply || source === null) return;
     const controller = new AbortController();
@@ -539,15 +568,37 @@ export function PhotoEditorDialog({
       }
 
       if (mediaId === null || context === null) return;
+      let applyContext = context;
+      if (
+        ownedPendingRevisionId !== null &&
+        context.state.pendingRevisionId === ownedPendingRevisionId
+      ) {
+        applyContext = await cancelPendingMediaEditRevision({
+          mediaId,
+          revisionId: ownedPendingRevisionId,
+          signal: controller.signal,
+        });
+        setContext(applyContext);
+        setOwnedPendingRevisionId(null);
+      }
+
+      applyReservedRevisionId.current = null;
+      const preservePendingOnFailure = applyContext.publicationStatus !== "published";
       const applied = await applyMediaEditRecipe({
         mediaId,
         recipe,
         source,
-        basedOnGeneration: context.state.generation,
-        basedOnRevisionId: context.state.activeRevisionId,
+        basedOnGeneration: applyContext.state.generation,
+        basedOnRevisionId: applyContext.state.activeRevisionId,
         signal: controller.signal,
+        preservePendingOnFailure,
+        onReserved: (revisionId) => {
+          applyReservedRevisionId.current = revisionId;
+          setOwnedPendingRevisionId(revisionId);
+        },
         onProgress: (value) => setProgress(Math.round(value * 100)),
       });
+      setOwnedPendingRevisionId(null);
       setContext(applied);
       setProgress(100);
       toast.add({ title: "修图版本已应用", type: "success" });
@@ -555,12 +606,18 @@ export function PhotoEditorDialog({
       onOpenChange(false);
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") {
+        setOwnedPendingRevisionId(null);
         toast.add({ title: "已取消修图处理", type: "info" });
       } else {
+        if (localPhotoId === null && mediaId !== null && applyReservedRevisionId.current !== null) {
+          const latest = await getMediaEditContext(mediaId).catch(() => null);
+          if (latest !== null) setContext(latest);
+        }
         setError(userFacingErrorMessage(cause, "应用修图失败。"));
       }
       setStage("ready");
     } finally {
+      applyReservedRevisionId.current = null;
       if (applyController.current === controller) applyController.current = null;
     }
   }
@@ -601,8 +658,23 @@ export function PhotoEditorDialog({
             <div className="flex flex-col gap-5">
               {context?.state.pendingRevisionId !== null &&
               context?.state.pendingRevisionId !== undefined ? (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
-                  另一项修图版本正在处理中。当前参数可以查看，但在该版本完成或取消前不能应用新的版本。
+                <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
+                  <p>
+                    {context.state.pendingStatus === "failed"
+                      ? "待处理修图已失败。当前照片仍保留发布门禁；重试或显式取消前不会退回基础版本公开。"
+                      : pendingElsewhere
+                        ? "另一项修图版本正在处理中。完成或取消前不能应用新的版本。"
+                        : "当前修图版本仍待完成；再次应用会重试此修图。"}
+                  </p>
+                  <Button
+                    disabled={busy}
+                    onClick={() => void cancelPendingEdit()}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    取消待处理修图
+                  </Button>
                 </div>
               ) : null}
 
@@ -876,7 +948,9 @@ export function PhotoEditorDialog({
             </Button>
           )}
           <Button disabled={!canApply || !recipeChanged} onClick={() => void apply()} type="button">
-            应用修图
+            {ownedPendingRevisionId !== null && pendingRevisionId === ownedPendingRevisionId
+              ? "重试修图"
+              : "应用修图"}
           </Button>
         </DialogFooter>
       </DialogContent>
