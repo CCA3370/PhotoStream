@@ -97,6 +97,23 @@ function complete(transaction: IDBTransaction): Promise<void> {
   });
 }
 
+export function localPhotoEditDraftConflictsWithRemote(
+  draft: {
+    readonly basedOnGeneration?: number | null;
+    readonly basedOnRevisionId?: string | null;
+  },
+  remote: {
+    readonly generation: number;
+    readonly activeRevisionId: string | null;
+  },
+): boolean {
+  if (draft.basedOnGeneration == null) return false;
+  return (
+    remote.generation !== draft.basedOnGeneration ||
+    remote.activeRevisionId !== (draft.basedOnRevisionId ?? null)
+  );
+}
+
 export function photoEditSourceFingerprint(options: {
   readonly bytes: number;
   readonly width: number;
