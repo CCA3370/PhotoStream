@@ -148,6 +148,4 @@ for (const asset of assets) {
   }
 }
 
-process.stdout.write(
-  `[PhotoStream] 修图模型已准备：${destinationRoot}\n`,
-);
+process.stdout.write(`[PhotoStream] 修图模型已准备：${destinationRoot}\n`);
