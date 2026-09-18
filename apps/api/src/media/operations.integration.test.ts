@@ -236,6 +236,56 @@ maybeDescribe("stage 3 operations", () => {
 
   afterAll(async () => pool.end());
 
+  it("filters audit search and result state before pagination", async () => {
+    await database.insert(schema.auditLogs).values([
+      {
+        actorUserId: adminId,
+        action: "media.fixture.matched",
+        targetType: "media",
+        targetId: albumId,
+        result: "success",
+        changedFields: ["needleField"],
+        requestId: "audit-match",
+      },
+      {
+        actorUserId: adminId,
+        action: "media.fixture.failed",
+        targetType: "media",
+        targetId: otherAlbumId,
+        result: "failed",
+        changedFields: ["failureField"],
+        requestId: "audit-failed",
+      },
+      {
+        actorUserId: adminId,
+        action: "user.fixture.unrelated",
+        targetType: "user",
+        targetId: uploaderId,
+        result: "success",
+        changedFields: ["role"],
+        requestId: "audit-unrelated",
+      },
+    ]);
+
+    const matched = await service.listAudit({
+      actor: { id: adminId, role: "admin" },
+      cursor: undefined,
+      limit: 1,
+      query: "needleField",
+    });
+    expect(matched.items).toHaveLength(1);
+    expect(matched.items[0]?.action).toBe("media.fixture.matched");
+
+    const failed = await service.listAudit({
+      actor: { id: adminId, role: "admin" },
+      cursor: undefined,
+      limit: 60,
+      result: "failed",
+    });
+    expect(failed.items).toHaveLength(1);
+    expect(failed.items[0]?.result).toBe("failed");
+  });
+
   it("returns stable per-item batch results and never replays successful mutations", async () => {
     const media = await database
       .insert(schema.media)
