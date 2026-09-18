@@ -18,6 +18,11 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { toast } from "@/components/ui/toast";
 import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import {
+  photoEditAiAvailable,
+  restoreMediaEditPreview,
+  type PhotoEditAiPhase,
+} from "@/lib/photo-edit/ai-runtime";
+import {
   defaultPhotoEditRecipe,
   normalizePhotoEditRecipe,
   type PhotoEditRecipe,
@@ -115,11 +120,27 @@ export function PhotoEditorDialog({
   const [stage, setStage] = useState<EditorStage>("loading");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [aiPreviewSource, setAiPreviewSource] = useState<Blob | null>(null);
+  const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
+  const [aiPreviewPhase, setAiPreviewPhase] = useState<PhotoEditAiPhase | null>(null);
   const previewSequence = useRef(0);
+  const aiPreviewSequence = useRef(0);
+  const applyController = useRef<AbortController | null>(null);
 
   const busy = stage === "loading" || stage === "analyzing" || stage === "applying";
-  const pendingElsewhere = context?.state.pendingRevisionId !== null;
-  const canApply = stage === "ready" && context !== null && source !== null && !pendingElsewhere;
+  const pendingElsewhere = context?.state.pendingRevisionId != null;
+  const aiAvailable = photoEditAiAvailable();
+  const aiEnabled = recipe.denoiseStrength > 0 || recipe.deblurStrength > 0;
+  const aiPreExposure =
+    recipe.denoiseStrength > 0 && recipe.exposureEv >= 0.75
+      ? Math.min(0.75, recipe.exposureEv * 0.5)
+      : 0;
+  const canApply =
+    stage === "ready" &&
+    context !== null &&
+    source !== null &&
+    !pendingElsewhere &&
+    !aiPreviewLoading;
 
   useEffect(() => {
     if (!open || mediaId === null) return;
@@ -136,6 +157,9 @@ export function PhotoEditorDialog({
     setStage("loading");
     setError(null);
     setProgress(0);
+    setAiPreviewSource(null);
+    setAiPreviewLoading(false);
+    setAiPreviewPhase(null);
 
     void Promise.all([
       getMediaEditContext(mediaId, controller.signal),
@@ -168,12 +192,89 @@ export function PhotoEditorDialog({
   }, [mediaId, open]);
 
   useEffect(() => {
+    if (!open || source === null) return;
+    if (!aiEnabled) {
+      setAiPreviewSource(null);
+      setAiPreviewLoading(false);
+      setAiPreviewPhase(null);
+      return;
+    }
+    if (!aiAvailable) {
+      setAiPreviewSource(null);
+      setAiPreviewLoading(false);
+      setAiPreviewPhase(null);
+      return;
+    }
+
+    const sequence = aiPreviewSequence.current + 1;
+    aiPreviewSequence.current = sequence;
+    const controller = new AbortController();
+    setAiPreviewSource(null);
+    setAiPreviewLoading(true);
+    setAiPreviewPhase("loading-model");
+
+    const run = async () => {
+      let aiInput = source;
+      if (aiPreExposure > 0) {
+        aiInput = await renderMediaEditPreview(
+          source,
+          normalizePhotoEditRecipe({
+            ...defaultPhotoEditRecipe,
+            exposureEv: aiPreExposure,
+          }),
+          { signal: controller.signal },
+        );
+      }
+      return restoreMediaEditPreview(aiInput, recipe, {
+        signal: controller.signal,
+        onProgress: ({ phase }) => setAiPreviewPhase(phase),
+      });
+    };
+
+    void run()
+      .then((blob) => {
+        if (controller.signal.aborted || aiPreviewSequence.current !== sequence) return;
+        setAiPreviewSource(blob);
+        setAiPreviewPhase(null);
+      })
+      .catch((cause) => {
+        if (controller.signal.aborted) return;
+        setError(userFacingErrorMessage(cause, "本地 AI 预览失败。"));
+        setAiPreviewPhase(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && aiPreviewSequence.current === sequence) {
+          setAiPreviewLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [
+    aiAvailable,
+    aiEnabled,
+    aiPreExposure,
+    open,
+    recipe.deblurStrength,
+    recipe.denoiseStrength,
+    source,
+  ]);
+
+  useEffect(() => {
     if (!open || source === null || stage === "loading" || stage === "error") return;
+    if (aiEnabled && aiPreviewSource === null) return;
+
+    const previewSource = aiPreviewSource ?? source;
+    const previewRecipe = normalizePhotoEditRecipe({
+      ...recipe,
+      exposureEv: recipe.exposureEv - aiPreExposure,
+      denoiseStrength: 0,
+      deblurStrength: 0,
+    });
     const sequence = previewSequence.current + 1;
     previewSequence.current = sequence;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void renderMediaEditPreview(source, recipe, { signal: controller.signal })
+      void renderMediaEditPreview(previewSource, previewRecipe, { signal: controller.signal })
         .then((blob) => {
           if (controller.signal.aborted || previewSequence.current !== sequence) return;
           const url = URL.createObjectURL(blob);
@@ -192,7 +293,7 @@ export function PhotoEditorDialog({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, recipe, source, stage]);
+  }, [aiEnabled, aiPreExposure, aiPreviewSource, open, recipe, source, stage]);
 
   useEffect(
     () => () => {
@@ -230,7 +331,14 @@ export function PhotoEditorDialog({
     setError(null);
     try {
       const analysis = await analyzeMediaEditSource(source);
-      setRecipe(automaticPhotoEditRecipe(analysis));
+      const automatic = automaticPhotoEditRecipe(analysis);
+      setRecipe((current) =>
+        normalizePhotoEditRecipe({
+          ...automatic,
+          denoiseStrength: current.denoiseStrength,
+          deblurStrength: current.deblurStrength,
+        }),
+      );
       setStage("ready");
     } catch (cause) {
       setError(userFacingErrorMessage(cause, "智能优化分析失败。"));
@@ -279,6 +387,8 @@ export function PhotoEditorDialog({
 
   async function apply(): Promise<void> {
     if (!canApply || mediaId === null || context === null || source === null) return;
+    const controller = new AbortController();
+    applyController.current = controller;
     setStage("applying");
     setError(null);
     setProgress(0);
@@ -289,6 +399,7 @@ export function PhotoEditorDialog({
         source,
         basedOnGeneration: context.state.generation,
         basedOnRevisionId: context.state.activeRevisionId,
+        signal: controller.signal,
         onProgress: (value) => setProgress(Math.round(value * 100)),
       });
       setContext(applied);
@@ -297,8 +408,14 @@ export function PhotoEditorDialog({
       await onApplied();
       onOpenChange(false);
     } catch (cause) {
-      setError(userFacingErrorMessage(cause, "应用修图失败。"));
+      if (cause instanceof DOMException && cause.name === "AbortError") {
+        toast.add({ title: "已取消修图处理", type: "info" });
+      } else {
+        setError(userFacingErrorMessage(cause, "应用修图失败。"));
+      }
       setStage("ready");
+    } finally {
+      if (applyController.current === controller) applyController.current = null;
     }
   }
 
@@ -484,6 +601,75 @@ export function PhotoEditorDialog({
                 />
               </div>
 
+              <section className="flex flex-col gap-3 border-t pt-4">
+                <div>
+                  <h3 className="text-xs font-semibold text-muted-foreground">AI 修复</h3>
+                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    WebGPU 本机推理，不上传至 AI 服务。模型首次使用时从本站加载并长期缓存。
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    disabled={busy || !aiAvailable}
+                    onClick={() =>
+                      patchRecipe({
+                        denoiseStrength: recipe.denoiseStrength > 0 ? 0 : 0.55,
+                      })
+                    }
+                    type="button"
+                    variant={recipe.denoiseStrength > 0 ? "default" : "outline"}
+                  >
+                    AI 降噪
+                  </Button>
+                  <Button
+                    disabled={busy || !aiAvailable}
+                    onClick={() =>
+                      patchRecipe({
+                        deblurStrength: recipe.deblurStrength > 0 ? 0 : 0.28,
+                      })
+                    }
+                    type="button"
+                    variant={recipe.deblurStrength > 0 ? "default" : "outline"}
+                  >
+                    AI 清晰化
+                  </Button>
+                </div>
+                {!aiAvailable ? (
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    当前浏览器或设备未提供 WebGPU，确定性调色仍可正常使用。
+                  </p>
+                ) : null}
+                {recipe.denoiseStrength > 0 ? (
+                  <RangeControl
+                    disabled={busy}
+                    format={(value) => `${Math.round(value * 100)}%`}
+                    label="降噪强度"
+                    maximum={1}
+                    minimum={0}
+                    onChange={(value) => patchRecipe({ denoiseStrength: value })}
+                    step={0.05}
+                    value={recipe.denoiseStrength}
+                  />
+                ) : null}
+                {recipe.deblurStrength > 0 ? (
+                  <RangeControl
+                    disabled={busy}
+                    format={(value) => `${Math.round(value * 100)}%`}
+                    label="清晰强度"
+                    maximum={0.6}
+                    minimum={0}
+                    onChange={(value) => patchRecipe({ deblurStrength: value })}
+                    step={0.04}
+                    value={recipe.deblurStrength}
+                  />
+                ) : null}
+                {aiPreviewLoading ? (
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    {aiPreviewPhase === "loading-model" ? "正在加载本地 AI 模型…" : "正在生成 AI 预览…"}
+                  </p>
+                ) : null}
+              </section>
+
               <Button
                 disabled={stage === "loading" || originalUrl === null}
                 onPointerDown={() => setShowBefore(true)}
@@ -523,14 +709,24 @@ export function PhotoEditorDialog({
               恢复原图
             </Button>
           ) : null}
-          <Button
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
-            取消
-          </Button>
+          {stage === "applying" ? (
+            <Button
+              onClick={() => applyController.current?.abort()}
+              type="button"
+              variant="outline"
+            >
+              取消处理
+            </Button>
+          ) : (
+            <Button
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="outline"
+            >
+              取消
+            </Button>
+          )}
           <Button disabled={!canApply || !recipeChanged} onClick={() => void apply()} type="button">
             应用修图
           </Button>
