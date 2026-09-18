@@ -1,12 +1,12 @@
 /// <reference lib="webworker" />
 
-import { PHOTO_WORKER_PROTOCOL_VERSION } from "../lib/photo-worker-protocol";
 import { inspectPhoto, validatePhotoDeclaration } from "../lib/photo-inspection";
 import type {
   PhotoWorkerRequest,
   PhotoWorkerResponse,
   ProcessedPhotoVariant,
 } from "../lib/photo-processing";
+import { PHOTO_WORKER_PROTOCOL_VERSION } from "../lib/photo-worker-protocol";
 
 const worker = self as unknown as DedicatedWorkerGlobalScope;
 
