@@ -322,7 +322,9 @@ export function DashboardView({
   const [customOpen, setCustomOpen] = useState(false);
   const [rankingMode, setRankingMode] = useState<RankingMode>("downloads");
   const [rankingOpen, setRankingOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState(() => shanghaiInputValue(new Date(initialData.from)));
+  const [customFrom, setCustomFrom] = useState(() =>
+    shanghaiInputValue(new Date(initialData.from)),
+  );
   const [customTo, setCustomTo] = useState(() => shanghaiInputValue(new Date(initialData.to)));
   const points = useMemo(() => fillPoints(data), [data]);
   const searchUsagePoints = useMemo(() => fillSearchUsagePoints(data), [data]);
