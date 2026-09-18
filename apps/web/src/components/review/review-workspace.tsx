@@ -2135,7 +2135,15 @@ export function ReviewWorkspace({
             const bibConfirmed = isBibReviewConfirmed(item.bib);
             const ocrPending = bibOcrIsPending(item);
             const bibBlocked = !bibConfirmed && ocrPending;
-            const statusLabel = published ? "显示中" : hidden ? "已隐藏" : "处理中";
+            const statusLabel = published
+              ? "显示中"
+              : hidden
+                ? "已隐藏"
+                : item.source === "local"
+                  ? "本机处理中"
+                  : item.publicationStatus === "pending_review"
+                    ? "待审核"
+                    : "上传处理中";
             return (
               <div
                 className={cn(
