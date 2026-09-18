@@ -1,8 +1,8 @@
 export const photoEditPipelineVersion = "local-edit-v1";
-export const photoEditRecipeVersion = 1;
+export const photoEditRecipeVersion = 2;
 
 export interface PhotoEditRecipe {
-  readonly version: 1;
+  readonly version: 2;
   readonly exposureEv: number;
   readonly temperature: number;
   readonly tint: number;
@@ -12,10 +12,12 @@ export interface PhotoEditRecipe {
   readonly vibrance: number;
   readonly saturation: number;
   readonly sharpen: number;
+  readonly denoiseStrength: number;
+  readonly deblurStrength: number;
 }
 
 export const defaultPhotoEditRecipe: PhotoEditRecipe = {
-  version: 1,
+  version: 2,
   exposureEv: 0,
   temperature: 0,
   tint: 0,
@@ -25,6 +27,8 @@ export const defaultPhotoEditRecipe: PhotoEditRecipe = {
   vibrance: 0,
   saturation: 0,
   sharpen: 0,
+  denoiseStrength: 0,
+  deblurStrength: 0,
 };
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -33,10 +37,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 export function normalizePhotoEditRecipe(
-  recipe: Partial<Omit<PhotoEditRecipe, "version">> & { readonly version?: 1 },
+  recipe: Partial<Omit<PhotoEditRecipe, "version">> & { readonly version?: 1 | 2 },
 ): PhotoEditRecipe {
   return {
-    version: 1,
+    version: 2,
     exposureEv: clamp(recipe.exposureEv ?? 0, -2, 2),
     temperature: clamp(recipe.temperature ?? 0, -1, 1),
     tint: clamp(recipe.tint ?? 0, -1, 1),
@@ -46,6 +50,8 @@ export function normalizePhotoEditRecipe(
     vibrance: clamp(recipe.vibrance ?? 0, -100, 100),
     saturation: clamp(recipe.saturation ?? 0, -100, 100),
     sharpen: clamp(recipe.sharpen ?? 0, 0, 100),
+    denoiseStrength: clamp(recipe.denoiseStrength ?? 0, 0, 1),
+    deblurStrength: clamp(recipe.deblurStrength ?? 0, 0, 0.6),
   };
 }
 
@@ -63,6 +69,8 @@ export function photoEditRecipeFromUnknown(value: unknown): PhotoEditRecipe {
     "vibrance",
     "saturation",
     "sharpen",
+    "denoiseStrength",
+    "deblurStrength",
   ] as const) {
     if (typeof input[key] === "number") parsed[key] = input[key];
   }
@@ -79,6 +87,8 @@ export function photoEditRecipeIsIdentity(recipe: PhotoEditRecipe): boolean {
     recipe.contrast === 0 &&
     recipe.vibrance === 0 &&
     recipe.saturation === 0 &&
-    recipe.sharpen === 0
+    recipe.sharpen === 0 &&
+    recipe.denoiseStrength === 0 &&
+    recipe.deblurStrength === 0
   );
 }
