@@ -133,6 +133,12 @@ for (const asset of localAssets) {
 }
 
 for (const asset of assets) {
+  const destination = resolve(destinationRoot, asset.file);
+  if (await valid(destination, asset)) {
+    process.stdout.write(`[PhotoStream] 使用已校验修图模型 ${asset.file}。\n`);
+    continue;
+  }
+
   const cachePath = resolve(cacheRoot, asset.file);
   if (!(await valid(cachePath, asset))) {
     await rm(cachePath, { force: true });
@@ -141,11 +147,7 @@ for (const asset of assets) {
   } else {
     process.stdout.write(`[PhotoStream] 使用已校验模型缓存 ${asset.file}。\n`);
   }
-
-  const destination = resolve(destinationRoot, asset.file);
-  if (!(await valid(destination, asset))) {
-    await copyVerified(cachePath, destination, asset);
-  }
+  await copyVerified(cachePath, destination, asset);
 }
 
 process.stdout.write(`[PhotoStream] 修图模型已准备：${destinationRoot}\n`);
