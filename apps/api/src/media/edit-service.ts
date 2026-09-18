@@ -770,7 +770,7 @@ export class MediaEditService {
 
   async #lock(transaction: Transaction, mediaId: string): Promise<void> {
     await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`media-edit:${mediaId}`}, 0))`,
+      sql`select pg_advisory_xact_lock(hashtextextended(${`media:${mediaId}`}, 0))`,
     );
   }
 
