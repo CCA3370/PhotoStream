@@ -81,7 +81,15 @@ import {
   localBibOcrPending,
   patchLocalReviewPhoto,
 } from "@/lib/local-review-queue";
+import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { cn } from "@/lib/utils";
+
+async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
+  await Promise.all([
+    deleteLocalReviewPhoto(localPhotoId),
+    deleteLocalPhotoEditDraft(localPhotoId),
+  ]);
+}
 
 interface CategoryOption {
   readonly id: string;
@@ -991,7 +999,7 @@ export function ReviewWorkspace({
     try {
       const mediaId = remoteId(item);
       if (item.source === "local" && mediaId === null) {
-        await deleteLocalReviewPhoto(item.local.photo.id);
+        await deleteLocalReviewState(item.local.photo.id);
       } else if (mediaId !== null) {
         await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
         setRemoteMedia((current) => current.filter((candidate) => candidate.id !== mediaId));
@@ -1001,9 +1009,9 @@ export function ReviewWorkspace({
           return next;
         });
         if (item.source === "local") {
-          await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
+          await deleteLocalReviewState(item.local.photo.id).catch(() => undefined);
         } else if (item.local !== null) {
-          await deleteLocalReviewPhoto(item.local.photo.id).catch(() => undefined);
+          await deleteLocalReviewState(item.local.photo.id).catch(() => undefined);
         }
       }
       setSelectedKeys((current) => {
@@ -1436,7 +1444,7 @@ export function ReviewWorkspace({
     try {
       for (const item of selectedLocalItems) {
         try {
-          await deleteLocalReviewPhoto(item.local.photo.id);
+          await deleteLocalReviewState(item.local.photo.id);
           successCount += 1;
         } catch (cause) {
           failures.push({
