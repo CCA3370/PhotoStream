@@ -123,9 +123,7 @@ export function UserManagement({
         method: "PATCH",
         body: input,
       });
-      setUsers((currentUsers) =>
-        currentUsers.map((user) => (user.id === userId ? updated : user)),
-      );
+      setUsers((currentUsers) => currentUsers.map((user) => (user.id === userId ? updated : user)));
       if (invalidatesCurrentSession) {
         window.location.assign("/login");
         return;
