@@ -1,16 +1,19 @@
 "use client";
 
-import type { BibConfigView } from "@photostream/contracts";
+import type { BibConfigView, UploadIntentView } from "@photostream/contracts";
 
+import { clientMutation } from "@/lib/client-api";
 import { startLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   createLocalReviewPhoto,
+  deleteLocalReviewPhoto,
+  getLocalReviewPhoto,
   patchLocalReviewPhoto,
   putLocalReviewPhoto,
   updateLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
-import { getLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
+import { deleteLocalPhotoEditDraft, getLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
 import {
   createProgressiveUpload,
@@ -19,7 +22,7 @@ import {
   uploadProgressiveOriginal,
 } from "@/lib/progressive-photo-upload";
 
-export type LocalProcessingTaskStatus = "queued" | "processing" | "staged" | "failed";
+export type LocalProcessingTaskStatus = "queued" | "processing" | "staged" | "failed" | "cancelled";
 
 export interface LocalProcessingTaskView {
   readonly id: string;
@@ -34,7 +37,7 @@ export interface LocalProcessingSnapshot {
   readonly paused: boolean;
 }
 
-type PersistedProcessingStatus = Exclude<LocalProcessingTaskStatus, "staged">;
+type PersistedProcessingStatus = Exclude<LocalProcessingTaskStatus, "staged" | "cancelled">;
 
 interface ProcessingTask {
   readonly id: string;
@@ -133,6 +136,10 @@ function heapPressureRatio(): number | null {
   return memory.usedJSHeapSize / memory.jsHeapSizeLimit;
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 function isResourcePressureError(error: unknown): boolean {
   if (error instanceof RangeError) return true;
   if (!(error instanceof Error)) return false;
@@ -226,7 +233,9 @@ async function deletePersistedTask(id: string): Promise<void> {
 }
 
 function persistedTask(task: ProcessingTask): PersistedProcessingTask {
-  if (task.status === "staged") throw new Error("已完成任务不应写回处理队列");
+  if (task.status === "staged" || task.status === "cancelled") {
+    throw new Error("已结束任务不应写回处理队列");
+  }
   return {
     id: task.id,
     albumId: task.albumId,
@@ -245,6 +254,8 @@ class LocalProcessingRuntime {
   readonly #albumId: string;
   readonly #tasks = new Map<string, ProcessingTask>();
   readonly #listeners = new Set<Listener>();
+  readonly #abortControllers = new Map<string, AbortController>();
+  readonly #intentPromises = new Map<string, Promise<UploadIntentView>>();
   #bibConfig: BibConfigView | null = null;
   #initialized: Promise<void> | null = null;
   #paused = false;
@@ -314,6 +325,50 @@ class LocalProcessingRuntime {
     if (!this.#paused) this.#pump();
   }
 
+  async cancelTask(taskId: string): Promise<void> {
+    await this.initialize();
+    const task = this.#tasks.get(taskId);
+    if (task === undefined || task.status === "staged" || task.status === "cancelled") return;
+
+    task.status = "cancelled";
+    task.error = null;
+    this.#abortControllers.get(taskId)?.abort();
+    this.#emit();
+
+    let intentId: string | null = null;
+    try {
+      const localPhoto = await getLocalReviewPhoto(task.localPhotoId);
+      intentId = localPhoto?.intentId ?? null;
+      if (intentId === null) {
+        const pendingIntent = this.#intentPromises.get(taskId);
+        if (pendingIntent !== undefined) {
+          try {
+            intentId = (await pendingIntent).id;
+          } catch {
+            // The intent was never established, so there is no remote upload to cancel.
+          }
+        }
+      }
+      if (intentId !== null) {
+        await clientMutation(`/api/v1/uploads/${encodeURIComponent(intentId)}/cancel`);
+      }
+      await Promise.all([
+        deletePersistedTask(task.id),
+        deleteLocalReviewPhoto(task.localPhotoId),
+        deleteLocalPhotoEditDraft(task.localPhotoId),
+      ]);
+    } catch (error) {
+      task.status = "failed";
+      task.error = error instanceof Error ? error.message : "取消上传失败";
+      await putPersistedTasks([persistedTask(task)]).catch(() => undefined);
+      this.#emit();
+      throw error;
+    }
+
+    this.#emit();
+    this.#pump();
+  }
+
   async retryFailed(): Promise<void> {
     await this.initialize();
     const retrying: ProcessingTask[] = [];
@@ -332,7 +387,7 @@ class LocalProcessingRuntime {
 
   clearCompleted(): void {
     for (const [id, task] of this.#tasks) {
-      if (task.status === "staged") this.#tasks.delete(id);
+      if (task.status === "staged" || task.status === "cancelled") this.#tasks.delete(id);
     }
     this.#emit();
   }
@@ -381,6 +436,8 @@ class LocalProcessingRuntime {
     if (bibConfig === null || task.status !== "queued") return;
     task.status = "processing";
     task.error = null;
+    const controller = new AbortController();
+    this.#abortControllers.set(task.id, controller);
     this.#runningTasks += 1;
     this.#runningInputBytes += task.file.size;
     this.#emit();
@@ -415,6 +472,7 @@ class LocalProcessingRuntime {
             },
           };
           await putLocalReviewPhoto(localPhoto);
+          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
           intentPromise = createProgressiveUpload({
             localPhotoId: task.localPhotoId,
             albumId: this.#albumId,
@@ -422,7 +480,9 @@ class LocalProcessingRuntime {
             file: task.file,
             metadata: nextMetadata,
           });
+          this.#intentPromises.set(task.id, intentPromise);
           const intent = await intentPromise;
+          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
           await patchLocalReviewPhoto(task.localPhotoId, {
             intentId: intent.id,
             mediaId: intent.mediaId,
@@ -456,9 +516,11 @@ class LocalProcessingRuntime {
             ]);
           }
 
-          uploads.push(uploadProgressiveOriginal(intent, task.file));
+          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+          uploads.push(uploadProgressiveOriginal(intent, task.file, controller.signal));
         },
         onVariant: async (variant) => {
+          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
           await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
             ...current,
             variants: [
@@ -468,7 +530,11 @@ class LocalProcessingRuntime {
           }));
           const intent = await intentPromise;
           if (intent === null) throw new Error("原图上传任务尚未创建");
-          const uploaded = registerAndUploadProgressiveVariant(intent.id, variant);
+          const uploaded = registerAndUploadProgressiveVariant(
+            intent.id,
+            variant,
+            controller.signal,
+          );
           uploads.push(uploaded);
           if (variant.kind === "photo_480") {
             const currentMetadata = metadata;
@@ -480,14 +546,16 @@ class LocalProcessingRuntime {
                     variant,
                     currentMetadata.width,
                     currentMetadata.height,
+                    controller.signal,
                   ),
                 ),
               );
             }
           }
         },
-      });
+      }, { signal: controller.signal });
       await Promise.all(uploads);
+      if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
       await patchLocalReviewPhoto(task.localPhotoId, {
         uploadState: "published",
         error: null,
@@ -497,6 +565,7 @@ class LocalProcessingRuntime {
       task.status = "staged";
       task.error = null;
     } catch (error) {
+      if (isAbortError(error) && task.status === "cancelled") return;
       const message = error instanceof Error ? error.message : "本地处理或上传失败";
       task.status = "failed";
       task.error = message;
@@ -514,6 +583,8 @@ class LocalProcessingRuntime {
         // Keep the in-memory failure visible even if the persistence layer is unavailable.
       }
     } finally {
+      this.#abortControllers.delete(task.id);
+      this.#intentPromises.delete(task.id);
       this.#runningTasks = Math.max(0, this.#runningTasks - 1);
       this.#runningInputBytes = Math.max(0, this.#runningInputBytes - task.file.size);
       this.#emit();
