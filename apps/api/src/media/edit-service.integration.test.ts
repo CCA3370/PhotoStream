@@ -285,6 +285,56 @@ maybeDescribe("media edit revisions", () => {
     expect(applied.activeRevision?.status).toBe("active");
   });
 
+  it("keeps a failed revision pending until explicitly cancelled", async () => {
+    const created = await service.createRevision({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      input: createInput(),
+      requestId: "edit-failed-create",
+    });
+    const revisionId = created.state.pendingRevisionId;
+    if (revisionId === null) throw new Error("pending revision missing");
+
+    const failed = await service.failPending({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      revisionId,
+      requestId: "edit-failed-mark",
+    });
+    expect(failed.state).toMatchObject({
+      pendingRevisionId: revisionId,
+      generation: 1,
+      pendingStatus: "failed",
+    });
+    expect(failed.pendingRevision).toMatchObject({
+      id: revisionId,
+      status: "failed",
+      failureCode: "CLIENT_PROCESSING_FAILED",
+    });
+
+    await expect(
+      service.prepareRevision({
+        actor: { id: reviewerId, role: "reviewer" },
+        mediaId,
+        revisionId,
+        input: prepareInput(),
+        requestId: "edit-failed-prepare",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+
+    const cancelled = await service.cancelPending({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      revisionId,
+      requestId: "edit-failed-cancel",
+    });
+    expect(cancelled.state).toMatchObject({
+      pendingRevisionId: null,
+      generation: 2,
+      pendingStatus: null,
+    });
+  });
+
   it("rejects stale multi-device apply state", async () => {
     const created = await service.createRevision({
       actor: { id: reviewerId, role: "reviewer" },
