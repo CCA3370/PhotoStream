@@ -159,8 +159,7 @@ function postModelProgress(options: {
     type: "progress",
     phase: "downloading-model",
     operation: options.operation,
-    progress:
-      options.totalBytes <= 0 ? 0 : Math.min(1, options.loadedBytes / options.totalBytes),
+    progress: options.totalBytes <= 0 ? 0 : Math.min(1, options.loadedBytes / options.totalBytes),
     loadedBytes: options.loadedBytes,
     totalBytes: options.totalBytes,
   });
