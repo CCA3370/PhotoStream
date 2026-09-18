@@ -28,6 +28,7 @@ import {
   getLocalPhotoEditDraft,
   photoEditSourceFingerprint,
   putAppliedLocalPhotoEditDraft,
+  putLocalPhotoEditDraft,
 } from "@/lib/photo-edit/local-drafts";
 import {
   defaultPhotoEditRecipe,
@@ -133,6 +134,8 @@ export function PhotoEditorDialog({
   const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
   const [aiPreviewPhase, setAiPreviewPhase] = useState<PhotoEditAiPhase | null>(null);
   const [ownedPendingRevisionId, setOwnedPendingRevisionId] = useState<string | null>(null);
+  const [localSourceFingerprint, setLocalSourceFingerprint] = useState<string | null>(null);
+  const persistedRecipeKey = useRef<string | null>(null);
   const previewSequence = useRef(0);
   const aiPreviewSequence = useRef(0);
   const applyController = useRef<AbortController | null>(null);
@@ -174,6 +177,8 @@ export function PhotoEditorDialog({
     setAiPreviewLoading(false);
     setAiPreviewPhase(null);
     setOwnedPendingRevisionId(null);
+    setLocalSourceFingerprint(null);
+    persistedRecipeKey.current = null;
 
     const load = async () => {
       if (localPhotoId !== null) {
@@ -193,11 +198,18 @@ export function PhotoEditorDialog({
           (photo.mediaId === null ||
             draft.editState !== "synced" ||
             draft.remoteRevisionId === nextContext?.state.activeRevisionId);
+        const sourceFingerprint = photoEditSourceFingerprint({
+          bytes: photo.totalBytes,
+          width: photo.width,
+          height: photo.height,
+          contentType: photo.originalContentType,
+        });
         return {
           context: nextContext,
           blob: photo.originalBlob,
           sourceOrigin: "local-original" as const,
           ownedPendingRevisionId: draft?.remoteRevisionId ?? null,
+          localSourceFingerprint: sourceFingerprint,
           recipe: draftOwnsCurrentRemoteState ? draft.recipe : remoteRecipe,
         };
       }
@@ -212,6 +224,7 @@ export function PhotoEditorDialog({
         blob: resolved.blob,
         sourceOrigin: resolved.sourceOrigin,
         ownedPendingRevisionId: null,
+        localSourceFingerprint: null,
         recipe:
           nextContext.activeRevision === null
             ? defaultPhotoEditRecipe
@@ -226,8 +239,10 @@ export function PhotoEditorDialog({
         setContext(loaded.context);
         setSource(loaded.blob);
         setSourceOrigin(loaded.sourceOrigin);
+        persistedRecipeKey.current = JSON.stringify(loaded.recipe);
         setRecipe(loaded.recipe);
         setOwnedPendingRevisionId(loaded.ownedPendingRevisionId);
+        setLocalSourceFingerprint(loaded.localSourceFingerprint);
         setOriginalUrl(url);
         setStage("ready");
       })
@@ -242,6 +257,37 @@ export function PhotoEditorDialog({
       controller.abort();
     };
   }, [localPhotoId, mediaId, open]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      localPhotoId === null ||
+      localSourceFingerprint === null ||
+      stage !== "ready"
+    ) {
+      return;
+    }
+    const recipeKey = JSON.stringify(recipe);
+    if (recipeKey === persistedRecipeKey.current) return;
+    const timer = window.setTimeout(() => {
+      void getLocalReviewPhoto(localPhotoId)
+        .then((photo) => {
+          if (photo === null) return;
+          return putLocalPhotoEditDraft({
+            localPhotoId,
+            mediaId: photo.mediaId,
+            recipe,
+            sourceFingerprint: localSourceFingerprint,
+            editState: "draft",
+          });
+        })
+        .then(() => {
+          persistedRecipeKey.current = recipeKey;
+        })
+        .catch(() => undefined);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [localPhotoId, localSourceFingerprint, open, recipe, stage]);
 
   useEffect(() => {
     if (!open || source === null) return;
@@ -414,12 +460,13 @@ export function PhotoEditorDialog({
         expectedActiveRevisionId: context.state.activeRevisionId,
         targetRevisionId,
       });
-      setContext(switched);
-      setRecipe(
+      const switchedRecipe =
         switched.activeRevision === null
           ? defaultPhotoEditRecipe
-          : photoEditRecipeFromUnknown(switched.activeRevision.recipeJson),
-      );
+          : photoEditRecipeFromUnknown(switched.activeRevision.recipeJson);
+      persistedRecipeKey.current = JSON.stringify(switchedRecipe);
+      setContext(switched);
+      setRecipe(switchedRecipe);
       setProgress(100);
       toast.add({
         title: targetRevisionId === null ? "已恢复原始版本" : "已切换修图版本",
