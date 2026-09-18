@@ -1428,24 +1428,18 @@ export class PhotoService {
           ),
         )
         .limit(1);
-      if (editVariant === undefined || editVariant.bytes === null) {
-        throw new AppError({
-          code: "DOWNLOAD_NOT_READY",
-          message: "当前修图版本尚未准备完成",
-          statusCode: 409,
-          retryable: true,
-        });
+      if (editVariant !== undefined && editVariant.bytes !== null) {
+        const expiresAt = previewExpiresAt(ttlMilliseconds);
+        return {
+          url: this.#storage.signRead({
+            key: editVariant.objectKey,
+            expiresAt,
+            stable: true,
+          }),
+          expiresAt: expiresAt.toISOString(),
+          bytes: editVariant.bytes,
+        };
       }
-      const expiresAt = previewExpiresAt(ttlMilliseconds);
-      return {
-        url: this.#storage.signRead({
-          key: editVariant.objectKey,
-          expiresAt,
-          stable: true,
-        }),
-        expiresAt: expiresAt.toISOString(),
-        bytes: editVariant.bytes,
-      };
     }
     const [variant] = await this.#database
       .select()
@@ -1701,18 +1695,18 @@ export class PhotoService {
     const items = page.map((media) => {
       const deletion = deletionByMedia.get(media.id) ?? null;
       const editState = editStateByMedia.get(media.id);
-      const hasActiveEdit =
-        editState?.activeRevisionId !== null && editState?.activeRevisionId !== undefined;
-      const activeEditVariants = hasActiveEdit
-        ? (editVariantsByRevision.get(editState.activeRevisionId as string) ?? [])
-        : [];
+      const activeEditVariants =
+        editState?.activeRevisionId === null || editState?.activeRevisionId === undefined
+          ? []
+          : (editVariantsByRevision.get(editState.activeRevisionId) ?? []);
       const baseMediaVariants = byMedia.get(media.id) ?? [];
-      const resolvedVariants = hasActiveEdit
-        ? [
-            ...activeEditVariants.filter((variant) => variant.kind !== "photo_download"),
-            ...baseMediaVariants.filter((variant) => variant.kind === "photo_original"),
-          ]
-        : baseMediaVariants;
+      const resolvedVariants =
+        activeEditVariants.length === 0
+          ? baseMediaVariants
+          : [
+              ...activeEditVariants.filter((variant) => variant.kind !== "photo_download"),
+              ...baseMediaVariants.filter((variant) => variant.kind === "photo_original"),
+            ];
       return {
         id: media.id,
         albumId: media.albumId,
@@ -2229,26 +2223,27 @@ export class PhotoService {
         throw new Error("Published media lacks publication metadata");
       }
       const editState = publicEditStateByMedia.get(media.id);
-      const hasActiveEdit =
-        editState?.activeRevisionId !== null && editState?.activeRevisionId !== undefined;
-      const activeEditVariants = hasActiveEdit
-        ? (publicEditVariantsByRevision.get(editState.activeRevisionId as string) ?? [])
-        : [];
+      const activeEditVariants =
+        editState?.activeRevisionId === null || editState?.activeRevisionId === undefined
+          ? []
+          : (publicEditVariantsByRevision.get(editState.activeRevisionId) ?? []);
       const baseVariants = byMedia.get(media.id) ?? [];
-      const browserVariants = hasActiveEdit
-        ? activeEditVariants.filter((variant) => variant.kind !== "photo_download")
-        : baseVariants.filter((variant) =>
-            publicVariantKinds.has(variant.kind as PhotoVariantKind),
-          );
-      const activeDownload = hasActiveEdit
-        ? activeEditVariants.find(
-            (variant) =>
-              variant.kind === "photo_download" && variant.verified && variant.bytes !== null,
-          )
-        : baseVariants.find(
-            (variant) =>
-              variant.kind === "photo_original" && variant.verified && variant.bytes !== null,
-          );
+      const browserVariants =
+        activeEditVariants.length === 0
+          ? baseVariants.filter((variant) =>
+              publicVariantKinds.has(variant.kind as PhotoVariantKind),
+            )
+          : activeEditVariants.filter((variant) => variant.kind !== "photo_download");
+      const activeDownload =
+        activeEditVariants.length === 0
+          ? baseVariants.find(
+              (variant) =>
+                variant.kind === "photo_original" && variant.verified && variant.bytes !== null,
+            )
+          : activeEditVariants.find(
+              (variant) =>
+                variant.kind === "photo_download" && variant.verified && variant.bytes !== null,
+            );
       return {
         id: media.id,
         width: media.width,
