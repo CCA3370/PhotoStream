@@ -181,13 +181,14 @@ export class PhotoShareService {
           ),
         )
         .limit(1);
-      if (editVariant === undefined || editVariant.bytes === null) throw this.#notFound();
-      const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
-      return {
-        url: this.#storage.signRead({ key: editVariant.objectKey, expiresAt, stable: true }),
-        expiresAt: expiresAt.toISOString(),
-        bytes: editVariant.bytes,
-      };
+      if (editVariant !== undefined && editVariant.bytes !== null) {
+        const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+        return {
+          url: this.#storage.signRead({ key: editVariant.objectKey, expiresAt, stable: true }),
+          expiresAt: expiresAt.toISOString(),
+          bytes: editVariant.bytes,
+        };
+      }
     }
     const [variant] = await this.#database
       .select()
@@ -243,7 +244,8 @@ export class PhotoShareService {
           bytes: editVariant.bytes,
         };
       }
-    } else {
+    }
+    if (selected === undefined) {
       const [baseVariant] = await this.#database
         .select()
         .from(schema.mediaVariants)
@@ -347,26 +349,33 @@ export class PhotoShareService {
       const browserVariants = variants.filter(
         (variant) => variant.kind !== "photo_download" && variant.bytes !== null,
       );
-      return {
-        id: media.id,
-        width: media.width,
-        height: media.height,
-        publishSequence: media.publishSequence,
-        publishedAt: iso(media.publishedAt),
-        variants: browserVariants.map((variant) => ({
-          kind: variant.kind as PhotoVariantKind,
-          url: this.#storage.signRead({ key: variant.objectKey, expiresAt, stable: true }),
-          width: variant.width,
-          height: variant.height,
-          bytes: variant.bytes as number,
-          contentType: variant.contentType,
-        })),
-        downloads: {
-          preview: browserVariants.some((variant) => variant.kind === "photo_1920"),
-          original: download !== undefined,
-          originalBytes: download?.bytes ?? null,
-        },
-      };
+      const completeEdit =
+        download !== undefined &&
+        ["photo_480", "photo_960", "photo_1920"].every((kind) =>
+          browserVariants.some((variant) => variant.kind === kind),
+        );
+      if (completeEdit) {
+        return {
+          id: media.id,
+          width: media.width,
+          height: media.height,
+          publishSequence: media.publishSequence,
+          publishedAt: iso(media.publishedAt),
+          variants: browserVariants.map((variant) => ({
+            kind: variant.kind as PhotoVariantKind,
+            url: this.#storage.signRead({ key: variant.objectKey, expiresAt, stable: true }),
+            width: variant.width,
+            height: variant.height,
+            bytes: variant.bytes as number,
+            contentType: variant.contentType,
+          })),
+          downloads: {
+            preview: browserVariants.some((variant) => variant.kind === "photo_1920"),
+            original: true,
+            originalBytes: download.bytes,
+          },
+        };
+      }
     }
 
     const variants = await this.#database
