@@ -39,10 +39,12 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 function DialogContent({
   className,
   children,
+  forceOverlay = false,
   overlayClassName,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  forceOverlay?: boolean;
   overlayClassName?: string;
   showCloseButton?: boolean;
 }) {
@@ -55,6 +57,7 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay
+        forceRender={forceOverlay}
         className={cn(
           isMobileBottomSheet
             ? "max-sm:backdrop-blur-none! max-sm:duration-300 motion-reduce:duration-0"
