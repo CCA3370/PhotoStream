@@ -1,6 +1,6 @@
 import type { PhotoVariantKind } from "@photostream/contracts";
 
-import { PHOTO_WORKER_PROTOCOL_VERSION } from "@/lib/photo-worker-protocol";
+import { PHOTO_WORKER_PROTOCOL_VERSION } from "./photo-worker-protocol";
 
 export interface ProcessedPhotoVariant {
   readonly kind: Exclude<PhotoVariantKind, "photo_original">;
