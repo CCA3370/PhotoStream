@@ -3,18 +3,18 @@
 import type { InferenceSession } from "onnxruntime-web";
 
 import {
-  createPhotoEditTiles,
-  photoEditFeatherWeight,
-  reflectPhotoEditIndex,
-  type PhotoEditTile,
-} from "../lib/photo-edit/ai-tiling";
-import {
   PHOTO_EDIT_MODEL_ASSET_VERSION,
   PHOTO_EDIT_MODEL_BASE,
-  photoEditAiModels,
   type PhotoEditAiModelSpec,
   type PhotoEditAiOperation,
+  photoEditAiModels,
 } from "../lib/photo-edit/ai-models";
+import {
+  createPhotoEditTiles,
+  photoEditFeatherWeight,
+  type PhotoEditTile,
+  reflectPhotoEditIndex,
+} from "../lib/photo-edit/ai-tiling";
 
 type RestoreRequest = {
   readonly id: string;
@@ -282,11 +282,7 @@ function writeRowSegment(options: {
     }
   }
 
-  destination.putImageData(
-    new ImageData(rgba, width, count),
-    0,
-    rowY + localStart,
-  );
+  destination.putImageData(new ImageData(rgba, width, count), 0, rowY + localStart);
 }
 
 function bottomCarry(options: {
@@ -471,7 +467,9 @@ async function restore(request: RestoreRequest): Promise<void> {
     }
 
     for (let index = 0; index < enabled.length; index += 1) {
-      const [operation, strength] = enabled[index] ?? enabled[0];
+      const selected = enabled[index];
+      if (selected === undefined) continue;
+      const [operation, strength] = selected;
       current = await runOperation({
         id: request.id,
         source: current,
