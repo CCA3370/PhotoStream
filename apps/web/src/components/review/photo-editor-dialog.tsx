@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
+import { getLocalReviewPhoto } from "@/lib/local-review-queue";
 import {
   type PhotoEditAiPhase,
   photoEditAiAvailable,
@@ -28,6 +29,12 @@ import {
   type PhotoEditRecipe,
   photoEditRecipeFromUnknown,
 } from "@/lib/photo-edit/recipe";
+import {
+  getLocalPhotoEditDraft,
+  photoEditSourceFingerprint,
+  putAppliedLocalPhotoEditDraft,
+} from "@/lib/photo-edit/local-drafts";
+import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
   applyMediaEditRecipe,
   getMediaEditContext,
@@ -101,11 +108,13 @@ function sourceLabel(origin: MediaEditSourceOrigin | null): string {
 
 export function PhotoEditorDialog({
   mediaId,
+  localPhotoId = null,
   open,
   onOpenChange,
   onApplied,
 }: Readonly<{
   mediaId: string | null;
+  localPhotoId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplied: () => void | Promise<void>;
@@ -137,13 +146,13 @@ export function PhotoEditorDialog({
     denoiseStrength > 0 && recipe.exposureEv >= 0.75 ? Math.min(0.75, recipe.exposureEv * 0.5) : 0;
   const canApply =
     stage === "ready" &&
-    context !== null &&
     source !== null &&
     !pendingElsewhere &&
-    !aiPreviewLoading;
+    !aiPreviewLoading &&
+    (context !== null || localPhotoId !== null);
 
   useEffect(() => {
-    if (!open || mediaId === null) return;
+    if (!open || (mediaId === null && localPhotoId === null)) return;
     const controller = new AbortController();
     let disposed = false;
 
@@ -161,21 +170,49 @@ export function PhotoEditorDialog({
     setAiPreviewLoading(false);
     setAiPreviewPhase(null);
 
-    void Promise.all([
-      getMediaEditContext(mediaId, controller.signal),
-      resolveMediaEditSource(mediaId),
-    ])
-      .then(([nextContext, resolved]) => {
-        if (disposed) return;
-        const nextRecipe =
+    const load = async () => {
+      if (localPhotoId !== null) {
+        const photo = await getLocalReviewPhoto(localPhotoId);
+        if (photo === null) throw new Error("本地照片已不存在");
+        const draft = await getLocalPhotoEditDraft(localPhotoId);
+        const nextContext =
+          photo.mediaId === null ? null : await getMediaEditContext(photo.mediaId, controller.signal);
+        return {
+          context: nextContext,
+          blob: photo.originalBlob,
+          sourceOrigin: "local-original" as const,
+          recipe:
+            draft?.recipe ??
+            (nextContext?.activeRevision === null || nextContext?.activeRevision === undefined
+              ? defaultPhotoEditRecipe
+              : photoEditRecipeFromUnknown(nextContext.activeRevision.recipeJson)),
+        };
+      }
+
+      if (mediaId === null) throw new Error("缺少媒体标识");
+      const [nextContext, resolved] = await Promise.all([
+        getMediaEditContext(mediaId, controller.signal),
+        resolveMediaEditSource(mediaId),
+      ]);
+      return {
+        context: nextContext,
+        blob: resolved.blob,
+        sourceOrigin: resolved.sourceOrigin,
+        recipe:
           nextContext.activeRevision === null
             ? defaultPhotoEditRecipe
-            : photoEditRecipeFromUnknown(nextContext.activeRevision.recipeJson);
-        const url = URL.createObjectURL(resolved.blob);
-        setContext(nextContext);
-        setSource(resolved.blob);
-        setSourceOrigin(resolved.sourceOrigin);
-        setRecipe(nextRecipe);
+            : photoEditRecipeFromUnknown(nextContext.activeRevision.recipeJson),
+      };
+    };
+
+    void load()
+      .then((loaded) => {
+        if (disposed) return;
+        const url = URL.createObjectURL(loaded.blob);
+        setContext(loaded.context);
+        setSource(loaded.blob);
+        setSourceOrigin(loaded.sourceOrigin);
+        setRecipe(loaded.recipe);
         setOriginalUrl(url);
         setStage("ready");
       })
@@ -189,7 +226,7 @@ export function PhotoEditorDialog({
       disposed = true;
       controller.abort();
     };
-  }, [mediaId, open]);
+  }, [localPhotoId, mediaId, open]);
 
   useEffect(() => {
     if (!open || source === null) return;
@@ -345,7 +382,6 @@ export function PhotoEditorDialog({
 
   async function switchRevision(targetRevisionId: string | null): Promise<void> {
     if (
-      mediaId === null ||
       context === null ||
       busy ||
       context.state.pendingRevisionId !== null ||
@@ -358,7 +394,7 @@ export function PhotoEditorDialog({
     setProgress(15);
     try {
       const switched = await switchMediaEditRevision({
-        mediaId,
+        mediaId: context.mediaId,
         expectedGeneration: context.state.generation,
         expectedActiveRevisionId: context.state.activeRevisionId,
         targetRevisionId,
@@ -383,13 +419,55 @@ export function PhotoEditorDialog({
   }
 
   async function apply(): Promise<void> {
-    if (!canApply || mediaId === null || context === null || source === null) return;
+    if (!canApply || source === null) return;
     const controller = new AbortController();
     applyController.current = controller;
     setStage("applying");
     setError(null);
     setProgress(0);
     try {
+      if (localPhotoId !== null) {
+        const photo = await getLocalReviewPhoto(localPhotoId);
+        if (photo === null) throw new Error("本地照片已不存在");
+        await putAppliedLocalPhotoEditDraft({
+          localPhotoId,
+          mediaId: photo.mediaId,
+          recipe,
+          sourceFingerprint: photoEditSourceFingerprint({
+            bytes: photo.totalBytes,
+            width: photo.width,
+            height: photo.height,
+            contentType: photo.originalContentType,
+          }),
+        });
+        setProgress(photo.mediaId === null ? 100 : 5);
+
+        if (photo.mediaId === null) {
+          toast.add({
+            title: "修图已应用到本机",
+            description: "远端媒体建立后会自动同步此修图版本，基础原图上传不受影响。",
+            type: "success",
+          });
+          await onApplied();
+          onOpenChange(false);
+          return;
+        }
+
+        await syncLocalPhotoEditDraft(localPhotoId);
+        const draft = await getLocalPhotoEditDraft(localPhotoId);
+        if (draft?.editState === "failed") {
+          throw new Error(draft.error ?? "修图版本同步失败");
+        }
+        const applied = await getMediaEditContext(photo.mediaId, controller.signal);
+        setContext(applied);
+        setProgress(100);
+        toast.add({ title: "修图版本已同步并应用", type: "success" });
+        await onApplied();
+        onOpenChange(false);
+        return;
+      }
+
+      if (mediaId === null || context === null) return;
       const applied = await applyMediaEditRecipe({
         mediaId,
         recipe,
