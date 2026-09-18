@@ -1,7 +1,6 @@
 "use client";
 
 import { FlagIcon, LoaderCircleIcon } from "lucide-react";
-import type React from "react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -40,12 +39,10 @@ const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonl
 export function PhotoReportButton({
   className,
   mediaId,
-  portalContainer,
   slug,
 }: Readonly<{
   className?: string;
   mediaId: string;
-  portalContainer?: React.RefObject<HTMLElement | null>;
   slug: string;
 }>) {
   const [open, setOpen] = useState(false);
@@ -103,10 +100,9 @@ export function PhotoReportButton({
         <span>投诉</span>
       </DialogTrigger>
       <DialogContent
-        className="public-theme dark max-w-md bg-background text-foreground"
+        className="public-theme dark z-[70] max-w-md bg-background text-foreground"
         forceOverlay
-        overlayClassName="bg-black/55"
-        portalContainer={portalContainer}
+        overlayClassName="z-[60] bg-black/55"
       >
         <DialogHeader>
           <DialogTitle>投诉这张图片</DialogTitle>
@@ -137,7 +133,7 @@ export function PhotoReportButton({
               <SelectTrigger id="photo-report-reason">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent portalContainer={portalContainer}>
+              <SelectContent positionerClassName="z-[80]">
                 <SelectGroup>
                   {reportReasons.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
