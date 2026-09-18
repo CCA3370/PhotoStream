@@ -482,6 +482,12 @@ export const createMediaEditRevisionRequestSchema = z
     denoiseModelVersion: z.string().trim().min(1).max(120).nullable().default(null),
     deblurModel: z.string().trim().min(1).max(120).nullable().default(null),
     deblurModelVersion: z.string().trim().min(1).max(120).nullable().default(null),
+  })
+  .strict();
+export type CreateMediaEditRevisionRequest = z.infer<typeof createMediaEditRevisionRequestSchema>;
+
+export const prepareMediaEditRevisionRequestSchema = z
+  .object({
     variants: z.array(mediaEditVariantInputSchema).length(4),
   })
   .strict()
@@ -498,7 +504,9 @@ export const createMediaEditRevisionRequestSchema = z
       }
     }
   });
-export type CreateMediaEditRevisionRequest = z.infer<typeof createMediaEditRevisionRequestSchema>;
+export type PrepareMediaEditRevisionRequest = z.infer<
+  typeof prepareMediaEditRevisionRequestSchema
+>;
 
 export const mediaEditVariantViewSchema = z
   .object({
