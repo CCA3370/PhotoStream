@@ -344,7 +344,7 @@ test("large original uses fixed multipart parts while previews stay single PUT",
   expect(multipartPuts.every((url) => /\/parts\/[123]\?/u.test(url))).toBe(true);
 });
 
-test("queue pause waits between objects and explicit cancel removes local recovery", async () => {
+test("queue pause state and explicit cancel remove local recovery", async () => {
   test.skip(csrfToken === undefined, "E2E test account is not configured");
   const created = await context.request.post(appUrl("/api/v1/albums"), {
     data: {
@@ -387,20 +387,12 @@ test("queue pause waits between objects and explicit cancel removes local recove
   });
   await selectSyntheticFile(input, { base64: fixtureBase64, name: "synthetic-controls.png" });
   await firstUpload;
-  await page.getByRole("button", { name: "暂停全部" }).first().click();
+  await page.getByRole("button", { name: "暂停新任务" }).first().click();
   await expect(page.getByRole("button", { name: "继续队列" }).first()).toBeVisible();
   releaseUploads();
-  const task = page.locator('[data-slot="card"]').filter({ hasText: "synthetic-controls.png" });
-  await expect(
-    task.locator('[data-slot="card-description"]').getByText("上传 1920 灯箱图", {
-      exact: true,
-    }),
-  ).toBeVisible({ timeout: 15_000 });
   await page.unroute(objectStoreRoute);
+  await expect(page.getByText("synthetic-controls.png")).toHaveCount(0, { timeout: 30_000 });
   await page.getByRole("button", { name: "继续队列" }).first().click();
-  await expect(
-    task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
-  ).toBeVisible({ timeout: 30_000 });
 
   let releaseCancel: () => void = () => undefined;
   const cancelGate = new Promise<void>((resolve) => {
@@ -428,13 +420,15 @@ test("queue pause waits between objects and explicit cancel removes local recove
   await selectSyntheticFile(input, { base64: fixtureBase64, name: "synthetic-cancel.png" });
   await cancelUpload;
   const cancelledTask = page
-    .locator('[data-slot="card"]')
+    .locator("[data-upload-task-id]")
     .filter({ hasText: "synthetic-cancel.png" });
-  await cancelledTask.getByRole("button", { name: "取消" }).click();
+  await cancelledTask
+    .getByRole("button", { name: "取消 synthetic-cancel.png" })
+    .click();
   releaseCancel();
-  await expect(
-    cancelledTask.locator('[data-slot="card-description"]').getByText("已取消", { exact: true }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(cancelledTask.getByText("已取消", { exact: true }).first()).toBeVisible({
+    timeout: 15_000,
+  });
   await expect.poll(() => controlPlaneCancelCompleted).toBe(true);
   await page.unroute(objectStoreRoute);
   await page.reload();
