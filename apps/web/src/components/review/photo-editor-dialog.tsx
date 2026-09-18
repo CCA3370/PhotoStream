@@ -453,7 +453,7 @@ export function PhotoEditorDialog({
           return;
         }
 
-        await syncLocalPhotoEditDraft(localPhotoId);
+        await syncLocalPhotoEditDraft(localPhotoId, controller.signal);
         const draft = await getLocalPhotoEditDraft(localPhotoId);
         if (draft?.editState === "failed") {
           throw new Error(draft.error ?? "修图版本同步失败");
