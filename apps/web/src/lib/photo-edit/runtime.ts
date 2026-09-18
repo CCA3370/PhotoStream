@@ -3,6 +3,8 @@ import type { PhotoEditRecipe } from "./recipe";
 
 export type PhotoEditOutputKind = "photo_480" | "photo_960" | "photo_1920" | "photo_download";
 
+export type PhotoEditRenderableSource = Blob | ImageBitmap;
+
 export interface PhotoEditRenderedOutput {
   readonly kind: PhotoEditOutputKind;
   readonly blob: Blob;
@@ -16,6 +18,7 @@ type WorkerResponse =
   | { readonly id: string; readonly type: "analysis"; readonly analysis: PhotoEditAnalysis }
   | { readonly id: string; readonly type: "progress"; readonly progress: number }
   | { readonly id: string; readonly type: "preview"; readonly blob: Blob }
+  | { readonly id: string; readonly type: "intermediate"; readonly bitmap: ImageBitmap }
   | {
       readonly id: string;
       readonly type: "rendered";
@@ -35,6 +38,7 @@ function runWorker<T>(
   options: {
     readonly signal?: AbortSignal;
     readonly onProgress?: (progress: number) => void;
+    readonly transfer?: Transferable[];
   } = {},
 ): Promise<T> {
   const worker = createWorker();
@@ -70,7 +74,7 @@ function runWorker<T>(
       cleanup();
       reject(new Error(event.message || "照片处理 Worker 失败"));
     });
-    worker.postMessage({ ...request, id });
+    worker.postMessage({ ...request, id }, options.transfer ?? []);
   });
 }
 
@@ -86,19 +90,40 @@ export function analyzeMediaEditSource(
 }
 
 export function renderMediaEditPreview(
-  source: Blob,
+  source: PhotoEditRenderableSource,
   recipe: PhotoEditRecipe,
   options: { readonly signal?: AbortSignal } = {},
 ): Promise<Blob> {
   return runWorker(
     { type: "preview", source, recipe },
     (message) => (message.type === "preview" ? message.blob : undefined),
-    options,
+    {
+      ...options,
+      ...(source instanceof ImageBitmap ? { transfer: [source] } : {}),
+    },
+  );
+}
+
+export function renderMediaEditIntermediate(
+  source: PhotoEditRenderableSource,
+  recipe: PhotoEditRecipe,
+  options: {
+    readonly signal?: AbortSignal;
+    readonly onProgress?: (progress: number) => void;
+  } = {},
+): Promise<ImageBitmap> {
+  return runWorker(
+    { type: "intermediate", source, recipe },
+    (message) => (message.type === "intermediate" ? message.bitmap : undefined),
+    {
+      ...options,
+      ...(source instanceof ImageBitmap ? { transfer: [source] } : {}),
+    },
   );
 }
 
 export function renderMediaEditOutputs(
-  source: Blob,
+  source: PhotoEditRenderableSource,
   recipe: PhotoEditRecipe,
   options: {
     readonly signal?: AbortSignal;
@@ -108,6 +133,9 @@ export function renderMediaEditOutputs(
   return runWorker(
     { type: "render", source, recipe },
     (message) => (message.type === "rendered" ? message.outputs : undefined),
-    options,
+    {
+      ...options,
+      ...(source instanceof ImageBitmap ? { transfer: [source] } : {}),
+    },
   );
 }
