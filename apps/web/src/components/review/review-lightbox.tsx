@@ -102,6 +102,12 @@ function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
   ) {
     return true;
   }
+  if (
+    target instanceof HTMLButtonElement &&
+    target.closest('[data-lightbox-toolbar="true"]') === null
+  ) {
+    return true;
+  }
   const role = target.getAttribute("role");
   return (
     role === "combobox" ||
@@ -605,15 +611,24 @@ export function ReviewLightbox({
                     item={selected.inspector}
                     onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
                     onClose={() => setInspectorOpen(false)}
-                    onDelete={() => onDelete(selected.key)}
+                    onDelete={() => {
+                      onDelete(selected.key);
+                      focusViewer();
+                    }}
                     onOpenBib={() => setBibDialogOpen(true)}
                     onEdit={() => {
                       resetView();
                       setEditMode(true);
                       setEditPreview({ beforeUrl: null, afterUrl: null, loading: true });
                     }}
-                    onStateAction={() => onToggleVisibility(selected.key)}
-                    onToggleFeatured={() => onToggleFeatured(selected.key)}
+                    onStateAction={() => {
+                      onToggleVisibility(selected.key);
+                      focusViewer();
+                    }}
+                    onToggleFeatured={() => {
+                      onToggleFeatured(selected.key);
+                      focusViewer();
+                    }}
                   />
                 )}
               </div>
@@ -656,7 +671,10 @@ export function ReviewLightbox({
                   <span>{Math.round(zoom * 100)}%</span>
                 </div>
 
-                <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl">
+                <div
+                  className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl"
+                  data-lightbox-toolbar="true"
+                >
                   {bibConfirmed ? (
                     <Button
                       aria-label="修改号码确认"

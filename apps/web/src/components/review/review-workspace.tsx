@@ -2311,13 +2311,13 @@ export function ReviewWorkspace({
                     </Button>
                     <Button
                       aria-label="删除照片"
-                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="size-8"
                       disabled={pending || batchBusy || !canDeleteItem(item)}
                       onClick={() => void deleteItem(item)}
                       size="icon"
                       title={canDeleteItem(item) ? "删除照片" : "仅管理员可删除"}
                       type="button"
-                      variant="ghost"
+                      variant="destructive"
                     >
                       {pendingAction === "delete" ? (
                         <LoaderCircleIcon className="size-4 animate-spin" />
