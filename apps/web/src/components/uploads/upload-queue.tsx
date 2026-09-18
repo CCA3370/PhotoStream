@@ -4,6 +4,7 @@ import type { BibConfigView } from "@photostream/contracts";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
+  CircleXIcon,
   FolderOpenIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
@@ -70,6 +71,7 @@ function taskLabel(status: LocalProcessingTaskStatus): string {
   if (status === "queued") return "等待处理";
   if (status === "processing") return "处理中并上传";
   if (status === "staged") return "已上传（默认隐藏）";
+  if (status === "cancelled") return "已取消";
   return "处理或上传失败";
 }
 
@@ -213,13 +215,15 @@ export function UploadQueue({
     let processing = 0;
     let failed = 0;
     let completed = 0;
+    let cancelled = 0;
     for (const task of tasks) {
       if (task.status === "queued") queued += 1;
       else if (task.status === "processing") processing += 1;
       else if (task.status === "failed") failed += 1;
       else if (task.status === "staged") completed += 1;
+      else if (task.status === "cancelled") cancelled += 1;
     }
-    return { queued, processing, failed, completed };
+    return { queued, processing, failed, completed, cancelled };
   }, [tasks]);
 
   useEffect(() => {
@@ -238,6 +242,16 @@ export function UploadQueue({
       toast.add({
         title: "重试队列失败",
         description: error instanceof Error ? error.message : "无法更新上传队列",
+        type: "error",
+      });
+    });
+  }
+
+  function cancelTask(taskId: string): void {
+    void runtime.cancelTask(taskId).catch((error) => {
+      toast.add({
+        title: "取消上传失败",
+        description: error instanceof Error ? error.message : "无法取消该上传任务",
         type: "error",
       });
     });
@@ -275,6 +289,7 @@ export function UploadQueue({
         queued: queueCounts.queued,
         processing: queueCounts.processing,
         failed: queueCounts.failed,
+        cancelled: queueCounts.cancelled,
         retryableFailed: queueCounts.failed,
         pendingReview: items.filter((item) => item.photo.uploadState !== "published").length,
         completed: queueCounts.completed,
@@ -407,12 +422,18 @@ export function UploadQueue({
             </div>
             <div className="divide-y rounded-lg border">
               {visibleTasks.map((task) => (
-                <div className="flex items-start gap-3 px-3 py-2.5" key={task.id}>
+                <div
+                  className="flex items-start gap-3 px-3 py-2.5"
+                  data-upload-task-id={task.id}
+                  key={task.id}
+                >
                   <div className="mt-0.5 text-muted-foreground">
                     {task.status === "processing" ? (
                       <LoaderCircleIcon className="size-4 animate-spin" />
                     ) : task.status === "failed" ? (
                       <CircleAlertIcon className="size-4 text-destructive" />
+                    ) : task.status === "cancelled" ? (
+                      <CircleXIcon className="size-4" />
                     ) : (
                       <CircleCheckIcon className="size-4" />
                     )}
@@ -426,9 +447,22 @@ export function UploadQueue({
                       <p className="mt-1 text-xs text-destructive">{task.error}</p>
                     )}
                   </div>
-                  <Badge variant={task.status === "failed" ? "destructive" : "outline"}>
-                    {taskLabel(task.status)}
-                  </Badge>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={task.status === "failed" ? "destructive" : "outline"}>
+                      {taskLabel(task.status)}
+                    </Badge>
+                    {task.status === "cancelled" ? null : (
+                      <Button
+                        aria-label={`取消 ${task.fileName}`}
+                        onClick={() => cancelTask(task.id)}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        取消
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -470,21 +504,23 @@ export function UploadQueue({
                     >
                       <SlidersHorizontalIcon className="size-3.5" />
                     </Button>
-                    <Button
-                      aria-label="从本地队列删除"
-                      className="absolute right-1 top-1 size-8 opacity-0 shadow-sm group-hover:opacity-100 focus-visible:opacity-100"
-                      onClick={() =>
-                        void Promise.all([
-                          deleteLocalReviewPhoto(photo.id),
-                          deleteLocalPhotoEditDraft(photo.id),
-                        ])
-                      }
-                      size="icon"
-                      type="button"
-                      variant="destructive"
-                    >
-                      <Trash2Icon className="size-3.5" />
-                    </Button>
+                    {photo.uploadState === "published" || photo.uploadState === "local" ? (
+                      <Button
+                        aria-label="删除本机照片副本"
+                        className="absolute right-1 top-1 size-8 opacity-0 shadow-sm group-hover:opacity-100 focus-visible:opacity-100"
+                        onClick={() =>
+                          void Promise.all([
+                            deleteLocalReviewPhoto(photo.id),
+                            deleteLocalPhotoEditDraft(photo.id),
+                          ])
+                        }
+                        size="icon"
+                        type="button"
+                        variant="destructive"
+                      >
+                        <Trash2Icon className="size-3.5" />
+                      </Button>
+                    ) : null}
                   </div>
                   <div className="p-2">
                     <p className="truncate text-xs font-medium">{photo.fileName}</p>
