@@ -1,6 +1,7 @@
 import type {
   CreateMediaEditRevisionRequest,
   MediaEditContextView,
+  PrepareMediaEditRevisionRequest,
   MediaEditVariantKind,
   SignedUpload,
 } from "@photostream/contracts";
@@ -162,20 +163,7 @@ export async function applyMediaEditRecipe(options: {
   readonly onProgress?: (progress: number) => void;
 }): Promise<MediaEditContextView> {
   options.onProgress?.(0);
-  const outputs = await renderRecipeOutputs({
-    source: options.source,
-    recipe: options.recipe,
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-    onProgress: (progress) => options.onProgress?.(progress * 0.72),
-  });
-
-  const orderedKinds: readonly MediaEditVariantKind[] = [
-    "photo_480",
-    "photo_960",
-    "photo_1920",
-    "photo_download",
-  ];
-  const request: CreateMediaEditRevisionRequest = {
+  const reserveRequest: CreateMediaEditRevisionRequest = {
     basedOnRevisionId: options.basedOnRevisionId,
     basedOnGeneration: options.basedOnGeneration,
     pipelineVersion: photoEditPipelineVersion,
@@ -186,30 +174,55 @@ export async function applyMediaEditRecipe(options: {
       options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.version : null,
     deblurModel: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.id : null,
     deblurModelVersion: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
-    variants: orderedKinds.map((kind) => {
-      const output = outputByKind(outputs, kind);
-      return {
-        kind,
-        format: output.format,
-        contentType: output.contentType,
-        width: output.width,
-        height: output.height,
-        bytes: output.blob.size,
-      };
-    }),
   };
 
-  const created = await clientMutation<MediaEditContextView>(
+  const reserved = await clientMutation<MediaEditContextView>(
     `/api/v1/media/${encodeURIComponent(options.mediaId)}/edits`,
     {
-      body: request,
+      body: reserveRequest,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     },
   );
-  const revisionId = created.state.pendingRevisionId;
-  if (revisionId === null) throw new Error("修图版本创建失败");
+  const revisionId = reserved.state.pendingRevisionId;
+  if (revisionId === null) throw new Error("修图版本预留失败");
+  options.onProgress?.(0.02);
 
   try {
+    const outputs = await renderRecipeOutputs({
+      source: options.source,
+      recipe: options.recipe,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      onProgress: (progress) => options.onProgress?.(0.02 + progress * 0.68),
+    });
+
+    const orderedKinds: readonly MediaEditVariantKind[] = [
+      "photo_480",
+      "photo_960",
+      "photo_1920",
+      "photo_download",
+    ];
+    const prepareRequest: PrepareMediaEditRevisionRequest = {
+      variants: orderedKinds.map((kind) => {
+        const output = outputByKind(outputs, kind);
+        return {
+          kind,
+          format: output.format,
+          contentType: output.contentType,
+          width: output.width,
+          height: output.height,
+          bytes: output.blob.size,
+        };
+      }),
+    };
+    await clientMutation<MediaEditContextView>(
+      `/api/v1/media/${encodeURIComponent(options.mediaId)}/edits/${encodeURIComponent(revisionId)}/prepare`,
+      {
+        body: prepareRequest,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    );
+    options.onProgress?.(0.72);
+
     for (let index = 0; index < orderedKinds.length; index += 1) {
       const kind = orderedKinds[index] ?? "photo_480";
       await uploadOutput(options.mediaId, revisionId, outputByKind(outputs, kind), options.signal);
