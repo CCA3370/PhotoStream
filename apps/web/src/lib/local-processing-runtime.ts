@@ -10,6 +10,7 @@ import {
   updateLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
+import { getLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
 import {
   createProgressiveUpload,
@@ -428,7 +429,37 @@ class LocalProcessingRuntime {
             uploadState: "uploading",
             error: null,
           });
-          void syncLocalPhotoEditDraft(task.localPhotoId).catch(() => undefined);
+
+          const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
+          if (
+            editDraft !== null &&
+            editDraft.editState !== "synced" &&
+            editDraft.sourceFingerprint.length > 0
+          ) {
+            let reserved = false;
+            let releaseReservation: (() => void) | null = null;
+            const reservationReady = new Promise<void>((resolve) => {
+              releaseReservation = resolve;
+            });
+            const syncPromise = syncLocalPhotoEditDraft(
+              task.localPhotoId,
+              undefined,
+              () => {
+                reserved = true;
+                releaseReservation?.();
+              },
+            );
+            void syncPromise.catch(() => undefined);
+            await Promise.race([
+              reservationReady,
+              syncPromise.then(() => {
+                if (!reserved) {
+                  throw new Error("修图版本未能在基础预览上传前建立发布门禁");
+                }
+              }),
+            ]);
+          }
+
           uploads.push(uploadProgressiveOriginal(intent, task.file));
         },
         onVariant: async (variant) => {
