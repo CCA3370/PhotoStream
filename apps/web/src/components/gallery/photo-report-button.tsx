@@ -89,12 +89,7 @@ export function PhotoReportButton({
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger
         render={
-          <Button
-            aria-label="投诉这张图片"
-            className={className}
-            type="button"
-            variant="outline"
-          />
+          <Button aria-label="投诉这张图片" className={className} type="button" variant="outline" />
         }
       >
         <FlagIcon className="size-4" />
@@ -162,11 +157,22 @@ export function PhotoReportButton({
         </div>
 
         <DialogFooter>
-          <Button disabled={submitting} onClick={() => setOpen(false)} type="button" variant="outline">
+          <Button
+            disabled={submitting}
+            onClick={() => setOpen(false)}
+            type="button"
+            variant="outline"
+          >
             取消
           </Button>
-          <Button disabled={message.trim().length < 2 || submitting} onClick={() => void submit()} type="button">
-            {submitting ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : null}
+          <Button
+            disabled={message.trim().length < 2 || submitting}
+            onClick={() => void submit()}
+            type="button"
+          >
+            {submitting ? (
+              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+            ) : null}
             提交投诉
           </Button>
         </DialogFooter>
