@@ -23,18 +23,18 @@ import {
   restoreMediaEditPreview,
 } from "@/lib/photo-edit/ai-runtime";
 import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
+import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
+import {
+  getLocalPhotoEditDraft,
+  photoEditSourceFingerprint,
+  putAppliedLocalPhotoEditDraft,
+} from "@/lib/photo-edit/local-drafts";
 import {
   defaultPhotoEditRecipe,
   normalizePhotoEditRecipe,
   type PhotoEditRecipe,
   photoEditRecipeFromUnknown,
 } from "@/lib/photo-edit/recipe";
-import {
-  getLocalPhotoEditDraft,
-  photoEditSourceFingerprint,
-  putAppliedLocalPhotoEditDraft,
-} from "@/lib/photo-edit/local-drafts";
-import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
   applyMediaEditRecipe,
   getMediaEditContext,
@@ -176,7 +176,9 @@ export function PhotoEditorDialog({
         if (photo === null) throw new Error("本地照片已不存在");
         const draft = await getLocalPhotoEditDraft(localPhotoId);
         const nextContext =
-          photo.mediaId === null ? null : await getMediaEditContext(photo.mediaId, controller.signal);
+          photo.mediaId === null
+            ? null
+            : await getMediaEditContext(photo.mediaId, controller.signal);
         return {
           context: nextContext,
           blob: photo.originalBlob,
