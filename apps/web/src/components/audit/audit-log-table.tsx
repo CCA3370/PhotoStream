@@ -60,10 +60,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
     setPending(true);
     setError(null);
     const timer = window.setTimeout(() => {
-      void clientGet<AuditLogList>(
-        auditPath({ query, resultFilter }),
-        controller.signal,
-      )
+      void clientGet<AuditLogList>(auditPath({ query, resultFilter }), controller.signal)
         .then((page) => {
           if (requestVersion.current !== version) return;
           setItems(page.items);
@@ -89,9 +86,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
     setPending(true);
     setError(null);
     try {
-      const page = await clientGet<AuditLogList>(
-        auditPath({ cursor, query, resultFilter }),
-      );
+      const page = await clientGet<AuditLogList>(auditPath({ cursor, query, resultFilter }));
       if (requestVersion.current !== version) return;
       setItems((current) => [...current, ...page.items]);
       setCursor(page.nextCursor);
