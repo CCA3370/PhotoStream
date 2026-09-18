@@ -9,6 +9,7 @@ import type {
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 import { CopyIcon, ExternalLinkIcon, KeyRoundIcon, LoaderCircleIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -180,6 +181,7 @@ export function AlbumSettings({
       if (action === "basic") {
         setTitle(updated.title);
         setDescription(updated.description);
+        router.refresh();
       }
       if (action === "privacy") setPrivacyNotice(updated.privacyNotice);
       showNotice(label);
