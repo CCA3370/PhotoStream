@@ -591,7 +591,7 @@ export function ReviewWorkspace({
         const hasActiveEdit =
           item.edit?.activeRevisionId !== null && item.edit?.activeRevisionId !== undefined;
         return {
-          key: linkedLocal === null ? `remote:${item.id}` : `local:${linkedLocal.photo.id}`,
+          key: `remote:${item.id}`,
           source: "remote" as const,
           remote: item,
           local: linkedLocal,
@@ -683,6 +683,17 @@ export function ReviewWorkspace({
       return next.size === current.size ? current : next;
     });
   }, [items]);
+
+  useEffect(() => {
+    if (activeKey === null || !activeKey.startsWith("local:")) return;
+    if (items.some((item) => item.key === activeKey)) return;
+    const localPhotoId = activeKey.slice("local:".length);
+    const linked = localMedia.find((item) => item.photo.id === localPhotoId);
+    const mediaId = linked?.photo.mediaId ?? null;
+    if (mediaId === null) return;
+    const remoteKey = `remote:${mediaId}`;
+    if (items.some((item) => item.key === remoteKey)) setActiveKey(remoteKey);
+  }, [activeKey, items, localMedia]);
 
   const selectedItems = useMemo(
     () =>
@@ -1568,13 +1579,6 @@ export function ReviewWorkspace({
     return () => observer.disconnect();
   }, [cursor, loadMore, selectingAll]);
 
-  const filters: readonly { readonly id: FilterMode; readonly label: string }[] = [
-    { id: "all", label: "全部" },
-    { id: "local", label: "处理中" },
-    { id: "published", label: "显示中" },
-    { id: "hidden", label: "已隐藏" },
-    { id: "featured", label: "精选" },
-  ];
   const advancedFiltersActive =
     ingestFilter !== "all" ||
     bibDecision !== "all" ||
@@ -1649,285 +1653,301 @@ export function ReviewWorkspace({
           "xl:pr-[21rem]",
       )}
     >
-      <div className="flex flex-col gap-2 rounded-lg border bg-card px-2 py-1.5">
-        <div className="flex min-h-8 flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {filters.map((item) => (
-              <Button
-                className="h-7 shrink-0 px-2.5 text-xs"
-                key={item.id}
-                onClick={() => {
-                  setFilter(item.id);
-                  resetSelection();
-                }}
-                size="sm"
-                type="button"
-                variant={filter === item.id ? "secondary" : "ghost"}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            {categories.length === 0 ? null : (
-              <Select
-                items={[
-                  { label: "全部分类", value: "all" },
-                  ...categories.map((item) => ({ label: item.name, value: item.id })),
-                ]}
-                onValueChange={(value) => {
-                  setCategory(value ?? "all");
-                  resetSelection();
-                }}
-                value={category}
-              >
-                <SelectTrigger aria-label="分类筛选" className="h-7 w-28 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">全部分类</SelectItem>
-                    {categories.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            )}
-            {uploaders.length === 0 ? null : (
-              <Select
-                items={[
-                  { label: "全部上传者", value: "all" },
-                  ...uploaders.map((item) => ({ label: item.displayName, value: item.id })),
-                ]}
-                onValueChange={(value) => {
-                  setUploader(value ?? "all");
-                  resetSelection();
-                }}
-                value={uploader}
-              >
-                <SelectTrigger aria-label="上传者筛选" className="h-7 w-28 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="all">全部上传者</SelectItem>
-                    {uploaders.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.displayName}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            )}
-            <Select
-              items={[
-                { label: "最新优先", value: "newest" },
-                { label: "最早优先", value: "oldest" },
-              ]}
-              onValueChange={(value) => {
-                setSortOrder((value ?? "newest") as SortOrder);
-                resetSelection();
-              }}
-              value={sortOrder}
-            >
-              <SelectTrigger aria-label="照片排序" className="h-7 w-24 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="newest">最新优先</SelectItem>
-                  <SelectItem value="oldest">最早优先</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Select
-              items={[
-                { label: "紧凑", value: "compact" },
-                { label: "标准", value: "standard" },
-                { label: "大图", value: "large" },
-              ]}
-              onValueChange={(value) => changeGridDensity((value ?? "standard") as GridDensity)}
-              value={gridDensity}
-            >
-              <SelectTrigger aria-label="网格密度" className="h-7 w-20 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="compact">紧凑</SelectItem>
-                  <SelectItem value="standard">标准</SelectItem>
-                  <SelectItem value="large">大图</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Button
-              className="h-7 px-2.5 text-xs"
-              onClick={() => {
-                if (selectionMode) resetSelection();
-                else setInspectorKey(null);
-                setSelectionMode((current) => !current);
-              }}
-              size="sm"
-              type="button"
-              variant={selectionMode ? "secondary" : "outline"}
-            >
-              {selectionMode ? "退出批量" : "批量选择"}
-            </Button>
-            <Button
-              aria-label="刷新审核列表"
-              className="size-7"
-              onClick={() =>
-                void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch(
-                  (cause) => setError(cause instanceof Error ? cause.message : "刷新失败"),
-                )
-              }
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <RefreshCwIcon className="size-3.5" />
-            </Button>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1.5">
+        <Select
+          items={[
+            { label: "全部状态", value: "all" },
+            { label: "处理中", value: "local" },
+            { label: "显示中", value: "published" },
+            { label: "已隐藏", value: "hidden" },
+            { label: "精选", value: "featured" },
+          ]}
+          onValueChange={(value) => {
+            setFilter((value ?? "all") as FilterMode);
+            resetSelection();
+          }}
+          value={filter}
+        >
+          <SelectTrigger aria-label="照片状态筛选" className="h-8 w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="local">处理中</SelectItem>
+              <SelectItem value="published">显示中</SelectItem>
+              <SelectItem value="hidden">已隐藏</SelectItem>
+              <SelectItem value="featured">精选</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
 
-        <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
+        {categories.length === 0 ? null : (
           <Select
             items={[
-              { label: "全部处理状态", value: "all" },
-              { label: "不完整", value: "incomplete" },
-              { label: "处理失败", value: "failed" },
+              { label: "全部分类", value: "all" },
+              ...categories.map((item) => ({ label: item.name, value: item.id })),
             ]}
-            onValueChange={(value) => setIngestFilter((value ?? "all") as IngestFilter)}
-            value={ingestFilter}
+            onValueChange={(value) => {
+              setCategory(value ?? "all");
+              resetSelection();
+            }}
+            value={category}
           >
-            <SelectTrigger aria-label="处理状态筛选" className="h-7 w-28 text-xs">
+            <SelectTrigger aria-label="分类筛选" className="h-8 w-40 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">全部处理状态</SelectItem>
-                <SelectItem value="incomplete">不完整</SelectItem>
-                <SelectItem value="failed">处理失败</SelectItem>
+                <SelectItem value="all">全部分类</SelectItem>
+                {categories.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>
+        )}
+
+        {uploaders.length === 0 ? null : (
           <Select
             items={[
-              { label: "全部号码状态", value: "all" },
-              { label: "待复核", value: "pending" },
-              { label: "已确认号码", value: "numbers_confirmed" },
-              { label: "已确认无号码", value: "no_number_confirmed" },
-              { label: "需复核", value: "needs_review" },
+              { label: "全部上传者", value: "all" },
+              ...uploaders.map((item) => ({ label: item.displayName, value: item.id })),
             ]}
-            onValueChange={(value) => setBibDecision((value ?? "all") as BibDecisionFilter)}
-            value={bibDecision}
+            onValueChange={(value) => {
+              setUploader(value ?? "all");
+              resetSelection();
+            }}
+            value={uploader}
           >
-            <SelectTrigger aria-label="号码审核状态筛选" className="h-7 w-32 text-xs">
+            <SelectTrigger aria-label="上传者筛选" className="h-8 w-40 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">全部号码状态</SelectItem>
-                <SelectItem value="pending">待复核</SelectItem>
-                <SelectItem value="numbers_confirmed">已确认号码</SelectItem>
-                <SelectItem value="no_number_confirmed">已确认无号码</SelectItem>
-                <SelectItem value="needs_review">需复核</SelectItem>
+                <SelectItem value="all">全部上传者</SelectItem>
+                {uploaders.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.displayName}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>
+        )}
+
+        <Select
+          items={[
+            { label: "最新优先", value: "newest" },
+            { label: "最早优先", value: "oldest" },
+          ]}
+          onValueChange={(value) => {
+            setSortOrder((value ?? "newest") as SortOrder);
+            resetSelection();
+          }}
+          value={sortOrder}
+        >
+          <SelectTrigger aria-label="照片排序" className="h-8 w-28 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="newest">最新优先</SelectItem>
+              <SelectItem value="oldest">最早优先</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        <Select
+          items={[
+            { label: "紧凑", value: "compact" },
+            { label: "标准", value: "standard" },
+            { label: "大图", value: "large" },
+          ]}
+          onValueChange={(value) => changeGridDensity((value ?? "standard") as GridDensity)}
+          value={gridDensity}
+        >
+          <SelectTrigger aria-label="网格密度" className="h-8 w-24 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="compact">紧凑</SelectItem>
+              <SelectItem value="standard">标准</SelectItem>
+              <SelectItem value="large">大图</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        <Select
+          items={[
+            { label: "全部处理状态", value: "all" },
+            { label: "不完整", value: "incomplete" },
+            { label: "处理失败", value: "failed" },
+          ]}
+          onValueChange={(value) => setIngestFilter((value ?? "all") as IngestFilter)}
+          value={ingestFilter}
+        >
+          <SelectTrigger aria-label="处理状态筛选" className="h-8 w-36 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部处理状态</SelectItem>
+              <SelectItem value="incomplete">不完整</SelectItem>
+              <SelectItem value="failed">处理失败</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        <Select
+          items={[
+            { label: "全部号码状态", value: "all" },
+            { label: "待复核", value: "pending" },
+            { label: "已确认号码", value: "numbers_confirmed" },
+            { label: "已确认无号码", value: "no_number_confirmed" },
+            { label: "需复核", value: "needs_review" },
+          ]}
+          onValueChange={(value) => setBibDecision((value ?? "all") as BibDecisionFilter)}
+          value={bibDecision}
+        >
+          <SelectTrigger aria-label="号码审核状态筛选" className="h-8 w-40 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部号码状态</SelectItem>
+              <SelectItem value="pending">待复核</SelectItem>
+              <SelectItem value="numbers_confirmed">已确认号码</SelectItem>
+              <SelectItem value="no_number_confirmed">已确认无号码</SelectItem>
+              <SelectItem value="needs_review">需复核</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        <Select
+          items={[
+            { label: "全部 OCR 状态", value: "all" },
+            { label: "未开始", value: "not_started" },
+            { label: "识别中", value: "processing" },
+            { label: "已完成", value: "completed" },
+            { label: "识别失败", value: "failed" },
+            { label: "不支持", value: "unsupported" },
+          ]}
+          onValueChange={(value) => setBibOcrStatus((value ?? "all") as BibOcrFilter)}
+          value={bibOcrStatus}
+        >
+          <SelectTrigger aria-label="号码 OCR 状态筛选" className="h-8 w-36 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部 OCR 状态</SelectItem>
+              <SelectItem value="not_started">未开始</SelectItem>
+              <SelectItem value="processing">识别中</SelectItem>
+              <SelectItem value="completed">已完成</SelectItem>
+              <SelectItem value="failed">识别失败</SelectItem>
+              <SelectItem value="unsupported">不支持</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        {gradeOptions.length === 0 ? null : (
           <Select
             items={[
-              { label: "全部 OCR 状态", value: "all" },
-              { label: "未开始", value: "not_started" },
-              { label: "识别中", value: "processing" },
-              { label: "已完成", value: "completed" },
-              { label: "识别失败", value: "failed" },
-              { label: "不支持", value: "unsupported" },
+              { label: "全部年级", value: "all" },
+              ...gradeOptions.map((item) => ({ label: item.displayName, value: item.id })),
             ]}
-            onValueChange={(value) => setBibOcrStatus((value ?? "all") as BibOcrFilter)}
-            value={bibOcrStatus}
+            onValueChange={(value) => {
+              setGradeOption(value ?? "all");
+              setClassOption("all");
+            }}
+            value={gradeOption}
           >
-            <SelectTrigger aria-label="号码 OCR 状态筛选" className="h-7 w-28 text-xs">
+            <SelectTrigger aria-label="年级筛选" className="h-8 w-32 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">全部 OCR 状态</SelectItem>
-                <SelectItem value="not_started">未开始</SelectItem>
-                <SelectItem value="processing">识别中</SelectItem>
-                <SelectItem value="completed">已完成</SelectItem>
-                <SelectItem value="failed">识别失败</SelectItem>
-                <SelectItem value="unsupported">不支持</SelectItem>
+                <SelectItem value="all">全部年级</SelectItem>
+                {gradeOptions.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.displayName}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>
-          {gradeOptions.length === 0 ? null : (
-            <Select
-              items={[
-                { label: "全部年级", value: "all" },
-                ...gradeOptions.map((item) => ({ label: item.displayName, value: item.id })),
-              ]}
-              onValueChange={(value) => {
-                setGradeOption(value ?? "all");
-                setClassOption("all");
-              }}
-              value={gradeOption}
-            >
-              <SelectTrigger aria-label="年级筛选" className="h-7 w-28 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">全部年级</SelectItem>
-                  {gradeOptions.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.displayName}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-          {classOptions.length === 0 || gradeOption === "all" ? null : (
-            <Select
-              items={[
-                { label: "全部班级", value: "all" },
-                ...classOptions.map((item) => ({ label: item.displayName, value: item.id })),
-              ]}
-              onValueChange={(value) => setClassOption(value ?? "all")}
-              value={classOption}
-            >
-              <SelectTrigger aria-label="班级筛选" className="h-7 w-28 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">全部班级</SelectItem>
-                  {classOptions.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.displayName}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-          {advancedFiltersActive ? (
-            <Button
-              className="h-7 px-2 text-xs"
-              onClick={clearAdvancedFilters}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              清除高级筛选
-            </Button>
-          ) : null}
-        </div>
+        )}
+
+        {classOptions.length === 0 || gradeOption === "all" ? null : (
+          <Select
+            items={[
+              { label: "全部班级", value: "all" },
+              ...classOptions.map((item) => ({ label: item.displayName, value: item.id })),
+            ]}
+            onValueChange={(value) => setClassOption(value ?? "all")}
+            value={classOption}
+          >
+            <SelectTrigger aria-label="班级筛选" className="h-8 w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">全部班级</SelectItem>
+                {classOptions.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.displayName}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+
+        <Button
+          className="ml-auto h-8 px-3 text-xs"
+          onClick={() => {
+            if (selectionMode) resetSelection();
+            else setInspectorKey(null);
+            setSelectionMode((current) => !current);
+          }}
+          size="sm"
+          type="button"
+          variant={selectionMode ? "secondary" : "outline"}
+        >
+          {selectionMode ? "退出批量" : "批量选择"}
+        </Button>
+
+        {advancedFiltersActive ? (
+          <Button
+            className="h-8 px-2.5 text-xs"
+            onClick={clearAdvancedFilters}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            清除筛选
+          </Button>
+        ) : null}
+
+        <Button
+          aria-label="刷新审核列表"
+          className="size-8"
+          onClick={() =>
+            void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch((cause) =>
+              setError(cause instanceof Error ? cause.message : "刷新失败"),
+            )
+          }
+          size="icon"
+          title="刷新审核列表"
+          type="button"
+          variant="ghost"
+        >
+          <RefreshCwIcon className="size-3.5" />
+        </Button>
       </div>
 
       {selectionMode ? (
@@ -2135,15 +2155,6 @@ export function ReviewWorkspace({
             const bibConfirmed = isBibReviewConfirmed(item.bib);
             const ocrPending = bibOcrIsPending(item);
             const bibBlocked = !bibConfirmed && ocrPending;
-            const statusLabel = published
-              ? "显示中"
-              : hidden
-                ? "已隐藏"
-                : item.source === "local"
-                  ? "本机处理中"
-                  : item.publicationStatus === "pending_review"
-                    ? "待审核"
-                    : "上传处理中";
             return (
               <div
                 className={cn(
@@ -2210,31 +2221,6 @@ export function ReviewWorkspace({
                       )}
                     </Button>
                   ) : null}
-                  <div className="pointer-events-none absolute right-1.5 top-1.5 flex max-w-[75%] flex-wrap justify-end gap-1">
-                    <Badge
-                      className="bg-background/90 text-foreground shadow-sm"
-                      variant="secondary"
-                    >
-                      {statusLabel}
-                    </Badge>
-                    {item.featured ? (
-                      <Badge
-                        className="bg-background/90 text-foreground shadow-sm"
-                        variant="secondary"
-                      >
-                        <StarIcon className="size-3 fill-current" />
-                        精选
-                      </Badge>
-                    ) : null}
-                    {!bibConfirmed ? (
-                      <Badge
-                        className="bg-background/90 text-foreground shadow-sm"
-                        variant="secondary"
-                      >
-                        {ocrPending ? "号码识别中" : "号码待复核"}
-                      </Badge>
-                    ) : null}
-                  </div>
                 </div>
                 {selectionMode ? null : (
                   <div className="flex items-center justify-center gap-1 border-t bg-card p-1.5">
@@ -2322,6 +2308,22 @@ export function ReviewWorkspace({
                       variant={inspectorKey === item.key ? "secondary" : "ghost"}
                     >
                       <PanelRightOpenIcon className="size-4" />
+                    </Button>
+                    <Button
+                      aria-label="删除照片"
+                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={pending || batchBusy || !canDeleteItem(item)}
+                      onClick={() => void deleteItem(item)}
+                      size="icon"
+                      title={canDeleteItem(item) ? "删除照片" : "仅管理员可删除"}
+                      type="button"
+                      variant="ghost"
+                    >
+                      {pendingAction === "delete" ? (
+                        <LoaderCircleIcon className="size-4 animate-spin" />
+                      ) : (
+                        <Trash2Icon className="size-4" />
+                      )}
                     </Button>
                   </div>
                 )}

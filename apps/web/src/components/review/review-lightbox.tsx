@@ -94,12 +94,22 @@ function stateLabel(status: string): string {
 
 function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return (
+  if (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
-    target instanceof HTMLButtonElement ||
     target.isContentEditable
+  ) {
+    return true;
+  }
+  const role = target.getAttribute("role");
+  return (
+    role === "combobox" ||
+    role === "listbox" ||
+    role === "menuitem" ||
+    role === "option" ||
+    role === "slider" ||
+    target.closest('[data-slot="select-content"]') !== null
   );
 }
 
@@ -198,6 +208,10 @@ export function ReviewLightbox({
     setPan({ x: 0, y: 0 });
   }, []);
 
+  const focusViewer = useCallback(() => {
+    requestAnimationFrame(() => stageRef.current?.focus({ preventScroll: true }));
+  }, []);
+
   const selectOffset = useCallback(
     (offset: number) => {
       if (items.length < 2 || selectedIndex < 0) return;
@@ -225,7 +239,8 @@ export function ReviewLightbox({
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
     deleteTapRef.current = null;
-  }, [resetView, selectedKey]);
+    focusViewer();
+  }, [focusViewer, resetView, selectedKey]);
 
   useEffect(() => {
     if (editMode) return;
@@ -283,11 +298,15 @@ export function ReviewLightbox({
         if (event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
           onToggleVisibility(selected.key);
+          focusViewer();
         }
       } else if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        if (selected.pendingAction === null) onToggleFeatured(selected.key);
+        if (selected.pendingAction === null) {
+          onToggleFeatured(selected.key);
+          focusViewer();
+        }
       } else if (event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
         if (selected.pendingAction !== null) return;
@@ -295,6 +314,7 @@ export function ReviewLightbox({
         if (deleteTapRef.current?.key === selected.key && now - deleteTapRef.current.at <= 900) {
           deleteTapRef.current = null;
           onDelete(selected.key);
+          focusViewer();
         } else {
           deleteTapRef.current = { key: selected.key, at: now };
         }
@@ -308,6 +328,7 @@ export function ReviewLightbox({
   }, [
     changeZoom,
     editMode,
+    focusViewer,
     fullscreenSupported,
     onClose,
     onDelete,
@@ -445,6 +466,7 @@ export function ReviewLightbox({
               onWheel={editMode ? undefined : onWheel}
               ref={stageRef}
               role="application"
+              tabIndex={-1}
             >
               {editMode ? (
                 editPreview.beforeUrl !== null ? (
@@ -639,7 +661,10 @@ export function ReviewLightbox({
                     <Button
                       aria-label="修改号码确认"
                       className="size-8 rounded-lg border-emerald-400/30 bg-emerald-500/80 text-white shadow-none hover:border-emerald-300/40 hover:bg-emerald-500 hover:text-white"
-                      onClick={() => setBibDialogOpen(true)}
+                      onClick={(event) => {
+                        event.currentTarget.blur();
+                        setBibDialogOpen(true);
+                      }}
                       size="icon-sm"
                       title="号码已确认，点击修改"
                       type="button"
@@ -657,7 +682,11 @@ export function ReviewLightbox({
                       selected.featured && "text-amber-400 hover:text-amber-300",
                     )}
                     disabled={busy}
-                    onClick={() => onToggleFeatured(selected.key)}
+                    onClick={(event) => {
+                      event.currentTarget.blur();
+                      onToggleFeatured(selected.key);
+                      focusViewer();
+                    }}
                     size="icon-sm"
                     title={selected.featured ? "取消精选 (Enter)" : "精选 (Enter)"}
                     type="button"
@@ -678,7 +707,11 @@ export function ReviewLightbox({
                         "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
                     )}
                     disabled={busy || !canToggleVisibility}
-                    onClick={() => onToggleVisibility(selected.key)}
+                    onClick={(event) => {
+                      event.currentTarget.blur();
+                      onToggleVisibility(selected.key);
+                      focusViewer();
+                    }}
                     size="icon-sm"
                     style={
                       hidden
@@ -707,7 +740,10 @@ export function ReviewLightbox({
                     aria-label="照片属性"
                     className={cn(toolbarButtonClass, "size-8")}
                     disabled={busy}
-                    onClick={() => setInspectorOpen(true)}
+                    onClick={(event) => {
+                      event.currentTarget.blur();
+                      setInspectorOpen(true);
+                    }}
                     size="icon-sm"
                     title="照片属性"
                     type="button"
@@ -719,7 +755,11 @@ export function ReviewLightbox({
                     aria-label="删除"
                     className="size-8 rounded-lg border-red-400/20 bg-red-500/25 text-red-100 shadow-none backdrop-blur-md hover:border-red-400/35 hover:bg-red-500/40 hover:text-white disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35"
                     disabled={busy || !selected.canDelete}
-                    onClick={() => onDelete(selected.key)}
+                    onClick={(event) => {
+                      event.currentTarget.blur();
+                      onDelete(selected.key);
+                      focusViewer();
+                    }}
                     size="icon-sm"
                     title={selected.canDelete ? "删除（键盘连续按两次 Delete）" : "仅管理员可删除"}
                     type="button"
