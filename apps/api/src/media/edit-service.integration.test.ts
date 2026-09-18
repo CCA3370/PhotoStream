@@ -342,6 +342,27 @@ maybeDescribe("media edit revisions", () => {
     await expect(
       service.getContext({ id: other.id, role: "uploader" }, mediaId),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      service.apply({
+        actor: { id: other.id, role: "uploader" },
+        mediaId,
+        revisionId: mediaId,
+        input: { expectedGeneration: 0, expectedActiveRevisionId: null },
+        requestId: "other-uploader-apply",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      service.revert({
+        actor: { id: other.id, role: "uploader" },
+        mediaId,
+        input: {
+          expectedGeneration: 0,
+          expectedActiveRevisionId: null,
+          targetRevisionId: null,
+        },
+        requestId: "other-uploader-revert",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("only signs a remote edit source after the base original is verified", async () => {
