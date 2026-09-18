@@ -241,10 +241,10 @@ AI GPU queue 独立，B inference 仍单并发。
 
 - 上传队列照片使用 IndexedDB `photostream-local-photo-edit-drafts` 持久化；
 - mediaId 尚未建立时 key 为 localPhotoId；
-- draft 保存 recipe、pipeline/model versions、sourceFingerprint、remoteRevisionId 和同步状态；
+- draft 保存 recipe、pipeline/model versions、sourceFingerprint、remoteRevisionId、Apply 时的 basedOnGeneration/basedOnRevisionId 和同步状态；
 - 状态为 `draft / applied_local / syncing / synced / failed`；
 - 仅拖参数、未点击“应用”的 draft 不同步给其他设备，也不阻塞显示；
-- 点击“应用”但 mediaId 尚未建立时进入 `applied_local`，Media 建立后自动绑定 mediaId 并同步；
+- 点击“应用”但 mediaId 尚未建立时进入 `applied_local`，并绑定新 Media 的初始基线 generation=0 / active=null；Media 建立后自动绑定 mediaId 并同步；
 - local original 仍存在时同步必须直接使用 `LocalReviewPhoto.originalBlob`，不得重新 GET 远端原图。
 
 ### 8.2 点击“应用”
@@ -329,7 +329,8 @@ expectedActiveRevisionId
 - 一致：apply，generation + 1；
 - 不一致：409 EDIT_VERSION_CONFLICT；
 - 客户端要求重新载入最新版本；
-- 不允许静默覆盖其他设备已经应用的 revision。
+- 不允许静默覆盖其他设备已经应用的 revision；
+- 本地队列路径也必须沿用用户点击 Apply 时记录的 generation/activeRevisionId；同步前发现服务器已变化则标记冲突，不能自动 rebase 到最新版本。
 
 同一 Media 默认只允许一个服务器 pending revision。另一设备已有 pending 时，新 Apply 返回冲突。
 
