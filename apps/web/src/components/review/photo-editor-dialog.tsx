@@ -16,12 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
-import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import {
+  type PhotoEditAiPhase,
   photoEditAiAvailable,
   restoreMediaEditPreview,
-  type PhotoEditAiPhase,
 } from "@/lib/photo-edit/ai-runtime";
+import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import {
   defaultPhotoEditRecipe,
   normalizePhotoEditRecipe,
@@ -130,9 +130,11 @@ export function PhotoEditorDialog({
   const busy = stage === "loading" || stage === "analyzing" || stage === "applying";
   const pendingElsewhere = context?.state.pendingRevisionId != null;
   const aiAvailable = photoEditAiAvailable();
-  const aiEnabled = recipe.denoiseStrength > 0 || recipe.deblurStrength > 0;
+  const denoiseStrength = recipe.denoiseStrength;
+  const deblurStrength = recipe.deblurStrength;
+  const aiEnabled = denoiseStrength > 0 || deblurStrength > 0;
   const aiPreExposure =
-    recipe.denoiseStrength > 0 && recipe.exposureEv >= 0.75
+    denoiseStrength > 0 && recipe.exposureEv >= 0.75
       ? Math.min(0.75, recipe.exposureEv * 0.5)
       : 0;
   const canApply =
@@ -225,7 +227,12 @@ export function PhotoEditorDialog({
           { signal: controller.signal },
         );
       }
-      return restoreMediaEditPreview(aiInput, recipe, {
+      const aiRecipe = normalizePhotoEditRecipe({
+        ...defaultPhotoEditRecipe,
+        denoiseStrength,
+        deblurStrength,
+      });
+      return restoreMediaEditPreview(aiInput, aiRecipe, {
         signal: controller.signal,
         onProgress: ({ phase }) => setAiPreviewPhase(phase),
       });
@@ -254,8 +261,8 @@ export function PhotoEditorDialog({
     aiEnabled,
     aiPreExposure,
     open,
-    recipe.deblurStrength,
-    recipe.denoiseStrength,
+    deblurStrength,
+    denoiseStrength,
     source,
   ]);
 
@@ -665,7 +672,9 @@ export function PhotoEditorDialog({
                 ) : null}
                 {aiPreviewLoading ? (
                   <p className="text-[11px] leading-4 text-muted-foreground">
-                    {aiPreviewPhase === "loading-model" ? "正在加载本地 AI 模型…" : "正在生成 AI 预览…"}
+                    {aiPreviewPhase === "loading-model"
+                      ? "正在加载本地 AI 模型…"
+                      : "正在生成 AI 预览…"}
                   </p>
                 ) : null}
               </section>
