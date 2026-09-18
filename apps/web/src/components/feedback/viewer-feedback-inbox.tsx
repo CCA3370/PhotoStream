@@ -23,6 +23,7 @@ function formatTime(value: string): string {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
+    timeZone: "Asia/Shanghai",
   }).format(date);
 }
 
@@ -144,8 +145,9 @@ export function ViewerFeedbackInbox({
       ) : (
         <div className="grid gap-2.5">
           {items.map((item) => {
-            const isReport = item.kind === "report" && item.mediaId !== null;
-            const mediaHidden = item.mediaStatus === "hidden";
+            const isReport = item.kind === "report";
+            const mediaVisible = item.mediaId !== null && item.mediaStatus === "published";
+            const mediaMissing = item.mediaId === null;
             const hiding = item.mediaId !== null && hidingMediaId === item.mediaId;
             return (
               <article
@@ -162,8 +164,12 @@ export function ViewerFeedbackInbox({
                     ) : null}
                     <span className="truncate text-sm font-medium">{item.albumTitle}</span>
                     {isReport ? (
-                      <Badge variant={mediaHidden ? "secondary" : "outline"}>
-                        {mediaHidden ? "图片已隐藏" : "图片仍显示"}
+                      <Badge variant={mediaVisible ? "outline" : "secondary"}>
+                        {mediaMissing
+                          ? "原图片已删除"
+                          : mediaVisible
+                            ? "图片仍显示"
+                            : "图片已不可见"}
                       </Badge>
                     ) : null}
                   </div>
@@ -183,25 +189,33 @@ export function ViewerFeedbackInbox({
                   <div className="mt-3 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-xs font-medium">目标图片</p>
-                      <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-                        {item.mediaId}
-                      </p>
+                      {item.mediaId === null ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          原图片已被删除，投诉记录继续保留。
+                        </p>
+                      ) : (
+                        <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                          {item.mediaId}
+                        </p>
+                      )}
                     </div>
-                    {canModerate ? (
+                    {canModerate && item.mediaId !== null ? (
                       <Button
                         className="shrink-0"
-                        disabled={mediaHidden || hiding}
-                        onClick={() => void hideReportedPhoto(item.mediaId as string)}
+                        disabled={!mediaVisible || hiding}
+                        onClick={() => void hideReportedPhoto(item.mediaId)}
                         size="sm"
-                        variant={mediaHidden ? "secondary" : "destructive"}
+                        variant={mediaVisible ? "destructive" : "secondary"}
                       >
                         {hiding ? (
                           <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
                         ) : (
                           <EyeOffIcon data-icon="inline-start" />
                         )}
-                        {mediaHidden ? "已下架" : "一键下架图片"}
+                        {mediaVisible ? "一键下架图片" : "已不可见"}
                       </Button>
+                    ) : canModerate ? (
+                      <span className="text-xs text-muted-foreground">无需继续下架</span>
                     ) : (
                       <span className="text-xs text-muted-foreground">仅管理员或审核员可下架图片</span>
                     )}
