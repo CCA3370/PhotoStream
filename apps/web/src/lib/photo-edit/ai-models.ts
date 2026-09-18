@@ -8,12 +8,10 @@ export interface PhotoEditAiModelSpec {
   readonly id: string;
   readonly version: string;
   readonly modelUrl: string;
-  readonly externalData:
-    | {
-        readonly path: string;
-        readonly url: string;
-      }
-    | null;
+  readonly externalData: {
+    readonly path: string;
+    readonly url: string;
+  } | null;
   readonly tileSize: number;
   readonly overlap: number;
   readonly inputDivisor: number;
