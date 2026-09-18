@@ -280,7 +280,8 @@ maybeDescribe("single-photo sharing", () => {
       originalBytes: 4_000_000,
     });
     expect(
-      (await shareService.refreshSharedVariant({ shareId: share.shareId, kind: "photo_1920" })).bytes,
+      (await shareService.refreshSharedVariant({ shareId: share.shareId, kind: "photo_1920" }))
+        .bytes,
     ).toBe(400_000);
 
     const initialLike = await shareService.getSharedLikeState({
