@@ -39,12 +39,12 @@ import {
   listLocalReviewPhotos,
   localQueueSupported,
 } from "@/lib/local-review-queue";
+import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
   deleteLocalPhotoEditDraft,
   getLocalPhotoEditDraft,
   type LocalPhotoEditDraft,
 } from "@/lib/photo-edit/local-drafts";
-import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
