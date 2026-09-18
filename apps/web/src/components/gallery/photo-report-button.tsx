@@ -60,7 +60,7 @@ export function PhotoReportButton({
           body: {
             reason,
             message: detail,
-            pagePath: window.location.pathname + window.location.search,
+            pagePath: `${window.location.pathname}${window.location.search}`.slice(0, 512),
           },
         },
       );
