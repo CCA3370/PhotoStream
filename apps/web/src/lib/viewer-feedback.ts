@@ -4,6 +4,7 @@ export type ViewerReportReason =
   | "inappropriate"
   | "copyright"
   | "inaccurate"
+  | "malicious_spread"
   | "other";
 
 export interface ViewerFeedbackItem {
@@ -37,5 +38,6 @@ export function viewerReportReasonLabel(reason: ViewerReportReason): string {
   if (reason === "inappropriate") return "图片中有不适合公开的内容";
   if (reason === "copyright") return "未经授权使用了我的作品或图片";
   if (reason === "inaccurate") return "图片中的人物或信息有误";
+  if (reason === "malicious_spread") return "这张图片被他人恶意传播或扩散";
   return "其他需要处理的问题";
 }
