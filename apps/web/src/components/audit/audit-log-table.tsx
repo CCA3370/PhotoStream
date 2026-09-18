@@ -2,7 +2,7 @@
 
 import type { AuditLogList, AuditLogView } from "@photostream/contracts";
 import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,19 @@ const auditDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai",
 });
 
+function auditPath(options: {
+  readonly cursor?: string | null;
+  readonly query: string;
+  readonly resultFilter: ResultFilter;
+}): string {
+  const params = new URLSearchParams({ limit: "60" });
+  if (options.cursor) params.set("cursor", options.cursor);
+  const query = options.query.trim();
+  if (query.length > 0) params.set("q", query);
+  if (options.resultFilter !== "all") params.set("result", options.resultFilter);
+  return `/api/v1/audit?${params.toString()}`;
+}
+
 export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) {
   const [items, setItems] = useState<readonly AuditLogView[]>(initial.items);
   const [cursor, setCursor] = useState(initial.nextCursor);
@@ -34,34 +47,59 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  const firstFilterRender = useRef(true);
+  const requestVersion = useRef(0);
 
-  const visibleItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
-    return items.filter((item) => {
-      if (resultFilter === "success" && item.result !== "success") return false;
-      if (resultFilter === "failed" && item.result === "success") return false;
-      if (normalizedQuery.length === 0) return true;
-      return [item.action, item.targetType, item.targetId ?? "", ...item.changedFields]
-        .join("\n")
-        .toLocaleLowerCase("zh-CN")
-        .includes(normalizedQuery);
-    });
-  }, [items, query, resultFilter]);
+  useEffect(() => {
+    if (firstFilterRender.current) {
+      firstFilterRender.current = false;
+      return;
+    }
+    const version = ++requestVersion.current;
+    const controller = new AbortController();
+    setPending(true);
+    setError(null);
+    const timer = window.setTimeout(() => {
+      void clientGet<AuditLogList>(
+        auditPath({ query, resultFilter }),
+        controller.signal,
+      )
+        .then((page) => {
+          if (requestVersion.current !== version) return;
+          setItems(page.items);
+          setCursor(page.nextCursor);
+        })
+        .catch((caught) => {
+          if (controller.signal.aborted || requestVersion.current !== version) return;
+          setError(caught instanceof Error ? caught.message : "审计记录加载失败");
+        })
+        .finally(() => {
+          if (requestVersion.current === version) setPending(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, resultFilter]);
 
   async function loadMore(): Promise<void> {
     if (cursor === null || pending) return;
+    const version = ++requestVersion.current;
     setPending(true);
     setError(null);
     try {
       const page = await clientGet<AuditLogList>(
-        `/api/v1/audit?limit=60&cursor=${encodeURIComponent(cursor)}`,
+        auditPath({ cursor, query, resultFilter }),
       );
+      if (requestVersion.current !== version) return;
       setItems((current) => [...current, ...page.items]);
       setCursor(page.nextCursor);
     } catch (caught) {
+      if (requestVersion.current !== version) return;
       setError(caught instanceof Error ? caught.message : "审计记录加载失败");
     } finally {
-      setPending(false);
+      if (requestVersion.current === version) setPending(false);
     }
   }
 
@@ -72,7 +110,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
           <div className="flex items-center gap-2">
             <CardTitle>操作记录</CardTitle>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {visibleItems.length}/{items.length}
+              已加载 {items.length}
             </span>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -129,14 +167,14 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleItems.length === 0 ? (
+              {items.length === 0 ? (
                 <TableRow>
                   <TableCell className="h-28 text-center text-muted-foreground" colSpan={5}>
                     没有符合条件的记录
                   </TableCell>
                 </TableRow>
               ) : (
-                visibleItems.map((item) => (
+                items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="pl-4 text-xs tabular-nums text-muted-foreground">
                       {auditDateTimeFormatter.format(new Date(item.createdAt))}
