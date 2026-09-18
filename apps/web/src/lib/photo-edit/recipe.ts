@@ -58,8 +58,7 @@ export function normalizePhotoEditRecipe(
 export function photoEditRecipeFromUnknown(value: unknown): PhotoEditRecipe {
   if (typeof value !== "object" || value === null) return defaultPhotoEditRecipe;
   const input = value as Record<string, unknown>;
-  const parsed: Partial<Omit<PhotoEditRecipe, "version">> = {};
-  for (const key of [
+  const keys = [
     "exposureEv",
     "temperature",
     "tint",
@@ -71,9 +70,10 @@ export function photoEditRecipeFromUnknown(value: unknown): PhotoEditRecipe {
     "sharpen",
     "denoiseStrength",
     "deblurStrength",
-  ] as const) {
-    if (typeof input[key] === "number") parsed[key] = input[key];
-  }
+  ] as const;
+  const parsed = Object.fromEntries(
+    keys.flatMap((key) => (typeof input[key] === "number" ? [[key, input[key]]] : [])),
+  ) as Partial<Omit<PhotoEditRecipe, "version">>;
   return normalizePhotoEditRecipe(parsed);
 }
 
