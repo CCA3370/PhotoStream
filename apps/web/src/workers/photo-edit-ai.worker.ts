@@ -34,6 +34,7 @@ type Request = RestoreRequest | CancelRequest;
 
 const scope = self as DedicatedWorkerGlobalScope;
 const sessions = new Map<PhotoEditAiOperation, InferenceSession>();
+const recoveryAttempts = new Map<PhotoEditAiOperation, number>();
 const cancelled = new Set<string>();
 let disabledReason: string | null = null;
 let ortPromise: Promise<typeof import("onnxruntime-web/webgpu")> | null = null;
@@ -197,7 +198,6 @@ async function inferTile(
   operation: PhotoEditAiOperation,
   prepared: PreparedTile,
   tileSize: number,
-  attempt = 0,
 ): Promise<Float32Array> {
   const spec = photoEditAiModels[operation];
   const ort = await ortRuntime();
@@ -218,11 +218,13 @@ async function inferTile(
     return output.data;
   } catch (error) {
     releaseSession(operation);
-    if (attempt === 0) {
-      return inferTile(operation, prepared, tileSize, 1);
-    }
+    const attempts = recoveryAttempts.get(operation) ?? 0;
     const message = error instanceof Error ? error.message : String(error);
-    disabledReason = `WebGPU AI 推理失败，本次会话已禁用 AI：${message}`;
+    if (attempts === 0) {
+      recoveryAttempts.set(operation, 1);
+      throw new Error(`WebGPU AI 推理中断，模型会话已释放；请重试本次操作：${message}`);
+    }
+    disabledReason = `WebGPU AI 再次失败，本次页面会话已禁用 AI：${message}`;
     throw new Error(disabledReason);
   }
 }
