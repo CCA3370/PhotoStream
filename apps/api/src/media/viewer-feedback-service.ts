@@ -13,6 +13,7 @@ export type ViewerReportReason =
   | "inappropriate"
   | "copyright"
   | "inaccurate"
+  | "malicious_spread"
   | "other";
 
 export interface ViewerFeedbackView {
