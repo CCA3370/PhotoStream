@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   type AlbumView,
   type CreateAlbumRequest,
@@ -211,6 +211,166 @@ export class PhotoService {
     const row = await this.#albumById(this.#database, albumId);
     if (row === null) throw this.#albumNotFound();
     return albumView(row);
+  }
+
+  async reviewRevision(actor: InternalActor, albumId: string): Promise<string> {
+    requirePermission(actor.role, "album:read");
+    const [row] = await this.#database
+      .select({
+        albumUpdatedAt: schema.albums.updatedAt,
+        mediaCount: sql<number>`(
+          select count(*)::int
+          from ${schema.media}
+          where ${schema.media.albumId} = ${albumId}
+        )`,
+        mediaUpdatedAt: sql<Date | null>`(
+          select max(${schema.media.updatedAt})
+          from ${schema.media}
+          where ${schema.media.albumId} = ${albumId}
+        )`,
+        variantCount: sql<number>`(
+          select count(*)::int
+          from ${schema.mediaVariants}
+          where ${schema.mediaVariants.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        variantCompletedAt: sql<Date | null>`(
+          select max(${schema.mediaVariants.completedAt})
+          from ${schema.mediaVariants}
+          where ${schema.mediaVariants.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        featuredCount: sql<number>`(
+          select count(*)::int
+          from ${schema.featuredMedia}
+          where ${schema.featuredMedia.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        featuredAt: sql<Date | null>`(
+          select max(${schema.featuredMedia.featuredAt})
+          from ${schema.featuredMedia}
+          where ${schema.featuredMedia.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        categoryCount: sql<number>`(
+          select count(*)::int
+          from ${schema.categories}
+          where ${schema.categories.albumId} = ${albumId}
+        )`,
+        categoryUpdatedAt: sql<Date | null>`(
+          select max(${schema.categories.updatedAt})
+          from ${schema.categories}
+          where ${schema.categories.albumId} = ${albumId}
+        )`,
+        uploaderUpdatedAt: sql<Date | null>`(
+          select max(${schema.users.updatedAt})
+          from ${schema.users}
+          where ${schema.users.id} in (
+            select distinct ${schema.media.uploaderId}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        bibReviewCount: sql<number>`(
+          select count(*)::int
+          from ${schema.mediaBibReviews}
+          where ${schema.mediaBibReviews.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        bibReviewUpdatedAt: sql<Date | null>`(
+          select max(${schema.mediaBibReviews.updatedAt})
+          from ${schema.mediaBibReviews}
+          where ${schema.mediaBibReviews.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        bibTagCount: sql<number>`(
+          select count(*)::int
+          from ${schema.mediaBibTags}
+          where ${schema.mediaBibTags.albumId} = ${albumId}
+        )`,
+        bibTagUpdatedAt: sql<Date | null>`(
+          select max(${schema.mediaBibTags.updatedAt})
+          from ${schema.mediaBibTags}
+          where ${schema.mediaBibTags.albumId} = ${albumId}
+        )`,
+        editStateCount: sql<number>`(
+          select count(*)::int
+          from ${schema.mediaEditStates}
+          where ${schema.mediaEditStates.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        editStateUpdatedAt: sql<Date | null>`(
+          select max(${schema.mediaEditStates.updatedAt})
+          from ${schema.mediaEditStates}
+          where ${schema.mediaEditStates.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        editRevisionCount: sql<number>`(
+          select count(*)::int
+          from ${schema.mediaEditRevisions}
+          where ${schema.mediaEditRevisions.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        editRevisionUpdatedAt: sql<Date | null>`(
+          select max(${schema.mediaEditRevisions.updatedAt})
+          from ${schema.mediaEditRevisions}
+          where ${schema.mediaEditRevisions.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        deletionCount: sql<number>`(
+          select count(*)::int
+          from ${schema.deletionTasks}
+          where ${schema.deletionTasks.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+        deletionUpdatedAt: sql<Date | null>`(
+          select max(${schema.deletionTasks.updatedAt})
+          from ${schema.deletionTasks}
+          where ${schema.deletionTasks.mediaId} in (
+            select ${schema.media.id}
+            from ${schema.media}
+            where ${schema.media.albumId} = ${albumId}
+          )
+        )`,
+      })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId))
+      .limit(1);
+    if (row === undefined) throw this.#albumNotFound();
+    return createHash("sha256").update(JSON.stringify(row), "utf8").digest("base64url");
   }
 
   async createAlbum(options: {
