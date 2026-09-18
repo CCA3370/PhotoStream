@@ -41,11 +41,13 @@ async function syncOnce(
     }
 
     let context = await getMediaEditContext(photo.mediaId, signal);
+    let retryingOwnedPending = false;
     if (context.state.pendingRevisionId !== null) {
       if (
         draft.remoteRevisionId !== null &&
         draft.remoteRevisionId === context.state.pendingRevisionId
       ) {
+        retryingOwnedPending = true;
         context = await cancelPendingMediaEditRevision({
           mediaId: photo.mediaId,
           revisionId: draft.remoteRevisionId,
@@ -60,6 +62,20 @@ async function syncOnce(
         });
         return;
       }
+    }
+
+    if (
+      !retryingOwnedPending &&
+      draft.basedOnGeneration !== null &&
+      (context.state.generation !== draft.basedOnGeneration ||
+        context.state.activeRevisionId !== draft.basedOnRevisionId)
+    ) {
+      await patchLocalPhotoEditDraft(localPhotoId, {
+        mediaId: photo.mediaId,
+        editState: "failed",
+        error: "此照片已在其他设备更新，请重新打开最新版本后再应用本机参数。",
+      });
+      return;
     }
 
     await patchLocalPhotoEditDraft(localPhotoId, {
