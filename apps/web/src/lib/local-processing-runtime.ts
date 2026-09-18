@@ -136,10 +136,6 @@ function heapPressureRatio(): number | null {
   return memory.usedJSHeapSize / memory.jsHeapSizeLimit;
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
 function isResourcePressureError(error: unknown): boolean {
   if (error instanceof RangeError) return true;
   if (!(error instanceof Error)) return false;
@@ -530,6 +526,7 @@ class LocalProcessingRuntime {
           }));
           const intent = await intentPromise;
           if (intent === null) throw new Error("原图上传任务尚未创建");
+          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
           const uploaded = registerAndUploadProgressiveVariant(
             intent.id,
             variant,
@@ -565,7 +562,7 @@ class LocalProcessingRuntime {
       task.status = "staged";
       task.error = null;
     } catch (error) {
-      if (isAbortError(error) && task.status === "cancelled") return;
+      if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : "本地处理或上传失败";
       task.status = "failed";
       task.error = message;
