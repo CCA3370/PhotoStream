@@ -1,18 +1,9 @@
 "use client";
 
 import { photoEditAiModels } from "./ai-models";
-import {
-  type PhotoEditRecipe,
-  photoEditPipelineVersion,
-  photoEditRecipeVersion,
-} from "./recipe";
+import { type PhotoEditRecipe, photoEditPipelineVersion, photoEditRecipeVersion } from "./recipe";
 
-export type LocalPhotoEditState =
-  | "draft"
-  | "applied_local"
-  | "syncing"
-  | "synced"
-  | "failed";
+export type LocalPhotoEditState = "draft" | "applied_local" | "syncing" | "synced" | "failed";
 
 export interface LocalPhotoEditDraft {
   readonly localPhotoId: string;
@@ -56,17 +47,14 @@ function notify(localPhotoId: string): void {
 function ensureChannel(): void {
   if (typeof window === "undefined" || !("BroadcastChannel" in window) || channel !== null) return;
   channel = new BroadcastChannel(channelName);
-  channel.addEventListener(
-    "message",
-    (event: MessageEvent<{ readonly localPhotoId?: string }>) => {
-      if (typeof event.data.localPhotoId !== "string") return;
-      window.dispatchEvent(
-        new CustomEvent("photostream:local-photo-edit-draft-changed", {
-          detail: { localPhotoId: event.data.localPhotoId },
-        }),
-      );
-    },
-  );
+  channel.addEventListener("message", (event: MessageEvent<{ readonly localPhotoId?: string }>) => {
+    if (typeof event.data.localPhotoId !== "string") return;
+    window.dispatchEvent(
+      new CustomEvent("photostream:local-photo-edit-draft-changed", {
+        detail: { localPhotoId: event.data.localPhotoId },
+      }),
+    );
+  });
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -152,8 +140,7 @@ export async function putAppliedLocalPhotoEditDraft(options: {
     denoiseModelVersion:
       options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.version : null,
     deblurModel: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.id : null,
-    deblurModelVersion:
-      options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
+    deblurModelVersion: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
     sourceFingerprint: options.sourceFingerprint,
     editState: "applied_local",
     remoteRevisionId: null,
@@ -175,10 +162,7 @@ export async function putAppliedLocalPhotoEditDraft(options: {
 export async function patchLocalPhotoEditDraft(
   localPhotoId: string,
   change: Partial<
-    Pick<
-      LocalPhotoEditDraft,
-      "mediaId" | "editState" | "remoteRevisionId" | "error" | "updatedAt"
-    >
+    Pick<LocalPhotoEditDraft, "mediaId" | "editState" | "remoteRevisionId" | "error" | "updatedAt">
   >,
 ): Promise<LocalPhotoEditDraft | null> {
   if (!supported()) return null;
