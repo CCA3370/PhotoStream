@@ -41,13 +41,11 @@ function DialogContent({
   children,
   forceOverlay = false,
   overlayClassName,
-  portalContainer,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
   forceOverlay?: boolean;
   overlayClassName?: string;
-  portalContainer?: DialogPrimitive.Portal.Props["container"];
   showCloseButton?: boolean;
 }) {
   const isMobileBottomSheet =
@@ -57,7 +55,7 @@ function DialogContent({
   const isPaddingless = typeof className === "string" && className.includes("p-0");
 
   return (
-    <DialogPortal container={portalContainer}>
+    <DialogPortal>
       <DialogOverlay
         forceRender={forceOverlay}
         className={cn(
