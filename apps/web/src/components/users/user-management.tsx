@@ -55,8 +55,12 @@ interface TemporaryCredential {
 }
 
 export function UserManagement({
+  currentUserId,
   initialUsers,
-}: Readonly<{ initialUsers: readonly AdminUserView[] }>) {
+}: Readonly<{
+  currentUserId: string;
+  initialUsers: readonly AdminUserView[];
+}>) {
   const formRef = useRef<HTMLFormElement>(null);
   const [users, setUsers] = useState(initialUsers);
   const [role, setRole] = useState<UserRole>("uploader");
@@ -66,6 +70,7 @@ export function UserManagement({
   const [temporaryCredential, setTemporaryCredential] = useState<TemporaryCredential | null>(null);
   const [copied, setCopied] = useState(false);
   const [resetTarget, setResetTarget] = useState<AdminUserView | null>(null);
+  const [loginRequiredAfterCredential, setLoginRequiredAfterCredential] = useState(false);
 
   function setUserPending(userId: string, pending: boolean): void {
     setPendingUsers((current) => {
@@ -106,6 +111,11 @@ export function UserManagement({
 
   async function update(userId: string, input: Partial<Pick<AdminUserView, "isActive" | "role">>) {
     if (pendingUsers.has(userId)) return;
+    const current = users.find((user) => user.id === userId);
+    const invalidatesCurrentSession =
+      userId === currentUserId &&
+      ((input.role !== undefined && input.role !== current?.role) ||
+        (input.isActive !== undefined && input.isActive !== current?.isActive));
     setUserPending(userId, true);
     setError(null);
     try {
@@ -113,7 +123,13 @@ export function UserManagement({
         method: "PATCH",
         body: input,
       });
-      setUsers((current) => current.map((user) => (user.id === userId ? updated : user)));
+      setUsers((currentUsers) =>
+        currentUsers.map((user) => (user.id === userId ? updated : user)),
+      );
+      if (invalidatesCurrentSession) {
+        window.location.assign("/login");
+        return;
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "成员更新失败");
     } finally {
@@ -131,6 +147,7 @@ export function UserManagement({
       displayName: target?.displayName ?? "成员",
       password: result.generatedTemporaryPassword,
     });
+    setLoginRequiredAfterCredential(userId === currentUserId);
     setCopied(false);
     setResetTarget(null);
   }
@@ -313,13 +330,22 @@ export function UserManagement({
           if (!open) {
             setTemporaryCredential(null);
             setCopied(false);
+            if (loginRequiredAfterCredential) {
+              setLoginRequiredAfterCredential(false);
+              window.location.assign("/login");
+            }
           }
         }}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>临时密码</DialogTitle>
-            <DialogDescription>{temporaryCredential?.displayName}</DialogDescription>
+            <DialogDescription>
+              {temporaryCredential?.displayName}
+              {loginRequiredAfterCredential
+                ? " · 当前会话已失效，保存密码后关闭窗口重新登录。"
+                : ""}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 select-all truncate rounded-lg border bg-muted/30 px-3 py-2 font-mono text-base">
