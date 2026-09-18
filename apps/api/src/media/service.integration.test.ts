@@ -487,7 +487,10 @@ maybeDescribe("photo vertical slice transactions", () => {
       { albumId: album.album.id, limit: 60 },
     );
     expect(
-      internal.items.find((item) => item.id === intent.mediaId)?.variants.map((variant) => variant.kind).sort(),
+      internal.items
+        .find((item) => item.id === intent.mediaId)
+        ?.variants.map((variant) => variant.kind)
+        .sort(),
     ).toEqual(["photo_1920", "photo_480", "photo_960"]);
 
     const internal1920 = await service.refreshInternalVariant(
