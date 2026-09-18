@@ -24,6 +24,7 @@ const reportReasonSchema = z.enum([
   "inappropriate",
   "copyright",
   "inaccurate",
+  "malicious_spread",
   "other",
 ]);
 const createFeedbackSchema = z
