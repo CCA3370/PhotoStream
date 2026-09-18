@@ -449,113 +449,117 @@ class LocalProcessingRuntime {
 
     try {
       await putPersistedTasks([persistedTask(task)]);
-      await processPhotoInWorkerStreaming(task.file, {
-        onMetadata: async (nextMetadata) => {
-          metadata = nextMetadata;
-          const created = createLocalReviewPhoto({
-            albumId: this.#albumId,
-            categoryId: task.categoryId,
-            file: task.file,
-            processed: { ...nextMetadata, variants: [] },
-          });
-          const localPhoto = {
-            ...created,
-            id: task.localPhotoId,
-            createdAt: task.createdAt,
-            uploadState: "uploading" as const,
-            bib: {
-              ...created.bib,
-              ocrStatus: bibConfig.recognitionEnabled
-                ? ("not_started" as const)
-                : ("disabled" as const),
-              modelVersion: bibConfig.modelVersion,
-              ruleVersion: bibConfig.ruleVersion,
-            },
-          };
-          await putLocalReviewPhoto(localPhoto);
-          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-          intentPromise = createProgressiveUpload({
-            localPhotoId: task.localPhotoId,
-            albumId: this.#albumId,
-            categoryId: task.categoryId,
-            file: task.file,
-            metadata: nextMetadata,
-          });
-          this.#intentPromises.set(task.id, intentPromise);
-          const intent = await intentPromise;
-          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-          await patchLocalReviewPhoto(task.localPhotoId, {
-            intentId: intent.id,
-            mediaId: intent.mediaId,
-            uploadState: "uploading",
-            error: null,
-          });
-
-          const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
-          if (
-            editDraft !== null &&
-            ["applied_local", "syncing", "failed"].includes(editDraft.editState) &&
-            editDraft.sourceFingerprint.length > 0
-          ) {
-            let reserved = false;
-            let releaseReservation: () => void = () => {};
-            const reservationReady = new Promise<void>((resolve) => {
-              releaseReservation = resolve;
+      await processPhotoInWorkerStreaming(
+        task.file,
+        {
+          onMetadata: async (nextMetadata) => {
+            metadata = nextMetadata;
+            const created = createLocalReviewPhoto({
+              albumId: this.#albumId,
+              categoryId: task.categoryId,
+              file: task.file,
+              processed: { ...nextMetadata, variants: [] },
             });
-            const syncPromise = syncLocalPhotoEditDraft(task.localPhotoId, undefined, () => {
-              reserved = true;
-              releaseReservation();
+            const localPhoto = {
+              ...created,
+              id: task.localPhotoId,
+              createdAt: task.createdAt,
+              uploadState: "uploading" as const,
+              bib: {
+                ...created.bib,
+                ocrStatus: bibConfig.recognitionEnabled
+                  ? ("not_started" as const)
+                  : ("disabled" as const),
+                modelVersion: bibConfig.modelVersion,
+                ruleVersion: bibConfig.ruleVersion,
+              },
+            };
+            await putLocalReviewPhoto(localPhoto);
+            if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+            intentPromise = createProgressiveUpload({
+              localPhotoId: task.localPhotoId,
+              albumId: this.#albumId,
+              categoryId: task.categoryId,
+              file: task.file,
+              metadata: nextMetadata,
             });
-            void syncPromise.catch(() => undefined);
-            await Promise.race([
-              reservationReady,
-              syncPromise.then(() => {
-                if (!reserved) {
-                  throw new Error("修图版本未能在基础预览上传前建立发布门禁");
-                }
-              }),
-            ]);
-          }
-
-          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-          uploads.push(uploadProgressiveOriginal(intent, task.file, controller.signal));
-        },
-        onVariant: async (variant) => {
-          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-          await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
-            ...current,
-            variants: [
-              ...current.variants.filter((existing) => existing.kind !== variant.kind),
-              { ...variant },
-            ],
-          }));
-          const intent = await intentPromise;
-          if (intent === null) throw new Error("原图上传任务尚未创建");
-          if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-          const uploaded = registerAndUploadProgressiveVariant(
-            intent.id,
-            variant,
-            controller.signal,
-          );
-          uploads.push(uploaded);
-          if (variant.kind === "photo_480") {
-            const currentMetadata = metadata;
-            if (currentMetadata !== null) {
-              uploads.push(
-                uploaded.then((latest) =>
-                  uploadProgressiveMicroPreview(
-                    latest.mediaId,
-                    variant,
-                    currentMetadata.width,
-                    currentMetadata.height,
-                    controller.signal,
-                  ),
-                ),
-              );
+            this.#intentPromises.set(task.id, intentPromise);
+            const intent = await intentPromise;
+            if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+            await patchLocalReviewPhoto(task.localPhotoId, {
+              intentId: intent.id,
+              mediaId: intent.mediaId,
+              uploadState: "uploading",
+              error: null,
+            });
+  
+            const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
+            if (
+              editDraft !== null &&
+              ["applied_local", "syncing", "failed"].includes(editDraft.editState) &&
+              editDraft.sourceFingerprint.length > 0
+            ) {
+              let reserved = false;
+              let releaseReservation: () => void = () => {};
+              const reservationReady = new Promise<void>((resolve) => {
+                releaseReservation = resolve;
+              });
+              const syncPromise = syncLocalPhotoEditDraft(task.localPhotoId, undefined, () => {
+                reserved = true;
+                releaseReservation();
+              });
+              void syncPromise.catch(() => undefined);
+              await Promise.race([
+                reservationReady,
+                syncPromise.then(() => {
+                  if (!reserved) {
+                    throw new Error("修图版本未能在基础预览上传前建立发布门禁");
+                  }
+                }),
+              ]);
             }
-          }
+  
+            if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+            uploads.push(uploadProgressiveOriginal(intent, task.file, controller.signal));
+          },
+          onVariant: async (variant) => {
+            if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+            await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
+              ...current,
+              variants: [
+                ...current.variants.filter((existing) => existing.kind !== variant.kind),
+                { ...variant },
+              ],
+            }));
+            const intent = await intentPromise;
+            if (intent === null) throw new Error("原图上传任务尚未创建");
+            if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+            const uploaded = registerAndUploadProgressiveVariant(
+              intent.id,
+              variant,
+              controller.signal,
+            );
+            uploads.push(uploaded);
+            if (variant.kind === "photo_480") {
+              const currentMetadata = metadata;
+              if (currentMetadata !== null) {
+                uploads.push(
+                  uploaded.then((latest) =>
+                    uploadProgressiveMicroPreview(
+                      latest.mediaId,
+                      variant,
+                      currentMetadata.width,
+                      currentMetadata.height,
+                      controller.signal,
+                    ),
+                  ),
+                );
+              }
+            }
+          },
         },
-      }, { signal: controller.signal });
+        { signal: controller.signal },
+      );
       await Promise.all(uploads);
       if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
       await patchLocalReviewPhoto(task.localPhotoId, {
