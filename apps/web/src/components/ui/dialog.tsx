@@ -39,11 +39,15 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 function DialogContent({
   className,
   children,
+  forceOverlay = false,
   overlayClassName,
+  portalContainer,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  forceOverlay?: boolean;
   overlayClassName?: string;
+  portalContainer?: DialogPrimitive.Portal.Props["container"];
   showCloseButton?: boolean;
 }) {
   const isMobileBottomSheet =
@@ -53,8 +57,9 @@ function DialogContent({
   const isPaddingless = typeof className === "string" && className.includes("p-0");
 
   return (
-    <DialogPortal>
+    <DialogPortal container={portalContainer}>
       <DialogOverlay
+        forceRender={forceOverlay}
         className={cn(
           isMobileBottomSheet
             ? "max-sm:backdrop-blur-none! max-sm:duration-300 motion-reduce:duration-0"
