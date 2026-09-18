@@ -433,20 +433,20 @@ class LocalProcessingRuntime {
           const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
           if (
             editDraft !== null &&
-            editDraft.editState !== "synced" &&
+            ["applied_local", "syncing", "failed"].includes(editDraft.editState) &&
             editDraft.sourceFingerprint.length > 0
           ) {
             let reserved = false;
-            let releaseReservation: (() => void) | null = null;
+            let releaseReservation = () => undefined;
             const reservationReady = new Promise<void>((resolve) => {
-              releaseReservation = resolve;
+              releaseReservation = () => resolve();
             });
             const syncPromise = syncLocalPhotoEditDraft(
               task.localPhotoId,
               undefined,
               () => {
                 reserved = true;
-                releaseReservation?.();
+                releaseReservation();
               },
             );
             void syncPromise.catch(() => undefined);
