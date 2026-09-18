@@ -276,7 +276,8 @@ hidden Media 有 pending edit 时：
 
 - 显示按钮禁用，提示“修图版本处理中”；
 - edit ready 后完成 apply，再允许显示；
-- 用户可以取消 pending edit，然后显示当前旧 active/base。
+- edit 本地处理/上传失败时，服务器把该 pending revision 标记为 `failed`，但不清除 pending gate；
+- failed pending 不会自动退回 base；用户可以重试，或显式取消 pending edit 后显示当前旧 active/base。
 
 ### 8.4 Published Media
 
@@ -444,6 +445,7 @@ POST /api/v1/media/:mediaId/edits/:revisionId/variants/:kind/complete
 POST /api/v1/media/:mediaId/edit-source
 POST /api/v1/media/:mediaId/edits/:revisionId/complete
 POST /api/v1/media/:mediaId/edits/:revisionId/apply
+POST /api/v1/media/:mediaId/edits/:revisionId/fail
 POST /api/v1/media/:mediaId/edits/:revisionId/cancel
 POST /api/v1/media/:mediaId/edits/revert
 ~~~
@@ -485,7 +487,8 @@ otherwise
 
 - base ready、无 edit：可显示 base；
 - base ready、edit ready+active：可显示 edit；
-- base ready、pending edit rendering/uploading：暂不能显示；
+- base ready、pending edit rendering/uploading/failed：暂不能显示；
+- failed pending 必须重试或显式取消，不能静默清 gate 后显示 base；
 - edit ready 但 base 未 ready：仍不能显示；
 - auto publish 相册在 base preview ready 时如果仍有 pending edit，不报上传失败，也不发布 base，而是停在 pending_review；
 - pending edit apply 或明确取消后，才允许首次公开。
@@ -524,7 +527,7 @@ active edit 存在时，真正 base photo_original 只供管理端恢复、重�
 修图：未修图 / 已应用·本地 / 正在同步修图版本 / 修图版本已同步 / 修图同步失败
 ~~~
 
-上传队列照片一进入本地队列即可打开同一个 PhotoEditor。默认只显示进行中/失败项，按需“显示已上传”后可继续编辑本机仍保留 originalBlob 的已上传照片，避免默认一次创建大量 Object URL。
+上传队列照片一进入本地队列即可打开同一个 PhotoEditor。默认只显示进行中/失败项，按需“显示已上传”后可继续编辑本机仍保留 originalBlob 的已上传照片，避免默认一次创建大量 Object URL。本机显式清理 LocalReviewPhoto 时必须同时清理对应 local edit draft，不能留下无源 IndexedDB 草稿。
 
 其他设备看到上传中的 Media：
 
@@ -637,9 +640,11 @@ pendingRevisionId
 11. base ingest failed 时即使 edit ready 也不能显示。
 12. pending edit 取消后可继续显示当前旧 active/base。
 13. pre-mediaId 已应用本地 edit：mediaId 建立后必须先 reserve pending，再允许 base preview 进入可发布阶段，不能闪 base。
-14. edit 渲染/上传失败：base ingest 独立继续，但已应用的首次发布 gate 不得静默丢失。
-15. uploader 只能修自己的 Media；对其他 uploader Media 的 get/apply/revert 均返回 403。
-16. auto publish + pending edit：480/960 完成后进入 pending_review，不把上传标失败，也不发布 base。
+14. edit 渲染/上传失败：base ingest 独立继续，服务器 pending status=failed，已应用的首次发布 gate 不得静默丢失。
+15. failed pending 显式取消后 revision 进入 discarded；未超过签名 PUT 有效期时不得物理清理，超过 20 分钟后后台可重试删除其 edit 对象与 revision。
+16. 未发布上传被 cancel/expire 后，upload cleanup 必须同时清理该 Media 的 edit state/revisions/variants 和 OSS edit 对象，且不能被 sourceVariantId 外键阻塞。
+17. uploader 只能修自己的 Media；对其他 uploader Media 的 get/apply/revert 均返回 403。
+18. auto publish + pending edit：480/960 完成后进入 pending_review，不把上传标失败，也不发布 base。
 
 ## 21. 实施顺序
 
@@ -712,3 +717,7 @@ pendingRevisionId
 15. A+B 不使用云 AI；B 直接正常接入生产代码，在当前未正式投产环境中验证和调整。
 16. uploader 不获得全局 media:review；修图服务按资源所有权允许 uploader 仅编辑自己上传的 Media。
 17. base upload 与 edit 同步状态独立；edit 同步失败不能把已成功的 base 对象回滚或删除。
+18. failed pending 必须保留发布 gate；retry 会显式取消旧 failed revision 后创建新 revision，cancel 则把旧 revision 标为 discarded。
+19. discarded revision 只在至少 20 分钟后回收对象，覆盖 15 分钟预签名 PUT 的失效窗口；删除失败保留 DB 记录供后续维护重试。
+20. 未发布上传 cancel/expire 时必须先回收 edit 对象/状态/revision，再删除受 sourceVariantId RESTRICT 约束的 base variant。
+21. 本机 LocalReviewPhoto 被显式清理时必须同时删除对应 IndexedDB edit draft。
