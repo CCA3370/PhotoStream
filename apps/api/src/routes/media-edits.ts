@@ -6,6 +6,7 @@ import {
   mediaEditSourceViewSchema,
   mediaEditVariantKindSchema,
   okResponseSchema,
+  prepareMediaEditRevisionRequestSchema,
   revertMediaEditRequestSchema,
   signedUploadSchema,
 } from "@photostream/contracts";
@@ -88,6 +89,30 @@ export async function registerMediaEditRoutes(
         requestId: request.id,
       });
       return reply.status(201).send(context);
+    },
+  );
+
+  typed.post(
+    "/api/v1/media/:id/edits/:revisionId/prepare",
+    {
+      schema: {
+        operationId: "prepareMediaEditRevision",
+        tags: ["media-edit"],
+        params: revisionParamsSchema,
+        body: prepareMediaEditRevisionRequestSchema,
+        response: { 200: mediaEditContextViewSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      return options.mediaEditService.prepareRevision({
+        actor: actorFrom(session),
+        mediaId: request.params.id,
+        revisionId: request.params.revisionId,
+        input: request.body,
+        requestId: request.id,
+      });
     },
   );
 
