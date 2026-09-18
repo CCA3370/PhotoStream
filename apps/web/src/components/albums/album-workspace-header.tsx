@@ -20,6 +20,7 @@ function stateVariant(state: AlbumView["state"]): "default" | "outline" | "secon
 
 export function AlbumWorkspaceHeader({
   actions,
+  albumHref,
   albumId,
   description,
   headingId,
@@ -29,6 +30,7 @@ export function AlbumWorkspaceHeader({
   title,
 }: Readonly<{
   actions?: ReactNode | undefined;
+  albumHref?: string | null | undefined;
   albumId: string;
   description?: string | null | undefined;
   headingId: string;
@@ -47,9 +49,16 @@ export function AlbumWorkspaceHeader({
           活动
         </Link>
         <ChevronRightIcon className="size-3 shrink-0" aria-hidden="true" />
-        <Link className="truncate hover:text-foreground" href={`/studio/albums/${albumId}`}>
-          {title}
-        </Link>
+        {albumHref === null ? (
+          <span className="truncate">{title}</span>
+        ) : (
+          <Link
+            className="truncate hover:text-foreground"
+            href={albumHref ?? `/studio/albums/${albumId}`}
+          >
+            {title}
+          </Link>
+        )}
         <ChevronRightIcon className="size-3 shrink-0" aria-hidden="true" />
         <span className="shrink-0 text-foreground">{section}</span>
       </nav>
