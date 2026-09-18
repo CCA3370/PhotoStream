@@ -1,5 +1,5 @@
 import { type Database, schema } from "@photostream/db";
-import { asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import { liveEventChannel } from "./live-event-broker.js";
@@ -7,13 +7,23 @@ import type { PhotoService } from "./service.js";
 
 export const viewerFeedbackTopic = "viewer-feedback";
 
-export type ViewerFeedbackKind = "problem" | "suggestion" | "other";
+export type ViewerFeedbackKind = "problem" | "suggestion" | "other" | "report";
+export type ViewerReportReason =
+  | "privacy"
+  | "inappropriate"
+  | "copyright"
+  | "inaccurate"
+  | "other";
 
 export interface ViewerFeedbackView {
   readonly id: number;
   readonly albumId: string;
   readonly albumTitle: string;
+  readonly albumSlug: string;
+  readonly mediaId: string | null;
+  readonly mediaStatus: string | null;
   readonly kind: ViewerFeedbackKind;
+  readonly reportReason: ViewerReportReason | null;
   readonly message: string;
   readonly pagePath: string | null;
   readonly createdAt: string;
@@ -34,6 +44,8 @@ export class ViewerFeedbackService {
     readonly kind: ViewerFeedbackKind;
     readonly message: string;
     readonly pagePath: string | null;
+    readonly mediaId?: string | null;
+    readonly reportReason?: ViewerReportReason | null;
   }): Promise<{ readonly id: number; readonly received: true }> {
     const publicAlbum = await this.#photoService.getPublicAlbum(options.slug, options.visitorToken);
     if (publicAlbum.view.accessRequired) {
@@ -44,12 +56,46 @@ export class ViewerFeedbackService {
       });
     }
 
+    const isReport = options.kind === "report";
+    const mediaId = isReport ? (options.mediaId ?? null) : null;
+    const reportReason = isReport ? (options.reportReason ?? null) : null;
+    if (isReport && (mediaId === null || reportReason === null)) {
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "投诉信息不完整",
+        statusCode: 400,
+      });
+    }
+
+    if (mediaId !== null) {
+      const [target] = await this.#database
+        .select({ id: schema.media.id })
+        .from(schema.media)
+        .where(
+          and(
+            eq(schema.media.id, mediaId),
+            eq(schema.media.albumId, publicAlbum.album.id),
+            eq(schema.media.publicationStatus, "published"),
+          ),
+        )
+        .limit(1);
+      if (target === undefined) {
+        throw new AppError({
+          code: "NOT_FOUND",
+          message: "图片不存在或已不可见",
+          statusCode: 404,
+        });
+      }
+    }
+
     const created = await this.#database.transaction(async (transaction) => {
       const [row] = await transaction
         .insert(schema.viewerFeedback)
         .values({
           albumId: publicAlbum.album.id,
+          mediaId,
           kind: options.kind,
+          reportReason,
           message: options.message.trim(),
           pagePath: options.pagePath,
         })
@@ -77,13 +123,18 @@ export class ViewerFeedbackService {
         id: schema.viewerFeedback.id,
         albumId: schema.viewerFeedback.albumId,
         albumTitle: schema.albums.title,
+        albumSlug: schema.albums.slug,
+        mediaId: schema.viewerFeedback.mediaId,
+        mediaStatus: schema.media.publicationStatus,
         kind: schema.viewerFeedback.kind,
+        reportReason: schema.viewerFeedback.reportReason,
         message: schema.viewerFeedback.message,
         pagePath: schema.viewerFeedback.pagePath,
         createdAt: schema.viewerFeedback.createdAt,
       })
       .from(schema.viewerFeedback)
       .innerJoin(schema.albums, eq(schema.albums.id, schema.viewerFeedback.albumId))
+      .leftJoin(schema.media, eq(schema.media.id, schema.viewerFeedback.mediaId))
       .orderBy(desc(schema.viewerFeedback.id))
       .limit(limit);
     return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
@@ -95,13 +146,18 @@ export class ViewerFeedbackService {
         id: schema.viewerFeedback.id,
         albumId: schema.viewerFeedback.albumId,
         albumTitle: schema.albums.title,
+        albumSlug: schema.albums.slug,
+        mediaId: schema.viewerFeedback.mediaId,
+        mediaStatus: schema.media.publicationStatus,
         kind: schema.viewerFeedback.kind,
+        reportReason: schema.viewerFeedback.reportReason,
         message: schema.viewerFeedback.message,
         pagePath: schema.viewerFeedback.pagePath,
         createdAt: schema.viewerFeedback.createdAt,
       })
       .from(schema.viewerFeedback)
       .innerJoin(schema.albums, eq(schema.albums.id, schema.viewerFeedback.albumId))
+      .leftJoin(schema.media, eq(schema.media.id, schema.viewerFeedback.mediaId))
       .where(gt(schema.viewerFeedback.id, afterId))
       .orderBy(asc(schema.viewerFeedback.id))
       .limit(limit);
