@@ -8,9 +8,11 @@ export interface PhotoEditAiModelSpec {
   readonly id: string;
   readonly version: string;
   readonly modelUrl: string;
+  readonly modelBytes: number;
   readonly externalData: {
     readonly path: string;
     readonly url: string;
+    readonly bytes: number;
   } | null;
   readonly tileSize: number;
   readonly overlap: number;
@@ -26,9 +28,11 @@ export const photoEditAiModels: Readonly<Record<PhotoEditAiOperation, PhotoEditA
     id: "scunet-color-real-psnr",
     version: "75c7857c1ae254174fbeed18fa57fe4a1acb9ecf",
     modelUrl: `${PHOTO_EDIT_MODEL_BASE}/scunet_color_real_psnr.onnx`,
+    modelBytes: 3_798_678,
     externalData: {
       path: "scunet_color_real_psnr.onnx.data",
       url: `${PHOTO_EDIT_MODEL_BASE}/scunet_color_real_psnr.onnx.data`,
+      bytes: 73_138_176,
     },
     tileSize: 256,
     overlap: 32,
@@ -42,6 +46,7 @@ export const photoEditAiModels: Readonly<Record<PhotoEditAiOperation, PhotoEditA
     id: "nafnet-deblurring-2025may",
     version: "ea498688be1d1649d0965e0e16d275ecc7cc08ac",
     modelUrl: `${PHOTO_EDIT_MODEL_BASE}/deblurring_nafnet_2025may.onnx`,
+    modelBytes: 91_736_251,
     externalData: null,
     tileSize: 256,
     overlap: 32,
