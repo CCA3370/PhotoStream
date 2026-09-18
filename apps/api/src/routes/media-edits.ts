@@ -223,6 +223,28 @@ export async function registerMediaEditRoutes(
   );
 
   typed.post(
+    "/api/v1/media/:id/edits/:revisionId/fail",
+    {
+      schema: {
+        operationId: "failMediaEditRevision",
+        tags: ["media-edit"],
+        params: revisionParamsSchema,
+        response: { 200: mediaEditContextViewSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      return options.mediaEditService.failPending({
+        actor: actorFrom(session),
+        mediaId: request.params.id,
+        revisionId: request.params.revisionId,
+        requestId: request.id,
+      });
+    },
+  );
+
+  typed.post(
     "/api/v1/media/:id/edits/:revisionId/cancel",
     {
       schema: {
