@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { PHOTO_WORKER_PROTOCOL_VERSION } from "./photo-worker-protocol";
 import { processPhotoInWorkerStreaming } from "./photo-processing";
+import { PHOTO_WORKER_PROTOCOL_VERSION } from "./photo-worker-protocol";
 
 type MessageListener = (event: MessageEvent<unknown>) => void;
 type ErrorListener = (event: Event) => void;
