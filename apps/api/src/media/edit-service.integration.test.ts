@@ -242,6 +242,21 @@ maybeDescribe("media edit revisions", () => {
     });
     expect(prepared.pendingRevision?.status).toBe("uploading");
 
+    await expect(
+      service.apply({
+        actor: { id: reviewerId, role: "reviewer" },
+        mediaId,
+        revisionId,
+        input: { expectedGeneration: 1, expectedActiveRevisionId: null },
+        requestId: "edit-apply-before-ready",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+    expect((await service.getContext({ id: reviewerId, role: "reviewer" }, mediaId)).state).toMatchObject({
+      activeRevisionId: null,
+      pendingRevisionId: revisionId,
+      generation: 1,
+    });
+
     variants = await database
       .select()
       .from(schema.mediaEditVariants)
