@@ -120,7 +120,7 @@ LocalReviewPhoto 仍然有价值，但只承担本机能力：
 - 上传恢复；
 - 为修图 EditSourceResolver 提供本地源；mediaId 未建立前用 localPhotoId 关联本地 draft，mediaId 回填后再绑定服务器 Media。
 
-上传完成后不要无条件立即删除 originalBlob，否则同设备后续修图会产生不必要的 CDN/OSS 原图 GET。
+上传完成后不要无条件立即删除 originalBlob，否则同设备后续修图会产生不必要的 CDN/OSS 原图 GET。用户显式清理本机 LocalReviewPhoto 时，应同步删除对应 local edit draft，避免留下无源 IndexedDB 草稿。
 
 但是：
 
@@ -233,7 +233,7 @@ AND active edit（若存在）已 ready/active
 - edit ready 但 base 未 ready：仍不能显示；
 - auto publish 模式在 base preview ready 时如果仍有 pending edit，降级为 pending_review，不发布 base，也不把基础上传判失败。
 
-用户可等待 pending edit 完成，或取消 pending edit 后显示当前旧 active/base。对于上传前已明确 Apply 的 edit，渲染/上传失败时保留首次发布 gate，避免静默取消后闪现 base；重试时客户端识别自己记录的 remoteRevisionId，清理旧 pending 后重建。
+用户可等待 pending edit 完成，或取消 pending edit 后显示当前旧 active/base。对于上传前已明确 Apply 的 edit，渲染/上传失败时服务端将 pending revision 标记为 failed 并保留首次发布 gate，避免静默取消后闪现 base；重试时客户端识别自己记录的 remoteRevisionId，显式取消旧 failed pending 后创建新 revision。
 
 ## 11. Published 后修图
 
@@ -341,6 +341,7 @@ base photo_original
 - base photo_original >16MiB 继续使用 8MiB multipart；
 - edit photo_download 超过阈值可复用 multipart；
 - 预签名过期重新签同一对象；
+- discarded edit revision 至少等待 20 分钟后才允许后台物理回收，确保 15 分钟旧签名 PUT 已失效；
 - complete 使用幂等；
 - 服务端校验对象后才更新状态；
 - base/edit 共用网络并发预算。
@@ -354,7 +355,9 @@ base photo_original
 | 派生上传失败 | 保持 hidden/incomplete，继续补传 |
 | base ingest 未 ready | 禁止显示 |
 | edit 失败 | base/current active 不受影响 |
-| hidden + pending edit 失败 | 保持 hidden；允许重试或取消 pending |
+| hidden + pending edit 失败 | pending status=failed；保持发布 gate；允许重试或显式取消 |
+| discarded edit orphan | 20 分钟后由 deletion maintenance 删除 edit 对象/revision；失败自动后续重试 |
+| 未发布 upload cancel/expire | 同时清 base 临时对象和 edit state/revisions/variants/对象 |
 | published + new edit 失败 | 继续服务旧 active |
 | 本地修图源缺失 | 仅在 remote base original verified 后 fallback |
 | WebGPU/OOM/device lost | 只终止当前 B 操作 |
@@ -372,4 +375,6 @@ base photo_original
 - published Media 新 edit 未 ready 时公共端保持旧版本；
 - Apply/Revert 不改变 publishSequence；
 - active edit 时观众最高质量下载命中 edit photo_download；
-- 本机 stale base preview 不得覆盖服务器 active edit。
+- 本机 stale base preview 不得覆盖服务器 active edit；
+- abandoned upload cleanup 不得遗留 edit 对象，也不得因 edit revision 的 sourceVariantId 外键阻塞 base 清理；
+- discarded edit cleanup 必须晚于预签名 PUT 有效期并支持失败重试。
