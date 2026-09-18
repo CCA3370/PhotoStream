@@ -144,6 +144,19 @@ export async function switchMediaEditRevision(options: {
   );
 }
 
+export function cancelPendingMediaEditRevision(options: {
+  readonly mediaId: string;
+  readonly revisionId: string;
+  readonly signal?: AbortSignal;
+}): Promise<MediaEditContextView> {
+  return clientMutation<MediaEditContextView>(
+    `/api/v1/media/${encodeURIComponent(options.mediaId)}/edits/${encodeURIComponent(options.revisionId)}/cancel`,
+    {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    },
+  );
+}
+
 export function revertMediaEditToBase(options: {
   readonly mediaId: string;
   readonly expectedGeneration: number;
@@ -161,6 +174,7 @@ export async function applyMediaEditRecipe(options: {
   readonly basedOnRevisionId: string | null;
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: number) => void;
+  readonly onReserved?: (revisionId: string) => void | Promise<void>;
 }): Promise<MediaEditContextView> {
   options.onProgress?.(0);
   const reserveRequest: CreateMediaEditRevisionRequest = {
@@ -185,6 +199,7 @@ export async function applyMediaEditRecipe(options: {
   );
   const revisionId = reserved.state.pendingRevisionId;
   if (revisionId === null) throw new Error("修图版本预留失败");
+  await options.onReserved?.(revisionId);
   options.onProgress?.(0.02);
 
   try {
