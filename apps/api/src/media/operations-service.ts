@@ -999,17 +999,7 @@ export class OperationsService {
     requirePermission(options.actor.role, "audit:read");
     const afterId = options.cursor === undefined ? null : this.#decodeAuditCursor(options.cursor);
     const query = options.query?.trim() ?? "";
-    const escapedQuery = query.replace(/[\\%_]/gu, "\\  async listAudit(options: {
-    readonly actor: InternalActor;
-    readonly cursor: string | undefined;
-    readonly limit: number;
-  }) {
-    requirePermission(options.actor.role, "audit:read");
-    const afterId = options.cursor === undefined ? null : this.#decodeAuditCursor(options.cursor);
-    const rows = await this.#database
-      .select()
-      .from(schema.auditLogs)
-      .where(afterId === null ? undefined : lt(schema.auditLogs.id, afterId))");
+    const escapedQuery = query.replace(/[\\%_]/gu, "\\$&");
     const pattern = `%${escapedQuery}%`;
     const resultCondition =
       options.result === "success"
