@@ -24,6 +24,7 @@ import {
   selectDisplayVariant,
 } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
+import { PhotoReportButton } from "@/components/gallery/photo-report-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -336,6 +337,13 @@ export function PhotoLightbox({
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       revealControls();
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.matches("input, textarea, select") || target.isContentEditable)
+      ) {
+        return;
+      }
       if (event.key === "ArrowLeft" && canNavigate) {
         event.preventDefault();
         animateOffset(-1);
@@ -643,7 +651,7 @@ export function PhotoLightbox({
           <div
             aria-hidden={!controlsVisible}
             className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 transition-[opacity,transform] duration-200 ease-out sm:p-4 sm:pb-16 motion-reduce:transition-none",
+              "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 transition-[opacity,transform] duration-200 ease-out sm:p-4 sm:pb-16 motion-reduce:transition-none",
               controlsVisible
                 ? "translate-y-0 opacity-100"
                 : "pointer-events-none -translate-y-2 opacity-0",
@@ -651,6 +659,15 @@ export function PhotoLightbox({
             data-lightbox-controls
             inert={!controlsVisible}
           >
+            <div className="pointer-events-auto">
+              {slug !== undefined && shareId === undefined ? (
+                <PhotoReportButton
+                  className="h-11 rounded-full border-white/10 bg-black/30 px-3 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.96] sm:h-10 motion-reduce:transform-none motion-reduce:transition-none"
+                  mediaId={selected.id}
+                  slug={slug}
+                />
+              ) : null}
+            </div>
             <div className="pointer-events-auto flex items-center gap-1.5">
               {fullscreenSupported ? (
                 <Button
