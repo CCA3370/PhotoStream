@@ -259,12 +259,7 @@ export function PhotoEditorDialog({
   }, [localPhotoId, mediaId, open]);
 
   useEffect(() => {
-    if (
-      !open ||
-      localPhotoId === null ||
-      localSourceFingerprint === null ||
-      stage !== "ready"
-    ) {
+    if (!open || localPhotoId === null || localSourceFingerprint === null || stage !== "ready") {
       return;
     }
     const recipeKey = JSON.stringify(recipe);
