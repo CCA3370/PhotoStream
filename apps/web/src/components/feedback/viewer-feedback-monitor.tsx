@@ -30,7 +30,7 @@ export function ViewerFeedbackMonitor() {
           if (window.location.pathname === "/studio/feedback") return;
           const preview = item.message.length > 68 ? `${item.message.slice(0, 68)}…` : item.message;
           toast.add({
-            title: "收到新的观众反馈",
+            title: item.kind === "report" ? "收到新的图片投诉" : "收到新的观众反馈",
             description: `${item.albumTitle} · ${viewerFeedbackKindLabel(item.kind)}：${preview}`,
             type: "info",
             timeout: 7_000,
