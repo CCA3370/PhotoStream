@@ -14,7 +14,7 @@ import {
 
 const syncTails = new Map<string, Promise<void>>();
 
-async function syncOnce(localPhotoId: string): Promise<void> {
+async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<void> {
   const photo = await getLocalReviewPhoto(localPhotoId);
   const draft = await getLocalPhotoEditDraft(localPhotoId);
   if (photo === null || draft === null || photo.mediaId === null) return;
@@ -35,7 +35,7 @@ async function syncOnce(localPhotoId: string): Promise<void> {
     return;
   }
 
-  let context = await getMediaEditContext(photo.mediaId);
+  let context = await getMediaEditContext(photo.mediaId, signal);
   if (context.state.pendingRevisionId !== null) {
     if (
       draft.remoteRevisionId !== null &&
@@ -44,6 +44,7 @@ async function syncOnce(localPhotoId: string): Promise<void> {
       context = await cancelPendingMediaEditRevision({
         mediaId: photo.mediaId,
         revisionId: draft.remoteRevisionId,
+        ...(signal === undefined ? {} : { signal }),
       });
       await patchLocalPhotoEditDraft(localPhotoId, { remoteRevisionId: null });
     } else {
@@ -69,6 +70,7 @@ async function syncOnce(localPhotoId: string): Promise<void> {
       source: photo.originalBlob,
       basedOnGeneration: context.state.generation,
       basedOnRevisionId: context.state.activeRevisionId,
+      ...(signal === undefined ? {} : { signal }),
       onReserved: async (revisionId) => {
         await patchLocalPhotoEditDraft(localPhotoId, {
           mediaId: photo.mediaId,
@@ -93,9 +95,15 @@ async function syncOnce(localPhotoId: string): Promise<void> {
   }
 }
 
-export function syncLocalPhotoEditDraft(localPhotoId: string): Promise<void> {
+export function syncLocalPhotoEditDraft(
+  localPhotoId: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const previous = syncTails.get(localPhotoId) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(() => syncOnce(localPhotoId));
+  const next = previous.catch(() => undefined).then(() => {
+    if (signal?.aborted) throw new DOMException("修图同步已取消", "AbortError");
+    return syncOnce(localPhotoId, signal);
+  });
   syncTails.set(localPhotoId, next);
   return next.finally(() => {
     if (syncTails.get(localPhotoId) === next) syncTails.delete(localPhotoId);
