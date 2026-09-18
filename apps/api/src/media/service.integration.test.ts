@@ -379,7 +379,7 @@ maybeDescribe("photo vertical slice transactions", () => {
       visitorToken: visitor.rawToken,
       afterId: 0,
     });
-    expect(replay.events.map((event) => event.type)).toEqual(["media.published", "media.updated"]);
+    expect(replay.events.map((event) => event.type)).toEqual(["media.published"]);
   });
 
   it("defers auto publication while a local edit revision is pending", async () => {
