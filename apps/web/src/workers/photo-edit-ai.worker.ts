@@ -11,8 +11,8 @@ import {
 } from "../lib/photo-edit/ai-models";
 import {
   createPhotoEditTiles,
-  photoEditFeatherWeight,
   type PhotoEditTile,
+  photoEditFeatherWeight,
   reflectPhotoEditIndex,
 } from "../lib/photo-edit/ai-tiling";
 
