@@ -14,10 +14,28 @@ import {
 import { visitorSessionToken } from "../media/visitor-http.js";
 
 const slugParamsSchema = z.object({ slug: z.string().min(12).max(32) }).strict();
+const reportParamsSchema = z
+  .object({ slug: z.string().min(12).max(32), mediaId: z.string().uuid() })
+  .strict();
 const feedbackKindSchema = z.enum(["problem", "suggestion", "other"]);
+const feedbackRecordKindSchema = z.enum(["problem", "suggestion", "other", "report"]);
+const reportReasonSchema = z.enum([
+  "privacy",
+  "inappropriate",
+  "copyright",
+  "inaccurate",
+  "other",
+]);
 const createFeedbackSchema = z
   .object({
     kind: feedbackKindSchema,
+    message: z.string().trim().min(2).max(2_000),
+    pagePath: z.string().trim().min(1).max(512).startsWith("/").nullable().default(null),
+  })
+  .strict();
+const createReportSchema = z
+  .object({
+    reason: reportReasonSchema,
     message: z.string().trim().min(2).max(2_000),
     pagePath: z.string().trim().min(1).max(512).startsWith("/").nullable().default(null),
   })
@@ -27,7 +45,11 @@ const feedbackViewSchema = z
     id: z.number().int().positive(),
     albumId: z.string().uuid(),
     albumTitle: z.string().min(1),
-    kind: feedbackKindSchema,
+    albumSlug: z.string().min(1),
+    mediaId: z.string().uuid().nullable(),
+    mediaStatus: z.string().nullable(),
+    kind: feedbackRecordKindSchema,
+    reportReason: reportReasonSchema.nullable(),
     message: z.string(),
     pagePath: z.string().nullable(),
     createdAt: z.string().datetime(),
@@ -85,6 +107,33 @@ export async function registerViewerFeedbackRoutes(
         slug: request.params.slug,
         visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         kind: request.body.kind,
+        message: request.body.message,
+        pagePath: request.body.pagePath,
+      });
+      void reply.header("cache-control", "no-store");
+      return reply.status(201).send(result);
+    },
+  );
+
+  typed.post(
+    "/api/v1/public/albums/:slug/media/:mediaId/report",
+    {
+      config: { rateLimit: { max: 3, timeWindow: "10 minutes" } },
+      schema: {
+        operationId: "createPhotoReport",
+        tags: ["public", "feedback", "media"],
+        params: reportParamsSchema,
+        body: createReportSchema,
+        response: { 201: createFeedbackResponseSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      const result = await options.feedbackService.createPublic({
+        slug: request.params.slug,
+        visitorToken: visitorSessionToken(request, options.config, request.params.slug),
+        kind: "report",
+        mediaId: request.params.mediaId,
+        reportReason: request.body.reason,
         message: request.body.message,
         pagePath: request.body.pagePath,
       });
