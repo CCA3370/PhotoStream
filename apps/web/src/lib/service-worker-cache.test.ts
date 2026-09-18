@@ -39,5 +39,5 @@ it("keeps media caches when a new shell worker activates", async () => {
     },
   });
   await activation;
-  expect(deleted).toEqual(["photostream-shell-v0"]);
+  expect(deleted).toEqual(["photostream-shell-v0", "photostream-shell-v1"]);
 });
