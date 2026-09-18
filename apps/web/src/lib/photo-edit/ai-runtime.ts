@@ -1,11 +1,14 @@
 import type { PhotoEditRecipe } from "./recipe";
 import type { PhotoEditRenderableSource } from "./runtime";
 
-export type PhotoEditAiPhase = "loading-model" | "processing";
+export type PhotoEditAiPhase = "downloading-model" | "initializing-model" | "processing";
 
-interface AiProgress {
+export interface PhotoEditAiProgress {
   readonly progress: number;
   readonly phase: PhotoEditAiPhase;
+  readonly operation?: "denoise" | "deblur";
+  readonly loadedBytes?: number;
+  readonly totalBytes?: number;
 }
 
 type AiWorkerResponse =
@@ -14,6 +17,9 @@ type AiWorkerResponse =
       readonly type: "progress";
       readonly progress: number;
       readonly phase: PhotoEditAiPhase;
+      readonly operation?: "denoise" | "deblur";
+      readonly loadedBytes?: number;
+      readonly totalBytes?: number;
     }
   | { readonly id: string; readonly type: "preview"; readonly blob: Blob }
   | { readonly id: string; readonly type: "full"; readonly bitmap: ImageBitmap }
@@ -51,7 +57,7 @@ function runAiWorker<T>(
   options: {
     readonly signal?: AbortSignal;
     readonly transfer?: Transferable[];
-    readonly onProgress?: (progress: AiProgress) => void;
+    readonly onProgress?: (progress: PhotoEditAiProgress) => void;
   } = {},
 ): Promise<T> {
   return enqueue(
@@ -97,6 +103,9 @@ function runAiWorker<T>(
             options.onProgress?.({
               progress: message.progress,
               phase: message.phase,
+              ...(message.operation === undefined ? {} : { operation: message.operation }),
+              ...(message.loadedBytes === undefined ? {} : { loadedBytes: message.loadedBytes }),
+              ...(message.totalBytes === undefined ? {} : { totalBytes: message.totalBytes }),
             });
             return;
           }
@@ -129,7 +138,7 @@ export function restoreMediaEditPreview(
   recipe: PhotoEditRecipe,
   options: {
     readonly signal?: AbortSignal;
-    readonly onProgress?: (progress: AiProgress) => void;
+    readonly onProgress?: (progress: PhotoEditAiProgress) => void;
   } = {},
 ): Promise<Blob> {
   return runAiWorker(
@@ -150,7 +159,7 @@ export function restoreMediaEditFull(
   recipe: PhotoEditRecipe,
   options: {
     readonly signal?: AbortSignal;
-    readonly onProgress?: (progress: AiProgress) => void;
+    readonly onProgress?: (progress: PhotoEditAiProgress) => void;
   } = {},
 ): Promise<ImageBitmap> {
   return runAiWorker(
