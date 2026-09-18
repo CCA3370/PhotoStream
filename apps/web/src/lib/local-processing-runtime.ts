@@ -9,8 +9,8 @@ import {
   putLocalReviewPhoto,
   updateLocalReviewPhoto,
 } from "@/lib/local-review-queue";
-import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
+import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
 import {
   createProgressiveUpload,
   registerAndUploadProgressiveVariant,
