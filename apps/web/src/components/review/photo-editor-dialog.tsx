@@ -700,9 +700,7 @@ export function PhotoEditorPanel({
                     onClick={() => void switchRevision(revision.id)}
                     size="sm"
                     type="button"
-                    variant={
-                      context.state.activeRevisionId === revision.id ? "default" : "outline"
-                    }
+                    variant={context.state.activeRevisionId === revision.id ? "default" : "outline"}
                   >
                     {context.state.activeRevisionId === revision.id
                       ? "当前修图"
@@ -922,41 +920,31 @@ export function PhotoEditorPanel({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3">
-
-          {context?.state.activeRevisionId !== null &&
-          context?.state.activeRevisionId !== undefined ? (
-            <Button
-              disabled={busy || context.state.pendingRevisionId !== null}
-              onClick={() => void switchRevision(null)}
-              type="button"
-              variant="outline"
-            >
-              恢复原图
-            </Button>
-          ) : null}
-          {stage === "applying" ? (
-            <Button
-              onClick={() => applyController.current?.abort()}
-              type="button"
-              variant="outline"
-            >
-              取消处理
-            </Button>
-          ) : (
-            <Button
-              disabled={busy}
-              onClick={onClose}
-              type="button"
-              variant="outline"
-            >
-              退出修图
-            </Button>
-          )}
-          <Button disabled={!canApply || !recipeChanged} onClick={() => void apply()} type="button">
-            {ownedPendingRevisionId !== null && pendingRevisionId === ownedPendingRevisionId
-              ? "重试修图"
-              : "应用修图"}
+        {context?.state.activeRevisionId !== null &&
+        context?.state.activeRevisionId !== undefined ? (
+          <Button
+            disabled={busy || context.state.pendingRevisionId !== null}
+            onClick={() => void switchRevision(null)}
+            type="button"
+            variant="outline"
+          >
+            恢复原图
           </Button>
+        ) : null}
+        {stage === "applying" ? (
+          <Button onClick={() => applyController.current?.abort()} type="button" variant="outline">
+            取消处理
+          </Button>
+        ) : (
+          <Button disabled={busy} onClick={onClose} type="button" variant="outline">
+            退出修图
+          </Button>
+        )}
+        <Button disabled={!canApply || !recipeChanged} onClick={() => void apply()} type="button">
+          {ownedPendingRevisionId !== null && pendingRevisionId === ownedPendingRevisionId
+            ? "重试修图"
+            : "应用修图"}
+        </Button>
       </div>
     </aside>
   );
