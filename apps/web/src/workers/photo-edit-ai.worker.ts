@@ -70,27 +70,70 @@ async function ortRuntime() {
   return ortPromise;
 }
 
-async function cachedBytes(url: string): Promise<Uint8Array> {
-  const absolute = new URL(url, scope.location.origin).toString();
+async function cachedBytes(options: {
+  readonly url: string;
+  readonly expectedBytes: number;
+  readonly onProgress: (loadedBytes: number) => void;
+}): Promise<Uint8Array> {
+  const absolute = new URL(options.url, scope.location.origin).toString();
+  const cacheName = `photostream-photo-edit-${PHOTO_EDIT_MODEL_ASSET_VERSION}`;
+
   try {
-    const cache = await caches.open(`photostream-photo-edit-${PHOTO_EDIT_MODEL_ASSET_VERSION}`);
-    let response = await cache.match(absolute);
-    if (response === undefined) {
-      response = await fetch(absolute, { cache: "force-cache", credentials: "same-origin" });
-      if (!response.ok) {
-        throw new Error(`模型资源读取失败（HTTP ${response.status}）`);
-      }
-      await cache.put(absolute, response.clone());
+    const cache = await caches.open(cacheName);
+    const cached = await cache.match(absolute);
+    if (cached !== undefined) {
+      const bytes = new Uint8Array(await cached.arrayBuffer());
+      options.onProgress(bytes.byteLength);
+      return bytes;
     }
-    return new Uint8Array(await response.arrayBuffer());
+
+    const response = await fetch(absolute, {
+      cache: "force-cache",
+      credentials: "same-origin",
+    });
+    if (!response.ok || response.body === null) {
+      throw new Error(`模型资源读取失败（HTTP ${response.status}）`);
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loadedBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loadedBytes += value.byteLength;
+      options.onProgress(loadedBytes);
+    }
+
+    if (loadedBytes !== options.expectedBytes) {
+      throw new Error(
+        `模型资源大小不匹配：期望 ${options.expectedBytes} bytes，实际 ${loadedBytes} bytes`,
+      );
+    }
+
+    const bytes = new Uint8Array(loadedBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    const headers = new Headers(response.headers);
+    headers.delete("content-encoding");
+    headers.set("content-length", String(bytes.byteLength));
+    await cache.put(
+      absolute,
+      new Response(bytes, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      }),
+    );
+    return bytes;
   } catch (error) {
-    const response = await fetch(absolute, { cache: "force-cache", credentials: "same-origin" });
-    if (!response.ok) {
-      throw error instanceof Error
-        ? new Error(`${error.message}；模型资源读取失败（HTTP ${response.status}）`)
-        : new Error(`模型资源读取失败（HTTP ${response.status}）`);
-    }
-    return new Uint8Array(await response.arrayBuffer());
+    if (error instanceof Error) throw error;
+    throw new Error("模型资源读取失败");
   }
 }
 
@@ -105,25 +148,82 @@ function releaseSession(operation: PhotoEditAiOperation): void {
   }
 }
 
-async function createSession(spec: PhotoEditAiModelSpec): Promise<InferenceSession> {
+function postModelProgress(options: {
+  readonly id: string;
+  readonly operation: PhotoEditAiOperation;
+  readonly loadedBytes: number;
+  readonly totalBytes: number;
+}): void {
+  scope.postMessage({
+    id: options.id,
+    type: "progress",
+    phase: "downloading-model",
+    operation: options.operation,
+    progress:
+      options.totalBytes <= 0 ? 0 : Math.min(1, options.loadedBytes / options.totalBytes),
+    loadedBytes: options.loadedBytes,
+    totalBytes: options.totalBytes,
+  });
+}
+
+async function createSession(
+  spec: PhotoEditAiModelSpec,
+  requestId: string,
+): Promise<InferenceSession> {
   if (disabledReason !== null) throw new Error(disabledReason);
   if (!("gpu" in navigator)) {
     disabledReason = "当前浏览器或设备不支持 WebGPU，本地 AI 修复不可用。";
     throw new Error(disabledReason);
   }
 
-  const ort = await ortRuntime();
-  const model = await cachedBytes(spec.modelUrl);
+  const totalBytes = spec.modelBytes + (spec.externalData?.bytes ?? 0);
+  let modelLoadedBytes = 0;
+  let externalLoadedBytes = 0;
+  const report = () =>
+    postModelProgress({
+      id: requestId,
+      operation: spec.operation,
+      loadedBytes: modelLoadedBytes + externalLoadedBytes,
+      totalBytes,
+    });
+
+  report();
+  const model = await cachedBytes({
+    url: spec.modelUrl,
+    expectedBytes: spec.modelBytes,
+    onProgress: (loadedBytes) => {
+      modelLoadedBytes = loadedBytes;
+      report();
+    },
+  });
   const externalData =
     spec.externalData === null
       ? undefined
       : [
           {
             path: spec.externalData.path,
-            data: await cachedBytes(spec.externalData.url),
+            data: await cachedBytes({
+              url: spec.externalData.url,
+              expectedBytes: spec.externalData.bytes,
+              onProgress: (loadedBytes) => {
+                externalLoadedBytes = loadedBytes;
+                report();
+              },
+            }),
           },
         ];
 
+  scope.postMessage({
+    id: requestId,
+    type: "progress",
+    phase: "initializing-model",
+    operation: spec.operation,
+    progress: 1,
+    loadedBytes: totalBytes,
+    totalBytes,
+  });
+
+  const ort = await ortRuntime();
   try {
     const session = await ort.InferenceSession.create(model, {
       executionProviders: ["webgpu"],
@@ -139,10 +239,16 @@ async function createSession(spec: PhotoEditAiModelSpec): Promise<InferenceSessi
   }
 }
 
-async function sessionFor(operation: PhotoEditAiOperation): Promise<InferenceSession> {
+async function sessionFor(
+  operation: PhotoEditAiOperation,
+  requestId?: string,
+): Promise<InferenceSession> {
   const existing = sessions.get(operation);
   if (existing !== undefined) return existing;
-  return createSession(photoEditAiModels[operation]);
+  if (requestId === undefined) {
+    throw new Error("AI 模型尚未初始化");
+  }
+  return createSession(photoEditAiModels[operation], requestId);
 }
 
 interface PreparedTile {
@@ -321,13 +427,7 @@ async function runOperation(options: {
   const sourceContext = source.getContext("2d", { alpha: true, willReadFrequently: true });
   if (sourceContext === null) throw new Error("无法读取 AI 修复画布");
 
-  scope.postMessage({
-    id,
-    type: "progress",
-    progress: progressStart,
-    phase: "loading-model",
-  });
-  await sessionFor(operation);
+  await sessionFor(operation, id);
   assertNotCancelled(id);
 
   const tiles = createPhotoEditTiles({
