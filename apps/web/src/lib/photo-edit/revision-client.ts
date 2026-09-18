@@ -175,6 +175,7 @@ export async function applyMediaEditRecipe(options: {
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: number) => void;
   readonly onReserved?: (revisionId: string) => void | Promise<void>;
+  readonly preservePendingOnFailure?: boolean;
 }): Promise<MediaEditContextView> {
   options.onProgress?.(0);
   const reserveRequest: CreateMediaEditRevisionRequest = {
@@ -265,10 +266,13 @@ export async function applyMediaEditRecipe(options: {
     options.onProgress?.(1);
     return applied;
   } catch (error) {
-    await clientMutation(
-      `/api/v1/media/${encodeURIComponent(options.mediaId)}/edits/${encodeURIComponent(revisionId)}/cancel`,
-      {},
-    ).catch(() => undefined);
+    const aborted = error instanceof DOMException && error.name === "AbortError";
+    if (aborted || options.preservePendingOnFailure !== true) {
+      await clientMutation(
+        `/api/v1/media/${encodeURIComponent(options.mediaId)}/edits/${encodeURIComponent(revisionId)}/cancel`,
+        {},
+      ).catch(() => undefined);
+    }
     throw error;
   }
 }
