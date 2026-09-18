@@ -131,6 +131,7 @@ export function AlbumSettings({
   faceConfig?: FaceConfigView | undefined;
   statistics?: unknown;
 }>) {
+  const router = useRouter();
   const pendingRef = useRef(new Set<PendingAction>());
   const [album, setAlbum] = useState(initialAlbum);
   const [pendingActions, setPendingActions] = useState<ReadonlySet<PendingAction>>(new Set());
