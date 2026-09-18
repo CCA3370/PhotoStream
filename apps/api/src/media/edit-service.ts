@@ -6,6 +6,7 @@ import {
   type MediaEditRevisionView,
   type MediaEditVariantKind,
   type MediaEditVariantView,
+  type PrepareMediaEditRevisionRequest,
   type RevertMediaEditRequest,
   type SignedUpload,
   type UserRole,
@@ -92,7 +93,7 @@ export class MediaEditService {
     requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
-      const media = await this.#media(transaction, options.mediaId);
+      await this.#media(transaction, options.mediaId);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== null) {
         throw new AppError({
@@ -117,24 +118,13 @@ export class MediaEditService {
         });
       }
 
-      for (const variant of options.input.variants) {
-        const expected = expectedDimensions(media, variant.kind);
-        if (variant.width !== expected.width || variant.height !== expected.height) {
-          throw new AppError({
-            code: "BAD_REQUEST",
-            message: `${variant.kind} 尺寸不符合修图输出规格`,
-            statusCode: 400,
-          });
-        }
-      }
-
       const now = new Date();
       const [revision] = await transaction
         .insert(schema.mediaEditRevisions)
         .values({
           mediaId: options.mediaId,
           createdBy: options.actor.id,
-          status: "uploading",
+          status: "rendering",
           basedOnRevisionId: options.input.basedOnRevisionId,
           basedOnGeneration: options.input.basedOnGeneration,
           pipelineVersion: options.input.pipelineVersion,
@@ -150,19 +140,6 @@ export class MediaEditService {
         .returning({ id: schema.mediaEditRevisions.id });
       if (revision === undefined) throw new Error("Media edit revision insert returned no row");
 
-      await transaction.insert(schema.mediaEditVariants).values(
-        options.input.variants.map((variant) => ({
-          editRevisionId: revision.id,
-          kind: variant.kind,
-          objectKey: `media/albums/${media.albumId}/photos/${media.id}/edits/${revision.id}/${filenameFor(variant.kind, variant.format)}`,
-          format: variant.format,
-          contentType: variant.contentType,
-          width: variant.width,
-          height: variant.height,
-          expectedBytes: variant.bytes,
-        })),
-      );
-
       await transaction
         .update(schema.mediaEditStates)
         .set({
@@ -175,9 +152,89 @@ export class MediaEditService {
 
       await this.#audit(transaction, {
         actorId: options.actor.id,
-        action: "media.edit.created",
+        action: "media.edit.reserved",
         targetId: options.mediaId,
         changedFields: ["pendingRevisionId", "generation"],
+        requestId: options.requestId,
+      });
+    });
+    return this.#context(this.#database, options.mediaId);
+  }
+
+  async prepareRevision(options: {
+    readonly actor: InternalActor;
+    readonly mediaId: string;
+    readonly revisionId: string;
+    readonly input: PrepareMediaEditRevisionRequest;
+    readonly requestId: string;
+  }): Promise<MediaEditContextView> {
+    requirePermission(options.actor.role);
+    await this.#database.transaction(async (transaction) => {
+      await this.#lock(transaction, options.mediaId);
+      const media = await this.#media(transaction, options.mediaId);
+      const state = await this.#stateForUpdate(transaction, options.mediaId);
+      if (state.pendingRevisionId !== options.revisionId) {
+        throw this.#versionConflict();
+      }
+
+      const [revision] = await transaction
+        .select()
+        .from(schema.mediaEditRevisions)
+        .where(
+          and(
+            eq(schema.mediaEditRevisions.id, options.revisionId),
+            eq(schema.mediaEditRevisions.mediaId, options.mediaId),
+          ),
+        )
+        .limit(1);
+      if (revision === undefined) throw this.#notFound();
+
+      const existing = await transaction
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(eq(schema.mediaEditVariants.editRevisionId, revision.id));
+      if (revision.status === "uploading" && existing.length === requiredKinds.length) return;
+      if (revision.status !== "rendering" || existing.length !== 0) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "当前修图版本不能重新准备上传对象",
+          statusCode: 409,
+        });
+      }
+
+      for (const variant of options.input.variants) {
+        const expected = expectedDimensions(media, variant.kind);
+        if (variant.width !== expected.width || variant.height !== expected.height) {
+          throw new AppError({
+            code: "BAD_REQUEST",
+            message: `${variant.kind} 尺寸不符合修图输出规格`,
+            statusCode: 400,
+          });
+        }
+      }
+
+      await transaction.insert(schema.mediaEditVariants).values(
+        options.input.variants.map((variant) => ({
+          editRevisionId: revision.id,
+          kind: variant.kind,
+          objectKey: `media/albums/${media.albumId}/photos/${media.id}/edits/${revision.id}/${filenameFor(variant.kind, variant.format)}`,
+          format: variant.format,
+          contentType: variant.contentType,
+          width: variant.width,
+          height: variant.height,
+          expectedBytes: variant.bytes,
+        })),
+      );
+      const now = new Date();
+      await transaction
+        .update(schema.mediaEditRevisions)
+        .set({ status: "uploading", updatedAt: now })
+        .where(eq(schema.mediaEditRevisions.id, revision.id));
+      await this.#audit(transaction, {
+        actorId: options.actor.id,
+        action: "media.edit.prepared",
+        targetId: options.mediaId,
+        changedFields: ["editRevision.status", "editVariants"],
         requestId: options.requestId,
       });
     });
