@@ -36,7 +36,10 @@ ARG MEDIA_BASE_URL=https://cdn.cloverta.top
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
 ENV MEDIA_BASE_URL=$MEDIA_BASE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @photostream/web build
+RUN --mount=type=cache,id=photostream-photo-edit-models,target=/root/.cache/photostream-photo-edit-models \
+    PHOTOSTREAM_MODEL_CACHE_DIR=/root/.cache/photostream-photo-edit-models \
+    node scripts/provision-photo-edit-models.mjs && \
+    pnpm --filter @photostream/web build
 
 FROM ${NODE_IMAGE} AS web
 ENV NODE_ENV=production
