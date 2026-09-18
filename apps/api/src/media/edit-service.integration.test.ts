@@ -155,13 +155,18 @@ maybeDescribe("media edit revisions", () => {
     return {
       basedOnRevisionId: null,
       basedOnGeneration: 0,
-      pipelineVersion: "local-edit-v1",
-      recipeVersion: 1,
-      recipeJson: { exposureEv: 0.2 },
+      pipelineVersion: "local-edit-v2",
+      recipeVersion: 2,
+      recipeJson: { exposureEv: 0.2, denoiseStrength: 0, deblurStrength: 0 },
       denoiseModel: null,
       denoiseModelVersion: null,
       deblurModel: null,
       deblurModelVersion: null,
+    };
+  }
+
+  function prepareInput() {
+    return {
       variants: [
         {
           kind: "photo_480" as const,
@@ -211,6 +216,8 @@ maybeDescribe("media edit revisions", () => {
     const revisionId = created.state.pendingRevisionId;
     if (revisionId === null) throw new Error("pending revision missing");
 
+    expect(created.pendingRevision?.status).toBe("rendering");
+
     await expect(
       service.completeRevision({
         actor: { id: reviewerId, role: "reviewer" },
@@ -220,7 +227,22 @@ maybeDescribe("media edit revisions", () => {
       }),
     ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
 
-    const variants = await database
+    let variants = await database
+      .select()
+      .from(schema.mediaEditVariants)
+      .where(eq(schema.mediaEditVariants.editRevisionId, revisionId));
+    expect(variants).toHaveLength(0);
+
+    const prepared = await service.prepareRevision({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      revisionId,
+      input: prepareInput(),
+      requestId: "edit-prepare-request",
+    });
+    expect(prepared.pendingRevision?.status).toBe("uploading");
+
+    variants = await database
       .select()
       .from(schema.mediaEditVariants)
       .where(eq(schema.mediaEditVariants.editRevisionId, revisionId));
