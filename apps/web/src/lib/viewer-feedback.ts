@@ -33,9 +33,9 @@ export function viewerFeedbackKindLabel(kind: ViewerFeedbackKind): string {
 }
 
 export function viewerReportReasonLabel(reason: ViewerReportReason): string {
-  if (reason === "privacy") return "涉及隐私或肖像";
-  if (reason === "inappropriate") return "内容不适当";
-  if (reason === "copyright") return "版权或授权问题";
-  if (reason === "inaccurate") return "图片或人物信息有误";
-  return "其他原因";
+  if (reason === "privacy") return "侵犯了我的隐私或肖像权";
+  if (reason === "inappropriate") return "图片中有不适合公开的内容";
+  if (reason === "copyright") return "未经授权使用了我的作品或图片";
+  if (reason === "inaccurate") return "图片中的人物或信息有误";
+  return "其他需要处理的问题";
 }
