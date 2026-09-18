@@ -34,6 +34,7 @@ export const UploadQueue: Story = {
         queued: 0,
         processing: 0,
         failed: 0,
+        cancelled: 0,
         retryableFailed: 0,
         pendingReview: 0,
         completed: 0,
