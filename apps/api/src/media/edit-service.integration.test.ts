@@ -251,7 +251,9 @@ maybeDescribe("media edit revisions", () => {
         requestId: "edit-apply-before-ready",
       }),
     ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
-    expect((await service.getContext({ id: reviewerId, role: "reviewer" }, mediaId)).state).toMatchObject({
+    expect(
+      (await service.getContext({ id: reviewerId, role: "reviewer" }, mediaId)).state,
+    ).toMatchObject({
       activeRevisionId: null,
       pendingRevisionId: revisionId,
       generation: 1,
