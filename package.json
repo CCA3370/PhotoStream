@@ -15,7 +15,8 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "test:db": "pnpm --filter @photostream/db test:integration",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "photo-edit:assets": "node scripts/provision-photo-edit-models.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",
