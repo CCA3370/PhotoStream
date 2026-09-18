@@ -40,7 +40,10 @@ async function encode(
   return { kind, format, contentType, width: size.width, height: size.height, blob };
 }
 
-function post(response: Omit<PhotoWorkerResponse, "protocolVersion">): void {
+type WithoutProtocolVersion<T> = T extends unknown ? Omit<T, "protocolVersion"> : never;
+type UnversionedPhotoWorkerResponse = WithoutProtocolVersion<PhotoWorkerResponse>;
+
+function post(response: UnversionedPhotoWorkerResponse): void {
   worker.postMessage({ ...response, protocolVersion: PHOTO_WORKER_PROTOCOL_VERSION });
 }
 
