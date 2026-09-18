@@ -441,14 +441,10 @@ class LocalProcessingRuntime {
             const reservationReady = new Promise<void>((resolve) => {
               releaseReservation = resolve;
             });
-            const syncPromise = syncLocalPhotoEditDraft(
-              task.localPhotoId,
-              undefined,
-              () => {
-                reserved = true;
-                releaseReservation();
-              },
-            );
+            const syncPromise = syncLocalPhotoEditDraft(task.localPhotoId, undefined, () => {
+              reserved = true;
+              releaseReservation();
+            });
             void syncPromise.catch(() => undefined);
             await Promise.race([
               reservationReady,
