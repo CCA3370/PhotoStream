@@ -130,6 +130,7 @@ export async function putAppliedLocalPhotoEditDraft(options: {
   readonly sourceFingerprint: string;
 }): Promise<LocalPhotoEditDraft> {
   if (!supported()) throw new Error("当前浏览器不支持本地修图草稿");
+  const current = await getLocalPhotoEditDraft(options.localPhotoId);
   const draft: LocalPhotoEditDraft = {
     localPhotoId: options.localPhotoId,
     mediaId: options.mediaId,
@@ -143,7 +144,7 @@ export async function putAppliedLocalPhotoEditDraft(options: {
     deblurModelVersion: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
     sourceFingerprint: options.sourceFingerprint,
     editState: "applied_local",
-    remoteRevisionId: null,
+    remoteRevisionId: current?.remoteRevisionId ?? null,
     error: null,
     updatedAt: new Date().toISOString(),
   };
