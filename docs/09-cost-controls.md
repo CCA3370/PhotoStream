@@ -60,7 +60,7 @@
 
 小图先发布增加少量 OSS 存储，但显著避免浏览列表下行原图，是主要节流策略。
 
-每个被保留的本地智能修图 revision 额外产生四个不可变对象：480、960、1920 和全分辨率 `photo_download`。不覆盖、也不创建第二份真正的 `photo_original`。有 active edit 时，观众“原图下载”解析到该 revision 的 `photo_download`；真正上传的 `photo_original` 只保留给管理端恢复/重新编辑，并在无 active edit 时作为公共最高质量下载。
+每个被保留的本地智能修图 revision 额外产生四个不可变对象：480、960、1920 和全分辨率 `photo_download`。不覆盖、也不创建第二份真正的 `photo_original`。正常 active edit 时，观众“原图下载”解析到该 revision 的 `photo_download`；真正上传的 `photo_original` 主要保留给管理端恢复/重新编辑，并在无 active edit 时作为公共最高质量下载。若 active edit 资产异常缺失/不可用，服务端 resolver 可自动 fallback base `photo_original`，该路径仅用于异常容错。
 
 未应用/历史 revision 的保留与清理必须有明确策略，不允许无界积累；若为了可靠回滚暂时长期保留，后台存储统计必须能把编辑派生图单独计入。
 
@@ -91,7 +91,7 @@
 2. 图片懒加载、虚拟化；灯箱只预取相邻一张，省流量模式不预取。
 3. 不可变 object key 与一年边缘缓存，鉴权参数不进入 cache key。
 4. 公共静态资源使用哈希文件名和一年浏览器/CDN 缓存。
-5. 下载默认关闭；最高质量下载地址只在用户明确点击时签发：有 active edit 时为该 revision 的 `photo_download`，否则为真正 `photo_original`。
+5. 下载默认关闭；最高质量下载地址只在用户明确点击时签发：正常 active edit 时为该 revision 的 `photo_download`，无 active edit 时为真正 `photo_original`；若 active edit 资产异常不可用则由服务端自动 fallback base `photo_original`。
 6. API/SSE 不走 CDN，不把动态查询参数制造为新静态缓存对象。
 7. OCR 模型只在内部识别页面按版本加载一次；观众端和未启用相册不请求模型，禁止第三方 CDN 回退。
 8. 本地修图模型只在有修图权限的内部用户主动首次使用对应 AI 功能时加载；第二次使用应命中长缓存，观众端绝不请求修图模型。
@@ -117,7 +117,7 @@
 - 号码搜索只用于口令相册，每个会话/IP-HMAC 每 10 分钟最多 30 次，不提供号码目录或模糊枚举。
 - 未来人脸搜索只用于口令相册，每个会话/IP-HMAC 每 10 分钟最多 3 次、每天最多 10 次；不提供人物目录或跨相册搜索。
 - 管理端修图远端源能力和编辑派生图上传能力只签发给已认证且有资源级权限的成员：admin/reviewer 可按既有审核权限操作，uploader 仅可操作自己上传的 Media；本地完整源命中时不签发、不请求远端原图能力。
-- active edit 存在时，普通观众的最高质量下载只能解析到 active `photo_download`；不得通过普通下载接口绕过 active revision 获取真正上传原图。
+- 正常 active edit 存在时，普通观众的最高质量下载解析到 active `photo_download`；客户端不得主动绕过 active revision 获取真正上传原图。只有服务端确认 active edit 资产异常缺失/不可用时，resolver 才可自动 fallback base。
 - CDN URL 鉴权能降低长期盗链，但鉴权失败请求仍可能产生 HTTPS 请求与少量流量费用。
 - 相册公开或开启下载时，后台必须展示费用与二次传播提示。
 - 学校应在阿里云费用中心设置余额/账单提醒，并定期查看 CDN 域名流量趋势；不得为了精确统计启用付费实时日志。
@@ -143,7 +143,7 @@
 - 管理端未使用 AI 修复时不下载 B 类修图模型；
 - 当前设备存在本地完整上传源时，应用 A/B 不产生远端 `photo_original` GET；只有换设备、本地记录被清理或损坏等 fallback 场景才允许远端源读取；
 - 每个完整编辑 revision 只增加预期的 480/960/1920/`photo_download` 四个对象，没有第二份真正 `photo_original` 或隐藏的云端处理费用；
-- active edit 时普通观众最高质量下载命中该 revision 的 `photo_download`，不会访问 base `photo_original`；
+- 正常 active edit 时普通观众最高质量下载命中该 revision 的 `photo_download`；仅在 active edit 资产异常缺失/不可用的容错路径访问 base `photo_original`；
 - 实际平均照片下行体积与本地样片预算一致。
 
 未来人脸 PoC/活动另行确认：

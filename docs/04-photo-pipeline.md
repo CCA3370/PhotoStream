@@ -243,9 +243,9 @@ published Media 创建新 edit revision 时：
 当前 active/base 继续服务观众
 → 浏览器本地处理
 → 上传 edit 4 对象
-→ complete
+→ complete（四个 edit 对象全部 verified）
 → ready
-→ CAS apply
+→ CAS apply（仅接受 ready revision）
 → active revision 原子切换
 → media.updated
 ~~~
@@ -290,8 +290,11 @@ Apply/Revert 使用 expectedGeneration + expectedActiveRevisionId 做事务 CAS�
 ### 浏览尺寸
 
 ~~~text
-active edit
+active edit 且对应 variant 可用
 → edit 480/960/1920
+
+active edit variant 异常缺失/不可用
+→ fallback 对应 base 480/960/1920
 
 无 active edit
 → base 480/960/1920
@@ -300,14 +303,17 @@ active edit
 ### 最高质量下载
 
 ~~~text
-active edit
+active edit 且 photo_download 可用
 → edit photo_download
+
+active edit photo_download 异常缺失/不可用
+→ fallback base photo_original
 
 无 active edit
 → base photo_original
 ~~~
 
-active edit 存在时，真正 base photo_original 只供管理端恢复、重新编辑、Before/After 和归档。
+正常 active edit 存在时，真正 base photo_original 只供管理端恢复、重新编辑、Before/After 和归档；active edit 资产异常缺失/不可用时允许服务端 resolver 自动 fallback base。
 
 ## 14. 编辑源原则
 
@@ -359,6 +365,7 @@ base photo_original
 | discarded edit orphan | 20 分钟后由 deletion maintenance 删除 edit 对象/revision；失败自动后续重试 |
 | 未发布 upload cancel/expire | 同时清 base 临时对象和 edit state/revisions/variants/对象 |
 | published + new edit 失败 | 继续服务旧 active |
+| active edit 资产异常缺失/不可用 | 普通相册、分享、预览/下载自动 fallback 对应 base 资产 |
 | 本地修图源缺失 | 仅在 remote base original verified 后 fallback |
 | WebGPU/OOM/device lost | 只终止当前 B 操作 |
 | 多端 edit 冲突 | 409，刷新最新 generation |
@@ -372,9 +379,9 @@ base photo_original
 - local original 存在时修图不得产生远端原图 GET；
 - remote original 未 verified 的设备不得假装可完成全分辨率 Apply；
 - base 未 ready 时任何 edit 都不能绕过显示门禁；
-- published Media 新 edit 未 ready 时公共端保持旧版本；
+- published Media 新 edit 未 ready 时公共端保持旧版本，且 revision 未 ready 时 apply 必须 409；
 - Apply/Revert 不改变 publishSequence；
-- active edit 时观众最高质量下载命中 edit photo_download；
+- 正常 active edit 时观众最高质量下载命中 edit photo_download；active edit 资产异常不可用时自动 fallback base photo_original；
 - 本机 stale base preview 不得覆盖服务器 active edit；
 - abandoned upload cleanup 不得遗留 edit 对象，也不得因 edit revision 的 sourceVariantId 外键阻塞 base 清理；
 - discarded edit cleanup 必须晚于预签名 PUT 有效期并支持失败重试。

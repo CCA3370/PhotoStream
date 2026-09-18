@@ -127,17 +127,20 @@ pending edit = uploading
 显示当前版本时：
 
 ~~~text
-active edit 存在
-→ 当前版本必须是 active edit
+active edit 存在且对应 edit 资产可用
+→ 当前版本使用 active edit
 → 若能从本地 original 精确按同一 recipe/model 重建，可本地加速
 → 否则使用远端 active edit variant
+
+active revision 指针存在，但对应所需 edit variant 异常缺失/不可用
+→ 容错回退对应 base variant
 
 无 active edit
 → 可优先使用本地 base variant
 → 否则使用远端 base variant
 ~~~
 
-因此本机本地文件只优化读取，不允许改变“当前版本”语义。
+因此本机本地文件只优化读取，不允许改变“当前版本”语义。正常状态机不会在 edit 未完成时切 active；上述 base fallback 只用于 active edit 资产异常丢失/损坏等容错场景。
 
 ## 5. 不同设备什么时候能修图
 
@@ -259,8 +262,8 @@ mediaId 已存在
 → POST prepare（登记四个 immutable 输出）
 → PUT 四个对象
 → HEAD/complete 校验
-→ revision ready
-→ CAS apply
+→ 四个 edit 对象全部 verified 后 revision ready
+→ CAS apply（仅接受 status=ready）
 → active revision 切换
 
 mediaId 尚未存在
@@ -498,8 +501,11 @@ otherwise
 浏览：
 
 ~~~text
-active edit
+active edit 且对应 variant 可用
 → edit 480/960/1920
+
+active edit variant 异常缺失/不可用
+→ fallback 对应 base 480/960/1920
 
 无 active edit
 → base 480/960/1920
@@ -508,14 +514,17 @@ active edit
 “原图下载”：
 
 ~~~text
-active edit
+active edit 且 photo_download 可用
 → active edit.photo_download
+
+active edit photo_download 异常缺失/不可用
+→ fallback base photo_original
 
 无 active edit
 → base photo_original
 ~~~
 
-active edit 存在时，真正 base photo_original 只供管理端恢复、重新编辑、Before/After 和归档。
+正常 active edit 存在时，真正 base photo_original 只供管理端恢复、重新编辑、Before/After 和归档；只有服务端检测到 active edit 资产异常不可用时，公共 resolver 才允许自动 fallback base，客户端不能主动绕过 active revision。
 
 ## 16. UI
 
@@ -635,7 +644,7 @@ pendingRevisionId
 6. 两设备 generation 冲突：后提交者得到 409，不覆盖先提交者。
 7. local original 存在：EditSourceResolver 不请求 remote original。
 8. local original 不存在：只读取 verified base original。
-9. active edit 时 viewer 下载命中 photo_download，不返回 base original。
+9. 正常 active edit 时 viewer 下载命中 photo_download；若 active edit 资产异常缺失/不可用，resolver 自动 fallback base original。
 10. 本机 stale base preview 不得覆盖服务器 active edit。
 11. base ingest failed 时即使 edit ready 也不能显示。
 12. pending edit 取消后可继续显示当前旧 active/base。
@@ -645,6 +654,8 @@ pendingRevisionId
 16. 未发布上传被 cancel/expire 后，upload cleanup 必须同时清理该 Media 的 edit state/revisions/variants 和 OSS edit 对象，且不能被 sourceVariantId 外键阻塞。
 17. uploader 只能修自己的 Media；对其他 uploader Media 的 get/apply/revert 均返回 403。
 18. auto publish + pending edit：480/960 完成后进入 pending_review，不把上传标失败，也不发布 base。
+19. edit 四个输出未全部 verified / revision 未 ready 时调用 apply 必须返回 409，activeRevisionId 保持不变。
+20. activeRevisionId 异常指向缺失/不可用 edit 资产时，普通相册、分享页、预览和最高质量下载均自动 fallback 对应 base 资产。
 
 ## 21. 实施顺序
 
@@ -712,7 +723,7 @@ pendingRevisionId
 10. published Media 在新 revision ready 前继续显示旧版本；ready 后原子切换。
 11. active/pending/generation 全由服务器同步；多端冲突用 CAS/409。
 12. DisplayResolver 必须尊重服务器 active revision，不能被本机 stale base preview 覆盖。
-13. active edit 时观众最高质量下载固定指向 edit photo_download。
+13. 正常 active edit 时观众最高质量下载指向 edit photo_download；active edit 资产异常缺失/不可用时服务端自动 fallback base photo_original。
 14. 修图不改变 publishSequence、OCR、人脸标签或 Media 身份。
 15. A+B 不使用云 AI；B 直接正常接入生产代码，在当前未正式投产环境中验证和调整。
 16. uploader 不获得全局 media:review；修图服务按资源所有权允许 uploader 仅编辑自己上传的 Media。
