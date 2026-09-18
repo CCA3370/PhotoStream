@@ -437,9 +437,9 @@ class LocalProcessingRuntime {
             editDraft.sourceFingerprint.length > 0
           ) {
             let reserved = false;
-            let releaseReservation = () => undefined;
+            let releaseReservation: () => void = () => {};
             const reservationReady = new Promise<void>((resolve) => {
-              releaseReservation = () => resolve();
+              releaseReservation = resolve;
             });
             const syncPromise = syncLocalPhotoEditDraft(
               task.localPhotoId,
