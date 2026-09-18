@@ -306,6 +306,44 @@ maybeDescribe("media edit revisions", () => {
     ).rejects.toMatchObject({ code: "EDIT_VERSION_CONFLICT" });
   });
 
+  it("allows an uploader to edit only their own uploaded media", async () => {
+    const [owner] = await database
+      .insert(schema.users)
+      .values({
+        username: "edit-owner",
+        normalizedUsername: "edit-owner",
+        displayName: "上传者 A",
+        role: "uploader",
+        passwordHash: "hash",
+        mustChangePassword: false,
+      })
+      .returning({ id: schema.users.id });
+    const [other] = await database
+      .insert(schema.users)
+      .values({
+        username: "edit-other",
+        normalizedUsername: "edit-other",
+        displayName: "上传者 B",
+        role: "uploader",
+        passwordHash: "hash",
+        mustChangePassword: false,
+      })
+      .returning({ id: schema.users.id });
+    if (owner === undefined || other === undefined) throw new Error("uploader insert failed");
+
+    await database
+      .update(schema.media)
+      .set({ uploaderId: owner.id })
+      .where(eq(schema.media.id, mediaId));
+
+    const owned = await service.getContext({ id: owner.id, role: "uploader" }, mediaId);
+    expect(owned.mediaId).toBe(mediaId);
+
+    await expect(
+      service.getContext({ id: other.id, role: "uploader" }, mediaId),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("only signs a remote edit source after the base original is verified", async () => {
     await expect(
       service.source({ id: reviewerId, role: "reviewer" }, mediaId),
