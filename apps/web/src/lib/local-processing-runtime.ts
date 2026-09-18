@@ -492,7 +492,7 @@ class LocalProcessingRuntime {
               uploadState: "uploading",
               error: null,
             });
-  
+
             const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
             if (
               editDraft !== null &&
@@ -518,7 +518,7 @@ class LocalProcessingRuntime {
                 }),
               ]);
             }
-  
+
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
             uploads.push(uploadProgressiveOriginal(intent, task.file, controller.signal));
           },
