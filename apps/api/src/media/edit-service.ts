@@ -9,7 +9,6 @@ import {
   type PrepareMediaEditRevisionRequest,
   type RevertMediaEditRequest,
   type SignedUpload,
-  type UserRole,
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
@@ -29,12 +28,6 @@ const requiredKinds: readonly MediaEditVariantKind[] = [
   "photo_1920",
   "photo_download",
 ];
-
-function requirePermission(role: UserRole): void {
-  if (!hasPermission(role, "media:review")) {
-    throw new AppError({ code: "FORBIDDEN", message: "当前角色无权修图", statusCode: 403 });
-  }
-}
 
 function extensionFor(format: string): string {
   return format === "jpeg" ? "jpg" : format;
@@ -80,7 +73,8 @@ export class MediaEditService {
   }
 
   async getContext(actor: InternalActor, mediaId: string): Promise<MediaEditContextView> {
-    requirePermission(actor.role);
+    const media = await this.#media(this.#database, mediaId);
+    this.#assertEditAccess(actor, media);
     return this.#context(this.#database, mediaId);
   }
 
@@ -90,10 +84,10 @@ export class MediaEditService {
     readonly input: CreateMediaEditRevisionRequest;
     readonly requestId: string;
   }): Promise<MediaEditContextView> {
-    requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
-      await this.#media(transaction, options.mediaId);
+      const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== null) {
         throw new AppError({
@@ -168,10 +162,10 @@ export class MediaEditService {
     readonly input: PrepareMediaEditRevisionRequest;
     readonly requestId: string;
   }): Promise<MediaEditContextView> {
-    requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) {
         throw this.#versionConflict();
@@ -247,7 +241,8 @@ export class MediaEditService {
     readonly revisionId: string;
     readonly kind: MediaEditVariantKind;
   }): Promise<SignedUpload> {
-    requirePermission(options.actor.role);
+    const media = await this.#media(this.#database, options.mediaId);
+    this.#assertEditAccess(options.actor, media);
     const [row] = await this.#database
       .select({ revision: schema.mediaEditRevisions, variant: schema.mediaEditVariants })
       .from(schema.mediaEditRevisions)
@@ -298,7 +293,8 @@ export class MediaEditService {
     readonly revisionId: string;
     readonly kind: MediaEditVariantKind;
   }): Promise<{ readonly ok: true }> {
-    requirePermission(options.actor.role);
+    const media = await this.#media(this.#database, options.mediaId);
+    this.#assertEditAccess(options.actor, media);
     const [row] = await this.#database
       .select({ revision: schema.mediaEditRevisions, variant: schema.mediaEditVariants })
       .from(schema.mediaEditRevisions)
@@ -348,9 +344,10 @@ export class MediaEditService {
     readonly revisionId: string;
     readonly requestId: string;
   }): Promise<MediaEditContextView> {
-    requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
+      const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) {
         throw new AppError({
@@ -409,7 +406,6 @@ export class MediaEditService {
     readonly input: ApplyMediaEditRequest;
     readonly requestId: string;
   }): Promise<MediaEditContextView> {
-    requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
@@ -479,9 +475,10 @@ export class MediaEditService {
     readonly revisionId: string;
     readonly requestId: string;
   }): Promise<MediaEditContextView> {
-    requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
+      const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) throw this.#versionConflict();
       const now = new Date();
@@ -520,7 +517,6 @@ export class MediaEditService {
     readonly input: RevertMediaEditRequest;
     readonly requestId: string;
   }): Promise<MediaEditContextView> {
-    requirePermission(options.actor.role);
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
@@ -594,8 +590,8 @@ export class MediaEditService {
   }
 
   async source(actor: InternalActor, mediaId: string) {
-    requirePermission(actor.role);
-    await this.#media(this.#database, mediaId);
+    const media = await this.#media(this.#database, mediaId);
+    this.#assertEditAccess(actor, media);
     const original = await this.#baseOriginal(this.#database, mediaId);
     if (original === null || !original.verified) {
       throw new AppError({
@@ -804,6 +800,19 @@ export class MediaEditService {
       result: "success",
       changedFields: options.changedFields,
       requestId: options.requestId,
+    });
+  }
+
+  #assertEditAccess(
+    actor: InternalActor,
+    media: typeof schema.media.$inferSelect,
+  ): void {
+    if (hasPermission(actor.role, "media:review")) return;
+    if (actor.role === "uploader" && media.uploaderId === actor.id) return;
+    throw new AppError({
+      code: "FORBIDDEN",
+      message: "无权修改他人上传的照片",
+      statusCode: 403,
     });
   }
 
