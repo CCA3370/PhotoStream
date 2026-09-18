@@ -95,15 +95,14 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
   }
 }
 
-export function syncLocalPhotoEditDraft(
-  localPhotoId: string,
-  signal?: AbortSignal,
-): Promise<void> {
+export function syncLocalPhotoEditDraft(localPhotoId: string, signal?: AbortSignal): Promise<void> {
   const previous = syncTails.get(localPhotoId) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(() => {
-    if (signal?.aborted) throw new DOMException("修图同步已取消", "AbortError");
-    return syncOnce(localPhotoId, signal);
-  });
+  const next = previous
+    .catch(() => undefined)
+    .then(() => {
+      if (signal?.aborted) throw new DOMException("修图同步已取消", "AbortError");
+      return syncOnce(localPhotoId, signal);
+    });
   syncTails.set(localPhotoId, next);
   return next.finally(() => {
     if (syncTails.get(localPhotoId) === next) syncTails.delete(localPhotoId);
