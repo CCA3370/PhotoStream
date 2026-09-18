@@ -52,19 +52,21 @@ export function normalizePhotoEditRecipe(
 export function photoEditRecipeFromUnknown(value: unknown): PhotoEditRecipe {
   if (typeof value !== "object" || value === null) return defaultPhotoEditRecipe;
   const input = value as Record<string, unknown>;
-  const number = (key: string): number | undefined =>
-    typeof input[key] === "number" ? (input[key] as number) : undefined;
-  return normalizePhotoEditRecipe({
-    exposureEv: number("exposureEv"),
-    temperature: number("temperature"),
-    tint: number("tint"),
-    highlights: number("highlights"),
-    shadows: number("shadows"),
-    contrast: number("contrast"),
-    vibrance: number("vibrance"),
-    saturation: number("saturation"),
-    sharpen: number("sharpen"),
-  });
+  const parsed: Partial<Omit<PhotoEditRecipe, "version">> = {};
+  for (const key of [
+    "exposureEv",
+    "temperature",
+    "tint",
+    "highlights",
+    "shadows",
+    "contrast",
+    "vibrance",
+    "saturation",
+    "sharpen",
+  ] as const) {
+    if (typeof input[key] === "number") parsed[key] = input[key];
+  }
+  return normalizePhotoEditRecipe(parsed);
 }
 
 export function photoEditRecipeIsIdentity(recipe: PhotoEditRecipe): boolean {
