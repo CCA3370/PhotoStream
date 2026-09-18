@@ -898,6 +898,24 @@ export class PhotoService {
       claimed.media.publicationStatus === "published" ||
       claimed.media.publicationStatus === "pending_review";
     const cleanedVariants = variants.filter((variant) => !(preserveVerified && variant.verified));
+    const editRevisions = preserveVerified
+      ? []
+      : await this.#database
+          .select({ id: schema.mediaEditRevisions.id })
+          .from(schema.mediaEditRevisions)
+          .where(eq(schema.mediaEditRevisions.mediaId, claimed.media.id));
+    const editRevisionIds = editRevisions.map((revision) => revision.id);
+    const editVariants =
+      editRevisionIds.length === 0
+        ? []
+        : await this.#database
+            .select({
+              id: schema.mediaEditVariants.id,
+              editRevisionId: schema.mediaEditVariants.editRevisionId,
+              objectKey: schema.mediaEditVariants.objectKey,
+            })
+            .from(schema.mediaEditVariants)
+            .where(inArray(schema.mediaEditVariants.editRevisionId, editRevisionIds));
     try {
       for (const variant of variants) {
         if (multipartVariantIds.has(variant.id)) {
@@ -908,6 +926,7 @@ export class PhotoService {
         }
       }
       for (const variant of cleanedVariants) await this.#storage.delete(variant.objectKey);
+      for (const variant of editVariants) await this.#storage.delete(variant.objectKey);
     } catch {
       const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** claimed.intent.cleanupAttempts);
       await this.#database
@@ -943,6 +962,17 @@ export class PhotoService {
             variants.map((variant) => variant.id),
           ),
         );
+      }
+      if (editRevisionIds.length > 0) {
+        await transaction
+          .delete(schema.mediaEditStates)
+          .where(eq(schema.mediaEditStates.mediaId, claimed.media.id));
+        await transaction
+          .delete(schema.mediaEditVariants)
+          .where(inArray(schema.mediaEditVariants.editRevisionId, editRevisionIds));
+        await transaction
+          .delete(schema.mediaEditRevisions)
+          .where(inArray(schema.mediaEditRevisions.id, editRevisionIds));
       }
       if (cleanedVariants.length > 0) {
         await transaction.delete(schema.mediaVariants).where(
