@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  localPhotoEditDraftConflictsWithRemote,
-  photoEditSourceFingerprint,
-} from "./local-drafts";
+import { localPhotoEditDraftConflictsWithRemote, photoEditSourceFingerprint } from "./local-drafts";
 
 describe("local photo edit drafts", () => {
   it("uses source identity fields that remain stable across edit retries", () => {
