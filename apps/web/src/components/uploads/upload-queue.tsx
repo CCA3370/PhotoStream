@@ -114,7 +114,8 @@ export function UploadQueue({
     const next = await Promise.all(
       rows.map(async (photo) => {
         const preview =
-          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
+          photo.originalBlob;
         return {
           photo,
           url: URL.createObjectURL(preview),
