@@ -1,5 +1,7 @@
 import type { PhotoVariantKind } from "@photostream/contracts";
 
+import { PHOTO_WORKER_PROTOCOL_VERSION } from "@/lib/photo-worker-protocol";
+
 export interface ProcessedPhotoVariant {
   readonly kind: Exclude<PhotoVariantKind, "photo_original">;
   readonly format: "webp" | "jpeg";
@@ -23,18 +25,34 @@ export interface ProcessedPhoto extends ProcessedPhotoMetadata {
 
 export interface PhotoWorkerRequest {
   readonly id: string;
+  readonly protocolVersion: typeof PHOTO_WORKER_PROTOCOL_VERSION;
   readonly file: File;
 }
 
+type VersionedPhotoWorkerResponse<T extends object> = T & {
+  readonly id: string;
+  readonly protocolVersion: typeof PHOTO_WORKER_PROTOCOL_VERSION;
+};
+
 export type PhotoWorkerResponse =
-  | { readonly id: string; readonly type: "metadata"; readonly metadata: ProcessedPhotoMetadata }
-  | { readonly id: string; readonly type: "variant"; readonly variant: ProcessedPhotoVariant }
-  | { readonly id: string; readonly type: "complete" }
-  | { readonly id: string; readonly type: "error"; readonly message: string };
+  | VersionedPhotoWorkerResponse<{
+      readonly type: "metadata";
+      readonly metadata: ProcessedPhotoMetadata;
+    }>
+  | VersionedPhotoWorkerResponse<{
+      readonly type: "variant";
+      readonly variant: ProcessedPhotoVariant;
+    }>
+  | VersionedPhotoWorkerResponse<{ readonly type: "complete" }>
+  | VersionedPhotoWorkerResponse<{ readonly type: "error"; readonly message: string }>;
 
 export interface PhotoProcessingHandlers {
   readonly onMetadata?: (metadata: ProcessedPhotoMetadata) => void | Promise<void>;
   readonly onVariant?: (variant: ProcessedPhotoVariant) => void | Promise<void>;
+}
+
+function workerVersionError(): Error {
+  return new Error("照片处理组件版本已过期，请刷新页面后重试");
 }
 
 export async function processPhotoInWorkerStreaming(
@@ -42,7 +60,7 @@ export async function processPhotoInWorkerStreaming(
   handlers: PhotoProcessingHandlers = {},
   options: { readonly signal?: AbortSignal } = {},
 ): Promise<ProcessedPhoto> {
-  const worker = new Worker(new URL("../workers/photo-processor.worker.ts", import.meta.url), {
+  const worker = new Worker(new URL("../workers/photo-processor-v2.worker.ts", import.meta.url), {
     type: "module",
   });
   const id = crypto.randomUUID();
@@ -60,26 +78,39 @@ export async function processPhotoInWorkerStreaming(
       }
       rejectOnAbort = () => reject(aborted());
       options.signal?.addEventListener("abort", rejectOnAbort, { once: true });
-      worker.addEventListener("message", (event: MessageEvent<PhotoWorkerResponse>) => {
-        if (event.data.id !== id) return;
-        if (event.data.type === "error") {
-          reject(new Error(event.data.message));
+      worker.addEventListener("message", (event: MessageEvent<unknown>) => {
+        if (typeof event.data !== "object" || event.data === null) {
+          reject(new Error("照片处理 Worker 返回了无效响应"));
           return;
         }
-        if (event.data.type === "metadata") {
-          const nextMetadata = event.data.metadata;
+        const response = event.data as Partial<PhotoWorkerResponse> & { readonly id?: unknown };
+        if (response.id !== id) return;
+        if (response.protocolVersion !== PHOTO_WORKER_PROTOCOL_VERSION) {
+          reject(workerVersionError());
+          return;
+        }
+        if (response.type === "error") {
+          reject(new Error(response.message));
+          return;
+        }
+        if (response.type === "metadata") {
+          const nextMetadata = response.metadata;
           metadata = nextMetadata;
           callbackTail = callbackTail.then(async () => {
             await handlers.onMetadata?.(nextMetadata);
           });
           return;
         }
-        if (event.data.type === "variant") {
-          const nextVariant = event.data.variant;
+        if (response.type === "variant") {
+          const nextVariant = response.variant;
           variants.push(nextVariant);
           callbackTail = callbackTail.then(async () => {
             await handlers.onVariant?.(nextVariant);
           });
+          return;
+        }
+        if (response.type !== "complete") {
+          reject(new Error("照片处理 Worker 协议无效"));
           return;
         }
         void callbackTail
@@ -90,7 +121,11 @@ export async function processPhotoInWorkerStreaming(
           .catch(reject);
       });
       worker.addEventListener("error", () => reject(new Error("照片处理 Worker 运行失败")));
-      const request: PhotoWorkerRequest = { id, file };
+      const request: PhotoWorkerRequest = {
+        id,
+        protocolVersion: PHOTO_WORKER_PROTOCOL_VERSION,
+        file,
+      };
       worker.postMessage(request);
     });
   } finally {
