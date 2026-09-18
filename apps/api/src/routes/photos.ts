@@ -122,6 +122,7 @@ const internalMediaSelectionQuerySchema = z
     message: "班级筛选必须同时提供年级",
     path: ["classOptionId"],
   });
+const reviewRevisionSchema = z.object({ revision: z.string().min(1) }).strict();
 const internalMediaSelectionListSchema = z
   .object({
     items: z.array(
@@ -523,6 +524,25 @@ export async function registerPhotoRoutes(
       return options.bibService === undefined
         ? media
         : options.bibService.attachMediaStates(actor, media);
+    },
+  );
+
+  typed.get(
+    "/api/v1/albums/:id/review-revision",
+    {
+      schema: {
+        operationId: "getReviewRevision",
+        tags: ["media"],
+        params: albumIdParamsSchema,
+        response: { 200: reviewRevisionSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return {
+        revision: await options.photoService.reviewRevision(actorFrom(session), request.params.id),
+      };
     },
   );
 
