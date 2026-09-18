@@ -44,6 +44,7 @@ import {
   getLocalPhotoEditDraft,
   type LocalPhotoEditDraft,
 } from "@/lib/photo-edit/local-drafts";
+import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
@@ -240,6 +241,29 @@ export function UploadQueue({
         type: "error",
       });
     });
+  }
+
+  function retryEditSync(localPhotoId: string): void {
+    void syncLocalPhotoEditDraft(localPhotoId)
+      .then(async () => {
+        const draft = await getLocalPhotoEditDraft(localPhotoId);
+        if (draft?.editState === "failed") {
+          toast.add({
+            title: "修图版本仍未同步",
+            description: draft.error ?? "请稍后重试。",
+            type: "error",
+          });
+          return;
+        }
+        toast.add({ title: "修图版本已同步", type: "success" });
+      })
+      .catch((error) => {
+        toast.add({
+          title: "无法同步修图版本",
+          description: error instanceof Error ? error.message : "请稍后重试。",
+          type: "error",
+        });
+      });
   }
 
   const visibleTasks = tasks.filter((task) => task.status !== "staged");
@@ -468,16 +492,30 @@ export function UploadQueue({
                           ? "已上传"
                           : "上传中"}
                     </p>
-                    <p
-                      className={cn(
-                        "mt-0.5 text-[11px]",
-                        editDraft?.editState === "failed"
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {editDraftLabel(editDraft)}
-                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <p
+                        className={cn(
+                          "text-[11px]",
+                          editDraft?.editState === "failed"
+                            ? "text-destructive"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {editDraftLabel(editDraft)}
+                      </p>
+                      {photo.mediaId !== null &&
+                      editDraft !== null &&
+                      (editDraft.editState === "failed" ||
+                        editDraft.editState === "applied_local") ? (
+                        <button
+                          className="text-[11px] font-medium text-primary hover:underline"
+                          onClick={() => retryEditSync(photo.id)}
+                          type="button"
+                        >
+                          {editDraft.editState === "failed" ? "重试同步" : "同步修图"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
