@@ -83,12 +83,17 @@ export async function processPhotoInWorkerStreaming(
           reject(new Error("照片处理 Worker 返回了无效响应"));
           return;
         }
-        const response = event.data as Partial<PhotoWorkerResponse> & { readonly id?: unknown };
-        if (response.id !== id) return;
-        if (response.protocolVersion !== PHOTO_WORKER_PROTOCOL_VERSION) {
+        const envelope = event.data as {
+          readonly id?: unknown;
+          readonly protocolVersion?: unknown;
+          readonly type?: unknown;
+        };
+        if (envelope.id !== id) return;
+        if (envelope.protocolVersion !== PHOTO_WORKER_PROTOCOL_VERSION) {
           reject(workerVersionError());
           return;
         }
+        const response = event.data as PhotoWorkerResponse;
         if (response.type === "error") {
           reject(new Error(response.message));
           return;
