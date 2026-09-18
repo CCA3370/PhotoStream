@@ -462,8 +462,7 @@ export function ReviewLightbox({
                     正在准备修图源…
                   </div>
                 )
-              ) : (
-                {displaySrc === null ? (
+              ) : displaySrc === null ? (
                 <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
                   暂无可预览图片
                 </div>
@@ -508,7 +507,6 @@ export function ReviewLightbox({
                     />
                   </div>
                 </>
-              )}
               )}
             </div>
 

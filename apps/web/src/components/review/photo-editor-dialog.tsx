@@ -565,7 +565,7 @@ export function PhotoEditorPanel({
             type: "success",
           });
           await onApplied();
-          return;
+        return;
         }
 
         await syncLocalPhotoEditDraft(localPhotoId, controller.signal);
