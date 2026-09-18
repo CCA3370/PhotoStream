@@ -14,7 +14,11 @@ import {
 
 const syncTails = new Map<string, Promise<void>>();
 
-async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<void> {
+async function syncOnce(
+  localPhotoId: string,
+  signal?: AbortSignal,
+  onReserved?: (revisionId: string) => void | Promise<void>,
+): Promise<void> {
   const photo = await getLocalReviewPhoto(localPhotoId);
   const draft = await getLocalPhotoEditDraft(localPhotoId);
   if (photo === null || draft === null || photo.mediaId === null) return;
@@ -71,6 +75,7 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
       basedOnGeneration: context.state.generation,
       basedOnRevisionId: context.state.activeRevisionId,
       ...(signal === undefined ? {} : { signal }),
+      preservePendingOnFailure: true,
       onReserved: async (revisionId) => {
         await patchLocalPhotoEditDraft(localPhotoId, {
           mediaId: photo.mediaId,
@@ -78,6 +83,7 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
           editState: "syncing",
           error: null,
         });
+        await onReserved?.(revisionId);
       },
     });
     await patchLocalPhotoEditDraft(localPhotoId, {
@@ -101,13 +107,17 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
   }
 }
 
-export function syncLocalPhotoEditDraft(localPhotoId: string, signal?: AbortSignal): Promise<void> {
+export function syncLocalPhotoEditDraft(
+  localPhotoId: string,
+  signal?: AbortSignal,
+  onReserved?: (revisionId: string) => void | Promise<void>,
+): Promise<void> {
   const previous = syncTails.get(localPhotoId) ?? Promise.resolve();
   const next = previous
     .catch(() => undefined)
     .then(() => {
       if (signal?.aborted) throw new DOMException("修图同步已取消", "AbortError");
-      return syncOnce(localPhotoId, signal);
+      return syncOnce(localPhotoId, signal, onReserved);
     });
   syncTails.set(localPhotoId, next);
   return next.finally(() => {
