@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const assetVersion = "restoration-v1-20260918";
@@ -100,9 +100,7 @@ async function download(asset, cachePath) {
   const sha256 = hash.digest("hex");
   if (bytes !== asset.bytes || sha256 !== asset.sha256) {
     await rm(temp, { force: true });
-    throw new Error(
-      `模型校验失败：${asset.file}，得到 ${bytes} bytes / ${sha256}`,
-    );
+    throw new Error(`模型校验失败：${asset.file}，得到 ${bytes} bytes / ${sha256}`);
   }
   await rename(temp, cachePath);
 }
