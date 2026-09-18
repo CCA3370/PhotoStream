@@ -146,9 +146,10 @@ export function ViewerFeedbackInbox({
         <div className="grid gap-2.5">
           {items.map((item) => {
             const isReport = item.kind === "report";
-            const mediaVisible = item.mediaId !== null && item.mediaStatus === "published";
-            const mediaMissing = item.mediaId === null;
-            const hiding = item.mediaId !== null && hidingMediaId === item.mediaId;
+            const mediaId = item.mediaId;
+            const mediaVisible = mediaId !== null && item.mediaStatus === "published";
+            const mediaMissing = mediaId === null;
+            const hiding = mediaId !== null && hidingMediaId === mediaId;
             return (
               <article
                 className={`rounded-xl border bg-card p-4 shadow-xs ${isReport ? "border-destructive/30" : ""}`}
@@ -189,21 +190,21 @@ export function ViewerFeedbackInbox({
                   <div className="mt-3 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-xs font-medium">目标图片</p>
-                      {item.mediaId === null ? (
+                      {mediaId === null ? (
                         <p className="mt-1 text-xs text-muted-foreground">
                           原图片已被删除，投诉记录继续保留。
                         </p>
                       ) : (
                         <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-                          {item.mediaId}
+                          {mediaId}
                         </p>
                       )}
                     </div>
-                    {canModerate && item.mediaId !== null ? (
+                    {canModerate && mediaId !== null ? (
                       <Button
                         className="shrink-0"
                         disabled={!mediaVisible || hiding}
-                        onClick={() => void hideReportedPhoto(item.mediaId)}
+                        onClick={() => void hideReportedPhoto(mediaId)}
                         size="sm"
                         variant={mediaVisible ? "destructive" : "secondary"}
                       >
