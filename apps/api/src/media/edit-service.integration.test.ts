@@ -285,6 +285,78 @@ maybeDescribe("media edit revisions", () => {
     expect(applied.activeRevision?.status).toBe("active");
   });
 
+  it("cleans discarded revision objects only after signed upload URLs expire", async () => {
+    const created = await service.createRevision({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      input: createInput(),
+      requestId: "edit-cleanup-create",
+    });
+    const revisionId = created.state.pendingRevisionId;
+    if (revisionId === null) throw new Error("pending revision missing");
+
+    await service.prepareRevision({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      revisionId,
+      input: prepareInput(),
+      requestId: "edit-cleanup-prepare",
+    });
+    const variants = await database
+      .select()
+      .from(schema.mediaEditVariants)
+      .where(eq(schema.mediaEditVariants.editRevisionId, revisionId));
+    for (const variant of variants) {
+      storage.objects.set(variant.objectKey, {
+        bytes: variant.expectedBytes,
+        contentType: variant.contentType,
+        etag: `cleanup-${variant.kind}`,
+      });
+    }
+
+    const cancelledAt = new Date();
+    await service.cancelPending({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId,
+      revisionId,
+      requestId: "edit-cleanup-cancel",
+    });
+
+    expect(
+      await service.cleanupDiscardedRevisions(
+        100,
+        new Date(cancelledAt.getTime() + 10 * 60 * 1_000),
+      ),
+    ).toBe(0);
+    expect(storage.objects).toHaveLength(4);
+    expect(
+      await database
+        .select()
+        .from(schema.mediaEditRevisions)
+        .where(eq(schema.mediaEditRevisions.id, revisionId)),
+    ).toHaveLength(1);
+
+    expect(
+      await service.cleanupDiscardedRevisions(
+        100,
+        new Date(cancelledAt.getTime() + 21 * 60 * 1_000),
+      ),
+    ).toBe(1);
+    expect(storage.objects).toHaveLength(0);
+    expect(
+      await database
+        .select()
+        .from(schema.mediaEditVariants)
+        .where(eq(schema.mediaEditVariants.editRevisionId, revisionId)),
+    ).toHaveLength(0);
+    expect(
+      await database
+        .select()
+        .from(schema.mediaEditRevisions)
+        .where(eq(schema.mediaEditRevisions.id, revisionId)),
+    ).toHaveLength(0);
+  });
+
   it("keeps a failed revision pending until explicitly cancelled", async () => {
     const created = await service.createRevision({
       actor: { id: reviewerId, role: "reviewer" },
