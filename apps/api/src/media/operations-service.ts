@@ -10,7 +10,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { safeEqual } from "../auth/crypto.js";
 import type { AppConfig } from "../config.js";
 import { AppError } from "../errors.js";
@@ -993,13 +993,49 @@ export class OperationsService {
     readonly actor: InternalActor;
     readonly cursor: string | undefined;
     readonly limit: number;
+    readonly query?: string | undefined;
+    readonly result?: "success" | "failed" | undefined;
+  }) {
+    requirePermission(options.actor.role, "audit:read");
+    const afterId = options.cursor === undefined ? null : this.#decodeAuditCursor(options.cursor);
+    const query = options.query?.trim() ?? "";
+    const escapedQuery = query.replace(/[\\%_]/gu, "\\  async listAudit(options: {
+    readonly actor: InternalActor;
+    readonly cursor: string | undefined;
+    readonly limit: number;
   }) {
     requirePermission(options.actor.role, "audit:read");
     const afterId = options.cursor === undefined ? null : this.#decodeAuditCursor(options.cursor);
     const rows = await this.#database
       .select()
       .from(schema.auditLogs)
-      .where(afterId === null ? undefined : lt(schema.auditLogs.id, afterId))
+      .where(afterId === null ? undefined : lt(schema.auditLogs.id, afterId))");
+    const pattern = `%${escapedQuery}%`;
+    const resultCondition =
+      options.result === "success"
+        ? eq(schema.auditLogs.result, "success")
+        : options.result === "failed"
+          ? ne(schema.auditLogs.result, "success")
+          : undefined;
+    const queryCondition =
+      query.length === 0
+        ? undefined
+        : or(
+            ilike(schema.auditLogs.action, pattern),
+            ilike(schema.auditLogs.targetType, pattern),
+            sql<boolean>`${schema.auditLogs.targetId}::text ilike ${pattern}`,
+            sql<boolean>`${schema.auditLogs.changedFields}::text ilike ${pattern}`,
+          );
+    const rows = await this.#database
+      .select()
+      .from(schema.auditLogs)
+      .where(
+        and(
+          afterId === null ? undefined : lt(schema.auditLogs.id, afterId),
+          resultCondition,
+          queryCondition,
+        ),
+      )
       .orderBy(desc(schema.auditLogs.id))
       .limit(options.limit + 1);
     const page = rows.slice(0, options.limit);
