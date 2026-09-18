@@ -1,4 +1,4 @@
-const CACHE_NAME = "photostream-shell-v1";
+const CACHE_NAME = "photostream-shell-v2";
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", (event) => {
@@ -30,6 +30,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (request.destination === "worker" || request.destination === "sharedworker") return;
 
   if (request.mode === "navigate") {
     event.respondWith(
