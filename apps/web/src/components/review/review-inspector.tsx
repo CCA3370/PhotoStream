@@ -74,14 +74,16 @@ function dateTime(value: string | null): string {
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "medium",
+    timeZone: "Asia/Shanghai",
   }).format(date);
 }
 
 function statusLabel(status: string): string {
   if (status === "published") return "显示中";
   if (status === "hidden") return "已隐藏";
-  if (status === "local") return "处理中";
-  if (status === "pending_review" || status === "draft") return "待迁移";
+  if (status === "local") return "本机处理中";
+  if (status === "draft") return "上传处理中";
+  if (status === "pending_review") return "待审核";
   return status;
 }
 
