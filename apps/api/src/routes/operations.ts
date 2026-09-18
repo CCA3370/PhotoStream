@@ -46,6 +46,8 @@ const auditQuerySchema = z
   .object({
     cursor: z.string().max(1_000).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(60),
+    q: z.string().trim().max(200).optional(),
+    result: z.enum(["success", "failed"]).optional(),
   })
   .strict();
 
@@ -380,6 +382,8 @@ export async function registerOperationsRoutes(
         actor: actorFrom(session),
         cursor: request.query.cursor,
         limit: request.query.limit,
+        query: request.query.q,
+        result: request.query.result,
       });
     },
   );
