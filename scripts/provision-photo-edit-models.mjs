@@ -17,6 +17,27 @@ const cacheRoot = resolve(
     resolve(repositoryRoot, ".local-data/photo-edit-model-cache"),
 );
 
+const localAssets = [
+  {
+    file: "ort/ort-wasm-simd-threaded.jsep.mjs",
+    source: resolve(
+      repositoryRoot,
+      "apps/web/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs",
+    ),
+    bytes: 46_595,
+    sha256: "9a99acd12acc495184c9ea4d458ac9424f8180aacfbc7b8371ed64f9351e4a81",
+  },
+  {
+    file: "ort/ort-wasm-simd-threaded.jsep.wasm",
+    source: resolve(
+      repositoryRoot,
+      "apps/web/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm",
+    ),
+    bytes: 25_014_754,
+    sha256: "2e0a3d0e3f6b7c13ecfaba38c13691fd19c9ed470e72f9d7d8416ca59ab6dbcd",
+  },
+];
+
 const assets = [
   {
     file: "scunet_color_real_psnr.onnx",
@@ -100,6 +121,18 @@ async function copyVerified(source, destination, asset) {
 
 await mkdir(cacheRoot, { recursive: true });
 await mkdir(destinationRoot, { recursive: true });
+
+for (const asset of localAssets) {
+  if (!(await valid(asset.source, asset))) {
+    throw new Error(
+      `ONNX Runtime 本地资产与锁定版本不一致：${asset.file}。请重新执行 pnpm install --frozen-lockfile。`,
+    );
+  }
+  const destination = resolve(destinationRoot, asset.file);
+  if (!(await valid(destination, asset))) {
+    await copyVerified(asset.source, destination, asset);
+  }
+}
 
 for (const asset of assets) {
   const cachePath = resolve(cacheRoot, asset.file);
