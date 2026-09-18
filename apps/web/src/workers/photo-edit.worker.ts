@@ -9,18 +9,32 @@ type Request =
   | {
       readonly id: string;
       readonly type: "preview";
-      readonly source: Blob;
+      readonly source: Blob | ImageBitmap;
+      readonly recipe: PhotoEditRecipe;
+    }
+  | {
+      readonly id: string;
+      readonly type: "intermediate";
+      readonly source: Blob | ImageBitmap;
       readonly recipe: PhotoEditRecipe;
     }
   | {
       readonly id: string;
       readonly type: "render";
-      readonly source: Blob;
+      readonly source: Blob | ImageBitmap;
       readonly recipe: PhotoEditRecipe;
     };
 
 const scope = self as DedicatedWorkerGlobalScope;
 const stripeRows = 256;
+
+async function sourceBitmap(source: Blob | ImageBitmap): Promise<ImageBitmap> {
+  return source instanceof Blob ? createImageBitmap(source) : source;
+}
+
+function sourceIsJpeg(source: Blob | ImageBitmap): boolean {
+  return source instanceof Blob && source.type === "image/jpeg";
+}
 
 function dimensions(width: number, height: number, maxEdge: number) {
   const scale = Math.min(1, maxEdge / Math.max(width, height));
@@ -50,7 +64,7 @@ async function encoded(
 }
 
 async function analyze(id: string, source: Blob): Promise<void> {
-  const bitmap = await createImageBitmap(source);
+  const bitmap = await sourceBitmap(source);
   try {
     const size = dimensions(bitmap.width, bitmap.height, 768);
     const canvas = new OffscreenCanvas(size.width, size.height);
@@ -92,14 +106,18 @@ function processStripe(
   context.putImageData(pixels, 0, sourceY, 0, centerOffset, width, outputRows);
 }
 
-async function preview(id: string, source: Blob, recipe: PhotoEditRecipe): Promise<void> {
-  const bitmap = await createImageBitmap(source);
+async function preview(
+  id: string,
+  source: Blob | ImageBitmap,
+  recipe: PhotoEditRecipe,
+): Promise<void> {
+  const bitmap = await sourceBitmap(source);
   try {
     const size = dimensions(bitmap.width, bitmap.height, 960);
     const canvas = new OffscreenCanvas(size.width, size.height);
     const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
     if (context === null) throw new Error("浏览器无法创建修图预览画布");
-    if (source.type === "image/jpeg") {
+    if (sourceIsJpeg(source)) {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, size.width, size.height);
     }
@@ -117,13 +135,49 @@ async function preview(id: string, source: Blob, recipe: PhotoEditRecipe): Promi
   }
 }
 
-async function render(id: string, source: Blob, recipe: PhotoEditRecipe): Promise<void> {
+async function intermediate(
+  id: string,
+  source: Blob | ImageBitmap,
+  recipe: PhotoEditRecipe,
+): Promise<void> {
+  const bitmap = await sourceBitmap(source);
+  try {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+    if (context === null) throw new Error("浏览器无法创建修图中间画布");
+    if (sourceIsJpeg(source)) {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, bitmap.width, bitmap.height);
+    }
+    context.drawImage(bitmap, 0, 0);
+    const stripeCount = Math.ceil(bitmap.height / stripeRows);
+    for (let stripe = 0; stripe < stripeCount; stripe += 1) {
+      processStripe(context, bitmap.width, bitmap.height, stripe * stripeRows, recipe);
+      scope.postMessage({
+        id,
+        type: "progress",
+        progress: (stripe + 1) / stripeCount,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    const result = canvas.transferToImageBitmap();
+    scope.postMessage({ id, type: "intermediate", bitmap: result }, [result]);
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function render(
+  id: string,
+  source: Blob | ImageBitmap,
+  recipe: PhotoEditRecipe,
+): Promise<void> {
   const bitmap = await createImageBitmap(source);
   try {
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
     if (context === null) throw new Error("浏览器无法创建修图导出画布");
-    if (source.type === "image/jpeg") {
+    if (sourceIsJpeg(source)) {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, bitmap.width, bitmap.height);
     }
@@ -140,7 +194,7 @@ async function render(id: string, source: Blob, recipe: PhotoEditRecipe): Promis
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
 
-    const fullFormat = source.type === "image/jpeg" ? "jpeg" : "webp";
+    const fullFormat = sourceIsJpeg(source) ? "jpeg" : "webp";
     const full = await encoded(canvas, fullFormat, fullFormat === "jpeg" ? 0.95 : 0.94);
     const outputs: Array<{
       kind: "photo_480" | "photo_960" | "photo_1920" | "photo_download";
@@ -198,7 +252,9 @@ scope.addEventListener("message", (event: MessageEvent<Request>) => {
       ? analyze(request.id, request.source)
       : request.type === "preview"
         ? preview(request.id, request.source, request.recipe)
-        : render(request.id, request.source, request.recipe);
+        : request.type === "intermediate"
+          ? intermediate(request.id, request.source, request.recipe)
+          : render(request.id, request.source, request.recipe);
   void task.catch((error: unknown) => {
     scope.postMessage({
       id: request.id,
