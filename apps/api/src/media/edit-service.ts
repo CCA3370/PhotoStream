@@ -12,7 +12,7 @@ import {
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import { liveEventChannel } from "./live-event-broker.js";
@@ -70,6 +70,72 @@ export class MediaEditService {
   constructor(options: { readonly database: Database; readonly storage: ObjectStorage }) {
     this.#database = options.database;
     this.#storage = options.storage;
+  }
+
+  async cleanupDiscardedRevisions(limit = 100, now = new Date()): Promise<number> {
+    const graceMs = 20 * 60 * 1_000;
+    const revisions = await this.#database
+      .select({
+        id: schema.mediaEditRevisions.id,
+        mediaId: schema.mediaEditRevisions.mediaId,
+      })
+      .from(schema.mediaEditRevisions)
+      .where(
+        and(
+          eq(schema.mediaEditRevisions.status, "discarded"),
+          lt(schema.mediaEditRevisions.updatedAt, new Date(now.getTime() - graceMs)),
+        ),
+      )
+      .orderBy(schema.mediaEditRevisions.updatedAt, schema.mediaEditRevisions.id)
+      .limit(limit);
+
+    let cleaned = 0;
+    for (const revision of revisions) {
+      const variants = await this.#database
+        .select({
+          id: schema.mediaEditVariants.id,
+          objectKey: schema.mediaEditVariants.objectKey,
+        })
+        .from(schema.mediaEditVariants)
+        .where(eq(schema.mediaEditVariants.editRevisionId, revision.id));
+      try {
+        for (const variant of variants) await this.#storage.delete(variant.objectKey);
+      } catch {
+        await this.#database
+          .update(schema.mediaEditRevisions)
+          .set({
+            failureCode: "DISCARDED_CLEANUP_FAILED",
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(schema.mediaEditRevisions.id, revision.id),
+              eq(schema.mediaEditRevisions.status, "discarded"),
+            ),
+          );
+        continue;
+      }
+
+      await this.#database.transaction(async (transaction) => {
+        await this.#lock(transaction, revision.mediaId);
+        const [current] = await transaction
+          .select({ status: schema.mediaEditRevisions.status })
+          .from(schema.mediaEditRevisions)
+          .where(eq(schema.mediaEditRevisions.id, revision.id))
+          .limit(1);
+        if (current === undefined || current.status !== "discarded") return;
+        if (variants.length > 0) {
+          await transaction
+            .delete(schema.mediaEditVariants)
+            .where(eq(schema.mediaEditVariants.editRevisionId, revision.id));
+        }
+        await transaction
+          .delete(schema.mediaEditRevisions)
+          .where(eq(schema.mediaEditRevisions.id, revision.id));
+        cleaned += 1;
+      });
+    }
+    return cleaned;
   }
 
   async getContext(actor: InternalActor, mediaId: string): Promise<MediaEditContextView> {
