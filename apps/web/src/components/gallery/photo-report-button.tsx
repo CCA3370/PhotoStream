@@ -27,14 +27,15 @@ import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 import type { ViewerReportReason } from "@/lib/viewer-feedback";
 
-const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonly label: string }> = [
-  { value: "privacy", label: "侵犯了我的隐私或肖像权" },
-  { value: "inappropriate", label: "图片中有不适合公开的内容" },
-  { value: "copyright", label: "未经授权使用了我的作品或图片" },
-  { value: "inaccurate", label: "图片中的人物或信息有误" },
-  { value: "malicious_spread", label: "这张图片被他人恶意传播或扩散" },
-  { value: "other", label: "其他需要处理的问题" },
-];
+const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonly label: string }> =
+  [
+    { value: "privacy", label: "侵犯了我的隐私或肖像权" },
+    { value: "inappropriate", label: "图片中有不适合公开的内容" },
+    { value: "copyright", label: "未经授权使用了我的作品或图片" },
+    { value: "inaccurate", label: "图片中的人物或信息有误" },
+    { value: "malicious_spread", label: "这张图片被他人恶意传播或扩散" },
+    { value: "other", label: "其他需要处理的问题" },
+  ];
 
 export function PhotoReportButton({
   className,
