@@ -722,7 +722,8 @@ export class OperationsService {
           bytes: editVariant.bytes,
         };
       }
-    } else {
+    }
+    if (selected === undefined) {
       const [baseVariant] = await this.#database
         .select()
         .from(schema.mediaVariants)
