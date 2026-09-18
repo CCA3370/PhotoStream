@@ -118,7 +118,7 @@ LocalReviewPhoto 仍然有价值，但只承担本机能力：
 - 保存本地 480/960/1920；
 - OCR 本地上下文；
 - 上传恢复；
-- 按 mediaId 为修图 EditSourceResolver 提供本地源。
+- 为修图 EditSourceResolver 提供本地源；mediaId 未建立前用 localPhotoId 关联本地 draft，mediaId 回填后再绑定服务器 Media。
 
 上传完成后不要无条件立即删除 originalBlob，否则同设备后续修图会产生不必要的 CDN/OSS 原图 GET。
 
@@ -130,11 +130,28 @@ LocalReviewPhoto 仍然有价值，但只承担本机能力：
 
 ## 8. 修图与上传的关系
 
-修图以 mediaId 为长期身份。
+服务端修图以 mediaId 为长期身份；但上传设备可以在 mediaId 建立前先用 localPhotoId 保存本地 draft。
 
 ### 8.1 上传设备
 
-上传设备持有真正原图，所以即使 base ingest 还在进行，也可以开始 A/B 修图。
+上传设备持有真正原图，所以进入本地队列后即可开始 A/B 修图，不需要等待上传完成或 mediaId 已存在。
+
+点击“应用”时：
+
+~~~text
+mediaId == null
+→ IndexedDB draft = applied_local
+→ progressive Media 建立并回填 mediaId
+→ 在 base preview 可公开前 reserve pending edit
+→ base 上传立即继续
+→ edit 本地处理 / 上传与 base 并行
+
+mediaId != null
+→ 立即 reserve pending edit
+→ 再执行本地处理 / edit 上传
+~~~
+
+reserve 只阻塞一个轻量控制面往返，不等待 AI 推理。
 
 处理源优先：
 
@@ -194,9 +211,11 @@ AI GPU queue 独立，B inference 单并发。
 
 ## 10. 修图状态与显示门禁
 
-纯本机 draft 不影响审核。
+纯参数 draft 不影响审核。
 
-用户点击“应用”后，服务器创建 pending edit revision。
+用户点击“应用”后表达的是“期望当前版本切换到此 edit”：
+- mediaId 已存在时立即创建 pending/rendering revision；
+- mediaId 尚未存在时先保存 applied_local，本地 Media 一建立就必须先 reserve pending，再允许 base preview 进入可发布阶段。
 
 hidden Media 的显示条件扩展为：
 
@@ -210,10 +229,11 @@ AND active edit（若存在）已 ready/active
 
 - base ready、无 edit：可显示 base；
 - base ready、edit ready+active：可显示 edit；
-- base ready、pending edit uploading：暂不能显示；
-- edit ready 但 base 未 ready：仍不能显示。
+- base ready、pending edit rendering/uploading：暂不能显示；
+- edit ready 但 base 未 ready：仍不能显示；
+- auto publish 模式在 base preview ready 时如果仍有 pending edit，降级为 pending_review，不发布 base，也不把基础上传判失败。
 
-用户可等待 pending edit 完成，或取消 pending edit 后显示当前旧 active/base。
+用户可等待 pending edit 完成，或取消 pending edit 后显示当前旧 active/base。对于上传前已明确 Apply 的 edit，渲染/上传失败时保留首次发布 gate，避免静默取消后闪现 base；重试时客户端识别自己记录的 remoteRevisionId，清理旧 pending 后重建。
 
 ## 11. Published 后修图
 
