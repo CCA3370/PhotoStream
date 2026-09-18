@@ -21,6 +21,7 @@ export interface UploadShellProps {
     readonly queued: number;
     readonly processing: number;
     readonly failed: number;
+    readonly cancelled: number;
     readonly retryableFailed: number;
     readonly pendingReview: number;
     readonly completed: number;
@@ -47,8 +48,10 @@ function QueueSummary({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>)
         <p className="mt-1 text-lg font-semibold tabular-nums">{queue.pendingReview}</p>
       </div>
       <div className="rounded-lg border bg-muted/20 p-3">
-        <p className="text-xs text-muted-foreground">失败</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums">{queue.failed}</p>
+        <p className="text-xs text-muted-foreground">失败 / 已取消</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums">
+          {queue.failed} / {queue.cancelled}
+        </p>
       </div>
     </div>
   );
@@ -84,7 +87,7 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
       </Button>
       <Button
         className="min-h-10 justify-start"
-        disabled={queue.completed === 0}
+        disabled={queue.completed + queue.cancelled === 0}
         onClick={queue.onClearCompleted}
         type="button"
         variant="ghost"
@@ -97,7 +100,7 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
 }
 
 export function UploadShell({ children, queue }: UploadShellProps) {
-  const processed = queue.completed + queue.failed;
+  const processed = queue.completed + queue.failed + queue.cancelled;
   const progress =
     queue.total === 0 ? 0 : Math.min(100, Math.round((processed / queue.total) * 100));
 
