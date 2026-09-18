@@ -388,9 +388,13 @@ export function UploadQueue({
 
         {role === "uploader" && items.length > 0 ? (
           <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
-            <p className="font-medium">当前有 {items.length} 张照片仍在处理或等待重试</p>
+            <p className="font-medium">
+              {showUploaded
+                ? `当前显示本机保留的 ${items.length} 张照片`
+                : `当前有 ${items.length} 张照片仍在处理或等待重试`}
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              原图保留在当前浏览器用于管理端优先预览；远端上传完成后照片仍保持隐藏，需由审核员或管理员切换为显示。
+              原图保留在当前浏览器，可在上传前、上传中或上传后继续修图；远端照片保持隐藏，需由审核员或管理员切换为显示。
             </p>
           </div>
         ) : null}
