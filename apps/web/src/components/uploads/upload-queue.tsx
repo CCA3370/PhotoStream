@@ -7,12 +7,14 @@ import {
   FolderOpenIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
+  SlidersHorizontalIcon,
   Trash2Icon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { PhotoEditorDialog } from "@/components/review/photo-editor-dialog";
 import { UploadShell } from "@/components/shells/upload-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -37,6 +39,11 @@ import {
   listLocalReviewPhotos,
   localQueueSupported,
 } from "@/lib/local-review-queue";
+import {
+  deleteLocalPhotoEditDraft,
+  getLocalPhotoEditDraft,
+  type LocalPhotoEditDraft,
+} from "@/lib/photo-edit/local-drafts";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
@@ -47,6 +54,7 @@ interface CategoryOption {
 interface PreviewPhoto {
   readonly photo: LocalReviewPhoto;
   readonly url: string;
+  readonly editDraft: LocalPhotoEditDraft | null;
 }
 
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -62,6 +70,15 @@ function taskLabel(status: LocalProcessingTaskStatus): string {
   if (status === "processing") return "处理中并上传";
   if (status === "staged") return "已上传（默认隐藏）";
   return "处理或上传失败";
+}
+
+function editDraftLabel(draft: LocalPhotoEditDraft | null): string {
+  if (draft === null) return "未修图";
+  if (draft.editState === "applied_local") return "已应用 · 本地";
+  if (draft.editState === "syncing") return "正在同步修图版本";
+  if (draft.editState === "synced") return "修图版本已同步";
+  if (draft.editState === "failed") return "修图同步失败";
+  return "已修改 · 未应用";
 }
 
 export function UploadQueue({
@@ -85,17 +102,24 @@ export function UploadQueue({
   const [tasks, setTasks] = useState<readonly LocalProcessingTaskView[]>([]);
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [editingLocalPhotoId, setEditingLocalPhotoId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const rows = (await listLocalReviewPhotos(albumId)).filter(
       (photo) => photo.uploadState !== "published",
     );
     for (const url of previewUrls.current) URL.revokeObjectURL(url);
-    const next = rows.map((photo) => {
-      const preview =
-        photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
-      return { photo, url: URL.createObjectURL(preview) };
-    });
+    const next = await Promise.all(
+      rows.map(async (photo) => {
+        const preview =
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ?? photo.originalBlob;
+        return {
+          photo,
+          url: URL.createObjectURL(preview),
+          editDraft: await getLocalPhotoEditDraft(photo.id),
+        };
+      }),
+    );
     previewUrls.current = next.map((item) => item.url);
     setItems(next);
   }, [albumId]);
@@ -169,9 +193,12 @@ export function UploadQueue({
       const detail = (event as CustomEvent<{ readonly albumId?: string }>).detail;
       if (detail?.albumId === albumId) void refresh();
     };
+    const editChanged = () => void refresh();
     window.addEventListener("photostream:local-review-changed", changed);
+    window.addEventListener("photostream:local-photo-edit-draft-changed", editChanged);
     return () => {
       window.removeEventListener("photostream:local-review-changed", changed);
+      window.removeEventListener("photostream:local-photo-edit-draft-changed", editChanged);
       for (const url of previewUrls.current) URL.revokeObjectURL(url);
       previewUrls.current = [];
     };
@@ -393,9 +420,24 @@ export function UploadQueue({
                       unoptimized
                     />
                     <Button
+                      aria-label="修图"
+                      className="absolute left-1 top-1 size-8 shadow-sm"
+                      onClick={() => setEditingLocalPhotoId(photo.id)}
+                      size="icon"
+                      type="button"
+                      variant="secondary"
+                    >
+                      <SlidersHorizontalIcon className="size-3.5" />
+                    </Button>
+                    <Button
                       aria-label="从本地队列删除"
                       className="absolute right-1 top-1 size-8 opacity-0 shadow-sm group-hover:opacity-100 focus-visible:opacity-100"
-                      onClick={() => void deleteLocalReviewPhoto(photo.id)}
+                      onClick={() =>
+                        void Promise.all([
+                          deleteLocalReviewPhoto(photo.id),
+                          deleteLocalPhotoEditDraft(photo.id),
+                        ])
+                      }
                       size="icon"
                       type="button"
                       variant="destructive"
@@ -409,6 +451,16 @@ export function UploadQueue({
                       {formatBytes(photo.totalBytes)} ·{" "}
                       {photo.uploadState === "failed" ? "上传失败" : "上传中"}
                     </p>
+                    <p
+                      className={cn(
+                        "mt-0.5 text-[11px]",
+                        editDraft?.editState === "failed"
+                          ? "text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {editDraftLabel(editDraft)}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -416,6 +468,16 @@ export function UploadQueue({
           </div>
         )}
       </div>
+
+      <PhotoEditorDialog
+        localPhotoId={editingLocalPhotoId}
+        mediaId={null}
+        onApplied={refresh}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditingLocalPhotoId(null);
+        }}
+        open={editingLocalPhotoId !== null}
+      />
     </UploadShell>
   );
 }
