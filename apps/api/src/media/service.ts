@@ -1294,6 +1294,20 @@ export class PhotoService {
         });
       }
       if (media.publicationStatus === "pending_review") {
+        if (media.ingestStatus !== "ready") {
+          throw new AppError({
+            code: "STATE_CONFLICT",
+            message: "照片尚未上传完成，不能显示",
+            statusCode: 409,
+          });
+        }
+        if (await this.#hasPendingEdit(transaction, media.id)) {
+          throw new AppError({
+            code: "STATE_CONFLICT",
+            message: "修图版本仍在处理中，完成或取消后才能显示",
+            statusCode: 409,
+          });
+        }
         await this.#allocatePublication(transaction, media.albumId, media.id, new Date());
         await transaction.insert(schema.auditLogs).values({
           actorUserId: options.actor.id,
