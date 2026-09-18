@@ -664,7 +664,6 @@ export function PhotoLightbox({
                 <PhotoReportButton
                   className="h-11 rounded-full border-white/10 bg-black/30 px-3 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.96] sm:h-10 motion-reduce:transform-none motion-reduce:transition-none"
                   mediaId={selected.id}
-                  portalContainer={viewerRef}
                   slug={slug}
                 />
               ) : null}
