@@ -132,12 +132,16 @@ export function PhotoEditorDialog({
   const [aiPreviewSource, setAiPreviewSource] = useState<Blob | null>(null);
   const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
   const [aiPreviewPhase, setAiPreviewPhase] = useState<PhotoEditAiPhase | null>(null);
+  const [ownedPendingRevisionId, setOwnedPendingRevisionId] = useState<string | null>(null);
   const previewSequence = useRef(0);
   const aiPreviewSequence = useRef(0);
   const applyController = useRef<AbortController | null>(null);
 
   const busy = stage === "loading" || stage === "analyzing" || stage === "applying";
-  const pendingElsewhere = context?.state.pendingRevisionId != null;
+  const pendingRevisionId = context?.state.pendingRevisionId ?? null;
+  const pendingElsewhere =
+    pendingRevisionId !== null &&
+    (localPhotoId === null || pendingRevisionId !== ownedPendingRevisionId);
   const aiAvailable = photoEditAiAvailable();
   const denoiseStrength = recipe.denoiseStrength;
   const deblurStrength = recipe.deblurStrength;
@@ -169,6 +173,7 @@ export function PhotoEditorDialog({
     setAiPreviewSource(null);
     setAiPreviewLoading(false);
     setAiPreviewPhase(null);
+    setOwnedPendingRevisionId(null);
 
     const load = async () => {
       if (localPhotoId !== null) {
@@ -183,6 +188,7 @@ export function PhotoEditorDialog({
           context: nextContext,
           blob: photo.originalBlob,
           sourceOrigin: "local-original" as const,
+          ownedPendingRevisionId: draft?.remoteRevisionId ?? null,
           recipe:
             draft?.recipe ??
             (nextContext?.activeRevision === null || nextContext?.activeRevision === undefined
@@ -200,6 +206,7 @@ export function PhotoEditorDialog({
         context: nextContext,
         blob: resolved.blob,
         sourceOrigin: resolved.sourceOrigin,
+        ownedPendingRevisionId: null,
         recipe:
           nextContext.activeRevision === null
             ? defaultPhotoEditRecipe
@@ -215,6 +222,7 @@ export function PhotoEditorDialog({
         setSource(loaded.blob);
         setSourceOrigin(loaded.sourceOrigin);
         setRecipe(loaded.recipe);
+        setOwnedPendingRevisionId(loaded.ownedPendingRevisionId);
         setOriginalUrl(url);
         setStage("ready");
       })
