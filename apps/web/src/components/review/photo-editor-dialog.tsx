@@ -897,12 +897,12 @@ export function PhotoEditorDialog({
                       <ProgressLabel>
                         正在下载{aiOperationLabel(aiPreviewProgress.operation)}模型
                       </ProgressLabel>
-                      <ProgressValue>
+                      <span className="ml-auto text-sm tabular-nums text-muted-foreground">
                         {aiPreviewProgress.loadedBytes !== undefined &&
                         aiPreviewProgress.totalBytes !== undefined
                           ? `${formatModelBytes(aiPreviewProgress.loadedBytes)} / ${formatModelBytes(aiPreviewProgress.totalBytes)}`
                           : `${Math.round(aiPreviewProgress.progress * 100)}%`}
-                      </ProgressValue>
+                      </span>
                     </Progress>
                   ) : (
                     <p className="text-[11px] leading-4 text-muted-foreground">
