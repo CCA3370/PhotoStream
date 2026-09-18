@@ -672,6 +672,106 @@ maybeDescribe("stage 3 operations", () => {
     expect(await service.cleanupAnalytics(new Date("2026-02-15T00:00:00.000Z"))).toBe(1);
   });
 
+  it("falls back to base downloads if an active edit asset is unexpectedly missing", async () => {
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "published",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 500,
+        publishSequence: 1,
+        publishedAt: new Date(),
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("media fixture missing");
+
+    const [original] = await database
+      .insert(schema.mediaVariants)
+      .values([
+        {
+          mediaId: media.id,
+          kind: "photo_1920",
+          objectKey: "media/fallback/1920.webp",
+          format: "webp",
+          contentType: "image/webp",
+          width: 100,
+          height: 100,
+          expectedBytes: 200,
+          bytes: 200,
+          verified: true,
+        },
+        {
+          mediaId: media.id,
+          kind: "photo_original",
+          objectKey: "media/fallback/original.jpg",
+          format: "jpeg",
+          contentType: "image/jpeg",
+          width: 100,
+          height: 100,
+          expectedBytes: 500,
+          bytes: 500,
+          verified: true,
+        },
+      ])
+      .returning({ id: schema.mediaVariants.id, kind: schema.mediaVariants.kind });
+    const sourceVariantId =
+      original?.kind === "photo_original"
+        ? original.id
+        : (
+            await database
+              .select({ id: schema.mediaVariants.id, kind: schema.mediaVariants.kind })
+              .from(schema.mediaVariants)
+              .where(eq(schema.mediaVariants.mediaId, media.id))
+          ).find((variant) => variant.kind === "photo_original")?.id;
+    if (sourceVariantId === undefined) throw new Error("original fixture missing");
+
+    const [revision] = await database
+      .insert(schema.mediaEditRevisions)
+      .values({
+        mediaId: media.id,
+        createdBy: reviewerId,
+        status: "active",
+        basedOnRevisionId: null,
+        basedOnGeneration: 0,
+        pipelineVersion: "local-edit-v2",
+        recipeVersion: 2,
+        recipeJson: { exposureEv: 0.1 },
+        sourceVariantId,
+        appliedAt: new Date(),
+      })
+      .returning({ id: schema.mediaEditRevisions.id });
+    if (revision === undefined) throw new Error("active edit fixture missing");
+    await database.insert(schema.mediaEditStates).values({
+      mediaId: media.id,
+      activeRevisionId: revision.id,
+      pendingRevisionId: null,
+      generation: 1,
+      updatedBy: reviewerId,
+    });
+
+    const preview = await service.issueDownload({
+      slug: "operations-album-one",
+      visitorToken: undefined,
+      mediaId: media.id,
+      kind: "preview",
+      visitorId: "fallback-viewer",
+      idempotencyKey: "fallback-preview-download",
+    });
+    expect(preview.bytes).toBe(200);
+
+    const originalView = await service.issueOriginalView({
+      slug: "operations-album-one",
+      visitorToken: undefined,
+      mediaId: media.id,
+    });
+    expect(originalView.bytes).toBe(500);
+  });
+
   it("expires operational idempotency and session records after their retention windows", async () => {
     const now = new Date("2026-08-30T12:00:00.000Z");
     const old = new Date("2026-07-01T00:00:00.000Z");
