@@ -184,16 +184,21 @@ export function PhotoEditorDialog({
           photo.mediaId === null
             ? null
             : await getMediaEditContext(photo.mediaId, controller.signal);
+        const remoteRecipe =
+          nextContext?.activeRevision === null || nextContext?.activeRevision === undefined
+            ? defaultPhotoEditRecipe
+            : photoEditRecipeFromUnknown(nextContext.activeRevision.recipeJson);
+        const draftOwnsCurrentRemoteState =
+          draft !== null &&
+          (photo.mediaId === null ||
+            draft.editState !== "synced" ||
+            draft.remoteRevisionId === nextContext?.state.activeRevisionId);
         return {
           context: nextContext,
           blob: photo.originalBlob,
           sourceOrigin: "local-original" as const,
           ownedPendingRevisionId: draft?.remoteRevisionId ?? null,
-          recipe:
-            draft?.recipe ??
-            (nextContext?.activeRevision === null || nextContext?.activeRevision === undefined
-              ? defaultPhotoEditRecipe
-              : photoEditRecipeFromUnknown(nextContext.activeRevision.recipeJson)),
+          recipe: draftOwnsCurrentRemoteState ? draft.recipe : remoteRecipe,
         };
       }
 
