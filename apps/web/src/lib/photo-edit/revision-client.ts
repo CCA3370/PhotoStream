@@ -6,9 +6,82 @@ import type {
 } from "@photostream/contracts";
 
 import { clientGet, clientMutation } from "../client-api";
-import type { PhotoEditRecipe } from "./recipe";
-import { photoEditPipelineVersion, photoEditRecipeVersion } from "./recipe";
-import { type PhotoEditRenderedOutput, renderMediaEditOutputs } from "./runtime";
+import { photoEditAiModels } from "./ai-models";
+import { restoreMediaEditFull } from "./ai-runtime";
+import {
+  defaultPhotoEditRecipe,
+  normalizePhotoEditRecipe,
+  type PhotoEditRecipe,
+  photoEditPipelineVersion,
+  photoEditRecipeVersion,
+} from "./recipe";
+import {
+  type PhotoEditRenderableSource,
+  type PhotoEditRenderedOutput,
+  renderMediaEditIntermediate,
+  renderMediaEditOutputs,
+} from "./runtime";
+
+function aiEnabled(recipe: PhotoEditRecipe): boolean {
+  return recipe.denoiseStrength > 0 || recipe.deblurStrength > 0;
+}
+
+function lowLightPreExposure(recipe: PhotoEditRecipe): number {
+  if (recipe.denoiseStrength <= 0 || recipe.exposureEv < 0.75) return 0;
+  return Math.min(0.75, recipe.exposureEv * 0.5);
+}
+
+function aOnlyRecipe(
+  recipe: PhotoEditRecipe,
+  exposureEv = recipe.exposureEv,
+): PhotoEditRecipe {
+  return normalizePhotoEditRecipe({
+    ...recipe,
+    exposureEv,
+    denoiseStrength: 0,
+    deblurStrength: 0,
+  });
+}
+
+async function renderRecipeOutputs(options: {
+  readonly source: Blob;
+  readonly recipe: PhotoEditRecipe;
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (progress: number) => void;
+}): Promise<readonly PhotoEditRenderedOutput[]> {
+  if (!aiEnabled(options.recipe)) {
+    return renderMediaEditOutputs(options.source, aOnlyRecipe(options.recipe), {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      onProgress: (progress) => options.onProgress?.(progress),
+    });
+  }
+
+  const preExposure = lowLightPreExposure(options.recipe);
+  let aiSource: PhotoEditRenderableSource = options.source;
+  if (preExposure > 0) {
+    const preRecipe = normalizePhotoEditRecipe({
+      ...defaultPhotoEditRecipe,
+      exposureEv: preExposure,
+    });
+    aiSource = await renderMediaEditIntermediate(options.source, preRecipe, {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      onProgress: (progress) => options.onProgress?.(progress * 0.08),
+    });
+  }
+
+  const restored = await restoreMediaEditFull(aiSource, options.recipe, {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    onProgress: ({ progress }) => {
+      options.onProgress?.(0.08 + progress * 0.52);
+    },
+  });
+
+  const postRecipe = aOnlyRecipe(options.recipe, options.recipe.exposureEv - preExposure);
+  return renderMediaEditOutputs(restored, postRecipe, {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    onProgress: (progress) => options.onProgress?.(0.6 + progress * 0.4),
+  });
+}
 
 function outputByKind(
   outputs: readonly PhotoEditRenderedOutput[],
@@ -92,7 +165,9 @@ export async function applyMediaEditRecipe(options: {
   readonly onProgress?: (progress: number) => void;
 }): Promise<MediaEditContextView> {
   options.onProgress?.(0);
-  const outputs = await renderMediaEditOutputs(options.source, options.recipe, {
+  const outputs = await renderRecipeOutputs({
+    source: options.source,
+    recipe: options.recipe,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     onProgress: (progress) => options.onProgress?.(progress * 0.72),
   });
@@ -109,10 +184,12 @@ export async function applyMediaEditRecipe(options: {
     pipelineVersion: photoEditPipelineVersion,
     recipeVersion: photoEditRecipeVersion,
     recipeJson: { ...options.recipe },
-    denoiseModel: null,
-    denoiseModelVersion: null,
-    deblurModel: null,
-    deblurModelVersion: null,
+    denoiseModel: options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.id : null,
+    denoiseModelVersion:
+      options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.version : null,
+    deblurModel: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.id : null,
+    deblurModelVersion:
+      options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
     variants: orderedKinds.map((kind) => {
       const output = outputByKind(outputs, kind);
       return {
