@@ -319,12 +319,14 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(preview.ingestStatus).toBe("preview_ready");
     expect(preview.publicationStatus).toBe("pending_review");
 
-    await service.publishMedia({
-      actor: { id: reviewerId, role: "reviewer" },
-      mediaId: intent.mediaId,
-      requestId: "request-publish",
-      idempotencyKey: "publish-media-idempotency",
-    });
+    await expect(
+      service.publishMedia({
+        actor: { id: reviewerId, role: "reviewer" },
+        mediaId: intent.mediaId,
+        requestId: "request-publish-too-early",
+        idempotencyKey: "publish-media-too-early",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
     await service.signUpload({
       actor: { id: uploaderId, role: "uploader" },
       intentId: intent.id,
@@ -336,7 +338,17 @@ maybeDescribe("photo vertical slice transactions", () => {
     ).toBe("uploading_source");
     const ready = await complete("photo_original");
     expect(ready.ingestStatus).toBe("ready");
-    expect(ready.publicationStatus).toBe("published");
+    expect(ready.publicationStatus).toBe("pending_review");
+    await service.publishMedia({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId: intent.mediaId,
+      requestId: "request-publish",
+      idempotencyKey: "publish-media-idempotency",
+    });
+    expect(
+      (await service.getUploadIntent({ id: uploaderId, role: "uploader" }, intent.id))
+        .publicationStatus,
+    ).toBe("published");
 
     await expect(service.unlockAlbum(first.album.slug, "wrong-password")).rejects.toMatchObject({
       code: "ALBUM_PASSWORD_INVALID",
@@ -442,6 +454,30 @@ maybeDescribe("photo vertical slice transactions", () => {
       revisionId,
       requestId: "request-cancel-edit-gate",
     });
+    await expect(
+      service.publishMedia({
+        actor: { id: reviewerId, role: "reviewer" },
+        mediaId: intent.mediaId,
+        requestId: "request-publish-edit-gate-still-incomplete",
+        idempotencyKey: "publish-edit-gate-still-incomplete",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+
+    for (const kind of ["photo_1920", "photo_original"] as const) {
+      const object = intent.objects.find((candidate) => candidate.kind === kind);
+      if (object === undefined) throw new Error(`Missing ${kind}`);
+      storage.objects.set(object.objectKey, {
+        bytes: object.expectedBytes,
+        contentType: object.contentType,
+        etag: `etag-${kind}`,
+      });
+      await service.completeUploadObject({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: intent.id,
+        kind,
+      });
+    }
+
     await service.publishMedia({
       actor: { id: reviewerId, role: "reviewer" },
       mediaId: intent.mediaId,
