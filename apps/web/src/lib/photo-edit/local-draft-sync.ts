@@ -21,49 +21,48 @@ async function syncOnce(localPhotoId: string, signal?: AbortSignal): Promise<voi
   if (draft.editState === "synced" && draft.mediaId === photo.mediaId) return;
 
   try {
-
-  const fingerprint = photoEditSourceFingerprint({
-    bytes: photo.totalBytes,
-    width: photo.width,
-    height: photo.height,
-    contentType: photo.originalContentType,
-  });
-  if (draft.sourceFingerprint !== fingerprint) {
-    await patchLocalPhotoEditDraft(localPhotoId, {
-      mediaId: photo.mediaId,
-      editState: "failed",
-      error: "本地原图与修图草稿不匹配，请重新打开照片应用修图。",
+    const fingerprint = photoEditSourceFingerprint({
+      bytes: photo.totalBytes,
+      width: photo.width,
+      height: photo.height,
+      contentType: photo.originalContentType,
     });
-    return;
-  }
-
-  let context = await getMediaEditContext(photo.mediaId, signal);
-  if (context.state.pendingRevisionId !== null) {
-    if (
-      draft.remoteRevisionId !== null &&
-      draft.remoteRevisionId === context.state.pendingRevisionId
-    ) {
-      context = await cancelPendingMediaEditRevision({
-        mediaId: photo.mediaId,
-        revisionId: draft.remoteRevisionId,
-        ...(signal === undefined ? {} : { signal }),
-      });
-      await patchLocalPhotoEditDraft(localPhotoId, { remoteRevisionId: null });
-    } else {
+    if (draft.sourceFingerprint !== fingerprint) {
       await patchLocalPhotoEditDraft(localPhotoId, {
         mediaId: photo.mediaId,
         editState: "failed",
-        error: "此照片正在另一台设备处理修图版本，请稍后重试。",
+        error: "本地原图与修图草稿不匹配，请重新打开照片应用修图。",
       });
       return;
     }
-  }
 
-  await patchLocalPhotoEditDraft(localPhotoId, {
-    mediaId: photo.mediaId,
-    editState: "syncing",
-    error: null,
-  });
+    let context = await getMediaEditContext(photo.mediaId, signal);
+    if (context.state.pendingRevisionId !== null) {
+      if (
+        draft.remoteRevisionId !== null &&
+        draft.remoteRevisionId === context.state.pendingRevisionId
+      ) {
+        context = await cancelPendingMediaEditRevision({
+          mediaId: photo.mediaId,
+          revisionId: draft.remoteRevisionId,
+          ...(signal === undefined ? {} : { signal }),
+        });
+        await patchLocalPhotoEditDraft(localPhotoId, { remoteRevisionId: null });
+      } else {
+        await patchLocalPhotoEditDraft(localPhotoId, {
+          mediaId: photo.mediaId,
+          editState: "failed",
+          error: "此照片正在另一台设备处理修图版本，请稍后重试。",
+        });
+        return;
+      }
+    }
+
+    await patchLocalPhotoEditDraft(localPhotoId, {
+      mediaId: photo.mediaId,
+      editState: "syncing",
+      error: null,
+    });
 
     const applied = await applyMediaEditRecipe({
       mediaId: photo.mediaId,
