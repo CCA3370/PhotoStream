@@ -285,6 +285,7 @@ export const FaceSearchConsent: Story = {
 export const Members: Story = {
   render: () => (
     <UserManagement
+      currentUserId="019d0000-0000-7000-8000-000000000121"
       initialUsers={[
         {
           id: "019d0000-0000-7000-8000-000000000121",
