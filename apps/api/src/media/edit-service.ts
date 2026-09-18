@@ -311,6 +311,13 @@ export class MediaEditService {
       )
       .limit(1);
     if (row === undefined) throw this.#notFound();
+    if (!inArrayValue(row.revision.status, ["rendering", "uploading"])) {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "当前修图版本不能继续完成对象",
+        statusCode: 409,
+      });
+    }
     if (row.variant.verified) return { ok: true };
 
     const metadata = await this.#storage.head(row.variant.objectKey);
@@ -367,6 +374,13 @@ export class MediaEditService {
         )
         .limit(1);
       if (revision === undefined) throw this.#notFound();
+      if (revision.status !== "uploading") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "当前修图版本不能标记为完成",
+          statusCode: 409,
+        });
+      }
       const variants = await transaction
         .select()
         .from(schema.mediaEditVariants)
@@ -464,6 +478,59 @@ export class MediaEditService {
         action: "media.edit.applied",
         targetId: options.mediaId,
         changedFields: ["activeRevisionId", "pendingRevisionId", "generation"],
+        requestId: options.requestId,
+      });
+    });
+    return this.#context(this.#database, options.mediaId);
+  }
+
+  async failPending(options: {
+    readonly actor: InternalActor;
+    readonly mediaId: string;
+    readonly revisionId: string;
+    readonly requestId: string;
+  }): Promise<MediaEditContextView> {
+    await this.#database.transaction(async (transaction) => {
+      await this.#lock(transaction, options.mediaId);
+      const media = await this.#media(transaction, options.mediaId);
+      this.#assertEditAccess(options.actor, media);
+      const state = await this.#stateForUpdate(transaction, options.mediaId);
+      if (state.pendingRevisionId !== options.revisionId) throw this.#versionConflict();
+
+      const [revision] = await transaction
+        .select()
+        .from(schema.mediaEditRevisions)
+        .where(
+          and(
+            eq(schema.mediaEditRevisions.id, options.revisionId),
+            eq(schema.mediaEditRevisions.mediaId, options.mediaId),
+          ),
+        )
+        .limit(1);
+      if (revision === undefined) throw this.#notFound();
+      if (revision.status === "failed") return;
+      if (!inArrayValue(revision.status, ["rendering", "uploading"])) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "当前修图版本不能标记为失败",
+          statusCode: 409,
+        });
+      }
+
+      const now = new Date();
+      await transaction
+        .update(schema.mediaEditRevisions)
+        .set({
+          status: "failed",
+          failureCode: "CLIENT_PROCESSING_FAILED",
+          updatedAt: now,
+        })
+        .where(eq(schema.mediaEditRevisions.id, revision.id));
+      await this.#audit(transaction, {
+        actorId: options.actor.id,
+        action: "media.edit.failed",
+        targetId: options.mediaId,
+        changedFields: ["editRevision.status", "editRevision.failureCode"],
         requestId: options.requestId,
       });
     });
