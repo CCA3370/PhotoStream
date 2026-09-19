@@ -61,7 +61,6 @@ export interface LocalReviewPhoto {
   readonly mediaId: string | null;
   readonly uploadState: LocalUploadState;
   readonly error: string | null;
-  readonly retainedOriginalOnly?: boolean;
   readonly bib: LocalBibState;
 }
 
@@ -94,14 +93,9 @@ function normalizeBibState(value: Partial<LocalBibState> | undefined): LocalBibS
 }
 
 function normalizeStoredPhoto(photo: LocalReviewPhoto): LocalReviewPhoto {
-  const stored = photo as LocalReviewPhoto & {
-    readonly bib?: Partial<LocalBibState>;
-    readonly retainedOriginalOnly?: boolean;
-  };
-  const storedBib = stored.bib;
+  const storedBib = (photo as LocalReviewPhoto & { readonly bib?: Partial<LocalBibState> }).bib;
   return {
     ...photo,
-    retainedOriginalOnly: stored.retainedOriginalOnly ?? false,
     bib:
       storedBib === undefined
         ? { ...defaultBibState(), ocrStatus: "disabled" }
@@ -218,7 +212,6 @@ export function createLocalReviewPhoto(options: {
     mediaId: null,
     uploadState: "local",
     error: null,
-    retainedOriginalOnly: false,
     bib: defaultBibState(),
   };
 }
@@ -235,7 +228,6 @@ export async function listLocalReviewPhotos(albumId: string): Promise<LocalRevie
     await complete(transaction);
     return rows
       .map(normalizeStoredPhoto)
-      .filter((photo) => photo.retainedOriginalOnly !== true)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   } finally {
     database.close();
@@ -309,23 +301,6 @@ export async function patchLocalReviewPhoto(
   change: Partial<Omit<LocalReviewPhoto, "id" | "albumId">>,
 ): Promise<LocalReviewPhoto> {
   return updateLocalReviewPhoto(id, (current) => ({ ...current, ...change }));
-}
-
-export function retainLocalOriginalRecord(photo: LocalReviewPhoto): LocalReviewPhoto {
-  return {
-    ...photo,
-    variants: [],
-    featured: false,
-    intentId: null,
-    mediaId: null,
-    uploadState: "local",
-    error: null,
-    retainedOriginalOnly: true,
-  };
-}
-
-export function retainLocalReviewOriginal(id: string): Promise<LocalReviewPhoto> {
-  return updateLocalReviewPhoto(id, retainLocalOriginalRecord);
 }
 
 export async function confirmLocalBibNumbers(
