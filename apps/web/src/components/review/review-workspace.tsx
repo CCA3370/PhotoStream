@@ -133,11 +133,13 @@ interface LocalView {
   readonly photo: LocalReviewPhoto;
   readonly originalUrl: string;
   readonly previewUrl: string;
+  readonly viewerUrl: string;
 }
 
 interface LocalObjectUrls {
   readonly originalUrl: string;
   readonly previewUrl: string;
+  readonly viewerUrl: string;
 }
 
 interface DragSelectionState {
@@ -460,22 +462,36 @@ export function ReviewWorkspace({
     for (const [photoId, urls] of localUrlCache.current) {
       if (activeIds.has(photoId)) continue;
       URL.revokeObjectURL(urls.previewUrl);
+      URL.revokeObjectURL(urls.viewerUrl);
       URL.revokeObjectURL(urls.originalUrl);
       localUrlCache.current.delete(photoId);
     }
     const next = rows.map((photo) => {
       let urls = localUrlCache.current.get(photo.id);
       if (urls === undefined) {
-        const thumb =
+        const previewBlob =
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
+          photo.variants.find((variant) => variant.kind === "photo_960")?.blob ??
+          photo.variants.find((variant) => variant.kind === "photo_1920")?.blob ??
+          photo.originalBlob;
+        const viewerBlob =
+          photo.variants.find((variant) => variant.kind === "photo_1920")?.blob ??
+          photo.variants.find((variant) => variant.kind === "photo_960")?.blob ??
           photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
           photo.originalBlob;
         urls = {
-          previewUrl: URL.createObjectURL(thumb),
+          previewUrl: URL.createObjectURL(previewBlob),
+          viewerUrl: URL.createObjectURL(viewerBlob),
           originalUrl: URL.createObjectURL(photo.originalBlob),
         };
         localUrlCache.current.set(photo.id, urls);
       }
-      return { photo, previewUrl: urls.previewUrl, originalUrl: urls.originalUrl };
+      return {
+        photo,
+        previewUrl: urls.previewUrl,
+        viewerUrl: urls.viewerUrl,
+        originalUrl: urls.originalUrl,
+      };
     });
     setLocalMedia(next);
   }, [albumId]);
@@ -591,6 +607,7 @@ export function ReviewWorkspace({
       window.removeEventListener(LOCAL_BIB_SERVER_STATE_EVENT, serverBibChanged);
       for (const urls of localUrlCache.current.values()) {
         URL.revokeObjectURL(urls.previewUrl);
+        URL.revokeObjectURL(urls.viewerUrl);
         URL.revokeObjectURL(urls.originalUrl);
       }
       localUrlCache.current.clear();
@@ -648,10 +665,10 @@ export function ReviewWorkspace({
         key: `local:${item.photo.id}`,
         source: "local",
         local: item,
-        previewUrl: item.originalUrl,
-        viewerUrl: item.originalUrl,
+        previewUrl: item.previewUrl,
+        viewerUrl: item.viewerUrl,
         viewerFallbackUrl: null,
-        remoteOriginalUrl: null,
+        remoteOriginalUrl: item.originalUrl,
         localPreferred: true,
         categoryId: item.photo.categoryId,
         uploaderId: null,
@@ -666,17 +683,19 @@ export function ReviewWorkspace({
         const linkedLocal = localByMediaId.get(item.id) ?? null;
         const ordinaryUrl = ordinary(item);
         const previewUrl = preview(item);
+        const localPreviewUrl = linkedLocal?.previewUrl ?? null;
+        const localViewerUrl = linkedLocal?.viewerUrl ?? null;
         const localOriginalUrl = linkedLocal?.originalUrl ?? null;
         return {
           key: `remote:${item.id}`,
           source: "remote" as const,
           remote: item,
           local: linkedLocal,
-          previewUrl: localOriginalUrl ?? previewUrl,
-          viewerUrl: localOriginalUrl ?? ordinaryUrl,
+          previewUrl: localPreviewUrl ?? previewUrl,
+          viewerUrl: localViewerUrl ?? ordinaryUrl,
           viewerFallbackUrl:
-            localOriginalUrl === null && previewUrl !== ordinaryUrl ? previewUrl : null,
-          remoteOriginalUrl: remoteOriginal(item),
+            localViewerUrl === null && previewUrl !== ordinaryUrl ? previewUrl : null,
+          remoteOriginalUrl: localOriginalUrl ?? remoteOriginal(item),
           localPreferred: localOriginalUrl !== null,
           categoryId: item.categoryId,
           uploaderId: item.uploaderId,
