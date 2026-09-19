@@ -140,7 +140,7 @@ export function ViewerFeedbackInbox({
     setChangingMediaId(mediaId);
     try {
       await clientMutation<{ readonly ok: true }>(
-        `/api/v1/media/${encodeURIComponent(mediaId)}/${visible ? "publish" : "hide"}`,
+        `/api/v1/media/${encodeURIComponent(mediaId)}/${visible ? "restore" : "hide"}`,
         {
           idempotencyKey: `feedback-${visible ? "publish" : "hide"}-${crypto.randomUUID()}`,
         },
