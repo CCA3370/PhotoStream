@@ -38,4 +38,19 @@ describe("management review stability guards", () => {
     expect(source).toContain("stableRemoteMedia(");
     expect(source).toContain("openItemKeysRef.current");
   });
+
+  it("uses 480/1920 management previews and resolves originals local-first", () => {
+    const lightbox = readFileSync(lightboxPath, "utf8");
+    const workspace = readFileSync(workspacePath, "utf8");
+
+    expect(workspace).toContain('variant.kind === "photo_480"');
+    expect(workspace).toContain('variant.kind === "photo_1920"');
+    expect(workspace).not.toContain('variant.kind === "photo_960")?.url ??');
+    expect(workspace).toContain("previewUrl: localOriginalUrl ?? previewUrl");
+    expect(workspace).toContain("viewerUrl: localOriginalUrl ?? ordinaryUrl");
+
+    expect(lightbox).toContain("resolveMediaEditSource");
+    expect(lightbox).toContain('"查看原图"');
+    expect(lightbox).toContain("mediaId={selected.mediaId}");
+  });
 });
