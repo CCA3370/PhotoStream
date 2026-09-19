@@ -73,30 +73,33 @@ export function ViewerServiceNotice() {
           <div className="mb-1 grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
             <InfoIcon aria-hidden="true" className="size-5" />
           </div>
-          <DialogTitle>请及时保存需要的照片</DialogTitle>
+          <DialogTitle>照片使用与版权说明</DialogTitle>
           <DialogDescription>
-            本网站由学生个人开发者（昵称：CCA3370）开发、维护，并作为北航实验学校中学部校团委学生会电视台的活动照片发布与服务平台运行，仅用于活动期间及结束后短期提供照片浏览与下载，不作为长期照片存储或备份服务。
+            本网站由学生个人开发者（昵称：CCA3370）开发、维护，并作为北航实验学校中学部校团委学生会电视台的活动照片发布与服务平台运行，仅用于校园活动纪实、师生观赏留念及平台许可范围内的照片下载，不作为长期照片存储或公开传播平台。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            出于服务器与存储成本、隐私保护等方面的考虑，相关活动的照片服务将在活动结束后的数周内停止。
+            本平台展示的现场拍摄影像资料版权及相关权益归学校或相应权利人所有，另有署名或约定的除外；PhotoStream
+            自主开发程序及原创界面内容版权归 CCA3370 所有。
           </p>
           <p>
-            服务停止后，该活动相册及其中的照片将无法继续访问、查看或下载。若有需要长期保留的照片，请尽早下载并自行妥善保存。
+            未经学校或相应权利人许可，不得擅自截图、转载、转发、外传、公开发布、二次剪辑或用于商业用途。通过平台正常提供的下载功能保存的照片，仅限个人留存与校内合理使用，不得再次传播。
           </p>
           <p>
-            PhotoStream 网站的自主开发程序及原创界面内容版权归 CCA3370
-            所有；本平台展示的活动照片版权及相关权益归北航实验学校中学部校团委学生会电视台或相应权利人所有，另有署名或约定的除外。未经相应权利人许可，请勿将相关内容用于超出个人合理使用范围的转载、发布或其他用途。
+            严禁恶意截取、篡改或传播他人肖像，以及调侃、造谣等侵权行为。违规内容可通过图片“投诉”功能反馈；学校可依据校规处理，并保留追溯相关责任的权利。
+          </p>
+          <p>
+            出于服务器与存储成本、隐私保护等考虑，活动照片服务将在活动结束后的数周内停止。届时相册将无法继续访问；确需留存且获准下载的照片，请尽早保存并妥善保管。
           </p>
           <p className="text-xs leading-5 text-muted-foreground/80">
-            PS：开发者明年就毕业了，所以下次运动会大概率不会再有这个网站了。需要的照片记得早点存下来。
+            请尊重他人肖像与隐私权益，共同维护安全、文明、纯净的校园网络环境。
           </p>
           <div className="flex items-start gap-2.5 rounded-xl border bg-muted/25 px-3.5 py-3 text-foreground">
             <DownloadIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <p className="text-sm font-medium leading-5">
-              建议在活动结束后尽快完成所需照片的下载。
+              浏览、下载或使用照片时，请遵守上述版权与肖像使用要求。
             </p>
           </div>
         </div>
