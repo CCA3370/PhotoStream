@@ -2226,7 +2226,11 @@ export function ReviewWorkspace({
                   <div className="flex items-center justify-center gap-1 border-t bg-card p-1.5">
                     <Button
                       aria-label={item.featured ? "取消精选" : "设为精选"}
-                      className={cn("size-8", item.featured && "text-primary")}
+                      className={cn(
+                        "size-8",
+                        item.featured &&
+                          "bg-amber-100 text-amber-700 hover:bg-amber-200 hover:text-amber-800",
+                      )}
                       disabled={pending || batchBusy}
                       onClick={() => void toggleFeatured(item)}
                       size="icon"
@@ -2257,9 +2261,9 @@ export function ReviewWorkspace({
                       {pendingAction === "state" ? (
                         <LoaderCircleIcon className="size-4 animate-spin" />
                       ) : published ? (
-                        <EyeOffIcon className="size-4" />
-                      ) : hidden ? (
                         <EyeIcon className="size-4" />
+                      ) : hidden ? (
+                        <EyeOffIcon className="size-4" />
                       ) : (
                         <LoaderCircleIcon className="size-4 opacity-50" />
                       )}

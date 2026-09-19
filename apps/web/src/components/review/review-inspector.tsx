@@ -125,7 +125,7 @@ export function ReviewInspector({
     (item.publicationStatus === "hidden" && !item.editPending);
 
   return (
-    <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+    <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
       <div className="flex items-start gap-3 border-b p-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.title}</p>
@@ -341,7 +341,7 @@ export function ReviewBatchInspector({
   ];
 
   return (
-    <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+    <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
       <div className="flex items-start gap-3 border-b p-4">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">批量属性</p>
