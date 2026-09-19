@@ -13,12 +13,16 @@ describe("media cache policy", () => {
     expect(mediaCacheBudget("photostream-derived-images-v1", 8 * 1024 * mib)).toBe(192 * mib);
   });
 
-  it("keeps original and internal caches on smaller quota shares", () => {
+  it("keeps originals bounded while retaining a larger internal review working set", () => {
     expect(mediaCacheBudget("photostream-original-images-v1")).toBe(128 * mib);
-    expect(mediaCacheBudget("photostream-internal-images-v1")).toBe(64 * mib);
+    expect(mediaCacheBudget("photostream-internal-images-v1")).toBe(512 * mib);
     expect(mediaCacheBudget("photostream-original-images-v1", 1024 * mib)).toBe(
       Math.floor(1024 * mib * 0.05),
     );
+    expect(mediaCacheBudget("photostream-internal-images-v1", 1024 * mib)).toBe(
+      Math.floor(1024 * mib * 0.2),
+    );
+    expect(mediaCacheBudget("photostream-internal-images-v1", 8 * 1024 * mib)).toBe(512 * mib);
   });
 
   it("classifies immutable derived cache keys without depending on query parameters", () => {
