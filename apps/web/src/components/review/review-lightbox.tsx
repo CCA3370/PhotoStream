@@ -11,6 +11,7 @@ import {
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
+  PanelRightCloseIcon,
   PanelRightOpenIcon,
   StarIcon,
   Trash2Icon,
@@ -179,7 +180,7 @@ export function ReviewLightbox({
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(() => !readOnly);
   const [editMode, setEditMode] = useState(false);
   const [editPreview, setEditPreview] = useState<PhotoEditorPreviewState>({
     beforeUrl: null,
@@ -249,7 +250,6 @@ export function ReviewLightbox({
   useEffect(() => {
     if (selectedKey === null) return;
     setBibDialogOpen(false);
-    setInspectorOpen(false);
     setEditMode(false);
     setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
     setViewingOriginal(false);
@@ -537,7 +537,8 @@ export function ReviewLightbox({
             Delete 删除。
           </DialogDescription>
 
-          <div className="relative h-full w-full overflow-hidden bg-black" ref={viewerRef}>
+          <div className="flex h-full w-full overflow-hidden bg-black" ref={viewerRef}>
+            <div className="relative min-w-0 flex-1 overflow-hidden bg-black">
             <div
               aria-label="审核图片画布"
               className={cn(
@@ -694,49 +695,6 @@ export function ReviewLightbox({
               </div>
             ) : null}
 
-            {!readOnly && inspectorOpen ? (
-              <div className="absolute inset-y-0 right-0 z-40 w-[min(96vw,24rem)] p-3 sm:p-4">
-                {editMode ? (
-                  <PhotoEditorPanel
-                    localPhotoId={selected.localPhotoId}
-                    mediaId={selected.mediaId}
-                    onApplied={onEditApplied}
-                    onClose={() => {
-                      setEditMode(false);
-                      setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
-                    }}
-                    onPreviewChange={handleEditPreviewChange}
-                  />
-                ) : (
-                  <ReviewInspector
-                    busy={busy}
-                    categories={categories}
-                    item={selected.inspector}
-                    onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
-                    onClose={() => setInspectorOpen(false)}
-                    onDelete={() => {
-                      onDelete(selected.key);
-                      focusViewer();
-                    }}
-                    onOpenBib={() => setBibDialogOpen(true)}
-                    onEdit={() => {
-                      resetView();
-                      setEditMode(true);
-                      setEditPreview({ beforeUrl: null, afterUrl: null, loading: true });
-                    }}
-                    onStateAction={() => {
-                      onToggleVisibility(selected.key);
-                      focusViewer();
-                    }}
-                    onToggleFeatured={() => {
-                      onToggleFeatured(selected.key);
-                      focusViewer();
-                    }}
-                  />
-                )}
-              </div>
-            ) : null}
-
             {canNavigate && !editMode ? (
               <>
                 <Button
@@ -861,19 +819,23 @@ export function ReviewLightbox({
                     )}
                   </Button>
                   <Button
-                    aria-label="照片属性"
-                    className={cn(toolbarButtonClass, "size-8")}
-                    disabled={busy}
+                    aria-label={inspectorOpen ? "关闭照片属性" : "打开照片属性"}
+                    className={cn(
+                      toolbarButtonClass,
+                      "size-8",
+                      inspectorOpen && "border-white/25 bg-white/[0.14]",
+                    )}
+                    disabled={busy || editMode}
                     onClick={(event) => {
                       event.currentTarget.blur();
-                      setInspectorOpen(true);
+                      setInspectorOpen((current) => !current);
                     }}
                     size="icon-sm"
-                    title="照片属性"
+                    title={inspectorOpen ? "关闭照片属性" : "打开照片属性"}
                     type="button"
                     variant="outline"
                   >
-                    <PanelRightOpenIcon />
+                    {inspectorOpen ? <PanelRightCloseIcon /> : <PanelRightOpenIcon />}
                   </Button>
                   <Button
                     aria-label="删除"
@@ -898,6 +860,51 @@ export function ReviewLightbox({
                 </div>
               </div>
             </div>
+
+            {!readOnly && inspectorOpen ? (
+              <div className="h-full w-[clamp(17rem,32vw,24rem)] shrink-0 overflow-hidden bg-card text-card-foreground">
+                {editMode ? (
+                  <PhotoEditorPanel
+                    docked
+                    localPhotoId={selected.localPhotoId}
+                    mediaId={selected.mediaId}
+                    onApplied={onEditApplied}
+                    onClose={() => {
+                      setEditMode(false);
+                      setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
+                    }}
+                    onPreviewChange={handleEditPreviewChange}
+                  />
+                ) : (
+                  <ReviewInspector
+                    busy={busy}
+                    categories={categories}
+                    docked
+                    item={selected.inspector}
+                    onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
+                    onClose={() => setInspectorOpen(false)}
+                    onDelete={() => {
+                      onDelete(selected.key);
+                      focusViewer();
+                    }}
+                    onOpenBib={() => setBibDialogOpen(true)}
+                    onEdit={() => {
+                      resetView();
+                      setEditMode(true);
+                      setEditPreview({ beforeUrl: null, afterUrl: null, loading: true });
+                    }}
+                    onStateAction={() => {
+                      onToggleVisibility(selected.key);
+                      focusViewer();
+                    }}
+                    onToggleFeatured={() => {
+                      onToggleFeatured(selected.key);
+                      focusViewer();
+                    }}
+                  />
+                )}
+              </div>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
