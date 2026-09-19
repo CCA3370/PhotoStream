@@ -60,7 +60,6 @@ function assertNotCancelled(id: string): void {
   if (cancelled.has(id)) throw new DOMException("AI 修复已取消", "AbortError");
 }
 
-
 async function ortRuntime() {
   if (ortPromise !== null) return ortPromise;
   const runtimeBase = new URL(`${PHOTO_EDIT_MODEL_BASE}/ort/`, scope.location.origin);
@@ -347,9 +346,7 @@ async function inferTile(
     const message = error instanceof Error ? error.message : String(error);
     if (attempts === 0) {
       recoveryAttempts.set(operation, 1);
-      throw new Error(
-        `WASM AI 推理中断，模型会话已释放；请重试本次操作：${message}`,
-      );
+      throw new Error(`WASM AI 推理中断，模型会话已释放；请重试本次操作：${message}`);
     }
     disabledReason = `WASM AI 再次失败，本次页面会话已禁用 AI：${message}`;
     throw new Error(disabledReason);
