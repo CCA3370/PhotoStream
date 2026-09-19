@@ -367,7 +367,6 @@ base photo_original
 | published + new edit 失败 | 继续服务旧 active |
 | active edit 资产异常缺失/不可用 | 普通相册、分享、预览/下载自动 fallback 对应 base 资产 |
 | 本地修图源缺失 | 仅在 remote base original verified 后 fallback |
-| WebGPU/OOM/device lost | 只终止当前 B 操作 |
 | 多端 edit 冲突 | 409，刷新最新 generation |
 
 ## 18. 性能与验收

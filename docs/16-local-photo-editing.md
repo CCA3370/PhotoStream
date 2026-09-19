@@ -1,7 +1,7 @@
 # 管理端本地智能修图
 
-状态：核心链路已实施；已按 PR #112“及时上传 + 多端审核”架构落地；A+B 已进入生产代码，当前未正式投产环境继续调参
-更新日期：2026-09-18
+状态：核心链路已实施；已按 PR #112“及时上传 + 多端审核”架构落地；修图仅保留确定性本地处理
+更新日期：2026-09-19
 
 ## 1. 新架构基线
 
@@ -92,15 +92,14 @@ pending edit = uploading
 2. 本地 originalBlob 是最高优先级处理源，但不是审核/当前版本权威。
 3. base 480/960/1920/photo_original 永远完整保留。
 4. 每个 edit revision 另外完整保留 edit 480/960/1920/photo_download。
-5. 新 edit 必须始终从真正 base photo_original + recipe/model 重建，不能继续压上一版 edit 输出。
+5. 新 edit 必须始终从真正 base photo_original + recipe 重建，不能继续压上一版 edit 输出。
 6. hidden/published 与 edit revision 独立。
 7. published Media 切新 edit 必须在四个 edit 对象全部 ready 后原子切换。
 8. hidden Media 已经有用户点击“应用”的 pending edit 时，在 edit ready 或取消前不能显示 base。
 9. 只在本机拖参数但未点击“应用”的 draft 不阻塞其他审核员。
 10. 多端冲突靠服务端 generation/CAS，不靠浏览器锁。
 11. DisplayResolver 必须尊重服务器 active revision，不能让本机 stale base preview 覆盖其他设备刚应用的 edit。
-12. A+B 都只在浏览器本机运行，不使用云 AI 或服务器 GPU。
-13. B 不设额外 PoC 晋级阶段。
+12. 修图仅使用浏览器本机确定性处理，不加载图像恢复模型，也不使用云 AI 或服务器 GPU。
 
 ## 4. EditSourceResolver 与 DisplayResolver 分离
 
@@ -387,10 +386,6 @@ based_on_generation
 pipeline_version
 recipe_version
 recipe_json
-denoise_model
-denoise_model_version
-deblur_model
-deblur_model_version
 source_variant_id
 created_at
 ready_at
@@ -563,28 +558,13 @@ active edit photo_download 异常缺失/不可用
 
 不能静默覆盖。
 
-## 17. A 与 B
+## 17. 确定性本地修图
 
-A 继续使用确定性本地处理：曝光、白平衡、高光/阴影、对比度/Tone Curve、Vibrance、Saturation、基础锐化；全部保存为版本化 recipe。
+修图仅保留确定性本地处理：曝光、白平衡、高光/阴影、对比度/Tone Curve、Vibrance、Saturation、基础锐化；全部保存为版本化 recipe。
 
-B 已按以下生产方案接入：
+已移除降噪、清晰化等图像恢复模型能力及其 ONNX Runtime 调用、模型供应链、模型缓存、专用 Worker、模型元数据字段和生产构建下载流程。修图不下载或执行任何图像恢复模型。
 
-- ONNX Runtime Web 1.24.3；
-- WebGPU-only，不对大图静默回退到 CPU；
-- 默认降噪：SCUNet blind real-world color PSNR，固定上游 commit；
-- 默认轻度去模糊：NAFNet deblurring，固定上游 commit；
-- 模型和 ORT JSEP/WASM 由生产构建下载、校验 SHA-256 后放入本站版本化静态目录；
-- 浏览器运行时只访问本站 `/assets/models/photo-edit/<version>/...`，不访问 Hugging Face/GitHub Raw；
-- 模型按功能懒加载并使用 immutable 长缓存；
-- 256×256 tile、32px overlap、reflect padding、feather merge；
-- AI concurrency=1；
-- denoise/deblur 都使用 strength blend，避免强制全量恢复；
-- 低光链路使用 A 预曝光 → B → 剩余 A；
-- 推理失败释放对应 session；下一次操作只允许重建一次，再失败则禁用本页面会话 B；
-- OOM/device lost/取消只影响 B/edit，不影响 base ingest；
-- 不使用云 AI、服务器 GPU或生成式内容修改。
-
-专用 `Photo edit model validation` workflow 已真实验证固定模型下载、字节数/SHA-256、生产 Web Docker 构建、镜像内模型文件，以及模型静态响应的 `Cache-Control: public, max-age=31536000, immutable`。
+号码 OCR 是独立链路：PaddleOCR.js、其 ONNX Runtime/WASM/WebGPU 运行时和 `/assets/models/bib-ocr/` 自托管资源继续保留，不受本次修图能力清理影响。
 
 ## 18. LocalPhotoEditRuntime
 
@@ -593,7 +573,6 @@ B 已按以下生产方案接入：
 ~~~text
 idle
 loading_source
-loading_model
 analyzing
 processing
 rendering
@@ -680,7 +659,7 @@ pendingRevisionId
 - stale local preview 保护；
 - public variant/download resolver。
 
-### Phase 2：A
+### Phase 2：确定性修图
 
 - analysis；
 - recipe；
@@ -691,21 +670,10 @@ pendingRevisionId
 - Before/After；
 - conflict UI。
 
-### Phase 3：B（已实施，待生产样片调参）
-
-- ONNX/WebGPU；
-- SCUNet denoise / NAFNet deblur；
-- tile / overlap / feather；
-- model cache 与固定 SHA-256 供应链；
-- progress/cancel；
-- GPU 失败隔离；
-- 生产 Docker 模型资产验证。
-
 ### Phase 4：效率
 
-- 批量 A；
+- 批量参数应用；
 - 参数同步；
-- AI batch；
 - soft edit presence；
 - 生产环境调参。
 
@@ -725,7 +693,7 @@ pendingRevisionId
 12. DisplayResolver 必须尊重服务器 active revision，不能被本机 stale base preview 覆盖。
 13. 正常 active edit 时观众最高质量下载指向 edit photo_download；active edit 资产异常缺失/不可用时服务端自动 fallback base photo_original。
 14. 修图不改变 publishSequence、OCR、人脸标签或 Media 身份。
-15. A+B 不使用云 AI；B 直接正常接入生产代码，在当前未正式投产环境中验证和调整。
+15. 修图只允许确定性本地处理；不得重新接入降噪、去模糊等图像恢复模型，除非重新进行架构与成本审批。
 16. uploader 不获得全局 media:review；修图服务按资源所有权允许 uploader 仅编辑自己上传的 Media。
 17. base upload 与 edit 同步状态独立；edit 同步失败不能把已成功的 base 对象回滚或删除。
 18. failed pending 必须保留发布 gate；retry 会显式取消旧 failed revision 后创建新 revision，cancel 则把旧 revision 标为 discarded。
