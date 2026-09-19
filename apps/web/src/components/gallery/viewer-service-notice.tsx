@@ -1,9 +1,10 @@
 "use client";
 
 import { DownloadIcon, InfoIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,9 @@ const dismissCountdownSeconds = 3;
 export function ViewerServiceNotice() {
   const [open, setOpen] = useState(false);
   const [dismissCountdown, setDismissCountdown] = useState(dismissCountdownSeconds);
+  const [hasReachedEnd, setHasReachedEnd] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -46,8 +50,37 @@ export function ViewerServiceNotice() {
     return () => window.clearInterval(timer);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    setHasReachedEnd(false);
+    setAcknowledged(false);
+
+    const frame = window.requestAnimationFrame(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      if (container.scrollHeight <= container.clientHeight + 2) {
+        setHasReachedEnd(true);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+
+  function handleNoticeScroll(): void {
+    const container = scrollContainerRef.current;
+    if (!container || hasReachedEnd) return;
+
+    const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (remaining <= 2) {
+      setHasReachedEnd(true);
+    }
+  }
+
   function dismiss(): void {
-    if (dismissCountdown > 0) return;
+    if (dismissCountdown > 0 || !hasReachedEnd || !acknowledged) return;
+
     try {
       window.localStorage.setItem(viewerServiceNoticeStorageKey, "seen");
     } catch {
@@ -61,14 +94,14 @@ export function ViewerServiceNotice() {
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen) {
-          setOpen(true);
-          return;
-        }
-        if (dismissCountdown === 0) dismiss();
+        if (nextOpen) setOpen(true);
       }}
     >
-      <DialogContent className="public-theme z-[100] sm:max-w-md" overlayClassName="z-[90]">
+      <DialogContent
+        className="public-theme z-[100] max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-md"
+        overlayClassName="z-[90]"
+        showCloseButton={false}
+      >
         <DialogHeader>
           <div className="mb-1 grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
             <InfoIcon aria-hidden="true" className="size-5" />
@@ -79,7 +112,12 @@ export function ViewerServiceNotice() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+        <div
+          className="min-h-0 max-h-[48dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground"
+          onScroll={handleNoticeScroll}
+          ref={scrollContainerRef}
+          tabIndex={0}
+        >
           <p>
             本平台现场拍摄影像资料版权及相关权益归学校或相应权利人所有，另有署名或约定的除外；PhotoStream
             自主开发程序及原创界面版权归 CCA3370 所有。
@@ -101,10 +139,30 @@ export function ViewerServiceNotice() {
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-3 sm:flex-col sm:items-stretch">
+          <div className="space-y-2">
+            <label
+              className="flex items-start gap-2.5 text-sm leading-5 text-foreground"
+              htmlFor="viewer-service-notice-acknowledgement"
+            >
+              <Checkbox
+                checked={acknowledged}
+                className="mt-0.5"
+                disabled={!hasReachedEnd}
+                id="viewer-service-notice-acknowledgement"
+                onCheckedChange={setAcknowledged}
+              />
+              <span>我已完整阅读并知晓上述照片使用、版权及肖像权益要求。</span>
+            </label>
+            {!hasReachedEnd && (
+              <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
+                请先阅读公告至底部，再勾选确认。
+              </p>
+            )}
+          </div>
           <Button
-            className="sm:min-w-28"
-            disabled={dismissCountdown > 0}
+            className="w-full"
+            disabled={dismissCountdown > 0 || !hasReachedEnd || !acknowledged}
             onClick={dismiss}
             type="button"
           >
