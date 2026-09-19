@@ -628,49 +628,49 @@ export class BibService {
         .where(eq(schema.mediaBibReviews.mediaId, media.id));
       const tagIds: string[] = [];
       for (const candidate of candidates) {
-          const blindIndexes = bibCrypto.blindIndexes(media.albumId, candidate.number);
-          const [existing] = await transaction
-            .select({ id: schema.mediaBibTags.id })
-            .from(schema.mediaBibTags)
-            .where(
-              and(
-                eq(schema.mediaBibTags.mediaId, media.id),
-                inArray(schema.mediaBibTags.blindIndex, [...blindIndexes]),
-                inArray(schema.mediaBibTags.status, ["suggested", "confirmed", "needs_review"]),
-              ),
-            )
-            .limit(1);
-          if (existing !== undefined) {
-            tagIds.push(existing.id);
-            continue;
-          }
-          const tagId = randomUUID();
-          const encrypted = bibCrypto.encrypt({
-            albumId: media.albumId,
-            mediaId: media.id,
-            tagId,
-            number: candidate.number,
-          });
-          await transaction.insert(schema.mediaBibTags).values({
-            id: tagId,
-            albumId: media.albumId,
-            mediaId: media.id,
-            numberCiphertext: encrypted.ciphertext,
-            numberIv: encrypted.iv,
-            numberAuthTag: encrypted.authTag,
-            blindIndex: encrypted.blindIndex,
-            keyVersion: encrypted.keyVersion,
-            status: "suggested",
-            source: "ocr",
-            confidenceBasisPoints: Math.round(candidate.confidence * 10_000),
-            quadrilateral: candidate.quadrilateral,
-            ruleVersion: album.bibRuleVersion,
-            modelVersion: candidate.modelVersion,
-            mappingVersion: album.bibMappingVersion,
-            createdBy: options.actor.id,
-          });
-          tagIds.push(tagId);
+        const blindIndexes = bibCrypto.blindIndexes(media.albumId, candidate.number);
+        const [existing] = await transaction
+          .select({ id: schema.mediaBibTags.id })
+          .from(schema.mediaBibTags)
+          .where(
+            and(
+              eq(schema.mediaBibTags.mediaId, media.id),
+              inArray(schema.mediaBibTags.blindIndex, [...blindIndexes]),
+              inArray(schema.mediaBibTags.status, ["suggested", "confirmed", "needs_review"]),
+            ),
+          )
+          .limit(1);
+        if (existing !== undefined) {
+          tagIds.push(existing.id);
+          continue;
         }
+        const tagId = randomUUID();
+        const encrypted = bibCrypto.encrypt({
+          albumId: media.albumId,
+          mediaId: media.id,
+          tagId,
+          number: candidate.number,
+        });
+        await transaction.insert(schema.mediaBibTags).values({
+          id: tagId,
+          albumId: media.albumId,
+          mediaId: media.id,
+          numberCiphertext: encrypted.ciphertext,
+          numberIv: encrypted.iv,
+          numberAuthTag: encrypted.authTag,
+          blindIndex: encrypted.blindIndex,
+          keyVersion: encrypted.keyVersion,
+          status: "suggested",
+          source: "ocr",
+          confidenceBasisPoints: Math.round(candidate.confidence * 10_000),
+          quadrilateral: candidate.quadrilateral,
+          ruleVersion: album.bibRuleVersion,
+          modelVersion: candidate.modelVersion,
+          mappingVersion: album.bibMappingVersion,
+          createdBy: options.actor.id,
+        });
+        tagIds.push(tagId);
+      }
       await this.#audit(transaction, {
         actorId: options.actor.id,
         action:
