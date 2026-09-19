@@ -11,7 +11,6 @@ import { getLocalReviewPhoto } from "@/lib/local-review-queue";
 import {
   type PhotoEditAiProgress,
   photoEditAiAvailable,
-  photoEditAiErrorMessage,
   restoreMediaEditPreview,
 } from "@/lib/photo-edit/ai-runtime";
 import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
@@ -40,7 +39,7 @@ import {
   type MediaEditSourceOrigin,
   resolveMediaEditSource,
 } from "@/lib/photo-edit/source-resolver";
-import { userFacingErrorMessage } from "@/lib/user-facing-error";
+import { managementErrorMessage } from "@/lib/management-error";
 
 type EditorStage = "loading" | "ready" | "analyzing" | "applying" | "error";
 
@@ -264,7 +263,7 @@ export function PhotoEditorPanel({
       })
       .catch((cause) => {
         if (disposed || controller.signal.aborted) return;
-        setError(userFacingErrorMessage(cause, "无法准备修图源。"));
+        setError(managementErrorMessage(cause, "无法准备修图源。"));
         setStage("error");
       });
 
@@ -370,7 +369,7 @@ export function PhotoEditorPanel({
       })
       .catch((cause) => {
         if (controller.signal.aborted) return;
-        setAiPreviewError(photoEditAiErrorMessage(cause));
+        setAiPreviewError(managementErrorMessage(cause));
         setAiPreviewProgress(null);
       })
       .finally(() => {
@@ -416,7 +415,7 @@ export function PhotoEditorPanel({
         })
         .catch((cause) => {
           if (controller.signal.aborted) return;
-          setError(userFacingErrorMessage(cause, "预览处理失败。"));
+          setError(managementErrorMessage(cause, "预览处理失败。"));
         });
     }, 120);
 
@@ -479,7 +478,7 @@ export function PhotoEditorPanel({
       );
       setStage("ready");
     } catch (cause) {
-      setError(userFacingErrorMessage(cause, "智能优化分析失败。"));
+      setError(managementErrorMessage(cause, "智能优化分析失败。"));
       setStage("ready");
     }
   }
@@ -518,7 +517,7 @@ export function PhotoEditorPanel({
       await onApplied();
       setStage("ready");
     } catch (cause) {
-      setError(userFacingErrorMessage(cause, "切换照片版本失败。"));
+      setError(managementErrorMessage(cause, "切换照片版本失败。"));
       setStage("ready");
     }
   }
@@ -544,7 +543,7 @@ export function PhotoEditorPanel({
       toast.add({ title: "已取消待处理修图", type: "success" });
       await onApplied();
     } catch (cause) {
-      setError(userFacingErrorMessage(cause, "取消待处理修图失败。"));
+      setError(managementErrorMessage(cause, "取消待处理修图失败。"));
     } finally {
       setStage("ready");
     }
@@ -644,7 +643,7 @@ export function PhotoEditorPanel({
           const latest = await getMediaEditContext(mediaId).catch(() => null);
           if (latest !== null) setContext(latest);
         }
-        setError(userFacingErrorMessage(cause, "应用修图失败。"));
+        setError(managementErrorMessage(cause, "应用修图失败。"));
       }
       setStage("ready");
     } finally {

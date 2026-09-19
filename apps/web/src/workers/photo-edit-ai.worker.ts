@@ -33,7 +33,9 @@ type CancelRequest = {
 type Request = RestoreRequest | CancelRequest;
 
 interface PhotoEditGpuApi {
-  requestAdapter(options?: { readonly powerPreference?: "low-power" | "high-performance" }): Promise<unknown | null>;
+  requestAdapter(options?: {
+    readonly powerPreference?: "low-power" | "high-performance";
+  }): Promise<unknown | null>;
 }
 
 const scope = self as DedicatedWorkerGlobalScope;

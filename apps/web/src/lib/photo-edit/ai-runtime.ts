@@ -140,15 +140,6 @@ export function photoEditAiAvailable(): boolean {
   return typeof Worker !== "undefined" && typeof navigator !== "undefined" && "gpu" in navigator;
 }
 
-export function photoEditAiErrorMessage(error: unknown): string {
-  if (error instanceof DOMException && error.name === "AbortError") return "AI 预览已取消。";
-  if (error instanceof Error) {
-    const detail = error.message.trim();
-    if (detail.length > 0) return `本地 AI 预览失败：${detail}`;
-  }
-  return "本地 AI 预览失败，请关闭 AI 修复后重试或更换支持 WebGPU 的浏览器。";
-}
-
 export async function restoreMediaEditPreview(
   source: Blob,
   recipe: PhotoEditRecipe,
