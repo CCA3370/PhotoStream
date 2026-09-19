@@ -32,12 +32,16 @@ type CancelRequest = {
 
 type Request = RestoreRequest | CancelRequest;
 
+interface PhotoEditGpuApi {
+  requestAdapter(options?: { readonly powerPreference?: "low-power" | "high-performance" }): Promise<unknown | null>;
+}
+
 const scope = self as DedicatedWorkerGlobalScope;
 const sessions = new Map<PhotoEditAiOperation, InferenceSession>();
 const recoveryAttempts = new Map<PhotoEditAiOperation, number>();
 const cancelled = new Set<string>();
 let disabledReason: string | null = null;
-let webGpuAdapterPromise: Promise<GPUAdapter> | null = null;
+let webGpuAdapterPromise: Promise<unknown> | null = null;
 let ortPromise: Promise<typeof import("onnxruntime-web/webgpu")> | null = null;
 
 function clamp01(value: number): number {
@@ -61,14 +65,15 @@ function assertNotCancelled(id: string): void {
   if (cancelled.has(id)) throw new DOMException("AI 修复已取消", "AbortError");
 }
 
-async function webGpuAdapter(): Promise<GPUAdapter> {
+async function webGpuAdapter(): Promise<unknown> {
   if (webGpuAdapterPromise !== null) return webGpuAdapterPromise;
   webGpuAdapterPromise = (async () => {
-    if (!("gpu" in navigator) || navigator.gpu === undefined) {
+    const gpu = (navigator as Navigator & { readonly gpu?: PhotoEditGpuApi }).gpu;
+    if (gpu === undefined) {
       throw new Error("当前浏览器或设备未提供 WebGPU");
     }
-    const preferred = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-    const adapter = preferred ?? (await navigator.gpu.requestAdapter());
+    const preferred = await gpu.requestAdapter({ powerPreference: "high-performance" });
+    const adapter = preferred ?? (await gpu.requestAdapter());
     if (adapter === null) {
       throw new Error("浏览器提供了 WebGPU 接口，但未能取得可用 GPU 适配器");
     }
@@ -87,7 +92,7 @@ async function ortRuntime() {
     };
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.proxy = false;
-    ort.env.webgpu.adapter = await webGpuAdapter();
+    ort.env.webgpu.adapter = (await webGpuAdapter()) as never;
     ort.env.webgpu.powerPreference = "high-performance";
     return ort;
   });
@@ -163,7 +168,7 @@ async function cachedBytes(options: {
     try {
       await cache.put(
         absolute,
-        new Response(bytes, {
+        new Response(bytes.slice().buffer as ArrayBuffer, {
           status: 200,
           headers: {
             "content-length": String(bytes.byteLength),

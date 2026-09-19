@@ -311,6 +311,7 @@ export function PhotoEditorPanel({
 
   useEffect(() => {
     if (source === null) return;
+    if (aiRetryNonce > 0) setAiPreviewError(null);
     if (!aiEnabled) {
       setAiPreviewSource(null);
       setAiPreviewLoading(false);

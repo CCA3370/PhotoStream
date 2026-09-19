@@ -1,6 +1,12 @@
 "use client";
 
-import { EyeIcon, EyeOffIcon, ImageIcon, LoaderCircleIcon, MessageSquareTextIcon } from "lucide-react";
+import {
+  EyeIcon,
+  EyeOffIcon,
+  ImageIcon,
+  LoaderCircleIcon,
+  MessageSquareTextIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
@@ -275,9 +281,7 @@ export function ViewerFeedbackInbox({
                                 : undefined
                             }
                             disabled={(!mediaVisible && !mediaHidden) || changing}
-                            onClick={() =>
-                              void setReportedPhotoVisibility(mediaId, mediaHidden)
-                            }
+                            onClick={() => void setReportedPhotoVisibility(mediaId, mediaHidden)}
                             size="sm"
                             type="button"
                             variant={mediaVisible ? "destructive" : "outline"}
@@ -289,11 +293,7 @@ export function ViewerFeedbackInbox({
                             ) : (
                               <EyeOffIcon data-icon="inline-start" />
                             )}
-                            {mediaVisible
-                              ? "一键下架图片"
-                              : mediaHidden
-                                ? "重新上架"
-                                : "已不可见"}
+                            {mediaVisible ? "一键下架图片" : mediaHidden ? "重新上架" : "已不可见"}
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">
