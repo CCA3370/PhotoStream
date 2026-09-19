@@ -225,7 +225,6 @@ function simpleQueryValue(params: URLSearchParams, key: string): string {
 function preview(media: InternalMediaView): string | null {
   return (
     media.variants.find((variant) => variant.kind === "photo_480")?.url ??
-    media.variants.find((variant) => variant.kind === "photo_960")?.url ??
     media.variants.find((variant) => variant.kind === "photo_1920")?.url ??
     null
   );
@@ -234,7 +233,6 @@ function preview(media: InternalMediaView): string | null {
 function ordinary(media: InternalMediaView): string | null {
   return (
     media.variants.find((variant) => variant.kind === "photo_1920")?.url ??
-    media.variants.find((variant) => variant.kind === "photo_960")?.url ??
     media.variants.find((variant) => variant.kind === "photo_480")?.url ??
     null
   );
@@ -649,7 +647,7 @@ export function ReviewWorkspace({
         key: `local:${item.photo.id}`,
         source: "local",
         local: item,
-        previewUrl: item.previewUrl,
+        previewUrl: item.originalUrl,
         viewerUrl: item.originalUrl,
         viewerFallbackUrl: null,
         remoteOriginalUrl: null,
@@ -666,18 +664,19 @@ export function ReviewWorkspace({
       .map((item) => {
         const linkedLocal = localByMediaId.get(item.id) ?? null;
         const ordinaryUrl = ordinary(item);
-        const hasActiveEdit =
-          item.edit?.activeRevisionId !== null && item.edit?.activeRevisionId !== undefined;
+        const previewUrl = preview(item);
+        const localOriginalUrl = linkedLocal?.originalUrl ?? null;
         return {
           key: `remote:${item.id}`,
           source: "remote" as const,
           remote: item,
           local: linkedLocal,
-          previewUrl: hasActiveEdit ? preview(item) : (linkedLocal?.previewUrl ?? preview(item)),
-          viewerUrl: hasActiveEdit ? ordinaryUrl : (linkedLocal?.originalUrl ?? ordinaryUrl),
-          viewerFallbackUrl: linkedLocal === null || hasActiveEdit ? null : ordinaryUrl,
+          previewUrl: localOriginalUrl ?? previewUrl,
+          viewerUrl: localOriginalUrl ?? ordinaryUrl,
+          viewerFallbackUrl:
+            localOriginalUrl === null && previewUrl !== ordinaryUrl ? previewUrl : null,
           remoteOriginalUrl: remoteOriginal(item),
-          localPreferred: linkedLocal !== null && !hasActiveEdit,
+          localPreferred: localOriginalUrl !== null,
           categoryId: item.categoryId,
           uploaderId: item.uploaderId,
           featured: featuredIds.has(item.id),
