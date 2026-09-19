@@ -68,7 +68,7 @@ async function analyze(id: string, source: Blob): Promise<void> {
   try {
     const size = dimensions(bitmap.width, bitmap.height, 768);
     const canvas = new OffscreenCanvas(size.width, size.height);
-    const context = canvas.getContext("2d", { alpha: true });
+    const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
     if (context === null) throw new Error("浏览器无法创建修图分析画布");
     context.drawImage(bitmap, 0, 0, size.width, size.height);
     const pixels = context.getImageData(0, 0, size.width, size.height);

@@ -32,19 +32,12 @@ type CancelRequest = {
 
 type Request = RestoreRequest | CancelRequest;
 
-interface PhotoEditGpuApi {
-  requestAdapter(options?: {
-    readonly powerPreference?: "low-power" | "high-performance";
-  }): Promise<unknown | null>;
-}
 
 const scope = self as DedicatedWorkerGlobalScope;
 const sessions = new Map<PhotoEditAiOperation, InferenceSession>();
 const recoveryAttempts = new Map<PhotoEditAiOperation, number>();
 const cancelled = new Set<string>();
 let disabledReason: string | null = null;
-let webGpuAdapterPromise: Promise<unknown> | null = null;
-const strictCspRuntime = process.env.NODE_ENV === "production";
 let ortPromise: Promise<typeof import("onnxruntime-web/wasm")> | null = null;
 
 function clamp01(value: number): number {
@@ -68,50 +61,21 @@ function assertNotCancelled(id: string): void {
   if (cancelled.has(id)) throw new DOMException("AI 修复已取消", "AbortError");
 }
 
-async function webGpuAdapter(): Promise<unknown> {
-  if (webGpuAdapterPromise !== null) return webGpuAdapterPromise;
-  webGpuAdapterPromise = (async () => {
-    const gpu = (navigator as Navigator & { readonly gpu?: PhotoEditGpuApi }).gpu;
-    if (gpu === undefined) {
-      throw new Error("当前浏览器或设备未提供 WebGPU");
-    }
-    const preferred = await gpu.requestAdapter({ powerPreference: "high-performance" });
-    const adapter = preferred ?? (await gpu.requestAdapter());
-    if (adapter === null) {
-      throw new Error("浏览器提供了 WebGPU 接口，但未能取得可用 GPU 适配器");
-    }
-    return adapter;
-  })();
-  return webGpuAdapterPromise;
-}
 
 async function ortRuntime() {
   if (ortPromise !== null) return ortPromise;
   const runtimeBase = new URL(`${PHOTO_EDIT_MODEL_BASE}/ort/`, scope.location.origin);
-  const runtimeImport = strictCspRuntime
-    ? import("onnxruntime-web/wasm")
-    : import("onnxruntime-web/webgpu");
-  ortPromise = runtimeImport.then(async (ort) => {
-    ort.env.wasm.wasmPaths = strictCspRuntime
-      ? {
-          mjs: new URL("ort-wasm-simd-threaded.mjs", runtimeBase).toString(),
-          wasm: new URL("ort-wasm-simd-threaded.wasm", runtimeBase).toString(),
-        }
-      : {
-          mjs: new URL("ort-wasm-simd-threaded.jsep.mjs", runtimeBase).toString(),
-          wasm: new URL("ort-wasm-simd-threaded.jsep.wasm", runtimeBase).toString(),
-        };
+  ortPromise = import("onnxruntime-web/wasm").then((ort) => {
+    ort.env.wasm.wasmPaths = {
+      mjs: new URL("ort-wasm-simd-threaded.mjs", runtimeBase).toString(),
+      wasm: new URL("ort-wasm-simd-threaded.wasm", runtimeBase).toString(),
+    };
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.proxy = false;
-    if (!strictCspRuntime) {
-      ort.env.webgpu.adapter = (await webGpuAdapter()) as never;
-      ort.env.webgpu.powerPreference = "high-performance";
-    }
     return ort;
   });
   return ortPromise;
 }
-
 async function cachedBytes(options: {
   readonly url: string;
   readonly expectedBytes: number;
@@ -229,14 +193,6 @@ async function createSession(
   requestId: string,
 ): Promise<InferenceSession> {
   if (disabledReason !== null) throw new Error(disabledReason);
-  if (!strictCspRuntime) {
-    try {
-      await webGpuAdapter();
-    } catch (error) {
-      disabledReason = error instanceof Error ? error.message : "当前浏览器或设备不支持 WebGPU";
-      throw new Error(disabledReason);
-    }
-  }
 
   const totalBytes = spec.modelBytes + (spec.externalData?.bytes ?? 0);
   let modelLoadedBytes = 0;
@@ -288,7 +244,7 @@ async function createSession(
   const ort = await ortRuntime();
   try {
     const session = await ort.InferenceSession.create(model, {
-      executionProviders: strictCspRuntime ? ["wasm"] : ["webgpu", "wasm"],
+      executionProviders: ["wasm"],
       graphOptimizationLevel: "all",
       ...(externalData === undefined ? {} : { externalData }),
     } as InferenceSession.SessionOptions);
@@ -296,7 +252,7 @@ async function createSession(
     return session;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    disabledReason = `${strictCspRuntime ? "WASM" : "WebGPU"} AI 模型初始化失败：${message}`;
+    disabledReason = `WASM AI 模型初始化失败：${message}`;
     throw new Error(disabledReason);
   }
 }
@@ -392,10 +348,10 @@ async function inferTile(
     if (attempts === 0) {
       recoveryAttempts.set(operation, 1);
       throw new Error(
-        `${strictCspRuntime ? "WASM" : "WebGPU"} AI 推理中断，模型会话已释放；请重试本次操作：${message}`,
+        `WASM AI 推理中断，模型会话已释放；请重试本次操作：${message}`,
       );
     }
-    disabledReason = `${strictCspRuntime ? "WASM" : "WebGPU"} AI 再次失败，本次页面会话已禁用 AI：${message}`;
+    disabledReason = `WASM AI 再次失败，本次页面会话已禁用 AI：${message}`;
     throw new Error(disabledReason);
   }
 }
