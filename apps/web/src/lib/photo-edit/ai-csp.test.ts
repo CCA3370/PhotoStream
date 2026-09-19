@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const workerPath = fileURLToPath(new URL("../../workers/photo-edit-ai.worker.ts", import.meta.url));
-const runtimePath = fileURLToPath(new URL("../ai-runtime.ts", import.meta.url));
-const bibPath = fileURLToPath(new URL("../../bib-ocr.ts", import.meta.url));
+const runtimePath = fileURLToPath(new URL("./ai-runtime.ts", import.meta.url));
+const bibPath = fileURLToPath(new URL("../bib-ocr.ts", import.meta.url));
 const provisionPath = fileURLToPath(
   new URL("../../../../../scripts/provision-photo-edit-models.mjs", import.meta.url),
 );
