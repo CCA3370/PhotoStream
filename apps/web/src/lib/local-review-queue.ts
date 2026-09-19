@@ -434,7 +434,19 @@ export function effectiveBibMediaState(
     (remote.review.decision === "numbers_confirmed" ||
       remote.review.decision === "no_number_confirmed")
   ) {
-    return remote;
+    if (
+      remote.review.decision !== "no_number_confirmed" ||
+      photo.bib.ocrRevision <= photo.bib.ocrSyncedRevision
+    ) {
+      return remote;
+    }
+    const remoteNumbers = new Set(remote.tags.map((tag) => tag.number));
+    const pendingLocalOcr = localBibMediaState(photo).tags.filter(
+      (tag) => tag.source === "ocr" && !remoteNumbers.has(tag.number),
+    );
+    return pendingLocalOcr.length === 0
+      ? remote
+      : { ...remote, tags: [...remote.tags, ...pendingLocalOcr] };
   }
   if (
     photo.bib.ocrRevision > photo.bib.ocrSyncedRevision ||
