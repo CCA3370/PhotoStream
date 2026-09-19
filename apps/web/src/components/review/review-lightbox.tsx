@@ -860,6 +860,7 @@ export function ReviewLightbox({
                 </div>
               </div>
             </div>
+          </div>
 
             {!readOnly && inspectorOpen ? (
               <div className="h-full w-[clamp(17rem,32vw,24rem)] shrink-0 overflow-hidden bg-card text-card-foreground">
