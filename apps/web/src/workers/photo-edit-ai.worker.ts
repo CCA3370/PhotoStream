@@ -32,7 +32,6 @@ type CancelRequest = {
 
 type Request = RestoreRequest | CancelRequest;
 
-
 const scope = self as DedicatedWorkerGlobalScope;
 const sessions = new Map<PhotoEditAiOperation, InferenceSession>();
 const recoveryAttempts = new Map<PhotoEditAiOperation, number>();
@@ -76,6 +75,7 @@ async function ortRuntime() {
   });
   return ortPromise;
 }
+
 async function cachedBytes(options: {
   readonly url: string;
   readonly expectedBytes: number;
