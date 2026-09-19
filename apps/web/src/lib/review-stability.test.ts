@@ -45,7 +45,12 @@ describe("management review stability guards", () => {
 
     expect(workspace).toContain('variant.kind === "photo_480"');
     expect(workspace).toContain('variant.kind === "photo_1920"');
-    expect(workspace).not.toContain('variant.kind === "photo_960")?.url ??');
+    expect(workspace).toContain(
+      'variant.kind === "photo_1920")?.url ??\n    media.variants.find((variant) => variant.kind === "photo_960")?.url ??',
+    );
+    expect(workspace).toContain(
+      'variant.kind === "photo_480")?.url ??\n    media.variants.find((variant) => variant.kind === "photo_1920")?.url ??',
+    );
     expect(workspace).toContain("previewUrl: localOriginalUrl ?? previewUrl");
     expect(workspace).toContain("viewerUrl: localOriginalUrl ?? ordinaryUrl");
 
