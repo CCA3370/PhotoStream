@@ -1,9 +1,10 @@
+import { hasPermission, type UserRole } from "@photostream/contracts";
 import { type Database, schema } from "@photostream/db";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import { liveEventChannel } from "./live-event-broker.js";
-import type { PhotoService } from "./service.js";
+import type { InternalActor, PhotoService } from "./service.js";
 
 export const viewerFeedbackTopic = "viewer-feedback";
 
@@ -15,6 +16,12 @@ export type ViewerReportReason =
   | "inaccurate"
   | "malicious_spread"
   | "other";
+
+function requirePermission(role: UserRole): void {
+  if (!hasPermission(role, "media:manage")) {
+    throw new AppError({ code: "FORBIDDEN", message: "当前角色无权删除反馈", statusCode: 403 });
+  }
+}
 
 export interface ViewerFeedbackView {
   readonly id: number;
@@ -169,6 +176,24 @@ export class ViewerFeedbackService {
     });
 
     return { id: created.id, received: true as const };
+  }
+
+  async deleteFeedback(options: {
+    readonly actor: InternalActor;
+    readonly feedbackId: number;
+  }): Promise<void> {
+    requirePermission(options.actor.role);
+    const [deleted] = await this.#database
+      .delete(schema.viewerFeedback)
+      .where(eq(schema.viewerFeedback.id, options.feedbackId))
+      .returning({ id: schema.viewerFeedback.id });
+    if (deleted === undefined) {
+      throw new AppError({
+        code: "NOT_FOUND",
+        message: "反馈记录不存在或已被删除",
+        statusCode: 404,
+      });
+    }
   }
 
   async latestId(): Promise<number> {

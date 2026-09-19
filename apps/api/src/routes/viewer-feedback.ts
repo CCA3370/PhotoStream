@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { requireInternalSession } from "../auth/http.js";
+import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import type { LiveEventBroker } from "../media/live-event-broker.js";
@@ -18,6 +18,7 @@ const reportParamsSchema = z
   .object({ slug: z.string().min(12).max(32), mediaId: z.string().uuid() })
   .strict();
 const shareReportParamsSchema = z.object({ shareId: z.string().uuid() }).strict();
+const feedbackIdParamsSchema = z.object({ id: z.coerce.number().int().positive() }).strict();
 const feedbackKindSchema = z.enum(["problem", "suggestion", "other"]);
 const feedbackRecordKindSchema = z.enum(["problem", "suggestion", "other", "report"]);
 const reportReasonSchema = z.enum([
@@ -183,6 +184,26 @@ export async function registerViewerFeedbackRoutes(
       const items = await options.feedbackService.listRecent(request.query.limit);
       void reply.header("cache-control", "no-store");
       return { items, latestId: items[0]?.id ?? 0 };
+    },
+  );
+
+  typed.delete(
+    "/api/v1/feedback/:id",
+    {
+      schema: {
+        operationId: "deleteViewerFeedback",
+        tags: ["feedback"],
+        params: feedbackIdParamsSchema,
+        response: { 200: z.object({ ok: z.literal(true) }).strict(), ...errors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await options.feedbackService.deleteFeedback({
+        actor: { id: session.record.user.id, role: session.record.user.role },
+        feedbackId: request.params.id,
+      });
+      return { ok: true as const };
     },
   );
 

@@ -240,6 +240,23 @@ maybeDescribe("single-photo sharing", () => {
       message: "请处理这张分享照片",
     });
 
+    await feedbackService.deleteFeedback({
+      actor: { id: adminId, role: "admin" },
+      feedbackId: report.id,
+    });
+    expect(
+      await database
+        .select({ id: schema.viewerFeedback.id })
+        .from(schema.viewerFeedback)
+        .where(eq(schema.viewerFeedback.id, report.id)),
+    ).toHaveLength(0);
+    await expect(
+      feedbackService.deleteFeedback({
+        actor: { id: adminId, role: "admin" },
+        feedbackId: report.id,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
     const shared = await shareService.getShareView({ shareId: share.shareId });
     expect(shared.slug).toBe(album.slug);
     expect(shared.media.id).toBe(media.id);
