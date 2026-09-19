@@ -456,17 +456,25 @@ export function ReviewLightbox({
   }
 
   async function showOriginal(): Promise<void> {
-    if (selected === null || selected.mediaId === null || selected.localPreferred) return;
+    if (selected === null) return;
 
     const selectedKeyAtStart = selected.key;
     setOriginalLoading(true);
     try {
-      let objectUrl = originalObjectUrlRef.current;
-      if (objectUrl === null) {
-        const resolved = await resolveMediaEditSource(selected.mediaId);
-        if (selectedKeyRef.current !== selectedKeyAtStart) return;
-        objectUrl = URL.createObjectURL(resolved.blob);
-        originalObjectUrlRef.current = objectUrl;
+      let objectUrl: string;
+      if (selected.localPreferred && selected.originalSrc !== null) {
+        objectUrl = selected.originalSrc;
+      } else {
+        if (selected.mediaId === null) return;
+        const cached = originalObjectUrlRef.current;
+        if (cached !== null) {
+          objectUrl = cached;
+        } else {
+          const resolved = await resolveMediaEditSource(selected.mediaId);
+          if (selectedKeyRef.current !== selectedKeyAtStart) return;
+          objectUrl = URL.createObjectURL(resolved.blob);
+          originalObjectUrlRef.current = objectUrl;
+        }
       }
       if (selectedKeyRef.current !== selectedKeyAtStart) return;
 
@@ -628,7 +636,8 @@ export function ReviewLightbox({
                 {selectedIndex + 1} / {items.length}
               </div>
               <div className="pointer-events-auto flex items-center gap-1.5">
-                {selected.mediaId !== null && !selected.localPreferred ? (
+                {(selected.localPreferred && selected.originalSrc !== null) ||
+                (!selected.localPreferred && selected.mediaId !== null) ? (
                   <Button
                     aria-label={viewingOriginal ? "返回 1920" : "查看原图"}
                     className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
