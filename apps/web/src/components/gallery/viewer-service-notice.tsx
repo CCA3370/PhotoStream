@@ -160,7 +160,7 @@ export function ViewerServiceNotice() {
 
         <div className="min-h-0">
           <div
-            className="max-h-[52dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground"
+            className="max-h-[52dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground outline-none focus:outline-none focus-visible:outline-none"
             onKeyDown={markScrollInteraction}
             onPointerDown={markScrollInteraction}
             onScroll={handleNoticeScroll}
