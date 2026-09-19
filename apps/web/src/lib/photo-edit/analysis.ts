@@ -21,7 +21,6 @@ export interface PhotoEditAnalysis {
   readonly neutralBlue: number;
   readonly neutralConfidence: number;
   readonly sharpness: number;
-  readonly noise: number;
 }
 
 const histogramSize = 256;
@@ -52,7 +51,6 @@ export function analyzePhotoPixels(buffer: PhotoPixelBuffer): PhotoEditAnalysis 
   let neutralGreen = 0;
   let neutralBlue = 0;
   let sharpnessSum = 0;
-  let noiseSum = 0;
   let gradientCount = 0;
 
   const { data, width, height } = buffer;
@@ -103,7 +101,6 @@ export function analyzePhotoPixels(buffer: PhotoPixelBuffer): PhotoEditAnalysis 
         const gy = belowLight - light;
         const gradient = Math.sqrt(gx * gx + gy * gy);
         sharpnessSum += gradient;
-        noiseSum += Math.min(Math.abs(gx - gy), 0.25);
         gradientCount += 1;
       }
     }
@@ -130,7 +127,6 @@ export function analyzePhotoPixels(buffer: PhotoPixelBuffer): PhotoEditAnalysis 
     neutralBlue: neutralCount === 0 ? 0 : neutralBlue / neutralCount,
     neutralConfidence: total === 0 ? 0 : Math.min(1, neutralCount / Math.max(1, total * 0.12)),
     sharpness: gradientCount === 0 ? 0 : sharpnessSum / gradientCount,
-    noise: gradientCount === 0 ? 0 : noiseSum / gradientCount,
   };
 }
 

@@ -14,12 +14,6 @@ type Request =
     }
   | {
       readonly id: string;
-      readonly type: "intermediate";
-      readonly source: Blob | ImageBitmap;
-      readonly recipe: PhotoEditRecipe;
-    }
-  | {
-      readonly id: string;
       readonly type: "render";
       readonly source: Blob | ImageBitmap;
       readonly recipe: PhotoEditRecipe;
@@ -135,38 +129,6 @@ async function preview(
   }
 }
 
-async function intermediate(
-  id: string,
-  source: Blob | ImageBitmap,
-  recipe: PhotoEditRecipe,
-): Promise<void> {
-  const bitmap = await sourceBitmap(source);
-  try {
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
-    if (context === null) throw new Error("浏览器无法创建修图中间画布");
-    if (sourceIsJpeg(source)) {
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, bitmap.width, bitmap.height);
-    }
-    context.drawImage(bitmap, 0, 0);
-    const stripeCount = Math.ceil(bitmap.height / stripeRows);
-    for (let stripe = 0; stripe < stripeCount; stripe += 1) {
-      processStripe(context, bitmap.width, bitmap.height, stripe * stripeRows, recipe);
-      scope.postMessage({
-        id,
-        type: "progress",
-        progress: (stripe + 1) / stripeCount,
-      });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-    const result = canvas.transferToImageBitmap();
-    scope.postMessage({ id, type: "intermediate", bitmap: result }, [result]);
-  } finally {
-    bitmap.close();
-  }
-}
-
 async function render(
   id: string,
   source: Blob | ImageBitmap,
@@ -252,9 +214,7 @@ scope.addEventListener("message", (event: MessageEvent<Request>) => {
       ? analyze(request.id, request.source)
       : request.type === "preview"
         ? preview(request.id, request.source, request.recipe)
-        : request.type === "intermediate"
-          ? intermediate(request.id, request.source, request.recipe)
-          : render(request.id, request.source, request.recipe);
+        : render(request.id, request.source, request.recipe);
   void task.catch((error: unknown) => {
     scope.postMessage({
       id: request.id,

@@ -9,11 +9,6 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { toast } from "@/components/ui/toast";
 import { getLocalReviewPhoto } from "@/lib/local-review-queue";
 import { managementErrorMessage } from "@/lib/management-error";
-import {
-  type PhotoEditAiProgress,
-  photoEditAiAvailable,
-  restoreMediaEditPreview,
-} from "@/lib/photo-edit/ai-runtime";
 import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
@@ -101,17 +96,6 @@ function sourceLabel(origin: MediaEditSourceOrigin | null): string {
   return "正在解析";
 }
 
-function formatModelBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function aiOperationLabel(operation: PhotoEditAiProgress["operation"]): string {
-  if (operation === "denoise") return "AI 降噪";
-  if (operation === "deblur") return "AI 清晰化";
-  return "AI 模型";
-}
-
 export interface PhotoEditorPreviewState {
   readonly beforeUrl: string | null;
   readonly afterUrl: string | null;
@@ -140,16 +124,10 @@ export function PhotoEditorPanel({
   const [stage, setStage] = useState<EditorStage>("loading");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [aiPreviewSource, setAiPreviewSource] = useState<Blob | null>(null);
-  const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
-  const [aiPreviewProgress, setAiPreviewProgress] = useState<PhotoEditAiProgress | null>(null);
-  const [aiPreviewError, setAiPreviewError] = useState<string | null>(null);
-  const [aiRetryNonce, setAiRetryNonce] = useState(0);
   const [ownedPendingRevisionId, setOwnedPendingRevisionId] = useState<string | null>(null);
   const [localSourceFingerprint, setLocalSourceFingerprint] = useState<string | null>(null);
   const persistedRecipeKey = useRef<string | null>(null);
   const previewSequence = useRef(0);
-  const aiPreviewSequence = useRef(0);
   const applyController = useRef<AbortController | null>(null);
   const applyReservedRevisionId = useRef<string | null>(null);
 
@@ -157,18 +135,10 @@ export function PhotoEditorPanel({
   const pendingRevisionId = context?.state.pendingRevisionId ?? null;
   const pendingElsewhere =
     pendingRevisionId !== null && pendingRevisionId !== ownedPendingRevisionId;
-  const aiAvailable = photoEditAiAvailable();
-  const denoiseStrength = recipe.denoiseStrength;
-  const deblurStrength = recipe.deblurStrength;
-  const aiEnabled = denoiseStrength > 0 || deblurStrength > 0;
-  const aiPreExposure =
-    denoiseStrength > 0 && recipe.exposureEv >= 0.75 ? Math.min(0.75, recipe.exposureEv * 0.5) : 0;
   const canApply =
     stage === "ready" &&
     source !== null &&
     !pendingElsewhere &&
-    !aiPreviewLoading &&
-    (!aiEnabled || aiPreviewSource !== null) &&
     (context !== null || localPhotoId !== null);
   const draftBasedOnGeneration = context?.state.generation ?? null;
   const draftBasedOnRevisionId = context?.state.activeRevisionId ?? null;
@@ -187,10 +157,6 @@ export function PhotoEditorPanel({
     setStage("loading");
     setError(null);
     setProgress(0);
-    setAiPreviewSource(null);
-    setAiPreviewLoading(false);
-    setAiPreviewProgress(null);
-    setAiPreviewError(null);
     setOwnedPendingRevisionId(null);
     setLocalSourceFingerprint(null);
     persistedRecipeKey.current = null;
@@ -309,102 +275,13 @@ export function PhotoEditorPanel({
   ]);
 
   useEffect(() => {
-    if (source === null) return;
-    if (aiRetryNonce > 0) setAiPreviewError(null);
-    if (!aiEnabled) {
-      setAiPreviewSource(null);
-      setAiPreviewLoading(false);
-      setAiPreviewProgress(null);
-      setAiPreviewError(null);
-      return;
-    }
-    if (!aiAvailable) {
-      setAiPreviewSource(null);
-      setAiPreviewLoading(false);
-      setAiPreviewProgress(null);
-      setAiPreviewError("当前浏览器或设备未提供 WebGPU，本地 AI 修复不可用。");
-      return;
-    }
-
-    const sequence = aiPreviewSequence.current + 1;
-    aiPreviewSequence.current = sequence;
-    const controller = new AbortController();
-    setAiPreviewSource(null);
-    setAiPreviewLoading(true);
-    setAiPreviewError(null);
-    setAiPreviewProgress({
-      phase: "downloading-model",
-      progress: 0,
-    });
-
-    const run = async () => {
-      let aiInput = source;
-      if (aiPreExposure > 0) {
-        aiInput = await renderMediaEditPreview(
-          source,
-          normalizePhotoEditRecipe({
-            ...defaultPhotoEditRecipe,
-            exposureEv: aiPreExposure,
-          }),
-          { signal: controller.signal },
-        );
-      }
-      const aiRecipe = normalizePhotoEditRecipe({
-        ...defaultPhotoEditRecipe,
-        denoiseStrength,
-        deblurStrength,
-      });
-      return restoreMediaEditPreview(aiInput, aiRecipe, {
-        signal: controller.signal,
-        onProgress: (nextProgress) => setAiPreviewProgress(nextProgress),
-      });
-    };
-
-    void run()
-      .then((blob) => {
-        if (controller.signal.aborted || aiPreviewSequence.current !== sequence) return;
-        setAiPreviewSource(blob);
-        setAiPreviewError(null);
-        setAiPreviewProgress(null);
-      })
-      .catch((cause) => {
-        if (controller.signal.aborted) return;
-        setAiPreviewError(managementErrorMessage(cause));
-        setAiPreviewProgress(null);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted && aiPreviewSequence.current === sequence) {
-          setAiPreviewLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [
-    aiAvailable,
-    aiEnabled,
-    aiPreExposure,
-    aiRetryNonce,
-    deblurStrength,
-    denoiseStrength,
-    source,
-  ]);
-
-  useEffect(() => {
     if (source === null || stage === "loading" || stage === "error") return;
-    if (aiEnabled && aiPreviewSource === null) return;
 
-    const previewSource = aiPreviewSource ?? source;
-    const previewRecipe = normalizePhotoEditRecipe({
-      ...recipe,
-      exposureEv: recipe.exposureEv - aiPreExposure,
-      denoiseStrength: 0,
-      deblurStrength: 0,
-    });
     const sequence = previewSequence.current + 1;
     previewSequence.current = sequence;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void renderMediaEditPreview(previewSource, previewRecipe, { signal: controller.signal })
+      void renderMediaEditPreview(source, recipe, { signal: controller.signal })
         .then((blob) => {
           if (controller.signal.aborted || previewSequence.current !== sequence) return;
           const url = URL.createObjectURL(blob);
@@ -423,7 +300,7 @@ export function PhotoEditorPanel({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [aiEnabled, aiPreExposure, aiPreviewSource, recipe, source, stage]);
+  }, [recipe, source, stage]);
 
   useEffect(
     () => () => {
@@ -469,13 +346,7 @@ export function PhotoEditorPanel({
     try {
       const analysis = await analyzeMediaEditSource(source);
       const automatic = automaticPhotoEditRecipe(analysis);
-      setRecipe((current) =>
-        normalizePhotoEditRecipe({
-          ...automatic,
-          denoiseStrength: current.denoiseStrength,
-          deblurStrength: current.deblurStrength,
-        }),
-      );
+      setRecipe(automatic);
       setStage("ready");
     } catch (cause) {
       setError(managementErrorMessage(cause, "智能优化分析失败。"));
@@ -658,7 +529,7 @@ export function PhotoEditorPanel({
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">修图</h2>
           <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-            本机处理 · 图片不会发送至 AI 服务 · {sourceLabel(sourceOrigin)}
+            本机确定性处理 · {sourceLabel(sourceOrigin)}
           </p>
         </div>
         <Button
@@ -835,106 +706,6 @@ export function PhotoEditorPanel({
               value={recipe.sharpen}
             />
           </div>
-
-          <section className="flex flex-col gap-3 border-t pt-4">
-            <div>
-              <h3 className="text-xs font-semibold text-muted-foreground">AI 修复</h3>
-              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                WebGPU 本机推理，不上传至 AI 服务。模型首次使用时从本站加载并长期缓存。
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                disabled={busy || !aiAvailable}
-                onClick={() =>
-                  patchRecipe({
-                    denoiseStrength: recipe.denoiseStrength > 0 ? 0 : 0.55,
-                  })
-                }
-                type="button"
-                variant={recipe.denoiseStrength > 0 ? "default" : "outline"}
-              >
-                AI 降噪
-              </Button>
-              <Button
-                disabled={busy || !aiAvailable}
-                onClick={() =>
-                  patchRecipe({
-                    deblurStrength: recipe.deblurStrength > 0 ? 0 : 0.28,
-                  })
-                }
-                type="button"
-                variant={recipe.deblurStrength > 0 ? "default" : "outline"}
-              >
-                AI 清晰化
-              </Button>
-            </div>
-            {!aiAvailable ? (
-              <p className="text-[11px] leading-4 text-muted-foreground">
-                当前浏览器或设备未提供 WebGPU，确定性调色仍可正常使用。
-              </p>
-            ) : null}
-            {recipe.denoiseStrength > 0 ? (
-              <RangeControl
-                disabled={busy}
-                format={(value) => `${Math.round(value * 100)}%`}
-                label="降噪强度"
-                maximum={1}
-                minimum={0}
-                onChange={(value) => patchRecipe({ denoiseStrength: value })}
-                step={0.05}
-                value={recipe.denoiseStrength}
-              />
-            ) : null}
-            {recipe.deblurStrength > 0 ? (
-              <RangeControl
-                disabled={busy}
-                format={(value) => `${Math.round(value * 100)}%`}
-                label="清晰强度"
-                maximum={0.6}
-                minimum={0}
-                onChange={(value) => patchRecipe({ deblurStrength: value })}
-                step={0.04}
-                value={recipe.deblurStrength}
-              />
-            ) : null}
-            {aiPreviewLoading && aiPreviewProgress !== null ? (
-              aiPreviewProgress.phase === "downloading-model" ? (
-                <Progress value={Math.round(aiPreviewProgress.progress * 100)}>
-                  <ProgressLabel>
-                    正在下载{aiOperationLabel(aiPreviewProgress.operation)}模型
-                  </ProgressLabel>
-                  <span className="ml-auto text-sm tabular-nums text-muted-foreground">
-                    {aiPreviewProgress.loadedBytes !== undefined &&
-                    aiPreviewProgress.totalBytes !== undefined
-                      ? `${formatModelBytes(aiPreviewProgress.loadedBytes)} / ${formatModelBytes(aiPreviewProgress.totalBytes)}`
-                      : `${Math.round(aiPreviewProgress.progress * 100)}%`}
-                  </span>
-                </Progress>
-              ) : (
-                <p className="text-[11px] leading-4 text-muted-foreground">
-                  {aiPreviewProgress.phase === "initializing-model"
-                    ? `正在初始化${aiOperationLabel(aiPreviewProgress.operation)}模型…`
-                    : "正在生成 AI 预览…"}
-                </p>
-              )
-            ) : null}
-            {aiPreviewError !== null && aiEnabled ? (
-              <div className="flex flex-col gap-2 rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
-                <p>{aiPreviewError}</p>
-                <Button
-                  className="w-fit"
-                  disabled={aiPreviewLoading}
-                  onClick={() => setAiRetryNonce((current) => current + 1)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  重试 AI 预览
-                </Button>
-              </div>
-            ) : null}
-          </section>
 
           {error !== null ? (
             <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">

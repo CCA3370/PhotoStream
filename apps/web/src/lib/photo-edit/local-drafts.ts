@@ -1,7 +1,11 @@
 "use client";
 
-import { photoEditAiModels } from "./ai-models";
-import { type PhotoEditRecipe, photoEditPipelineVersion, photoEditRecipeVersion } from "./recipe";
+import {
+  normalizePhotoEditRecipe,
+  type PhotoEditRecipe,
+  photoEditPipelineVersion,
+  photoEditRecipeVersion,
+} from "./recipe";
 
 export type LocalPhotoEditState = "draft" | "applied_local" | "syncing" | "synced" | "failed";
 
@@ -11,10 +15,6 @@ export interface LocalPhotoEditDraft {
   readonly recipe: PhotoEditRecipe;
   readonly pipelineVersion: string;
   readonly recipeVersion: number;
-  readonly denoiseModel: string | null;
-  readonly denoiseModelVersion: string | null;
-  readonly deblurModel: string | null;
-  readonly deblurModelVersion: string | null;
   readonly sourceFingerprint: string;
   readonly basedOnGeneration: number | null;
   readonly basedOnRevisionId: string | null;
@@ -26,12 +26,29 @@ export interface LocalPhotoEditDraft {
 
 const databaseName = "photostream-local-photo-edit-drafts";
 const storeName = "drafts";
-const databaseVersion = 1;
+const databaseVersion = 2;
 const channelName = "photostream-local-photo-edit-drafts-events";
 let channel: BroadcastChannel | null = null;
 
 function supported(): boolean {
   return typeof window !== "undefined" && "indexedDB" in window;
+}
+
+function sanitizeDraft(value: LocalPhotoEditDraft): LocalPhotoEditDraft {
+  return {
+    localPhotoId: value.localPhotoId,
+    mediaId: value.mediaId ?? null,
+    recipe: normalizePhotoEditRecipe(value.recipe),
+    pipelineVersion: photoEditPipelineVersion,
+    recipeVersion: photoEditRecipeVersion,
+    sourceFingerprint: value.sourceFingerprint,
+    basedOnGeneration: value.basedOnGeneration ?? null,
+    basedOnRevisionId: value.basedOnRevisionId ?? null,
+    editState: value.editState,
+    remoteRevisionId: value.remoteRevisionId ?? null,
+    error: value.error ?? null,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function notify(localPhotoId: string): void {
@@ -63,10 +80,21 @@ function openDatabase(): Promise<IDBDatabase> {
   ensureChannel();
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(databaseName, databaseVersion);
-    request.addEventListener("upgradeneeded", () => {
+    request.addEventListener("upgradeneeded", (event) => {
       const database = request.result;
       if (!database.objectStoreNames.contains(storeName)) {
         database.createObjectStore(storeName, { keyPath: "localPhotoId" });
+        return;
+      }
+      if (event.oldVersion < 2) {
+        const store = request.transaction?.objectStore(storeName);
+        const cursorRequest = store?.openCursor();
+        cursorRequest?.addEventListener("success", () => {
+          const cursor = cursorRequest.result;
+          if (cursor === null) return;
+          cursor.update(sanitizeDraft(cursor.value as LocalPhotoEditDraft));
+          cursor.continue();
+        });
       }
     });
     request.addEventListener("success", () => resolve(request.result));
@@ -136,7 +164,7 @@ export async function getLocalPhotoEditDraft(
       >,
     );
     await complete(transaction);
-    return row ?? null;
+    return row === undefined ? null : sanitizeDraft(row);
   } finally {
     database.close();
   }
@@ -159,11 +187,6 @@ export async function putLocalPhotoEditDraft(options: {
     recipe: options.recipe,
     pipelineVersion: photoEditPipelineVersion,
     recipeVersion: photoEditRecipeVersion,
-    denoiseModel: options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.id : null,
-    denoiseModelVersion:
-      options.recipe.denoiseStrength > 0 ? photoEditAiModels.denoise.version : null,
-    deblurModel: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.id : null,
-    deblurModelVersion: options.recipe.deblurStrength > 0 ? photoEditAiModels.deblur.version : null,
     sourceFingerprint: options.sourceFingerprint,
     basedOnGeneration: options.basedOnGeneration,
     basedOnRevisionId: options.basedOnRevisionId,

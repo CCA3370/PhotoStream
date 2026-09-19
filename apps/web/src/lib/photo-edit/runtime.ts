@@ -18,7 +18,6 @@ type WorkerResponse =
   | { readonly id: string; readonly type: "analysis"; readonly analysis: PhotoEditAnalysis }
   | { readonly id: string; readonly type: "progress"; readonly progress: number }
   | { readonly id: string; readonly type: "preview"; readonly blob: Blob }
-  | { readonly id: string; readonly type: "intermediate"; readonly bitmap: ImageBitmap }
   | {
       readonly id: string;
       readonly type: "rendered";
@@ -97,24 +96,6 @@ export function renderMediaEditPreview(
   return runWorker(
     { type: "preview", source, recipe },
     (message) => (message.type === "preview" ? message.blob : undefined),
-    {
-      ...options,
-      ...(source instanceof ImageBitmap ? { transfer: [source] } : {}),
-    },
-  );
-}
-
-export function renderMediaEditIntermediate(
-  source: PhotoEditRenderableSource,
-  recipe: PhotoEditRecipe,
-  options: {
-    readonly signal?: AbortSignal;
-    readonly onProgress?: (progress: number) => void;
-  } = {},
-): Promise<ImageBitmap> {
-  return runWorker(
-    { type: "intermediate", source, recipe },
-    (message) => (message.type === "intermediate" ? message.bitmap : undefined),
     {
       ...options,
       ...(source instanceof ImageBitmap ? { transfer: [source] } : {}),
