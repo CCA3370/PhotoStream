@@ -157,7 +157,7 @@ type ReviewItem =
       readonly previewUrl: string;
       readonly viewerUrl: string;
       readonly viewerFallbackUrl: null;
-      readonly remoteOriginalUrl: null;
+      readonly remoteOriginalUrl: string;
       readonly localPreferred: true;
       readonly categoryId: string | null;
       readonly uploaderId: null;
