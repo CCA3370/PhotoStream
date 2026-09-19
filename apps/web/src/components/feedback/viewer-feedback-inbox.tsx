@@ -1,6 +1,6 @@
 "use client";
 
-import { EyeOffIcon, ImageIcon, LoaderCircleIcon, MessageSquareTextIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, ImageIcon, LoaderCircleIcon, MessageSquareTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
@@ -54,7 +54,7 @@ export function ViewerFeedbackInbox({
 }>) {
   const [items, setItems] = useState<readonly ViewerFeedbackItem[]>(initialItems);
   const [connected, setConnected] = useState(false);
-  const [hidingMediaId, setHidingMediaId] = useState<string | null>(null);
+  const [changingMediaId, setChangingMediaId] = useState<string | null>(null);
   const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     readonly mediaId: string;
@@ -129,34 +129,36 @@ export function ViewerFeedbackInbox({
     setPreviewError("这张照片当前没有可查看的预览版本。");
   }
 
-  async function hideReportedPhoto(mediaId: string): Promise<void> {
-    if (!canModerate || hidingMediaId !== null) return;
-    setHidingMediaId(mediaId);
+  async function setReportedPhotoVisibility(mediaId: string, visible: boolean): Promise<void> {
+    if (!canModerate || changingMediaId !== null) return;
+    setChangingMediaId(mediaId);
     try {
       await clientMutation<{ readonly ok: true }>(
-        `/api/v1/media/${encodeURIComponent(mediaId)}/hide`,
+        `/api/v1/media/${encodeURIComponent(mediaId)}/${visible ? "publish" : "hide"}`,
         {
-          idempotencyKey: `feedback-hide-${crypto.randomUUID()}`,
+          idempotencyKey: `feedback-${visible ? "publish" : "hide"}-${crypto.randomUUID()}`,
         },
       );
       setItems((current) =>
         current.map((item) =>
-          item.mediaId === mediaId ? { ...item, mediaStatus: "hidden" } : item,
+          item.mediaId === mediaId
+            ? { ...item, mediaStatus: visible ? "published" : "hidden" }
+            : item,
         ),
       );
       toast.add({
-        title: "图片已下架",
-        description: "该图片已从公共相册中隐藏。",
+        title: visible ? "图片已重新上架" : "图片已下架",
+        description: visible ? "该图片已恢复到公共相册。" : "该图片已从公共相册中隐藏。",
         type: "success",
       });
     } catch (error) {
       toast.add({
-        title: "下架失败",
+        title: visible ? "重新上架失败" : "下架失败",
         description: error instanceof Error ? error.message : "请稍后重试。",
         type: "error",
       });
     } finally {
-      setHidingMediaId(null);
+      setChangingMediaId(null);
     }
   }
 
@@ -197,8 +199,9 @@ export function ViewerFeedbackInbox({
             const isReport = item.kind === "report";
             const mediaId = item.mediaId;
             const mediaVisible = mediaId !== null && item.mediaStatus === "published";
+            const mediaHidden = mediaId !== null && item.mediaStatus === "hidden";
             const mediaMissing = mediaId === null;
-            const hiding = mediaId !== null && hidingMediaId === mediaId;
+            const changing = mediaId !== null && changingMediaId === mediaId;
             return (
               <article
                 className={`rounded-xl border bg-card p-4 shadow-xs ${isReport ? "border-destructive/30" : ""}`}
@@ -221,7 +224,9 @@ export function ViewerFeedbackInbox({
                           ? "原图片已删除"
                           : mediaVisible
                             ? "图片仍显示"
-                            : "图片已不可见"}
+                            : mediaHidden
+                              ? "图片已下架"
+                              : "图片已不可见"}
                       </Badge>
                     ) : null}
                   </div>
@@ -264,22 +269,35 @@ export function ViewerFeedbackInbox({
                         </Button>
                         {canModerate ? (
                           <Button
-                            disabled={!mediaVisible || hiding}
-                            onClick={() => void hideReportedPhoto(mediaId)}
+                            className={
+                              mediaHidden
+                                ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                                : undefined
+                            }
+                            disabled={(!mediaVisible && !mediaHidden) || changing}
+                            onClick={() =>
+                              void setReportedPhotoVisibility(mediaId, mediaHidden)
+                            }
                             size="sm"
                             type="button"
-                            variant={mediaVisible ? "destructive" : "secondary"}
+                            variant={mediaVisible ? "destructive" : "outline"}
                           >
-                            {hiding ? (
+                            {changing ? (
                               <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                            ) : mediaHidden ? (
+                              <EyeIcon data-icon="inline-start" />
                             ) : (
                               <EyeOffIcon data-icon="inline-start" />
                             )}
-                            {mediaVisible ? "一键下架图片" : "已不可见"}
+                            {mediaVisible
+                              ? "一键下架图片"
+                              : mediaHidden
+                                ? "重新上架"
+                                : "已不可见"}
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">
-                            仅管理员或审核员可下架图片
+                            仅管理员或审核员可上下架图片
                           </span>
                         )}
                       </div>
