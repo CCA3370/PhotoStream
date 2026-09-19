@@ -331,9 +331,7 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
           appUrl(`/api/v1/media/${mediaId as string}/bib`),
         );
         const state = (await response.json()) as BibMediaState;
-        return state.tags
-          .filter((tag) => tag.status === "confirmed")
-          .map((tag) => tag.number);
+        return state.tags.filter((tag) => tag.status === "confirmed").map((tag) => tag.number);
       })
       .toEqual(["102000"]);
 
