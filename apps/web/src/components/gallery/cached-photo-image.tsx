@@ -32,6 +32,11 @@ interface MicroPreviewDecision {
   readonly enabled: boolean;
 }
 
+interface PaintedImage {
+  readonly identity: string;
+  readonly url: string;
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
@@ -84,6 +89,7 @@ export function CachedPhotoImage({
   const [microPreviewDecision, setMicroPreviewDecision] = useState<MicroPreviewDecision | null>(
     null,
   );
+  const [painted, setPainted] = useState<PaintedImage | null>(null);
   const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
   const cacheRequest = { scope, mediaId, kind, bytes };
   const telemetryScope = scope === "public-media" ? undefined : scope;
@@ -97,8 +103,10 @@ export function CachedPhotoImage({
   const deferredGridThumbnail = kind === "photo_480" && !cacheOnly && !priority;
   const microPreviewEnabled =
     microPreviewDecision?.identity === identity && microPreviewDecision.enabled;
+  const displayPainted =
+    displayUrl !== null && painted?.identity === identity && painted.url === displayUrl;
   const microUrl =
-    deferredGridThumbnail && microPreviewEnabled && !warmDecoded && scope !== "public-media"
+    deferredGridThumbnail && microPreviewEnabled && !displayPainted && scope !== "public-media"
       ? `/api/v1/public/albums/${encodeURIComponent(scope)}/media/${encodeURIComponent(mediaId)}/micro-preview`
       : null;
   const microFailed = microUrl !== null && failedMicroUrl === microUrl;
@@ -111,7 +119,10 @@ export function CachedPhotoImage({
     if (deferredGridThumbnail) {
       const initiallyVisible = isInsideViewport(host);
       setMicroPreviewDecision({ identity, enabled: !initiallyVisible });
-      if (initiallyVisible) setActive(true);
+      if (initiallyVisible) {
+        setActive(true);
+        return;
+      }
     }
 
     if (!("IntersectionObserver" in window)) {
@@ -131,13 +142,13 @@ export function CachedPhotoImage({
         if (deferredGridThumbnail) {
           if (!intersecting) {
             clearTimer();
-            setActive(false);
             return;
           }
           if (timer !== null) return;
           timer = window.setTimeout(() => {
             timer = null;
             setActive(true);
+            observer.disconnect();
           }, gridThumbnailUpgradeDelayMs);
           return;
         }
@@ -267,6 +278,7 @@ export function CachedPhotoImage({
           className={className}
           draggable={draggable}
           fill
+          loading="eager"
           onError={() => {
             if (cacheOnly) return;
             if (fallbackMode !== "direct") {
@@ -278,6 +290,7 @@ export function CachedPhotoImage({
             });
           }}
           onLoad={() => {
+            setPainted({ identity, url: displayUrl });
             if (fallbackMode !== "direct") markDerivedImageDecoded(cacheRequest);
             onLoad?.();
           }}
