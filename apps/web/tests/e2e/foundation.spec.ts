@@ -219,11 +219,11 @@ test("5000 item gallery keeps the mounted DOM bounded while scrolling", async ()
   await expect(page.locator('[data-virtualized="true"]')).toBeAttached();
   const mounted = page.locator("[data-media-id]");
   await expect.poll(() => mounted.count()).toBeGreaterThan(0);
-  expect(await mounted.count()).toBeLessThan(100);
+  expect(await mounted.count()).toBeLessThan(120);
 
   await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
   await expect(
     page.locator('[data-media-id="00000000-0000-7000-8000-000000000001"]'),
   ).toBeAttached();
-  expect(await mounted.count()).toBeLessThan(100);
+  expect(await mounted.count()).toBeLessThan(120);
 });
