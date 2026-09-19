@@ -14,6 +14,7 @@ import {
 
 import { isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -102,6 +103,7 @@ export function ReviewInspector({
   onEdit,
   onStateAction,
   onToggleFeatured,
+  docked = false,
 }: Readonly<{
   item: ReviewInspectorItem;
   categories: readonly ReviewInspectorCategory[];
@@ -113,6 +115,7 @@ export function ReviewInspector({
   onEdit?: () => void;
   onStateAction: () => void;
   onToggleFeatured: () => void;
+  docked?: boolean;
 }>) {
   const bibConfirmed = isBibReviewConfirmed(item.bib);
   const confirmedNumbers =
@@ -125,7 +128,14 @@ export function ReviewInspector({
     (item.publicationStatus === "hidden" && !item.editPending);
 
   return (
-    <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+    <aside
+      className={cn(
+        "flex flex-col overflow-hidden bg-card text-card-foreground",
+        docked
+          ? "h-full min-h-0 border-l"
+          : "sticky top-20 max-h-[calc(100dvh-6rem)] rounded-xl border shadow-sm",
+      )}
+    >
       <div className="flex items-start gap-3 border-b p-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.title}</p>
