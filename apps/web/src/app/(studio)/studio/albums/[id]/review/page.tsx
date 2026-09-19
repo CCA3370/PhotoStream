@@ -67,7 +67,6 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         role={session.user.role}
       />
       <ReviewWorkspace
-        key={syncRevision}
         albumId={id}
         albumTitle={album.title}
         bibConfig={bibConfig}

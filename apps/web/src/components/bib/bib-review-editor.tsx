@@ -155,16 +155,18 @@ export function BibReviewEditor({
   }, [mediaId, state?.review.mediaId]);
 
   useEffect(() => {
+    if (dirty) return;
+    if (noNumber) {
+      setNumber("");
+      return;
+    }
     const confirmedNumbers = activeTags
       .filter((tag) => tag.status === "confirmed")
       .map((tag) => tag.number);
-    if (confirmedNumbers.length > 0) {
-      setNumber(confirmedNumbers.join(","));
-      setDirty(false);
-      return;
-    }
-    if (!dirty) setNumber(defaultOcrNumbers.join(","));
-  }, [activeTags, defaultOcrNumbers, dirty]);
+    setNumber(
+      confirmedNumbers.length > 0 ? confirmedNumbers.join(",") : defaultOcrNumbers.join(","),
+    );
+  }, [activeTags, defaultOcrNumbers, dirty, noNumber]);
 
   useEffect(() => {
     if (mediaId === null || state !== null) return;
@@ -268,14 +270,28 @@ export function BibReviewEditor({
         if (localActions === undefined) return;
         const result = await localActions.confirmNoNumber();
         onChange(result);
+        setNumber("");
         setDirty(false);
         return;
+      }
+      let current = state;
+      if (current === null) return;
+      for (const tag of current.tags.filter((candidate) => candidate.status === "confirmed")) {
+        current = await clientMutation<BibMediaState>(
+          `/api/v1/media/${mediaId}/bib-tags/${tag.id}`,
+          {
+            method: "DELETE",
+            idempotencyKey: `bib-delete-before-no-number-${crypto.randomUUID()}`,
+          },
+        );
+        onChange(current);
       }
       const result = await clientMutation<BibMediaState>(
         `/api/v1/media/${mediaId}/bib-review/no-number`,
         { idempotencyKey: `bib-no-number-${crypto.randomUUID()}` },
       );
       onChange(result);
+      setNumber("");
       setDirty(false);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "无号码确认失败");

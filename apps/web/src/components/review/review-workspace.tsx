@@ -44,6 +44,7 @@ import {
   type ReviewLightboxItem,
   type ReviewPendingAction,
 } from "@/components/review/review-lightbox";
+import { REVIEW_REMOTE_CHANGED_EVENT } from "@/components/review/review-remote-sync";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -303,6 +304,10 @@ export function ReviewWorkspace({
   const [inspectorKey, setInspectorKey] = useState<string | null>(null);
   const [inspectorDeleteOpen, setInspectorDeleteOpen] = useState(false);
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
+  const openItemKeysRef = useRef<ReadonlySet<string>>(new Set());
+  openItemKeysRef.current = new Set(
+    [activeKey, inspectorKey, bibDialogKey].filter((key): key is string => key !== null),
+  );
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
   );
@@ -483,7 +488,21 @@ export function ReviewWorkspace({
 
   const refreshRemote = useCallback(async (): Promise<RemotePage> => {
     const page = await fetchRemote();
-    setRemoteMedia(page.items);
+    setRemoteMedia((current) => {
+      const next = [...page.items];
+      const present = new Set(next.map((item) => item.id));
+      const currentById = new Map(current.map((item) => [item.id, item] as const));
+      for (const key of openItemKeysRef.current) {
+        if (!key.startsWith("remote:")) continue;
+        const mediaId = key.slice("remote:".length);
+        if (present.has(mediaId)) continue;
+        const pinned = currentById.get(mediaId);
+        if (pinned === undefined) continue;
+        next.push(pinned);
+        present.add(mediaId);
+      }
+      return next;
+    });
     setCursor(page.nextCursor);
     return page;
   }, [fetchRemote]);
@@ -535,6 +554,20 @@ export function ReviewWorkspace({
       localUrlCache.current.clear();
     };
   }, [albumId, bibConfig, refreshFeatured, refreshLocal, updateBibState]);
+
+  useEffect(() => {
+    const remoteChanged = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ readonly albumId?: string; readonly revision?: string }>
+      ).detail;
+      if (detail?.albumId !== albumId) return;
+      void Promise.all([refreshRemote(), refreshFeatured()]).catch((cause) =>
+        setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
+      );
+    };
+    window.addEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
+    return () => window.removeEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
+  }, [albumId, refreshFeatured, refreshRemote]);
 
   useEffect(() => {
     if (!filtersHydrated) return;

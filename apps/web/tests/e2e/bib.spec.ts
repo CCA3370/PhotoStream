@@ -299,6 +299,58 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
       await viewer.close();
     }
 
+    await completedCard.getByRole("button", { name: "隐藏" }).click();
+    await expect(completedCard.getByRole("button", { name: "显示" })).toBeVisible();
+    await completedCard.getByRole("button", { name: "修改号码确认" }).click();
+    const reviewDialog = page.getByRole("dialog").filter({ hasText: "号码确认" });
+    const reviewInput = reviewDialog.getByLabel("确认号码，多个号码用英文逗号分隔");
+    await expect(reviewInput).toHaveValue("101999");
+    await page.waitForTimeout(4_500);
+    await expect(reviewDialog).toBeVisible();
+
+    await reviewInput.fill("101999,102000");
+    await reviewDialog.getByRole("button", { name: "确认", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get(
+          appUrl(`/api/v1/media/${mediaId as string}/bib`),
+        );
+        const state = (await response.json()) as BibMediaState;
+        return state.tags
+          .filter((tag) => tag.status === "confirmed")
+          .map((tag) => tag.number)
+          .sort();
+      })
+      .toEqual(["101999", "102000"]);
+
+    await reviewInput.fill("102000");
+    await reviewDialog.getByRole("button", { name: "确认", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get(
+          appUrl(`/api/v1/media/${mediaId as string}/bib`),
+        );
+        const state = (await response.json()) as BibMediaState;
+        return state.tags
+          .filter((tag) => tag.status === "confirmed")
+          .map((tag) => tag.number);
+      })
+      .toEqual(["102000"]);
+
+    await reviewDialog.getByRole("button", { name: "设为无号码" }).click();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get(
+          appUrl(`/api/v1/media/${mediaId as string}/bib`),
+        );
+        const state = (await response.json()) as BibMediaState;
+        return {
+          decision: state.review.decision,
+          confirmed: state.tags.filter((tag) => tag.status === "confirmed").length,
+        };
+      })
+      .toEqual({ decision: "no_number_confirmed", confirmed: 0 });
+
     await page.goto(appUrl(`/studio/albums/${album.album.id}/settings`));
     const bibTab = page.getByRole("tab", { name: "号码规则" });
     await expectReactHydrated(bibTab);

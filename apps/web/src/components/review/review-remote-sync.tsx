@@ -5,6 +5,8 @@ import { useEffect, useRef, useTransition } from "react";
 
 import { clientGet } from "@/lib/client-api";
 
+export const REVIEW_REMOTE_CHANGED_EVENT = "photostream:review-remote-changed";
+
 const pollIntervalMs = 4_000;
 
 export function ReviewRemoteSync({
@@ -37,6 +39,11 @@ export function ReviewRemoteSync({
         const nextRevision = result.revision;
         if (nextRevision === revisionRef.current) return;
         revisionRef.current = nextRevision;
+        window.dispatchEvent(
+          new CustomEvent(REVIEW_REMOTE_CHANGED_EVENT, {
+            detail: { albumId, revision: nextRevision },
+          }),
+        );
         startTransition(() => router.refresh());
       } catch {
         // The normal page-level error handling remains authoritative. A later poll retries.
