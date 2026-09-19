@@ -42,7 +42,7 @@ export function contentSecurityPolicy(options: {
     "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: ${origin}`,
-    `connect-src 'self' ${connectionOrigins}${development ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,
+    `connect-src 'self' blob: ${connectionOrigins}${development ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,
     "worker-src 'self' blob:",
     "font-src 'self'",
     "manifest-src 'self'",

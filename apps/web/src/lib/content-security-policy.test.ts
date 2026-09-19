@@ -17,8 +17,9 @@ describe("contentSecurityPolicy", () => {
     expect(policy.match(/script-src [^;]+/u)?.[0]).not.toContain("'unsafe-inline'");
     expect(policy).not.toContain("'unsafe-eval'");
     expect(policy).toContain("img-src 'self' data: blob: https://cdn.cloverta.top");
+    expect(policy.match(/connect-src [^;]+/u)?.[0]).toContain("blob:");
     expect(policy).toContain(
-      "connect-src 'self' https://cdn.cloverta.top https://school-media.oss-cn-beijing.aliyuncs.com https://school-face-reference.oss-cn-beijing.aliyuncs.com",
+      "connect-src 'self' blob: https://cdn.cloverta.top https://school-media.oss-cn-beijing.aliyuncs.com https://school-face-reference.oss-cn-beijing.aliyuncs.com",
     );
     expect(policy).toContain("media-src 'none'");
     expect(policy).toContain("object-src 'none'");
@@ -34,7 +35,7 @@ describe("contentSecurityPolicy", () => {
     });
 
     expect(policy).toContain("img-src 'self' data: blob: http://127.0.0.1:3002");
-    expect(policy).toContain("connect-src 'self' http://127.0.0.1:3002");
+    expect(policy).toContain("connect-src 'self' blob: http://127.0.0.1:3002");
     expect(policy).toContain("'unsafe-eval'");
     expect(policy).not.toContain("upgrade-insecure-requests");
   });
