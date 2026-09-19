@@ -15,11 +15,6 @@ export function internalImageKey(src: string): string {
   return url.toString();
 }
 
-interface FallbackState {
-  readonly source: string;
-  readonly failed: boolean;
-}
-
 export function InternalCachedImage({
   src,
   mediaId,
@@ -35,7 +30,6 @@ export function InternalCachedImage({
   const host = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [resolved, setResolved] = useState<{ source: string; url: string } | null>(null);
-  const [fallback, setFallback] = useState<FallbackState | null>(null);
   const errorRef = useRef(onError);
   errorRef.current = onError;
   const direct = !/^https?:\/\//.test(src);
@@ -74,7 +68,6 @@ export function InternalCachedImage({
           if (localPhoto !== null && !disposed) {
             objectUrl = URL.createObjectURL(localPhoto.originalBlob);
             setResolved({ source: stableSource, url: objectUrl });
-            setFallback((current) => (current?.source === stableSource ? null : current));
             return;
           }
         } catch {
@@ -101,11 +94,10 @@ export function InternalCachedImage({
       if (disposed) return;
       objectUrl = URL.createObjectURL(blob);
       setResolved({ source: stableSource, url: objectUrl });
-      setFallback((current) => (current?.source === stableSource ? null : current));
     };
 
     void resolveImage().catch(() => {
-      if (!disposed) setFallback({ source: stableSource, failed: false });
+      if (!disposed) errorRef.current?.();
     });
     return () => {
       disposed = true;
@@ -113,16 +105,11 @@ export function InternalCachedImage({
     };
   }, [direct, eager, mediaId, stableSource, variantKind, visible]);
 
-  const fallbackState = fallback?.source === stableSource ? fallback : null;
   const cachedDisplay = resolved?.source === stableSource ? resolved.url : null;
-  const display = direct
-    ? src
-    : fallbackState?.failed
-      ? null
-      : fallbackState !== null
-        ? src
-        : cachedDisplay;
-  const usingDirectFallback = !direct && fallbackState !== null && !fallbackState.failed;
+  // Remote HTTP(S) media is never rendered directly from a signed CDN URL.
+  // It must pass through loadMediaBlob first so concurrent requests coalesce and
+  // successfully fetched bytes enter the PhotoStream media cache before display.
+  const display = direct ? src : cachedDisplay;
 
   return (
     <span className="absolute inset-0" ref={host}>
@@ -132,11 +119,9 @@ export function InternalCachedImage({
           src={display}
           unoptimized
           onError={() => {
-            if (!direct && !usingDirectFallback) {
-              setFallback({ source: stableSource, failed: false });
-              return;
+            if (!direct) {
+              setResolved((current) => (current?.source === stableSource ? null : current));
             }
-            if (usingDirectFallback) setFallback({ source: stableSource, failed: true });
             errorRef.current?.();
           }}
         />
