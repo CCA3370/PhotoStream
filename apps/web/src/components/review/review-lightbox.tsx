@@ -7,6 +7,7 @@ import {
   ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
+  ImageIcon,
   LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -41,6 +42,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
+import { resolveMediaEditSource } from "@/lib/photo-edit/source-resolver";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -169,6 +171,11 @@ export function ReviewLightbox({
   const [loadFailed, setLoadFailed] = useState(false);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
   const displayIdentityRef = useRef<string | null>(null);
+  const selectedKeyRef = useRef<string | null>(selectedKey);
+  selectedKeyRef.current = selectedKey;
+  const originalObjectUrlRef = useRef<string | null>(null);
+  const [viewingOriginal, setViewingOriginal] = useState(false);
+  const [originalLoading, setOriginalLoading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
@@ -245,6 +252,12 @@ export function ReviewLightbox({
     setInspectorOpen(false);
     setEditMode(false);
     setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
+    setViewingOriginal(false);
+    setOriginalLoading(false);
+    if (originalObjectUrlRef.current !== null) {
+      URL.revokeObjectURL(originalObjectUrlRef.current);
+      originalObjectUrlRef.current = null;
+    }
     resetView();
     pointersRef.current.clear();
     gestureRef.current = { mode: "idle" };
@@ -253,7 +266,7 @@ export function ReviewLightbox({
   }, [focusViewer, resetView, selectedKey]);
 
   useEffect(() => {
-    if (editMode) return;
+    if (editMode || viewingOriginal) return;
     const nextSource = selected?.src ?? null;
     const nextIdentity =
       selected === null
@@ -264,11 +277,21 @@ export function ReviewLightbox({
     setDisplaySrc(nextSource);
     setLoaded(false);
     setLoadFailed(false);
-  }, [editMode, selected]);
+  }, [editMode, selected, viewingOriginal]);
 
   const handleEditPreviewChange = useCallback((preview: PhotoEditorPreviewState) => {
     setEditPreview(preview);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (originalObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(originalObjectUrlRef.current);
+        originalObjectUrlRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     setFullscreenSupported(document.fullscreenEnabled);
@@ -432,6 +455,45 @@ export function ReviewLightbox({
     if (pointersRef.current.size === 0) gestureRef.current = { mode: "idle" };
   }
 
+  async function showOriginal(): Promise<void> {
+    if (selected === null || selected.mediaId === null || selected.localPreferred) return;
+
+    const selectedKeyAtStart = selected.key;
+    setOriginalLoading(true);
+    try {
+      let objectUrl = originalObjectUrlRef.current;
+      if (objectUrl === null) {
+        const resolved = await resolveMediaEditSource(selected.mediaId);
+        if (selectedKeyRef.current !== selectedKeyAtStart) return;
+        objectUrl = URL.createObjectURL(resolved.blob);
+        originalObjectUrlRef.current = objectUrl;
+      }
+      if (selectedKeyRef.current !== selectedKeyAtStart) return;
+
+      displayIdentityRef.current = `${selected.key}\u0000original\u0000${internalImageSourceIdentity(objectUrl) ?? "local-original"}`;
+      setDisplaySrc(objectUrl);
+      setViewingOriginal(true);
+      setLoaded(false);
+      setLoadFailed(false);
+      resetView();
+    } catch {
+      if (selectedKeyRef.current === selectedKeyAtStart) setLoadFailed(true);
+    } finally {
+      if (selectedKeyRef.current === selectedKeyAtStart) setOriginalLoading(false);
+    }
+  }
+
+  function showPreview(): void {
+    if (selected === null) return;
+    const nextSource = selected.src;
+    displayIdentityRef.current = `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(nextSource) ?? "none"}`;
+    setDisplaySrc(nextSource);
+    setViewingOriginal(false);
+    setLoaded(false);
+    setLoadFailed(false);
+    resetView();
+  }
+
   function onImageError(): void {
     if (selected === null) return;
     setLoaded(false);
@@ -549,7 +611,7 @@ export function ReviewLightbox({
                       loading="eager"
                       sizes="100vw"
                       src={displaySrc}
-                      mediaId={selected.localPreferred ? selected.mediaId : null}
+                      mediaId={selected.mediaId}
                       variantKind={
                         selected.variants?.find((variant) => variant.url === displaySrc)?.kind
                       }
@@ -565,6 +627,28 @@ export function ReviewLightbox({
                 {selectedIndex + 1} / {items.length}
               </div>
               <div className="pointer-events-auto flex items-center gap-1.5">
+                {selected.mediaId !== null && !selected.localPreferred ? (
+                  <Button
+                    aria-label={viewingOriginal ? "返回 1920" : "查看原图"}
+                    className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
+                    disabled={originalLoading}
+                    onClick={() => {
+                      if (viewingOriginal) showPreview();
+                      else void showOriginal();
+                    }}
+                    size="sm"
+                    title={viewingOriginal ? "返回 1920 预览" : "查看上传原图"}
+                    type="button"
+                    variant="outline"
+                  >
+                    {originalLoading ? (
+                      <LoaderCircleIcon className="animate-spin" />
+                    ) : (
+                      <ImageIcon />
+                    )}
+                    <span>{viewingOriginal ? "返回 1920" : "查看原图"}</span>
+                  </Button>
+                ) : null}
                 {fullscreenSupported ? (
                   <Button
                     aria-label={fullscreen ? "退出全屏" : "进入全屏"}
