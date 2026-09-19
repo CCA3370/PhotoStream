@@ -129,6 +129,29 @@ describe("local bib review state", () => {
     });
   });
 
+  it("keeps unsynced local OCR candidates visible after server no-number wins the decision race", () => {
+    const local = photo({
+      ocrStatus: "completed",
+      decision: "no_number_confirmed",
+      decidedAt: "2026-09-06T00:00:30.000Z",
+      ocrRevision: 2,
+      ocrSyncedRevision: 1,
+      manualRevision: 1,
+      manualSyncedRevision: 1,
+    });
+
+    const state = effectiveBibMediaState(local, remote("no_number_confirmed"));
+
+    expect(state.review.decision).toBe("no_number_confirmed");
+    expect(state.tags).toEqual([
+      expect.objectContaining({
+        number: "101999",
+        status: "suggested",
+        source: "ocr",
+      }),
+    ]);
+  });
+
   it("prefers unsynced local manual state but never replaces an already confirmed server decision", () => {
     const local = photo({
       decision: "numbers_confirmed",
