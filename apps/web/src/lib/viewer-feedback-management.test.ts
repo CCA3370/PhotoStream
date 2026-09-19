@@ -34,6 +34,6 @@ describe("viewer feedback management", () => {
     expect(inbox).toContain("readOnly");
     expect(lightbox).toContain("readOnly = false");
     expect(lightbox).toContain("!readOnly && !bibConfirmed");
-    expect(lightbox).toContain("selected.localPreferred ? selected.mediaId : null");
+    expect(lightbox).toContain("mediaId={selected.mediaId}");
   });
 });
