@@ -25,6 +25,7 @@ export function ViewerServiceNotice() {
   const [dismissCountdown, setDismissCountdown] = useState(dismissCountdownSeconds);
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [showReadToEndHint, setShowReadToEndHint] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export function ViewerServiceNotice() {
 
     setHasReachedEnd(false);
     setAcknowledged(false);
+    setShowReadToEndHint(false);
 
     const frame = window.requestAnimationFrame(() => {
       const container = scrollContainerRef.current;
@@ -75,7 +77,18 @@ export function ViewerServiceNotice() {
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (remaining <= 2) {
       setHasReachedEnd(true);
+      setShowReadToEndHint(false);
     }
+  }
+
+  function handleAcknowledgementChange(checked: boolean): void {
+    if (!hasReachedEnd) {
+      setAcknowledged(false);
+      setShowReadToEndHint(true);
+      return;
+    }
+
+    setAcknowledged(checked);
   }
 
   function dismiss(): void {
@@ -142,20 +155,23 @@ export function ViewerServiceNotice() {
         <DialogFooter className="gap-3 sm:flex-col sm:items-stretch">
           <div className="space-y-2">
             <label
-              className="flex items-start gap-2.5 text-sm leading-5 text-foreground"
+              className="flex cursor-pointer items-start gap-2.5 text-sm leading-5 text-foreground"
               htmlFor="viewer-service-notice-acknowledgement"
             >
               <Checkbox
                 checked={acknowledged}
                 className="mt-0.5"
-                disabled={!hasReachedEnd}
                 id="viewer-service-notice-acknowledgement"
-                onCheckedChange={setAcknowledged}
+                onCheckedChange={handleAcknowledgementChange}
               />
               <span>我已完整阅读并知晓上述照片使用、版权及肖像权益要求。</span>
             </label>
-            {!hasReachedEnd && (
-              <p aria-live="polite" className="text-xs leading-5 text-muted-foreground">
+            {showReadToEndHint && !hasReachedEnd && (
+              <p
+                aria-live="polite"
+                className="text-xs font-medium leading-5 text-destructive"
+                role="alert"
+              >
                 请先阅读公告至底部，再勾选确认。
               </p>
             )}
