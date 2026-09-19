@@ -1,7 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useTransition } from "react";
+import { useEffect, useRef } from "react";
 
 import { clientGet } from "@/lib/client-api";
 
@@ -16,8 +15,6 @@ export function ReviewRemoteSync({
   albumId: string;
   initialRevision: string;
 }>) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
   const revisionRef = useRef(initialRevision);
   const pollingRef = useRef(false);
 
@@ -44,7 +41,6 @@ export function ReviewRemoteSync({
             detail: { albumId, revision: nextRevision },
           }),
         );
-        startTransition(() => router.refresh());
       } catch {
         // The normal page-level error handling remains authoritative. A later poll retries.
       } finally {
@@ -72,7 +68,7 @@ export function ReviewRemoteSync({
       window.removeEventListener("pageshow", recover);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [albumId, router]);
+  }, [albumId]);
 
   return null;
 }

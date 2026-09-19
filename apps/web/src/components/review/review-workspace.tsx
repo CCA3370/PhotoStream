@@ -253,6 +253,54 @@ function mergeRemote(
   return [...byId.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+function stableRemoteMedia(
+  previous: InternalMediaView | undefined,
+  incoming: InternalMediaView,
+): InternalMediaView {
+  if (
+    previous === undefined ||
+    (previous.edit?.activeRevisionId ?? null) !== (incoming.edit?.activeRevisionId ?? null)
+  ) {
+    return incoming;
+  }
+  const previousByKind = new Map(previous.variants.map((variant) => [variant.kind, variant] as const));
+  return {
+    ...incoming,
+    variants: incoming.variants.map((variant) => {
+      const existing = previousByKind.get(variant.kind);
+      if (
+        existing === undefined ||
+        existing.bytes !== variant.bytes ||
+        existing.width !== variant.width ||
+        existing.height !== variant.height ||
+        existing.contentType !== variant.contentType
+      ) {
+        return variant;
+      }
+      return { ...variant, url: existing.url };
+    }),
+  };
+}
+
+function reconcileRemotePage(
+  current: readonly InternalMediaView[],
+  incoming: readonly InternalMediaView[],
+  openKeys: ReadonlySet<string>,
+  preserveLoadedTail: boolean,
+): readonly InternalMediaView[] {
+  const currentById = new Map(current.map((item) => [item.id, item] as const));
+  const next = incoming.map((item) => stableRemoteMedia(currentById.get(item.id), item));
+  const present = new Set(next.map((item) => item.id));
+  for (const existing of current) {
+    if (present.has(existing.id)) continue;
+    const open = openKeys.has(`remote:${existing.id}`);
+    if (!open && !preserveLoadedTail) continue;
+    next.push(existing);
+    present.add(existing.id);
+  }
+  return next;
+}
+
 function chunks<T>(items: readonly T[], size: number): readonly T[][] {
   const result: T[][] = [];
   for (let index = 0; index < items.length; index += size)
@@ -488,21 +536,14 @@ export function ReviewWorkspace({
 
   const refreshRemote = useCallback(async (): Promise<RemotePage> => {
     const page = await fetchRemote();
-    setRemoteMedia((current) => {
-      const next = [...page.items];
-      const present = new Set(next.map((item) => item.id));
-      const currentById = new Map(current.map((item) => [item.id, item] as const));
-      for (const key of openItemKeysRef.current) {
-        if (!key.startsWith("remote:")) continue;
-        const mediaId = key.slice("remote:".length);
-        if (present.has(mediaId)) continue;
-        const pinned = currentById.get(mediaId);
-        if (pinned === undefined) continue;
-        next.push(pinned);
-        present.add(mediaId);
-      }
-      return next;
-    });
+    setRemoteMedia((current) =>
+      reconcileRemotePage(
+        current,
+        page.items,
+        openItemKeysRef.current,
+        current.length > page.items.length,
+      ),
+    );
     setCursor(page.nextCursor);
     return page;
   }, [fetchRemote]);
@@ -581,7 +622,9 @@ export function ReviewWorkspace({
     void fetchRemote()
       .then((page) => {
         if (filterRequestIdRef.current !== requestId) return;
-        setRemoteMedia(page.items);
+        setRemoteMedia((current) =>
+          reconcileRemotePage(current, page.items, openItemKeysRef.current, false),
+        );
         setCursor(page.nextCursor);
       })
       .catch((cause) => {
@@ -834,6 +877,8 @@ export function ReviewWorkspace({
         fallbackSrc: item.viewerFallbackUrl,
         originalSrc: item.remoteOriginalUrl,
         localPreferred: item.localPreferred,
+        visualRevision:
+          item.source === "remote" ? (item.remote.edit?.activeRevisionId ?? null) : null,
         width: item.source === "local" ? item.local.photo.width : item.remote.width,
         height: item.source === "local" ? item.local.photo.height : item.remote.height,
         featured: item.featured,

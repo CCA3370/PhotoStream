@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -41,6 +40,7 @@ import {
 } from "@/components/review/review-inspector";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -65,6 +65,7 @@ export interface ReviewLightboxItem {
   readonly fallbackSrc: string | null;
   readonly originalSrc: string | null;
   readonly localPreferred: boolean;
+  readonly visualRevision: string | null;
   readonly width: number;
   readonly height: number;
   readonly featured: boolean;
@@ -165,6 +166,7 @@ export function ReviewLightbox({
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
+  const displayIdentityRef = useRef<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
@@ -250,10 +252,17 @@ export function ReviewLightbox({
 
   useEffect(() => {
     if (editMode) return;
-    setDisplaySrc(selected?.src ?? null);
+    const nextSource = selected?.src ?? null;
+    const nextIdentity =
+      selected === null
+        ? null
+        : `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(nextSource) ?? "none"}`;
+    if (displayIdentityRef.current === nextIdentity) return;
+    displayIdentityRef.current = nextIdentity;
+    setDisplaySrc(nextSource);
     setLoaded(false);
     setLoadFailed(false);
-  }, [editMode, selected?.src]);
+  }, [editMode, selected]);
 
   const handleEditPreviewChange = useCallback((preview: PhotoEditorPreviewState) => {
     setEditPreview(preview);
@@ -265,6 +274,18 @@ export function ReviewLightbox({
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
+
+  useEffect(() => {
+    if (editMode || selectedKey === null) return;
+    const stage = stageRef.current;
+    if (stage === null) return;
+    const handleWheel = (event: WheelEvent): void => {
+      event.preventDefault();
+      changeZoom(zoom + (event.deltaY < 0 ? 0.35 : -0.35));
+    };
+    stage.addEventListener("wheel", handleWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", handleWheel);
+  }, [changeZoom, editMode, selectedKey, zoom]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -408,15 +429,12 @@ export function ReviewLightbox({
     if (pointersRef.current.size === 0) gestureRef.current = { mode: "idle" };
   }
 
-  function onWheel(event: ReactWheelEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    changeZoom(zoom + (event.deltaY < 0 ? 0.35 : -0.35));
-  }
-
   function onImageError(): void {
     if (selected === null) return;
     setLoaded(false);
     if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
+      displayIdentityRef.current =
+        `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(selected.fallbackSrc) ?? "none"}`;
       setDisplaySrc(selected.fallbackSrc);
       setLoadFailed(false);
       return;
@@ -469,7 +487,6 @@ export function ReviewLightbox({
               onPointerDown={editMode ? undefined : onPointerDown}
               onPointerMove={editMode ? undefined : onPointerMove}
               onPointerUp={editMode ? undefined : finishPointer}
-              onWheel={editMode ? undefined : onWheel}
               ref={stageRef}
               role="application"
               tabIndex={-1}
@@ -521,7 +538,7 @@ export function ReviewLightbox({
                       )}
                       draggable={false}
                       fill
-                      key={displaySrc}
+                      key={`${selected.key}:${selected.visualRevision ?? "base"}`}
                       onError={onImageError}
                       onLoad={() => {
                         setLoaded(true);

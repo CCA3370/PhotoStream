@@ -3,17 +3,9 @@
 import Image, { type ImageProps } from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { clientGet } from "@/lib/client-api";
+import { internalImageKey } from "@/lib/internal-media-url";
 import { findLocalReviewPhotoByMediaId } from "@/lib/local-review-queue";
 import { loadMediaBlob } from "@/lib/media-blob-cache";
-
-// Keep internal media separate from public album caches. Only the rotating CDN
-// signature is excluded; image-processing and other functional parameters remain.
-export function internalImageKey(src: string): string {
-  const url = new URL(src);
-  url.searchParams.delete("auth_key");
-  url.hash = "";
-  return url.toString();
-}
 
 export function InternalCachedImage({
   src,
