@@ -37,6 +37,7 @@ const sessions = new Map<PhotoEditAiOperation, InferenceSession>();
 const recoveryAttempts = new Map<PhotoEditAiOperation, number>();
 const cancelled = new Set<string>();
 let disabledReason: string | null = null;
+let webGpuAdapterPromise: Promise<GPUAdapter> | null = null;
 let ortPromise: Promise<typeof import("onnxruntime-web/webgpu")> | null = null;
 
 function clamp01(value: number): number {
@@ -60,11 +61,34 @@ function assertNotCancelled(id: string): void {
   if (cancelled.has(id)) throw new DOMException("AI 修复已取消", "AbortError");
 }
 
+async function webGpuAdapter(): Promise<GPUAdapter> {
+  if (webGpuAdapterPromise !== null) return webGpuAdapterPromise;
+  webGpuAdapterPromise = (async () => {
+    if (!("gpu" in navigator) || navigator.gpu === undefined) {
+      throw new Error("当前浏览器或设备未提供 WebGPU");
+    }
+    const preferred = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+    const adapter = preferred ?? (await navigator.gpu.requestAdapter());
+    if (adapter === null) {
+      throw new Error("浏览器提供了 WebGPU 接口，但未能取得可用 GPU 适配器");
+    }
+    return adapter;
+  })();
+  return webGpuAdapterPromise;
+}
+
 async function ortRuntime() {
   if (ortPromise !== null) return ortPromise;
-  ortPromise = import("onnxruntime-web/webgpu").then((ort) => {
-    ort.env.wasm.wasmPaths = `${PHOTO_EDIT_MODEL_BASE}/ort/`;
+  ortPromise = import("onnxruntime-web/webgpu").then(async (ort) => {
+    const runtimeBase = new URL(`${PHOTO_EDIT_MODEL_BASE}/ort/`, scope.location.origin);
+    ort.env.wasm.wasmPaths = {
+      mjs: new URL("ort-wasm-simd-threaded.jsep.mjs", runtimeBase).toString(),
+      wasm: new URL("ort-wasm-simd-threaded.jsep.wasm", runtimeBase).toString(),
+    };
     ort.env.wasm.numThreads = 1;
+    ort.env.wasm.proxy = false;
+    ort.env.webgpu.adapter = await webGpuAdapter();
+    ort.env.webgpu.powerPreference = "high-performance";
     return ort;
   });
   return ortPromise;
@@ -94,49 +118,57 @@ async function cachedBytes(options: {
     cache = null;
   }
 
-  const response = await fetch(absolute, {
-    cache: "force-cache",
-    credentials: "same-origin",
-  });
-  if (!response.ok || response.body === null) {
-    throw new Error(`模型资源读取失败（HTTP ${response.status}）`);
-  }
+  const download = async (cacheMode: RequestCache): Promise<Uint8Array> => {
+    const response = await fetch(absolute, {
+      cache: cacheMode,
+      credentials: "same-origin",
+    });
+    if (!response.ok || response.body === null) {
+      throw new Error(`模型资源读取失败（HTTP ${response.status}）：${options.url}`);
+    }
 
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let loadedBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loadedBytes += value.byteLength;
-    options.onProgress(loadedBytes);
-  }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loadedBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loadedBytes += value.byteLength;
+      options.onProgress(loadedBytes);
+    }
 
-  if (loadedBytes !== options.expectedBytes) {
+    const bytes = new Uint8Array(loadedBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  };
+
+  let bytes = await download("force-cache");
+  if (bytes.byteLength !== options.expectedBytes) {
+    // Do not let an incomplete/stale browser HTTP-cache entry permanently break AI.
+    options.onProgress(0);
+    bytes = await download("reload");
+  }
+  if (bytes.byteLength !== options.expectedBytes) {
     throw new Error(
-      `模型资源大小不匹配：期望 ${options.expectedBytes} bytes，实际 ${loadedBytes} bytes`,
+      `模型资源大小不匹配：期望 ${options.expectedBytes} bytes，实际 ${bytes.byteLength} bytes`,
     );
-  }
-
-  const bytes = new Uint8Array(loadedBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
   }
 
   if (cache !== null) {
     try {
-      const headers = new Headers(response.headers);
-      headers.delete("content-encoding");
-      headers.set("content-length", String(bytes.byteLength));
       await cache.put(
         absolute,
         new Response(bytes, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
+          status: 200,
+          headers: {
+            "content-length": String(bytes.byteLength),
+            "content-type": "application/octet-stream",
+          },
         }),
       );
     } catch {
@@ -179,8 +211,10 @@ async function createSession(
   requestId: string,
 ): Promise<InferenceSession> {
   if (disabledReason !== null) throw new Error(disabledReason);
-  if (!("gpu" in navigator)) {
-    disabledReason = "当前浏览器或设备不支持 WebGPU，本地 AI 修复不可用。";
+  try {
+    await webGpuAdapter();
+  } catch (error) {
+    disabledReason = error instanceof Error ? error.message : "当前浏览器或设备不支持 WebGPU";
     throw new Error(disabledReason);
   }
 
@@ -234,7 +268,7 @@ async function createSession(
   const ort = await ortRuntime();
   try {
     const session = await ort.InferenceSession.create(model, {
-      executionProviders: ["webgpu"],
+      executionProviders: ["webgpu", "wasm"],
       graphOptimizationLevel: "all",
       ...(externalData === undefined ? {} : { externalData }),
     } as InferenceSession.SessionOptions);
@@ -329,6 +363,7 @@ async function inferTile(
     if (output === undefined || !(output.data instanceof Float32Array)) {
       throw new Error(`${spec.id} 返回了不支持的输出类型`);
     }
+    recoveryAttempts.delete(operation);
     return output.data;
   } catch (error) {
     releaseSession(operation);

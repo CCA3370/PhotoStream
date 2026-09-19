@@ -11,6 +11,7 @@ import { getLocalReviewPhoto } from "@/lib/local-review-queue";
 import {
   type PhotoEditAiProgress,
   photoEditAiAvailable,
+  photoEditAiErrorMessage,
   restoreMediaEditPreview,
 } from "@/lib/photo-edit/ai-runtime";
 import { automaticPhotoEditRecipe } from "@/lib/photo-edit/analysis";
@@ -143,6 +144,8 @@ export function PhotoEditorPanel({
   const [aiPreviewSource, setAiPreviewSource] = useState<Blob | null>(null);
   const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
   const [aiPreviewProgress, setAiPreviewProgress] = useState<PhotoEditAiProgress | null>(null);
+  const [aiPreviewError, setAiPreviewError] = useState<string | null>(null);
+  const [aiRetryNonce, setAiRetryNonce] = useState(0);
   const [ownedPendingRevisionId, setOwnedPendingRevisionId] = useState<string | null>(null);
   const [localSourceFingerprint, setLocalSourceFingerprint] = useState<string | null>(null);
   const persistedRecipeKey = useRef<string | null>(null);
@@ -166,6 +169,7 @@ export function PhotoEditorPanel({
     source !== null &&
     !pendingElsewhere &&
     !aiPreviewLoading &&
+    (!aiEnabled || aiPreviewSource !== null) &&
     (context !== null || localPhotoId !== null);
   const draftBasedOnGeneration = context?.state.generation ?? null;
   const draftBasedOnRevisionId = context?.state.activeRevisionId ?? null;
@@ -187,6 +191,7 @@ export function PhotoEditorPanel({
     setAiPreviewSource(null);
     setAiPreviewLoading(false);
     setAiPreviewProgress(null);
+    setAiPreviewError(null);
     setOwnedPendingRevisionId(null);
     setLocalSourceFingerprint(null);
     persistedRecipeKey.current = null;
@@ -310,12 +315,14 @@ export function PhotoEditorPanel({
       setAiPreviewSource(null);
       setAiPreviewLoading(false);
       setAiPreviewProgress(null);
+      setAiPreviewError(null);
       return;
     }
     if (!aiAvailable) {
       setAiPreviewSource(null);
       setAiPreviewLoading(false);
       setAiPreviewProgress(null);
+      setAiPreviewError("当前浏览器或设备未提供 WebGPU，本地 AI 修复不可用。");
       return;
     }
 
@@ -324,6 +331,7 @@ export function PhotoEditorPanel({
     const controller = new AbortController();
     setAiPreviewSource(null);
     setAiPreviewLoading(true);
+    setAiPreviewError(null);
     setAiPreviewProgress({
       phase: "downloading-model",
       progress: 0,
@@ -356,11 +364,12 @@ export function PhotoEditorPanel({
       .then((blob) => {
         if (controller.signal.aborted || aiPreviewSequence.current !== sequence) return;
         setAiPreviewSource(blob);
+        setAiPreviewError(null);
         setAiPreviewProgress(null);
       })
       .catch((cause) => {
         if (controller.signal.aborted) return;
-        setError(userFacingErrorMessage(cause, "本地 AI 预览失败。"));
+        setAiPreviewError(photoEditAiErrorMessage(cause));
         setAiPreviewProgress(null);
       })
       .finally(() => {
@@ -370,7 +379,15 @@ export function PhotoEditorPanel({
       });
 
     return () => controller.abort();
-  }, [aiAvailable, aiEnabled, aiPreExposure, deblurStrength, denoiseStrength, source]);
+  }, [
+    aiAvailable,
+    aiEnabled,
+    aiPreExposure,
+    aiRetryNonce,
+    deblurStrength,
+    denoiseStrength,
+    source,
+  ]);
 
   useEffect(() => {
     if (source === null || stage === "loading" || stage === "error") return;
@@ -901,6 +918,21 @@ export function PhotoEditorPanel({
                     : "正在生成 AI 预览…"}
                 </p>
               )
+            ) : null}
+            {aiPreviewError !== null && aiEnabled ? (
+              <div className="flex flex-col gap-2 rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
+                <p>{aiPreviewError}</p>
+                <Button
+                  className="w-fit"
+                  disabled={aiPreviewLoading}
+                  onClick={() => setAiRetryNonce((current) => current + 1)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  重试 AI 预览
+                </Button>
+              </div>
             ) : null}
           </section>
 

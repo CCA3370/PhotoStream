@@ -75,6 +75,7 @@ function runAiWorker<T>(
         const cleanup = () => {
           current.removeEventListener("message", onMessage);
           current.removeEventListener("error", onWorkerError);
+          current.removeEventListener("messageerror", onWorkerMessageError);
           options.signal?.removeEventListener("abort", onAbort);
         };
         const finishReject = (error: unknown) => {
@@ -96,6 +97,10 @@ function runAiWorker<T>(
           resetWorker();
           finishReject(new Error(event.message || "本地 AI Worker 失败"));
         };
+        const onWorkerMessageError = () => {
+          resetWorker();
+          finishReject(new Error("本地 AI Worker 数据传输失败"));
+        };
         const onMessage = (event: MessageEvent<AiWorkerResponse>) => {
           const message = event.data;
           if (message.id !== id) return;
@@ -114,6 +119,7 @@ function runAiWorker<T>(
             return;
           }
           if (message.type === "error") {
+            resetWorker();
             finishReject(new Error(message.message));
             return;
           }
@@ -123,6 +129,7 @@ function runAiWorker<T>(
 
         current.addEventListener("message", onMessage);
         current.addEventListener("error", onWorkerError);
+        current.addEventListener("messageerror", onWorkerMessageError);
         options.signal?.addEventListener("abort", onAbort, { once: true });
         current.postMessage({ ...request, id }, options.transfer ?? []);
       }),
@@ -133,7 +140,16 @@ export function photoEditAiAvailable(): boolean {
   return typeof Worker !== "undefined" && typeof navigator !== "undefined" && "gpu" in navigator;
 }
 
-export function restoreMediaEditPreview(
+export function photoEditAiErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === "AbortError") return "AI 预览已取消。";
+  if (error instanceof Error) {
+    const detail = error.message.trim();
+    if (detail.length > 0) return `本地 AI 预览失败：${detail}`;
+  }
+  return "本地 AI 预览失败，请关闭 AI 修复后重试或更换支持 WebGPU 的浏览器。";
+}
+
+export async function restoreMediaEditPreview(
   source: Blob,
   recipe: PhotoEditRecipe,
   options: {
@@ -141,17 +157,30 @@ export function restoreMediaEditPreview(
     readonly onProgress?: (progress: PhotoEditAiProgress) => void;
   } = {},
 ): Promise<Blob> {
-  return runAiWorker(
-    {
-      type: "restore",
-      mode: "preview",
-      source,
-      denoiseStrength: recipe.denoiseStrength,
-      deblurStrength: recipe.deblurStrength,
-    },
-    (message) => (message.type === "preview" ? message.blob : undefined),
-    options,
-  );
+  const request = {
+    type: "restore",
+    mode: "preview",
+    source,
+    denoiseStrength: recipe.denoiseStrength,
+    deblurStrength: recipe.deblurStrength,
+  };
+  const run = () =>
+    runAiWorker(
+      request,
+      (message) => (message.type === "preview" ? message.blob : undefined),
+      options,
+    );
+
+  try {
+    return await run();
+  } catch (error) {
+    if (options.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+      throw error;
+    }
+    // A WebGPU device/session can be lost transiently. The worker is reset on
+    // runtime errors; retry the lightweight preview once in a fresh worker.
+    return run();
+  }
 }
 
 export function restoreMediaEditFull(
