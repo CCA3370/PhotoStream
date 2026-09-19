@@ -1,6 +1,5 @@
 "use client";
 
-import { LoaderCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -127,10 +126,8 @@ export function GalleryFilterNav({
       <div className="flex h-full shrink-0 items-stretch" ref={itemsRef}>
         {items.map((item) => {
           const active = selectedKey === item.key;
-          const pending = pendingKey === item.key;
           return (
             <button
-              aria-busy={pending || undefined}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "relative flex h-full shrink-0 touch-manipulation items-center justify-center gap-1.5 bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-wait disabled:opacity-70 sm:px-3.5 lg:px-5 lg:text-[15px] lg:after:inset-x-3",
@@ -141,9 +138,6 @@ export function GalleryFilterNav({
               onClick={() => onSelect(item)}
               type="button"
             >
-              {pending ? (
-                <LoaderCircleIcon aria-hidden="true" className="size-3.5 animate-spin" />
-              ) : null}
               {item.label}
             </button>
           );

@@ -1,6 +1,7 @@
 "use client";
 
 import type { PublicMediaView } from "@photostream/contracts";
+import { LoaderCircleIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
@@ -171,6 +172,22 @@ export function GalleryBrowser({
         reserveSearchSpace={inlineSearch}
         selectedKey={state.filterKey}
       />
+
+      {pendingKey !== null ? (
+        <div
+          aria-live="polite"
+          className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
+          role="status"
+        >
+          <div className="flex size-11 items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur">
+            <LoaderCircleIcon
+              aria-hidden="true"
+              className="size-5 animate-spin text-foreground/80"
+            />
+            <span className="sr-only">正在加载照片</span>
+          </div>
+        </div>
+      ) : null}
 
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {inlineSearch ? (
