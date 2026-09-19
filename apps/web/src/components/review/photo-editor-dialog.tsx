@@ -35,6 +35,7 @@ import {
   type MediaEditSourceOrigin,
   resolveMediaEditSource,
 } from "@/lib/photo-edit/source-resolver";
+import { cn } from "@/lib/utils";
 
 type EditorStage = "loading" | "ready" | "analyzing" | "applying" | "error";
 
@@ -108,12 +109,14 @@ export function PhotoEditorPanel({
   onApplied,
   onClose,
   onPreviewChange,
+  docked = false,
 }: Readonly<{
   mediaId: string | null;
   localPhotoId?: string | null;
   onApplied: () => void | Promise<void>;
   onClose: () => void;
   onPreviewChange: (preview: PhotoEditorPreviewState) => void;
+  docked?: boolean;
 }>) {
   const [context, setContext] = useState<MediaEditContextView | null>(null);
   const [source, setSource] = useState<Blob | null>(null);
@@ -524,7 +527,12 @@ export function PhotoEditorPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl">
+    <aside
+      className={cn(
+        "flex h-full min-h-0 flex-col overflow-hidden bg-card text-card-foreground",
+        docked ? "border-l" : "rounded-xl border shadow-2xl",
+      )}
+    >
       <div className="flex items-start gap-3 border-b px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">修图</h2>
