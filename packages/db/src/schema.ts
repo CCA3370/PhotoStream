@@ -398,10 +398,6 @@ export const mediaEditRevisions = pgTable(
     pipelineVersion: varchar("pipeline_version", { length: 80 }).notNull(),
     recipeVersion: integer("recipe_version").notNull(),
     recipeJson: jsonb("recipe_json").$type<Record<string, unknown>>().notNull(),
-    denoiseModel: varchar("denoise_model", { length: 120 }),
-    denoiseModelVersion: varchar("denoise_model_version", { length: 120 }),
-    deblurModel: varchar("deblur_model", { length: 120 }),
-    deblurModelVersion: varchar("deblur_model_version", { length: 120 }),
     sourceVariantId: uuid("source_variant_id").references(() => mediaVariants.id, {
       onDelete: "restrict",
     }),

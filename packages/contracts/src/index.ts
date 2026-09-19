@@ -478,10 +478,6 @@ export const createMediaEditRevisionRequestSchema = z
     pipelineVersion: z.string().trim().min(1).max(80),
     recipeVersion: z.number().int().positive(),
     recipeJson: z.record(z.string(), z.unknown()),
-    denoiseModel: z.string().trim().min(1).max(120).nullable().default(null),
-    denoiseModelVersion: z.string().trim().min(1).max(120).nullable().default(null),
-    deblurModel: z.string().trim().min(1).max(120).nullable().default(null),
-    deblurModelVersion: z.string().trim().min(1).max(120).nullable().default(null),
   })
   .strict();
 export type CreateMediaEditRevisionRequest = z.infer<typeof createMediaEditRevisionRequestSchema>;
@@ -529,10 +525,6 @@ export const mediaEditRevisionViewSchema = z
     pipelineVersion: z.string(),
     recipeVersion: z.number().int().positive(),
     recipeJson: z.record(z.string(), z.unknown()),
-    denoiseModel: z.string().nullable(),
-    denoiseModelVersion: z.string().nullable(),
-    deblurModel: z.string().nullable(),
-    deblurModelVersion: z.string().nullable(),
     createdAt: z.string().datetime(),
     readyAt: z.string().datetime().nullable(),
     appliedAt: z.string().datetime().nullable(),
