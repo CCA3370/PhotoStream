@@ -45,7 +45,7 @@ describe("management review stability guards", () => {
     expect(source).toContain("openItemKeysRef.current");
   });
 
-  it("uses 480/1920 management previews and resolves originals local-first", () => {
+  it("uses local 480/1920 management derivatives and keeps originals on demand", () => {
     const lightbox = readFileSync(lightboxPath, "utf8");
     const workspace = readFileSync(workspacePath, "utf8");
 
@@ -57,10 +57,15 @@ describe("management review stability guards", () => {
     expect(workspace).toContain(
       'variant.kind === "photo_480")?.url ??\n    media.variants.find((variant) => variant.kind === "photo_1920")?.url ??',
     );
-    expect(workspace).toContain("previewUrl: localOriginalUrl ?? previewUrl");
-    expect(workspace).toContain("viewerUrl: localOriginalUrl ?? ordinaryUrl");
+    expect(workspace).toContain('variant.kind === "photo_480")?.blob');
+    expect(workspace).toContain('variant.kind === "photo_1920")?.blob');
+    expect(workspace).toContain("previewUrl: item.previewUrl");
+    expect(workspace).toContain("viewerUrl: item.viewerUrl");
+    expect(workspace).toContain("previewUrl: localPreviewUrl ?? previewUrl");
+    expect(workspace).toContain("viewerUrl: localViewerUrl ?? ordinaryUrl");
 
     expect(lightbox).toContain("resolveMediaEditSource");
+    expect(lightbox).toContain("selected.localPreferred && selected.originalSrc !== null");
     expect(lightbox).toContain('"查看原图"');
     expect(lightbox).toContain("mediaId={selected.mediaId}");
   });
