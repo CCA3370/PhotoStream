@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
 import { getLocalReviewPhoto } from "@/lib/local-review-queue";
+import { managementErrorMessage } from "@/lib/management-error";
 import {
   type PhotoEditAiProgress,
   photoEditAiAvailable,
@@ -39,7 +40,6 @@ import {
   type MediaEditSourceOrigin,
   resolveMediaEditSource,
 } from "@/lib/photo-edit/source-resolver";
-import { managementErrorMessage } from "@/lib/management-error";
 
 type EditorStage = "loading" | "ready" | "analyzing" | "applying" | "error";
 

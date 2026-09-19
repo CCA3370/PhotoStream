@@ -263,7 +263,9 @@ function stableRemoteMedia(
   ) {
     return incoming;
   }
-  const previousByKind = new Map(previous.variants.map((variant) => [variant.kind, variant] as const));
+  const previousByKind = new Map(
+    previous.variants.map((variant) => [variant.kind, variant] as const),
+  );
   return {
     ...incoming,
     variants: incoming.variants.map((variant) => {

@@ -23,8 +23,8 @@ describe("internal media URL identity", () => {
   });
 
   it("keeps functional query changes distinct", () => {
-    expect(
-      internalImageKey("https://cdn.example.test/photo.webp?width=960&auth_key=one"),
-    ).not.toBe(internalImageKey("https://cdn.example.test/photo.webp?width=1920&auth_key=two"));
+    expect(internalImageKey("https://cdn.example.test/photo.webp?width=960&auth_key=one")).not.toBe(
+      internalImageKey("https://cdn.example.test/photo.webp?width=1920&auth_key=two"),
+    );
   });
 });

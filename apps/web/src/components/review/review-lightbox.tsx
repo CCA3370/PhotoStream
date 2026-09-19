@@ -433,8 +433,7 @@ export function ReviewLightbox({
     if (selected === null) return;
     setLoaded(false);
     if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
-      displayIdentityRef.current =
-        `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(selected.fallbackSrc) ?? "none"}`;
+      displayIdentityRef.current = `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(selected.fallbackSrc) ?? "none"}`;
       setDisplaySrc(selected.fallbackSrc);
       setLoadFailed(false);
       return;

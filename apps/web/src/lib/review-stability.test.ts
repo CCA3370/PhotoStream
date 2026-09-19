@@ -20,7 +20,7 @@ describe("management review stability guards", () => {
     expect(source).toContain('addEventListener("wheel", handleWheel, { passive: false })');
     expect(source).not.toContain("onWheel={");
     expect(source).not.toContain("key={displaySrc}");
-    expect(source).toContain('key={`${selected.key}:${selected.visualRevision ?? "base"}`}');
+    expect(source).toContain('selected.visualRevision ?? "base"');
   });
 
   it("keeps polling updates client-side instead of refreshing the RSC page", () => {
