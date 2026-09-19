@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { Transform } from "node:stream";
@@ -18,6 +19,26 @@ const cacheRoot = resolve(
 );
 
 const localAssets = [
+  {
+    file: "ort/ort-wasm-simd-threaded.mjs",
+    source: resolve(
+      repositoryRoot,
+      "apps/web/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs",
+    ),
+    bytes: 24_274,
+    sha256: "5687566b1bc1c8cf628d76c2ddb16b2a3b81a7997273d4666564880495088e57",
+    cspSafe: true,
+  },
+  {
+    file: "ort/ort-wasm-simd-threaded.wasm",
+    source: resolve(
+      repositoryRoot,
+      "apps/web/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm",
+    ),
+    bytes: 12_361_745,
+    sha256: "be0e129949062ad50290ef94683fac8be5bb6156f709e030b7a5f1661a2f6c17",
+    cspSafe: true,
+  },
   {
     file: "ort/ort-wasm-simd-threaded.jsep.mjs",
     source: resolve(
@@ -125,6 +146,12 @@ for (const asset of localAssets) {
     throw new Error(
       `ONNX Runtime 本地资产与锁定版本不一致：${asset.file}。请重新执行 pnpm install --frozen-lockfile。`,
     );
+  }
+  if (asset.cspSafe === true && asset.file.endsWith(".mjs")) {
+    const source = await readFile(asset.source, "utf8");
+    if (source.includes("new Function") || source.includes("eval(")) {
+      throw new Error(`CSP-safe ONNX Runtime 资产包含动态代码执行：${asset.file}`);
+    }
   }
   const destination = resolve(destinationRoot, asset.file);
   if (!(await valid(destination, asset))) {

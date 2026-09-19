@@ -68,6 +68,8 @@ jobs:
           231be201ab413dbc999d7951caa9844846b93a12a40a41e037d6b5888ed4e88c  scunet_color_real_psnr.onnx
           98825ea1210b641c71e5f052f582c70c49fd44b35387ebe2c034268c17df3feb  scunet_color_real_psnr.onnx.data
           07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587  deblurring_nafnet_2025may.onnx
+          5687566b1bc1c8cf628d76c2ddb16b2a3b81a7997273d4666564880495088e57  ort/ort-wasm-simd-threaded.mjs
+          be0e129949062ad50290ef94683fac8be5bb6156f709e030b7a5f1661a2f6c17  ort/ort-wasm-simd-threaded.wasm
           9a99acd12acc495184c9ea4d458ac9424f8180aacfbc7b8371ed64f9351e4a81  ort/ort-wasm-simd-threaded.jsep.mjs
           2e0a3d0e3f6b7c13ecfaba38c13691fd19c9ed470e72f9d7d8416ca59ab6dbcd  ort/ort-wasm-simd-threaded.jsep.wasm
           EOF
@@ -90,6 +92,8 @@ jobs:
             echo "231be201ab413dbc999d7951caa9844846b93a12a40a41e037d6b5888ed4e88c  scunet_color_real_psnr.onnx" | sha256sum -c -
             echo "98825ea1210b641c71e5f052f582c70c49fd44b35387ebe2c034268c17df3feb  scunet_color_real_psnr.onnx.data" | sha256sum -c -
             echo "07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587  deblurring_nafnet_2025may.onnx" | sha256sum -c -
+            echo "5687566b1bc1c8cf628d76c2ddb16b2a3b81a7997273d4666564880495088e57  ort/ort-wasm-simd-threaded.mjs" | sha256sum -c -
+            echo "be0e129949062ad50290ef94683fac8be5bb6156f709e030b7a5f1661a2f6c17  ort/ort-wasm-simd-threaded.wasm" | sha256sum -c -
             echo "9a99acd12acc495184c9ea4d458ac9424f8180aacfbc7b8371ed64f9351e4a81  ort/ort-wasm-simd-threaded.jsep.mjs" | sha256sum -c -
             echo "2e0a3d0e3f6b7c13ecfaba38c13691fd19c9ed470e72f9d7d8416ca59ab6dbcd  ort/ort-wasm-simd-threaded.jsep.wasm" | sha256sum -c -
           '

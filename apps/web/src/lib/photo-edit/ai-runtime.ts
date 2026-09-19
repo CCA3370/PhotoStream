@@ -137,7 +137,11 @@ function runAiWorker<T>(
 }
 
 export function photoEditAiAvailable(): boolean {
-  return typeof Worker !== "undefined" && typeof navigator !== "undefined" && "gpu" in navigator;
+  return (
+    typeof Worker !== "undefined" &&
+    typeof createImageBitmap === "function" &&
+    typeof OffscreenCanvas !== "undefined"
+  );
 }
 
 export async function restoreMediaEditPreview(

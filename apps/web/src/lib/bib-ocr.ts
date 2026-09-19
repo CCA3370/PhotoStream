@@ -82,7 +82,7 @@ async function createRunner(): Promise<OcrRunner> {
     textDetectionBatchSize: 1,
     textRecognitionBatchSize: 4,
     ortOptions: {
-      backend: "auto",
+      backend: process.env.NODE_ENV === "production" ? "wasm" : "auto",
       wasmPaths: `${assetBase}/ort/`,
       numThreads: globalThis.crossOriginIsolated
         ? Math.max(1, Math.min(2, navigator.hardwareConcurrency || 1))
