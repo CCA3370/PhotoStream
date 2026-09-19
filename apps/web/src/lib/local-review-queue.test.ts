@@ -7,6 +7,7 @@ import {
   type LocalReviewPhoto,
   localBibMediaState,
   localBibOcrPending,
+  retainLocalOriginalRecord,
 } from "./local-review-queue";
 
 function photo(bib: Partial<LocalReviewPhoto["bib"]>): LocalReviewPhoto {
@@ -86,6 +87,38 @@ function remote(decision: BibMediaState["review"]["decision"]): BibMediaState {
     },
   };
 }
+
+describe("local original retention", () => {
+  it("drops derived local caches while preserving the original blob", () => {
+    const originalBlob = new Blob(["original"], { type: "image/jpeg" });
+    const source: LocalReviewPhoto = {
+      ...photo({}),
+      originalBlob,
+      mediaId: "019d0000-0000-7000-8000-000000000003",
+      intentId: "019d0000-0000-7000-8000-000000000004",
+      uploadState: "published",
+      featured: true,
+      variants: [
+        {
+          kind: "photo_480",
+          format: "webp",
+          contentType: "image/webp",
+          width: 480,
+          height: 270,
+          blob: new Blob(["cache"], { type: "image/webp" }),
+        },
+      ],
+    };
+
+    const retained = retainLocalOriginalRecord(source);
+    expect(retained.originalBlob).toBe(originalBlob);
+    expect(retained.variants).toEqual([]);
+    expect(retained.mediaId).toBeNull();
+    expect(retained.intentId).toBeNull();
+    expect(retained.uploadState).toBe("local");
+    expect(retained.retainedOriginalOnly).toBe(true);
+  });
+});
 
 describe("local bib review state", () => {
   it("keeps manually confirmed numbers authoritative while OCR is still processing", () => {

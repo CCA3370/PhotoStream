@@ -79,6 +79,7 @@ import {
   localBibMediaState,
   localBibOcrPending,
   patchLocalReviewPhoto,
+  retainLocalReviewOriginal,
 } from "@/lib/local-review-queue";
 import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { cn } from "@/lib/utils";
@@ -86,6 +87,13 @@ import { cn } from "@/lib/utils";
 async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
   await Promise.all([
     deleteLocalReviewPhoto(localPhotoId),
+    deleteLocalPhotoEditDraft(localPhotoId),
+  ]);
+}
+
+async function retainLocalOriginalAfterMediaDelete(localPhotoId: string): Promise<void> {
+  await Promise.all([
+    retainLocalReviewOriginal(localPhotoId),
     deleteLocalPhotoEditDraft(localPhotoId),
   ]);
 }
@@ -868,8 +876,7 @@ export function ReviewWorkspace({
   }
 
   function canDeleteItem(item: ReviewItem): boolean {
-    if (item.source === "remote") return userRole === "admin";
-    return true;
+    return userRole === "admin" && remoteId(item) !== null;
   }
 
   async function changeCategory(item: ReviewItem, nextCategory: string | null): Promise<void> {
@@ -1001,29 +1008,25 @@ export function ReviewWorkspace({
 
   async function deleteItem(item: ReviewItem): Promise<void> {
     if (isPending(item.key) || !canDeleteItem(item)) return;
+    const mediaId = remoteId(item);
+    if (mediaId === null) return;
     const currentIndex = lightboxSourceItems.findIndex((candidate) => candidate.key === item.key);
     const nextKey =
       activeKey === item.key && lightboxSourceItems.length > 1 && currentIndex >= 0
         ? (lightboxSourceItems[(currentIndex + 1) % lightboxSourceItems.length]?.key ?? null)
         : null;
+    const linkedLocal = localPhoto(item);
     setPending(item.key, "delete");
     try {
-      const mediaId = remoteId(item);
-      if (item.source === "local" && mediaId === null) {
-        await deleteLocalReviewState(item.local.photo.id);
-      } else if (mediaId !== null) {
-        await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
-        setRemoteMedia((current) => current.filter((candidate) => candidate.id !== mediaId));
-        setFeaturedIds((current) => {
-          const next = new Set(current);
-          next.delete(mediaId);
-          return next;
-        });
-        if (item.source === "local") {
-          await deleteLocalReviewState(item.local.photo.id).catch(() => undefined);
-        } else if (item.local !== null) {
-          await deleteLocalReviewState(item.local.photo.id).catch(() => undefined);
-        }
+      await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
+      setRemoteMedia((current) => current.filter((candidate) => candidate.id !== mediaId));
+      setFeaturedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
+      if (linkedLocal !== null) {
+        await retainLocalOriginalAfterMediaDelete(linkedLocal.id).catch(() => undefined);
       }
       setSelectedKeys((current) => {
         const next = new Set(current);
@@ -1033,7 +1036,7 @@ export function ReviewWorkspace({
       if (activeKey === item.key) setActiveKey(nextKey);
       if (inspectorKey === item.key) setInspectorKey(null);
       if (bibDialogKey === item.key) setBibDialogKey(null);
-      showNotice("已删除");
+      showNotice(linkedLocal === null ? "已删除" : "已删除服务器媒体，本机原图已保留");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "删除失败");
     } finally {
@@ -1453,9 +1456,17 @@ export function ReviewWorkspace({
     const deletedMediaIds = new Set<string>();
     let successCount = 0;
     try {
-      for (const item of selectedLocalItems) {
+      const localTargets =
+        userRole === "admin"
+          ? selectedLocalItems.filter((item) => remoteId(item) !== null)
+          : [];
+      for (const item of localTargets) {
+        const mediaId = remoteId(item);
+        if (mediaId === null) continue;
         try {
-          await deleteLocalReviewState(item.local.photo.id);
+          await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
+          await retainLocalOriginalAfterMediaDelete(item.local.photo.id);
+          deletedMediaIds.add(mediaId);
           successCount += 1;
         } catch (cause) {
           failures.push({
@@ -1464,10 +1475,15 @@ export function ReviewWorkspace({
           });
         }
       }
+
       const remoteTargets = userRole === "admin" ? selectedRemoteItems : [];
       for (const item of remoteTargets) {
         try {
           await clientMutation(`/api/v1/media/${item.id}/direct`, { method: "DELETE" });
+          const linkedLocal = localMedia.find((candidate) => candidate.photo.mediaId === item.id);
+          if (linkedLocal !== undefined) {
+            await retainLocalOriginalAfterMediaDelete(linkedLocal.photo.id).catch(() => undefined);
+          }
           deletedMediaIds.add(item.id);
           successCount += 1;
         } catch (cause) {
@@ -1490,7 +1506,7 @@ export function ReviewWorkspace({
         "批量删除",
         successCount,
         failures,
-        selectedCount - selectedLocalItems.length - remoteTargets.length,
+        selectedCount - localTargets.length - remoteTargets.length,
       );
     } finally {
       setBatchBusy(false);
