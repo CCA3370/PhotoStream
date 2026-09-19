@@ -233,6 +233,7 @@ function preview(media: InternalMediaView): string | null {
 function ordinary(media: InternalMediaView): string | null {
   return (
     media.variants.find((variant) => variant.kind === "photo_1920")?.url ??
+    media.variants.find((variant) => variant.kind === "photo_960")?.url ??
     media.variants.find((variant) => variant.kind === "photo_480")?.url ??
     null
   );
