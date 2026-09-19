@@ -40,10 +40,12 @@ const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonl
 export function PhotoReportButton({
   className,
   mediaId,
+  shareId,
   slug,
 }: Readonly<{
   className?: string;
   mediaId: string;
+  shareId?: string;
   slug: string;
 }>) {
   const [open, setOpen] = useState(false);
@@ -57,7 +59,9 @@ export function PhotoReportButton({
     setSubmitting(true);
     try {
       await publicMutation<{ readonly id: number; readonly received: true }>(
-        `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/report`,
+        shareId === undefined
+          ? `/api/v1/public/albums/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/report`
+          : `/api/v1/public/shares/${encodeURIComponent(shareId)}/report`,
         {
           body: {
             reason,

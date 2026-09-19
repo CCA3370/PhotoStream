@@ -8,6 +8,9 @@ const galleryPagePath = fileURLToPath(
 const sharePagePath = fileURLToPath(
   new URL("../app/(public)/s/[shareId]/page.tsx", import.meta.url),
 );
+const sharedViewerPath = fileURLToPath(
+  new URL("../components/gallery/shared-photo-viewer.tsx", import.meta.url),
+);
 
 describe("shared photo route isolation", () => {
   it("renders the isolated shared viewer from the dedicated share route", () => {
@@ -19,6 +22,13 @@ describe("shared photo route isolation", () => {
     expect(source).toContain(
       ["/api/v1/public/shares/", "$", "{encodeURIComponent(shareId)}"].join(""),
     );
+  });
+
+  it("keeps a complaint action on the isolated share viewer", () => {
+    const source = readFileSync(sharedViewerPath, "utf8");
+
+    expect(source).toContain("<PhotoReportButton");
+    expect(source).toContain("shareId={shareId}");
   });
 
   it("does not keep the legacy share entrypoint in the gallery route", () => {

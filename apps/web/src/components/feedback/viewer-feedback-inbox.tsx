@@ -1,12 +1,14 @@
 "use client";
 
-import { EyeOffIcon, LoaderCircleIcon, MessageSquareTextIcon } from "lucide-react";
+import { EyeOffIcon, ImageIcon, LoaderCircleIcon, MessageSquareTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { InternalCachedImage } from "@/components/media/internal-cached-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
-import { clientMutation } from "@/lib/client-api";
+import { clientGet, clientMutation } from "@/lib/client-api";
 import {
   type ViewerFeedbackItem,
   viewerFeedbackKindLabel,
@@ -47,6 +49,15 @@ export function ViewerFeedbackInbox({
   const [items, setItems] = useState<readonly ViewerFeedbackItem[]>(initialItems);
   const [connected, setConnected] = useState(false);
   const [hidingMediaId, setHidingMediaId] = useState<string | null>(null);
+  const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    readonly mediaId: string;
+    readonly kind: "photo_1920" | "photo_960" | "photo_480";
+    readonly url: string;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewRequestId = useRef(0);
   const lastEventId = useRef(initialLatestId);
 
   useEffect(() => {
@@ -86,6 +97,31 @@ export function ViewerFeedbackInbox({
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     };
   }, []);
+
+  async function openReportedPhoto(mediaId: string): Promise<void> {
+    const requestId = previewRequestId.current + 1;
+    previewRequestId.current = requestId;
+    setPreviewMediaId(mediaId);
+    setPreview(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    for (const kind of ["photo_1920", "photo_960", "photo_480"] as const) {
+      try {
+        const result = await clientGet<{ readonly url: string }>(
+          `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${kind}`,
+        );
+        if (previewRequestId.current !== requestId) return;
+        setPreview({ mediaId, kind, url: result.url });
+        setPreviewLoading(false);
+        return;
+      } catch {
+        // Try the next verified preview size.
+      }
+    }
+    if (previewRequestId.current !== requestId) return;
+    setPreviewLoading(false);
+    setPreviewError("这张照片当前没有可查看的预览版本。");
+  }
 
   async function hideReportedPhoto(mediaId: string): Promise<void> {
     if (!canModerate || hidingMediaId !== null) return;
@@ -209,28 +245,41 @@ export function ViewerFeedbackInbox({
                         </p>
                       )}
                     </div>
-                    {canModerate && mediaId !== null ? (
-                      <Button
-                        className="shrink-0"
-                        disabled={!mediaVisible || hiding}
-                        onClick={() => void hideReportedPhoto(mediaId)}
-                        size="sm"
-                        variant={mediaVisible ? "destructive" : "secondary"}
-                      >
-                        {hiding ? (
-                          <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                    {mediaId !== null ? (
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                          onClick={() => void openReportedPhoto(mediaId)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <ImageIcon data-icon="inline-start" />
+                          查看照片
+                        </Button>
+                        {canModerate ? (
+                          <Button
+                            disabled={!mediaVisible || hiding}
+                            onClick={() => void hideReportedPhoto(mediaId)}
+                            size="sm"
+                            type="button"
+                            variant={mediaVisible ? "destructive" : "secondary"}
+                          >
+                            {hiding ? (
+                              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                            ) : (
+                              <EyeOffIcon data-icon="inline-start" />
+                            )}
+                            {mediaVisible ? "一键下架图片" : "已不可见"}
+                          </Button>
                         ) : (
-                          <EyeOffIcon data-icon="inline-start" />
+                          <span className="text-xs text-muted-foreground">
+                            仅管理员或审核员可下架图片
+                          </span>
                         )}
-                        {mediaVisible ? "一键下架图片" : "已不可见"}
-                      </Button>
+                      </div>
                     ) : canModerate ? (
                       <span className="text-xs text-muted-foreground">无需继续下架</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        仅管理员或审核员可下架图片
-                      </span>
-                    )}
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -244,6 +293,50 @@ export function ViewerFeedbackInbox({
           })}
         </div>
       )}
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (open) return;
+          previewRequestId.current += 1;
+          setPreviewMediaId(null);
+          setPreview(null);
+          setPreviewError(null);
+          setPreviewLoading(false);
+        }}
+        open={previewMediaId !== null}
+      >
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>投诉目标照片</DialogTitle>
+            <DialogDescription>
+              {previewMediaId === null ? "" : `媒体 ID：${previewMediaId}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative h-[min(72vh,48rem)] min-h-64 overflow-hidden rounded-lg bg-black">
+            {previewLoading ? (
+              <div className="absolute inset-0 grid place-items-center text-sm text-white/65">
+                <LoaderCircleIcon className="mr-2 inline size-4 animate-spin" />
+                正在加载照片…
+              </div>
+            ) : previewError !== null ? (
+              <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/65">
+                {previewError}
+              </div>
+            ) : preview !== null ? (
+              <InternalCachedImage
+                alt="投诉目标照片"
+                className="object-contain"
+                fill
+                mediaId={preview.mediaId}
+                sizes="min(90vw, 80rem)"
+                src={preview.url}
+                unoptimized
+                variantKind={preview.kind}
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

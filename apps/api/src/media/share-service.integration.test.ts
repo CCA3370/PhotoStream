@@ -12,6 +12,7 @@ import { LocalObjectStorage } from "./object-storage.js";
 import { OperationsService } from "./operations-service.js";
 import { PhotoService } from "./service.js";
 import { PhotoShareService } from "./share-service.js";
+import { ViewerFeedbackService } from "./viewer-feedback-service.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (databaseUrl !== undefined && new URL(databaseUrl).pathname !== "/photostream_test") {
@@ -68,6 +69,7 @@ maybeDescribe("single-photo sharing", () => {
     likeService,
     operationsService,
   });
+  const feedbackService = new ViewerFeedbackService({ database, photoService });
   let adminId = "";
 
   beforeAll(async () => {
@@ -85,6 +87,7 @@ maybeDescribe("single-photo sharing", () => {
     await database.delete(schema.deletionTasks);
     await database.delete(schema.mediaBatchRequests);
     await database.delete(schema.operationRequests);
+    await database.delete(schema.viewerFeedback);
     await database.delete(schema.photoShares);
     await database.delete(schema.mediaLikes);
     await database.delete(schema.mediaEditStates);
@@ -215,6 +218,26 @@ maybeDescribe("single-photo sharing", () => {
       slug: album.slug,
       visitorToken: visitor.rawToken,
       mediaId: media.id,
+    });
+
+    const report = await feedbackService.createSharedReport({
+      shareId: share.shareId,
+      reportReason: "privacy",
+      message: "请处理这张分享照片",
+      pagePath: `/s/${share.shareId}`,
+    });
+    expect(report.received).toBe(true);
+    const [storedReport] = await database
+      .select()
+      .from(schema.viewerFeedback)
+      .where(eq(schema.viewerFeedback.id, report.id))
+      .limit(1);
+    expect(storedReport).toMatchObject({
+      albumId: album.id,
+      mediaId: media.id,
+      kind: "report",
+      reportReason: "privacy",
+      message: "请处理这张分享照片",
     });
 
     const shared = await shareService.getShareView({ shareId: share.shareId });

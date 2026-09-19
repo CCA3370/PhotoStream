@@ -17,6 +17,7 @@ const slugParamsSchema = z.object({ slug: z.string().min(12).max(32) }).strict()
 const reportParamsSchema = z
   .object({ slug: z.string().min(12).max(32), mediaId: z.string().uuid() })
   .strict();
+const shareReportParamsSchema = z.object({ shareId: z.string().uuid() }).strict();
 const feedbackKindSchema = z.enum(["problem", "suggestion", "other"]);
 const feedbackRecordKindSchema = z.enum(["problem", "suggestion", "other", "report"]);
 const reportReasonSchema = z.enum([
@@ -134,6 +135,30 @@ export async function registerViewerFeedbackRoutes(
         visitorToken: visitorSessionToken(request, options.config, request.params.slug),
         kind: "report",
         mediaId: request.params.mediaId,
+        reportReason: request.body.reason,
+        message: request.body.message,
+        pagePath: request.body.pagePath,
+      });
+      void reply.header("cache-control", "no-store");
+      return reply.status(201).send(result);
+    },
+  );
+
+  typed.post(
+    "/api/v1/public/shares/:shareId/report",
+    {
+      config: { rateLimit: { max: 3, timeWindow: "10 minutes" } },
+      schema: {
+        operationId: "createSharedPhotoReport",
+        tags: ["public", "feedback", "media"],
+        params: shareReportParamsSchema,
+        body: createReportSchema,
+        response: { 201: createFeedbackResponseSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      const result = await options.feedbackService.createSharedReport({
+        shareId: request.params.shareId,
         reportReason: request.body.reason,
         message: request.body.message,
         pagePath: request.body.pagePath,

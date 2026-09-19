@@ -10,6 +10,7 @@ import { DownloadButton, type WeChatDownloadSource } from "@/components/gallery/
 import { ImageDownloadProgress } from "@/components/gallery/image-download-progress";
 import { fittedImageWidth } from "@/components/gallery/photo-lightbox-media";
 import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo-like-button";
+import { PhotoReportButton } from "@/components/gallery/photo-report-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -294,6 +295,17 @@ export function SharedPhotoViewer({
               />
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 sm:p-4 sm:pb-16">
+        <div className="pointer-events-auto">
+          <PhotoReportButton
+            className="h-11 rounded-full border-white/10 bg-black/30 px-3 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.96] sm:h-10 motion-reduce:transform-none motion-reduce:transition-none"
+            mediaId={media.id}
+            shareId={shareId}
+            slug={slug}
+          />
         </div>
       </div>
 

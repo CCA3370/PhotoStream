@@ -1,5 +1,5 @@
 import { type Database, schema } from "@photostream/db";
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import { liveEventChannel } from "./live-event-broker.js";
@@ -97,6 +97,68 @@ export class ViewerFeedbackService {
           mediaId,
           kind: options.kind,
           reportReason,
+          message: options.message.trim(),
+          pagePath: options.pagePath,
+        })
+        .returning({ id: schema.viewerFeedback.id });
+      if (row === undefined) throw new Error("Viewer feedback insert returned no row");
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${viewerFeedbackTopic})`);
+      return row;
+    });
+
+    return { id: created.id, received: true as const };
+  }
+
+  async createSharedReport(options: {
+    readonly shareId: string;
+    readonly reportReason: ViewerReportReason;
+    readonly message: string;
+    readonly pagePath: string | null;
+  }): Promise<{ readonly id: number; readonly received: true }> {
+    const [target] = await this.#database
+      .select({
+        albumId: schema.photoShares.albumId,
+        mediaId: schema.photoShares.mediaId,
+      })
+      .from(schema.photoShares)
+      .innerJoin(
+        schema.albums,
+        and(
+          eq(schema.albums.id, schema.photoShares.albumId),
+          eq(schema.albums.accessVersion, schema.photoShares.accessVersion),
+        ),
+      )
+      .innerJoin(
+        schema.media,
+        and(
+          eq(schema.media.id, schema.photoShares.mediaId),
+          eq(schema.media.albumId, schema.photoShares.albumId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.photoShares.id, options.shareId),
+          inArray(schema.albums.state, ["live", "ended", "archived"]),
+          eq(schema.media.publicationStatus, "published"),
+        ),
+      )
+      .limit(1);
+    if (target === undefined) {
+      throw new AppError({
+        code: "NOT_FOUND",
+        message: "分享图片不存在或已不可见",
+        statusCode: 404,
+      });
+    }
+
+    const created = await this.#database.transaction(async (transaction) => {
+      const [row] = await transaction
+        .insert(schema.viewerFeedback)
+        .values({
+          albumId: target.albumId,
+          mediaId: target.mediaId,
+          kind: "report",
+          reportReason: options.reportReason,
           message: options.message.trim(),
           pagePath: options.pagePath,
         })
