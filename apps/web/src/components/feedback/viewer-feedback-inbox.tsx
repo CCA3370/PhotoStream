@@ -10,12 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  ReviewLightbox,
-  type ReviewLightboxItem,
-} from "@/components/review/review-lightbox";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ReviewLightbox, type ReviewLightboxItem } from "@/components/review/review-lightbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +21,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { internalImageKey } from "@/lib/internal-media-url";
