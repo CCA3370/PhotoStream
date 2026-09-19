@@ -233,7 +233,7 @@ OCR 无结果、失败或设备不支持时，不影响照片上传和发布；�
 | `POST /api/v1/media/{id}/bib-tags/{tagId}/reject` | 拒绝候选 |
 | `DELETE /api/v1/media/{id}/bib-tags/{tagId}` | 删除有权限的标签 |
 | `POST /api/v1/media/bib-tags/batch` | 为选中照片批量添加同一确认号码 |
-| `POST /api/v1/media/{id}/bib-review/no-number` | 人工确认该照片无号码并拒绝剩余候选 |
+| `POST /api/v1/media/{id}/bib-review/no-number` | 人工确认该照片无号码；保留 OCR 候选供后续查看和重新选择 |
 | `POST /api/v1/media/{id}/bib-review/reset` | 撤销照片级结论，恢复待复核 |
 | `POST /api/v1/media/bib-review/no-number/batch` | 批量确认选中照片无号码 |
 

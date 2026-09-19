@@ -2308,10 +2308,10 @@ export function ReviewWorkspace({
                       className={cn(
                         "size-8",
                         bibBlocked
-                          ? "bg-muted text-muted-foreground"
+                          ? "border border-violet-300/70 bg-violet-100/70 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200"
                           : bibConfirmed
                             ? "bg-secondary text-secondary-foreground"
-                            : "bg-muted text-foreground",
+                            : "border border-violet-500 bg-violet-600 text-white hover:bg-violet-700 hover:text-white dark:border-violet-400 dark:bg-violet-500 dark:hover:bg-violet-600",
                       )}
                       disabled={pending || batchBusy || bibBlocked}
                       onClick={() => setBibDialogKey(item.key)}

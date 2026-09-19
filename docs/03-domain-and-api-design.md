@@ -196,7 +196,7 @@ stateDiagram-v2
 | `POST /api/v1/media/{id}/bib-tags/{tagId}/reject` | 有权限内部人员 | 拒绝候选 |
 | `DELETE /api/v1/media/{id}/bib-tags/{tagId}` | 有权限内部人员 | 删除标签 |
 | `POST /api/v1/media/bib-tags/batch` | 管理员/审核员 | 给选中照片添加同一确认号码 |
-| `POST /api/v1/media/{id}/bib-review/no-number` | 该照片上传者/管理员/审核员 | 明确确认照片无号码并拒绝剩余候选 |
+| `POST /api/v1/media/{id}/bib-review/no-number` | 该照片上传者/管理员/审核员 | 明确确认照片无号码；OCR 候选保留但不进入搜索，可供后续重新选择 |
 | `POST /api/v1/media/{id}/bib-review/reset` | 有权限内部人员 | 撤销照片级结论，恢复待复核 |
 | `POST /api/v1/media/bib-review/no-number/batch` | 管理员/审核员 | 批量确认选中照片无号码 |
 

@@ -637,8 +637,15 @@ maybeDescribe("bib configuration, privacy and search", () => {
       requestId: "late-candidate",
     });
     expect(late.review.decision).toBe("no_number_confirmed");
-    expect(late.tags.some((tag) => tag.number === "101999")).toBe(false);
-    expect(late.tags.every((tag) => tag.status === "rejected")).toBe(true);
+    expect(late.tags).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          number: "101999",
+          status: "suggested",
+          source: "ocr",
+        }),
+      ]),
+    );
     const reset = await service.resetReview({
       actor: { id: uploaderId, role: "uploader" },
       mediaId,

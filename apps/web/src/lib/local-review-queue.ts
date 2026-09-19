@@ -397,7 +397,7 @@ export function localBibMediaState(photo: LocalReviewPhoto): BibMediaState {
           id: `local-ocr-${photo.id}-${index}`,
           mediaId,
           number: candidate.text,
-          status: photo.bib.decision === "no_number_confirmed" ? "rejected" : "suggested",
+          status: "suggested",
           source: "ocr",
           confidence: candidate.confidence,
           quadrilateral: candidate.quadrilateral,

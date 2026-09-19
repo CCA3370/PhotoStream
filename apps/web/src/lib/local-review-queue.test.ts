@@ -124,7 +124,7 @@ describe("local bib review state", () => {
     expect(state.tags).toHaveLength(1);
     expect(state.tags[0]).toMatchObject({
       number: "101999",
-      status: "rejected",
+      status: "suggested",
       source: "ocr",
     });
   });

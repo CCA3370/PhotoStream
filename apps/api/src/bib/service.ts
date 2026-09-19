@@ -626,14 +626,8 @@ export class BibService {
           updatedAt: new Date(),
         })
         .where(eq(schema.mediaBibReviews.mediaId, media.id));
-      const [review] = await transaction
-        .select({ decision: schema.mediaBibReviews.decision })
-        .from(schema.mediaBibReviews)
-        .where(eq(schema.mediaBibReviews.mediaId, media.id))
-        .limit(1);
       const tagIds: string[] = [];
-      if (review?.decision !== "no_number_confirmed") {
-        for (const candidate of candidates) {
+      for (const candidate of candidates) {
           const blindIndexes = bibCrypto.blindIndexes(media.albumId, candidate.number);
           const [existing] = await transaction
             .select({ id: schema.mediaBibTags.id })
@@ -677,7 +671,6 @@ export class BibService {
           });
           tagIds.push(tagId);
         }
-      }
       await this.#audit(transaction, {
         actorId: options.actor.id,
         action:
@@ -1864,15 +1857,6 @@ export class BibService {
         statusCode: 409,
       });
     }
-    await transaction
-      .update(schema.mediaBibTags)
-      .set({ status: "rejected", updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.mediaBibTags.mediaId, media.id),
-          inArray(schema.mediaBibTags.status, ["suggested", "needs_review"]),
-        ),
-      );
     await this.#ensureReview(transaction, media.id);
     const now = new Date();
     await transaction
