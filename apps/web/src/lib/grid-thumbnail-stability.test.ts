@@ -10,7 +10,18 @@ const mediaGridPath = fileURLToPath(
   new URL("../components/gallery/media-grid.tsx", import.meta.url),
 );
 
+const policyPath = fileURLToPath(new URL("./grid-thumbnail-policy.ts", import.meta.url));
+
 describe("public gallery thumbnail stability", () => {
+  it("uses a wide 240px micro-preview overscan without widening the 480px upgrade margin", () => {
+    const grid = readFileSync(mediaGridPath, "utf8");
+    const policy = readFileSync(policyPath, "utf8");
+
+    expect(grid).toContain("overscan: gridMicroPreviewOverscanRows");
+    expect(policy).toContain("gridMicroPreviewOverscanRows = 12");
+    expect(policy).toContain('gridThumbnailRootMargin = "80px 0px"');
+  });
+
   it("does not stack native lazy loading on top of the viewport cache gate", () => {
     const source = readFileSync(cachedImagePath, "utf8");
 

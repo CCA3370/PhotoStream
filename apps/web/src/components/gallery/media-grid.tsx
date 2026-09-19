@@ -11,6 +11,7 @@ import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
+import { gridMicroPreviewOverscanRows } from "@/lib/grid-thumbnail-policy";
 import { cn } from "@/lib/utils";
 
 interface LikeListResponse {
@@ -210,7 +211,7 @@ function VirtualMediaGrid({
     count: rowCount,
     estimateSize: () => rowStep,
     getItemKey: (index) => items[index * layout.columns]?.id ?? index,
-    overscan: 5,
+    overscan: gridMicroPreviewOverscanRows,
     scrollMargin: layout.scrollMargin,
   });
 
