@@ -135,6 +135,7 @@ export function ReviewLightbox({
   onLocalBibConfirmNoNumber,
   onBibError,
   onCategoryChange,
+  readOnly = false,
 }: Readonly<{
   items: readonly ReviewLightboxItem[];
   categories: readonly ReviewInspectorCategory[];
@@ -151,6 +152,7 @@ export function ReviewLightbox({
   onLocalBibConfirmNoNumber: (key: string) => Promise<BibMediaState>;
   onBibError: (message: string) => void;
   onCategoryChange: (key: string, categoryId: string | null) => void;
+  readOnly?: boolean;
 }>) {
   const selectedIndex =
     selectedKey === null ? -1 : items.findIndex((item) => item.key === selectedKey);
@@ -319,7 +321,7 @@ export function ReviewLightbox({
       } else if (event.key.toLowerCase() === "f" && fullscreenSupported) {
         event.preventDefault();
         void toggleFullscreen();
-      } else if (event.code === "Space") {
+      } else if (!readOnly && event.code === "Space") {
         event.preventDefault();
         event.stopPropagation();
         if (event.repeat || selected.pendingAction !== null) return;
@@ -327,14 +329,14 @@ export function ReviewLightbox({
           onToggleVisibility(selected.key);
           focusViewer();
         }
-      } else if (event.key === "Enter") {
+      } else if (!readOnly && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
         if (selected.pendingAction === null) {
           onToggleFeatured(selected.key);
           focusViewer();
         }
-      } else if (event.key === "Delete" && selected.canDelete) {
+      } else if (!readOnly && event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
         if (selected.pendingAction !== null) return;
         const now = Date.now();
@@ -361,6 +363,7 @@ export function ReviewLightbox({
     onDelete,
     onToggleFeatured,
     onToggleVisibility,
+    readOnly,
     resetView,
     selectOffset,
     selected,
@@ -530,7 +533,7 @@ export function ReviewLightbox({
                     style={{ transform: imageTransform }}
                   >
                     <InternalCachedImage
-                      alt="审核图片"
+                      alt={readOnly ? "投诉目标照片" : "审核图片"}
                       className={cn(
                         "object-contain transition-opacity duration-150",
                         loaded ? "opacity-100" : "opacity-0",
@@ -546,7 +549,7 @@ export function ReviewLightbox({
                       loading="eager"
                       sizes="100vw"
                       src={displaySrc}
-                      mediaId={selected.mediaId}
+                      mediaId={selected.localPreferred ? selected.mediaId : null}
                       variantKind={
                         selected.variants?.find((variant) => variant.url === displaySrc)?.kind
                       }
@@ -576,7 +579,7 @@ export function ReviewLightbox({
                   </Button>
                 ) : null}
                 <Button
-                  aria-label="关闭审核图片查看器"
+                  aria-label={readOnly ? "关闭图片查看器" : "关闭审核图片查看器"}
                   className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
                   onClick={onClose}
                   size="icon-lg"
@@ -589,7 +592,7 @@ export function ReviewLightbox({
               </div>
             </div>
 
-            {!bibConfirmed && !editMode ? (
+            {!readOnly && !bibConfirmed && !editMode ? (
               <div className="pointer-events-none absolute inset-x-3 top-16 z-30 sm:left-auto sm:right-4 sm:w-[22rem]">
                 <div className="pointer-events-auto rounded-2xl border border-white/10 bg-black/60 p-3 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-4">
                   <BibReviewEditor
@@ -607,7 +610,7 @@ export function ReviewLightbox({
               </div>
             ) : null}
 
-            {inspectorOpen ? (
+            {!readOnly && inspectorOpen ? (
               <div className="absolute inset-y-0 right-0 z-40 w-[min(96vw,24rem)] p-3 sm:p-4">
                 {editMode ? (
                   <PhotoEditorPanel
@@ -687,10 +690,11 @@ export function ReviewLightbox({
                   <span>{Math.round(zoom * 100)}%</span>
                 </div>
 
-                <div
-                  className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl"
-                  data-lightbox-toolbar="true"
-                >
+                {!readOnly ? (
+                  <div
+                    className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl"
+                    data-lightbox-toolbar="true"
+                  >
                   {bibConfirmed ? (
                     <Button
                       aria-label="修改号码确认"
@@ -805,24 +809,27 @@ export function ReviewLightbox({
                       <Trash2Icon />
                     )}
                   </Button>
-                </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <BibReviewDialog
-        localActions={localActions}
-        mediaId={selected.mediaId}
-        onChange={(state) => {
-          if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
-        }}
-        onError={onBibError}
-        onOpenChange={setBibDialogOpen}
-        open={bibDialogOpen && bibConfirmed}
-        state={selected.bib}
-      />
+      {!readOnly ? (
+        <BibReviewDialog
+          localActions={localActions}
+          mediaId={selected.mediaId}
+          onChange={(state) => {
+            if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
+          }}
+          onError={onBibError}
+          onOpenChange={setBibDialogOpen}
+          open={bibDialogOpen && bibConfirmed}
+          state={selected.bib}
+        />
+      ) : null}
     </>
   );
 }

@@ -6,21 +6,30 @@ import {
   ImageIcon,
   LoaderCircleIcon,
   MessageSquareTextIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { InternalCachedImage } from "@/components/media/internal-cached-image";
+import {
+  ReviewLightbox,
+  type ReviewLightboxItem,
+} from "@/components/review/review-lightbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
+import { internalImageKey } from "@/lib/internal-media-url";
+import { loadMediaBlob } from "@/lib/media-blob-cache";
 import {
   type ViewerFeedbackItem,
   viewerFeedbackKindLabel,
@@ -61,15 +70,12 @@ export function ViewerFeedbackInbox({
   const [items, setItems] = useState<readonly ViewerFeedbackItem[]>(initialItems);
   const [connected, setConnected] = useState(false);
   const [changingMediaId, setChangingMediaId] = useState<string | null>(null);
-  const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{
-    readonly mediaId: string;
-    readonly kind: "photo_1920" | "photo_960" | "photo_480";
-    readonly url: string;
-  } | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<ReviewLightboxItem | null>(null);
+  const [previewLoadingMediaId, setPreviewLoadingMediaId] = useState<string | null>(null);
   const previewRequestId = useRef(0);
+  const previewObjectUrl = useRef<string | null>(null);
+  const [deleteFeedbackId, setDeleteFeedbackId] = useState<number | null>(null);
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<number | null>(null);
   const lastEventId = useRef(initialLatestId);
 
   useEffect(() => {
@@ -110,29 +116,103 @@ export function ViewerFeedbackInbox({
     };
   }, []);
 
-  async function openReportedPhoto(mediaId: string): Promise<void> {
+  function closeReportedPhoto(): void {
+    previewRequestId.current += 1;
+    if (previewObjectUrl.current !== null) {
+      URL.revokeObjectURL(previewObjectUrl.current);
+      previewObjectUrl.current = null;
+    }
+    setPreviewItem(null);
+    setPreviewLoadingMediaId(null);
+  }
+
+  async function openReportedPhoto(item: ViewerFeedbackItem): Promise<void> {
+    const mediaId = item.mediaId;
+    if (mediaId === null) return;
     const requestId = previewRequestId.current + 1;
     previewRequestId.current = requestId;
-    setPreviewMediaId(mediaId);
-    setPreview(null);
-    setPreviewError(null);
-    setPreviewLoading(true);
+    if (previewObjectUrl.current !== null) {
+      URL.revokeObjectURL(previewObjectUrl.current);
+      previewObjectUrl.current = null;
+    }
+    setPreviewItem(null);
+    setPreviewLoadingMediaId(mediaId);
+
     for (const kind of ["photo_1920", "photo_960", "photo_480"] as const) {
       try {
-        const result = await clientGet<{ readonly url: string }>(
-          `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${kind}`,
-        );
+        const endpoint = `/api/v1/media/${encodeURIComponent(mediaId)}/variants/${kind}`;
+        const signed = await clientGet<{ readonly url: string; readonly bytes: number }>(endpoint);
+        const blob = await loadMediaBlob({
+          cacheName: "photostream-internal-images-v1",
+          key: internalImageKey(signed.url),
+          expectedBytes: null,
+          sourceUrl: signed.url,
+          refreshUrl: async () => (await clientGet<{ readonly url: string }>(endpoint)).url,
+        });
         if (previewRequestId.current !== requestId) return;
-        setPreview({ mediaId, kind, url: result.url });
-        setPreviewLoading(false);
+        const bitmap = await createImageBitmap(blob);
+        const width = bitmap.width;
+        const height = bitmap.height;
+        bitmap.close();
+        const objectUrl = URL.createObjectURL(blob);
+        if (previewRequestId.current !== requestId) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        previewObjectUrl.current = objectUrl;
+        const key = `feedback:${item.id}:${mediaId}`;
+        setPreviewItem({
+          key,
+          inspector: {
+            key,
+            title: item.albumTitle,
+            mediaId,
+            categoryId: null,
+            uploaderName: null,
+            sourceLabel: "投诉记录",
+            featured: false,
+            publicationStatus: item.mediaStatus ?? "hidden",
+            ingestStatus: "ready",
+            editPending: false,
+            editActive: false,
+            width,
+            height,
+            totalBytes: blob.size,
+            createdAt: item.createdAt,
+            capturedAt: null,
+            bib: null,
+            canDelete: false,
+          },
+          variants: [{ url: objectUrl, kind }],
+          src: objectUrl,
+          fallbackSrc: null,
+          originalSrc: null,
+          localPreferred: false,
+          visualRevision: null,
+          width,
+          height,
+          featured: false,
+          publicationStatus: item.mediaStatus ?? "hidden",
+          mediaId,
+          localPhotoId: null,
+          bib: null,
+          canDelete: false,
+          pendingAction: null,
+        });
+        setPreviewLoadingMediaId(null);
         return;
       } catch {
         // Try the next verified preview size.
       }
     }
+
     if (previewRequestId.current !== requestId) return;
-    setPreviewLoading(false);
-    setPreviewError("这张照片当前没有可查看的预览版本。");
+    setPreviewLoadingMediaId(null);
+    toast.add({
+      title: "无法查看照片",
+      description: "这张照片当前没有可读取的预览版本。",
+      type: "error",
+    });
   }
 
   async function setReportedPhotoVisibility(mediaId: string, visible: boolean): Promise<void> {
@@ -165,6 +245,30 @@ export function ViewerFeedbackInbox({
       });
     } finally {
       setChangingMediaId(null);
+    }
+  }
+
+  async function deleteFeedback(): Promise<void> {
+    const feedbackId = deleteFeedbackId;
+    if (!canModerate || feedbackId === null || deletingFeedbackId !== null) return;
+    setDeletingFeedbackId(feedbackId);
+    try {
+      await clientMutation<{ readonly ok: true }>(
+        `/api/v1/feedback/${encodeURIComponent(String(feedbackId))}`,
+        { method: "DELETE" },
+      );
+      setItems((current) => current.filter((item) => item.id !== feedbackId));
+      setDeleteFeedbackId(null);
+      if (previewItem?.key.startsWith(`feedback:${feedbackId}:`)) closeReportedPhoto();
+      toast.add({ title: "投诉记录已删除", type: "success" });
+    } catch (error) {
+      toast.add({
+        title: "删除投诉记录失败",
+        description: error instanceof Error ? error.message : "请稍后重试。",
+        type: "error",
+      });
+    } finally {
+      setDeletingFeedbackId(null);
     }
   }
 
@@ -236,12 +340,26 @@ export function ViewerFeedbackInbox({
                       </Badge>
                     ) : null}
                   </div>
-                  <time
-                    className="shrink-0 text-[11px] tabular-nums text-muted-foreground"
-                    dateTime={item.createdAt}
-                  >
-                    {formatTime(item.createdAt)}
-                  </time>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <time
+                      className="text-[11px] tabular-nums text-muted-foreground"
+                      dateTime={item.createdAt}
+                    >
+                      {formatTime(item.createdAt)}
+                    </time>
+                    {canModerate && isReport ? (
+                      <Button
+                        aria-label="删除投诉记录"
+                        onClick={() => setDeleteFeedbackId(item.id)}
+                        size="icon-sm"
+                        title="删除投诉记录"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Trash2Icon className="text-destructive" />
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
 
                 <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">
@@ -265,12 +383,17 @@ export function ViewerFeedbackInbox({
                     {mediaId !== null ? (
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <Button
-                          onClick={() => void openReportedPhoto(mediaId)}
+                          disabled={previewLoadingMediaId === mediaId}
+                          onClick={() => void openReportedPhoto(item)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <ImageIcon data-icon="inline-start" />
+                          {previewLoadingMediaId === mediaId ? (
+                            <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                          ) : (
+                            <ImageIcon data-icon="inline-start" />
+                          )}
                           查看照片
                         </Button>
                         {canModerate ? (
@@ -318,49 +441,59 @@ export function ViewerFeedbackInbox({
         </div>
       )}
 
-      <Dialog
-        onOpenChange={(open) => {
-          if (open) return;
-          previewRequestId.current += 1;
-          setPreviewMediaId(null);
-          setPreview(null);
-          setPreviewError(null);
-          setPreviewLoading(false);
+      <ReviewLightbox
+        categories={[]}
+        items={previewItem === null ? [] : [previewItem]}
+        onBibError={() => undefined}
+        onBibStateChange={() => undefined}
+        onCategoryChange={() => undefined}
+        onClose={closeReportedPhoto}
+        onDelete={() => undefined}
+        onEditApplied={() => undefined}
+        onLocalBibConfirmNoNumber={async () => {
+          throw new Error("只读查看器不支持号码操作");
         }}
-        open={previewMediaId !== null}
+        onLocalBibConfirmNumbers={async () => {
+          throw new Error("只读查看器不支持号码操作");
+        }}
+        onSelect={() => undefined}
+        onStateAction={() => undefined}
+        onToggleFeatured={() => undefined}
+        onToggleVisibility={() => undefined}
+        readOnly
+        selectedKey={previewItem?.key ?? null}
+      />
+
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open && deletingFeedbackId === null) setDeleteFeedbackId(null);
+        }}
+        open={deleteFeedbackId !== null}
       >
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>投诉目标照片</DialogTitle>
-            <DialogDescription>
-              {previewMediaId === null ? "" : `媒体 ID：${previewMediaId}`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="relative h-[min(72vh,48rem)] min-h-64 overflow-hidden rounded-lg bg-black">
-            {previewLoading ? (
-              <div className="absolute inset-0 grid place-items-center text-sm text-white/65">
-                <LoaderCircleIcon className="mr-2 inline size-4 animate-spin" />
-                正在加载照片…
-              </div>
-            ) : previewError !== null ? (
-              <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/65">
-                {previewError}
-              </div>
-            ) : preview !== null ? (
-              <InternalCachedImage
-                alt="投诉目标照片"
-                className="object-contain"
-                fill
-                mediaId={preview.mediaId}
-                sizes="min(90vw, 80rem)"
-                src={preview.url}
-                unoptimized
-                variantKind={preview.kind}
-              />
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除投诉记录？</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作只删除这条投诉记录，不会删除、隐藏或重新上架目标照片，且无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingFeedbackId !== null}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingFeedbackId !== null}
+              onClick={() => void deleteFeedback()}
+              variant="destructive"
+            >
+              {deletingFeedbackId !== null ? (
+                <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Trash2Icon data-icon="inline-start" />
+              )}
+              删除投诉
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
