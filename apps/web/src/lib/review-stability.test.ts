@@ -12,6 +12,12 @@ const remoteSyncPath = fileURLToPath(
 const workspacePath = fileURLToPath(
   new URL("../components/review/review-workspace.tsx", import.meta.url),
 );
+const inspectorPath = fileURLToPath(
+  new URL("../components/review/review-inspector.tsx", import.meta.url),
+);
+const editorPath = fileURLToPath(
+  new URL("../components/review/photo-editor-dialog.tsx", import.meta.url),
+);
 
 describe("management review stability guards", () => {
   it("does not use passive React wheel prevention or signed URLs as image keys", () => {
@@ -57,5 +63,22 @@ describe("management review stability guards", () => {
     expect(lightbox).toContain("resolveMediaEditSource");
     expect(lightbox).toContain('"查看原图"');
     expect(lightbox).toContain("mediaId={selected.mediaId}");
+  });
+
+  it("docks the management inspector beside the image and opens it by default", () => {
+    const lightbox = readFileSync(lightboxPath, "utf8");
+    const inspector = readFileSync(inspectorPath, "utf8");
+    const editor = readFileSync(editorPath, "utf8");
+
+    expect(lightbox).toContain("useState(() => !readOnly)");
+    expect(lightbox).toContain('className="flex h-full w-full overflow-hidden bg-black"');
+    expect(lightbox).toContain('className="relative min-w-0 flex-1 overflow-hidden bg-black"');
+    expect(lightbox).toContain('w-[clamp(17rem,32vw,24rem)] shrink-0');
+    expect(lightbox).not.toContain('absolute inset-y-0 right-0 z-40');
+    expect(lightbox).toContain("<ReviewInspector");
+    expect(lightbox).toContain("                    docked");
+    expect(lightbox).toContain("<PhotoEditorPanel");
+    expect(inspector).toContain('docked ? "h-full min-h-0 border-l"');
+    expect(editor).toContain('docked ? "border-l"');
   });
 });
