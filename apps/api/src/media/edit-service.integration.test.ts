@@ -155,13 +155,9 @@ maybeDescribe("media edit revisions", () => {
     return {
       basedOnRevisionId: null,
       basedOnGeneration: 0,
-      pipelineVersion: "local-edit-v2",
+      pipelineVersion: "local-edit-v3",
       recipeVersion: 2,
-      recipeJson: { exposureEv: 0.2, denoiseStrength: 0, deblurStrength: 0 },
-      denoiseModel: null,
-      denoiseModelVersion: null,
-      deblurModel: null,
-      deblurModelVersion: null,
+      recipeJson: { exposureEv: 0.2 },
     };
   }
 

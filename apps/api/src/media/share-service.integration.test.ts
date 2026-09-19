@@ -300,7 +300,7 @@ maybeDescribe("single-photo sharing", () => {
         status: "active",
         basedOnRevisionId: null,
         basedOnGeneration: 0,
-        pipelineVersion: "local-edit-v2",
+        pipelineVersion: "local-edit-v3",
         recipeVersion: 2,
         recipeJson: { exposureEv: 0.1 },
         sourceVariantId,

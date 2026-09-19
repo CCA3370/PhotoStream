@@ -437,7 +437,7 @@ maybeDescribe("photo vertical slice transactions", () => {
         status: "active",
         basedOnRevisionId: null,
         basedOnGeneration: 0,
-        pipelineVersion: "local-edit-v2",
+        pipelineVersion: "local-edit-v3",
         recipeVersion: 2,
         recipeJson: { exposureEv: 0.1 },
         sourceVariantId: originalId,
@@ -524,14 +524,10 @@ maybeDescribe("photo vertical slice transactions", () => {
       input: {
         basedOnRevisionId: null,
         basedOnGeneration: 0,
-        pipelineVersion: "local-edit-v2",
+        pipelineVersion: "local-edit-v3",
         recipeVersion: 2,
-        recipeJson: { exposureEv: 0.2, denoiseStrength: 0, deblurStrength: 0 },
-        denoiseModel: null,
-        denoiseModelVersion: null,
-        deblurModel: null,
-        deblurModelVersion: null,
-      },
+        recipeJson: { exposureEv: 0.2 },
+              },
       requestId: "request-reserve-edit-gate",
     });
     const revisionId = reserved.state.pendingRevisionId;
@@ -821,14 +817,10 @@ maybeDescribe("photo vertical slice transactions", () => {
       input: {
         basedOnRevisionId: null,
         basedOnGeneration: 0,
-        pipelineVersion: "local-edit-v2",
+        pipelineVersion: "local-edit-v3",
         recipeVersion: 2,
-        recipeJson: { exposureEv: 0.1, denoiseStrength: 0, deblurStrength: 0 },
-        denoiseModel: null,
-        denoiseModelVersion: null,
-        deblurModel: null,
-        deblurModelVersion: null,
-      },
+        recipeJson: { exposureEv: 0.1 },
+              },
       requestId: "cancel-upload-edit-create",
     });
     const editRevisionId = edit.state.pendingRevisionId;
