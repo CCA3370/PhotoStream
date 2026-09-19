@@ -29,6 +29,7 @@ import {
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { internalImageKey } from "@/lib/internal-media-url";
+import { managementErrorMessage } from "@/lib/management-error";
 import { loadMediaBlob } from "@/lib/media-blob-cache";
 import {
   type ViewerFeedbackItem,
@@ -77,6 +78,13 @@ export function ViewerFeedbackInbox({
   const [deleteFeedbackId, setDeleteFeedbackId] = useState<number | null>(null);
   const [deletingFeedbackId, setDeletingFeedbackId] = useState<number | null>(null);
   const lastEventId = useRef(initialLatestId);
+
+  useEffect(
+    () => () => {
+      if (previewObjectUrl.current !== null) URL.revokeObjectURL(previewObjectUrl.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -222,7 +230,7 @@ export function ViewerFeedbackInbox({
       await clientMutation<{ readonly ok: true }>(
         `/api/v1/media/${encodeURIComponent(mediaId)}/${visible ? "restore" : "hide"}`,
         {
-          idempotencyKey: `feedback-${visible ? "publish" : "hide"}-${crypto.randomUUID()}`,
+          idempotencyKey: `feedback-${visible ? "restore" : "hide"}-${crypto.randomUUID()}`,
         },
       );
       setItems((current) =>
@@ -240,7 +248,7 @@ export function ViewerFeedbackInbox({
     } catch (error) {
       toast.add({
         title: visible ? "重新上架失败" : "下架失败",
-        description: error instanceof Error ? error.message : "请稍后重试。",
+        description: managementErrorMessage(error, "Unknown management error"),
         type: "error",
       });
     } finally {
@@ -264,7 +272,7 @@ export function ViewerFeedbackInbox({
     } catch (error) {
       toast.add({
         title: "删除投诉记录失败",
-        description: error instanceof Error ? error.message : "请稍后重试。",
+        description: managementErrorMessage(error, "Unknown management error"),
         type: "error",
       });
     } finally {

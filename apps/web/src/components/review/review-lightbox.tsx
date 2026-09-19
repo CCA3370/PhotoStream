@@ -690,11 +690,13 @@ export function ReviewLightbox({
                   <span>{Math.round(zoom * 100)}%</span>
                 </div>
 
-                {!readOnly ? (
-                  <div
-                    className="flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl"
-                    data-lightbox-toolbar="true"
-                  >
+                <div
+                  className={cn(
+                    "flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-black/35 p-1.5 shadow-lg shadow-black/20 backdrop-blur-xl",
+                    readOnly && "hidden",
+                  )}
+                  data-lightbox-toolbar="true"
+                >
                   {bibConfirmed ? (
                     <Button
                       aria-label="修改号码确认"
@@ -809,8 +811,7 @@ export function ReviewLightbox({
                       <Trash2Icon />
                     )}
                   </Button>
-                  </div>
-                ) : null}
+                </div>
               </div>
             </div>
           </div>

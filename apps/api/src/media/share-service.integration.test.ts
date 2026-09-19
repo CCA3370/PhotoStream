@@ -240,6 +240,13 @@ maybeDescribe("single-photo sharing", () => {
       message: "请处理这张分享照片",
     });
 
+    await expect(
+      feedbackService.deleteFeedback({
+        actor: { id: adminId, role: "uploader" },
+        feedbackId: report.id,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
     await feedbackService.deleteFeedback({
       actor: { id: adminId, role: "admin" },
       feedbackId: report.id,
