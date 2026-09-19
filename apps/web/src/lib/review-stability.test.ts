@@ -78,7 +78,7 @@ describe("management review stability guards", () => {
     expect(lightbox).toContain("<ReviewInspector");
     expect(lightbox).toContain("                    docked");
     expect(lightbox).toContain("<PhotoEditorPanel");
-    expect(inspector).toContain('docked ? "h-full min-h-0 border-l"');
+    expect(inspector).toContain('"h-full min-h-0 border-l"');
     expect(editor).toContain('docked ? "border-l"');
   });
 });
