@@ -7,11 +7,7 @@ import type {
 } from "@photostream/contracts";
 
 import { clientGet, clientMutation } from "../client-api";
-import {
-  type PhotoEditRecipe,
-  photoEditPipelineVersion,
-  photoEditRecipeVersion,
-} from "./recipe";
+import { type PhotoEditRecipe, photoEditPipelineVersion, photoEditRecipeVersion } from "./recipe";
 import { type PhotoEditRenderedOutput, renderMediaEditOutputs } from "./runtime";
 
 async function renderRecipeOutputs(options: {

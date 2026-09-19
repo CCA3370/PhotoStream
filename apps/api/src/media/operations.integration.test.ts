@@ -789,7 +789,7 @@ maybeDescribe("stage 3 operations", () => {
         basedOnRevisionId: null,
         basedOnGeneration: 0,
         pipelineVersion: "local-edit-v3",
-        recipeVersion: 2,
+        recipeVersion: 3,
         recipeJson: { exposureEv: 0.1 },
         sourceVariantId,
         appliedAt: new Date(),

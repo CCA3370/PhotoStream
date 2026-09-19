@@ -438,7 +438,7 @@ maybeDescribe("photo vertical slice transactions", () => {
         basedOnRevisionId: null,
         basedOnGeneration: 0,
         pipelineVersion: "local-edit-v3",
-        recipeVersion: 2,
+        recipeVersion: 3,
         recipeJson: { exposureEv: 0.1 },
         sourceVariantId: originalId,
         appliedAt: new Date(),
@@ -525,9 +525,9 @@ maybeDescribe("photo vertical slice transactions", () => {
         basedOnRevisionId: null,
         basedOnGeneration: 0,
         pipelineVersion: "local-edit-v3",
-        recipeVersion: 2,
+        recipeVersion: 3,
         recipeJson: { exposureEv: 0.2 },
-              },
+      },
       requestId: "request-reserve-edit-gate",
     });
     const revisionId = reserved.state.pendingRevisionId;
@@ -818,9 +818,9 @@ maybeDescribe("photo vertical slice transactions", () => {
         basedOnRevisionId: null,
         basedOnGeneration: 0,
         pipelineVersion: "local-edit-v3",
-        recipeVersion: 2,
+        recipeVersion: 3,
         recipeJson: { exposureEv: 0.1 },
-              },
+      },
       requestId: "cancel-upload-edit-create",
     });
     const editRevisionId = edit.state.pendingRevisionId;

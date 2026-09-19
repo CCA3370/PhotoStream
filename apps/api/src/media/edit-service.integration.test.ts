@@ -156,7 +156,7 @@ maybeDescribe("media edit revisions", () => {
       basedOnRevisionId: null,
       basedOnGeneration: 0,
       pipelineVersion: "local-edit-v3",
-      recipeVersion: 2,
+      recipeVersion: 3,
       recipeJson: { exposureEv: 0.2 },
     };
   }

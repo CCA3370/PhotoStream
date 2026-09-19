@@ -8,10 +8,7 @@ const repositoryRoot = fileURLToPath(new URL("../../../../../", import.meta.url)
 
 describe("photo editor restoration removal", () => {
   it("keeps photo-edit recipes deterministic-only", () => {
-    const recipe = readFileSync(
-      fileURLToPath(new URL("./recipe.ts", import.meta.url)),
-      "utf8",
-    );
+    const recipe = readFileSync(fileURLToPath(new URL("./recipe.ts", import.meta.url)), "utf8");
     expect(recipe).not.toMatch(/denoise|deblur/i);
     expect(recipe).toContain('photoEditPipelineVersion = "local-edit-v3"');
   });
