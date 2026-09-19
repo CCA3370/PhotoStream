@@ -72,7 +72,6 @@ import { LOCAL_BIB_SERVER_STATE_EVENT, resumeLocalBibOcr } from "@/lib/local-bib
 import {
   confirmLocalBibNoNumber,
   confirmLocalBibNumbers,
-  deleteLocalReviewPhoto,
   effectiveBibMediaState,
   type LocalReviewPhoto,
   listLocalReviewPhotos,
@@ -83,13 +82,6 @@ import {
 } from "@/lib/local-review-queue";
 import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { cn } from "@/lib/utils";
-
-async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
-  await Promise.all([
-    deleteLocalReviewPhoto(localPhotoId),
-    deleteLocalPhotoEditDraft(localPhotoId),
-  ]);
-}
 
 async function retainLocalOriginalAfterMediaDelete(localPhotoId: string): Promise<void> {
   await Promise.all([
@@ -1457,9 +1449,7 @@ export function ReviewWorkspace({
     let successCount = 0;
     try {
       const localTargets =
-        userRole === "admin"
-          ? selectedLocalItems.filter((item) => remoteId(item) !== null)
-          : [];
+        userRole === "admin" ? selectedLocalItems.filter((item) => remoteId(item) !== null) : [];
       for (const item of localTargets) {
         const mediaId = remoteId(item);
         if (mediaId === null) continue;
