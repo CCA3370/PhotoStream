@@ -377,9 +377,7 @@ export const media = pgTable(
     ),
     index("media_album_review_workload_idx")
       .on(table.albumId, table.reviewAssigneeId, table.reviewedAt)
-      .where(
-        sql`${table.reviewedAt} is null and ${table.publicationStatus} <> 'deleted'`,
-      ),
+      .where(sql`${table.reviewedAt} is null and ${table.publicationStatus} <> 'deleted'`),
   ],
 );
 
