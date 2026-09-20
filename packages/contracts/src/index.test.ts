@@ -13,9 +13,20 @@ import {
 
 describe("permission matrix", () => {
   it("grants administrators the complete permission set", () => {
-    expect(permissionsFor("admin")).toHaveLength(10);
+    expect(permissionsFor("admin")).toHaveLength(12);
     expect(hasPermission("admin", "user:manage")).toBe(true);
     expect(hasPermission("admin", "media:upload")).toBe(true);
+  });
+
+  it("gives operators full upload and review access without album settings", () => {
+    expect(hasPermission("operator", "media:upload")).toBe(true);
+    expect(hasPermission("operator", "media:review")).toBe(true);
+    expect(hasPermission("operator", "media:manage")).toBe(true);
+    expect(hasPermission("operator", "media:delete")).toBe(true);
+    expect(hasPermission("operator", "review:configure")).toBe(true);
+    expect(hasPermission("operator", "album:configure")).toBe(false);
+    expect(hasPermission("operator", "user:manage")).toBe(false);
+    expect(hasPermission("operator", "audit:read")).toBe(false);
   });
 
   it("keeps reviewer and uploader capabilities separated", () => {
