@@ -340,10 +340,7 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(deletion.mediaId).toBe(media.id);
 
     expect(
-      await dataSaverService.getForAlbum(
-        { id: operatorId, role: "operator" },
-        created.album.id,
-      ),
+      await dataSaverService.getForAlbum({ id: operatorId, role: "operator" }, created.album.id),
     ).toEqual({ enabled: false });
 
     await expect(
