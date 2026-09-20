@@ -64,12 +64,7 @@ export function ReviewCollaborationControl({
     if (assignment === "mine" && (!value.enabled || !value.currentUserParticipating)) {
       onAssignmentChange("all");
     }
-  }, [
-    assignment,
-    onAssignmentChange,
-    value.currentUserParticipating,
-    value.enabled,
-  ]);
+  }, [assignment, onAssignmentChange, value.currentUserParticipating, value.enabled]);
 
   const mineLabel =
     value.currentUserAssignedCount === null
@@ -157,7 +152,8 @@ export function ReviewCollaborationControl({
               <DialogHeader>
                 <DialogTitle>审核分工</DialogTitle>
                 <DialogDescription>
-                  选择至少 2 个账号后，系统会将当前相册的照片尽量平均分配；之后的新照片会自动分给当前任务量最少的协作者。清空选择可关闭分工。
+                  选择至少 2
+                  个账号后，系统会将当前相册的照片尽量平均分配；之后的新照片会自动分给当前任务量最少的协作者。清空选择可关闭分工。
                 </DialogDescription>
               </DialogHeader>
 
@@ -167,8 +163,8 @@ export function ReviewCollaborationControl({
                 ) : (
                   value.availableParticipants.map((participant) => {
                     const assigned =
-                      value.participants.find((item) => item.id === participant.id)?.assignedCount ??
-                      0;
+                      value.participants.find((item) => item.id === participant.id)
+                        ?.assignedCount ?? 0;
                     const checked = selectedIds.has(participant.id);
                     const eligible =
                       participant.isActive &&
@@ -223,7 +219,12 @@ export function ReviewCollaborationControl({
               )}
 
               <DialogFooter>
-                <Button disabled={saving} onClick={() => setOpen(false)} type="button" variant="outline">
+                <Button
+                  disabled={saving}
+                  onClick={() => setOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
                   取消
                 </Button>
                 <Button
