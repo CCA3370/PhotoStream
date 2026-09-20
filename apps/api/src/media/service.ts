@@ -435,8 +435,9 @@ export class PhotoService {
       remainingCount: counts.get(row.id) ?? 0,
     }));
 
+    const canConfigureReview = hasPermission(actor.role, "review:configure");
     const eligibleParticipants =
-      actor.role === "admin"
+      canConfigureReview
         ? await this.#database
             .select({
               id: schema.users.id,
@@ -449,13 +450,13 @@ export class PhotoService {
             .where(
               and(
                 eq(schema.users.isActive, true),
-                inArray(schema.users.role, ["admin", "reviewer"]),
+                inArray(schema.users.role, ["admin", "operator", "reviewer"]),
               ),
             )
             .orderBy(asc(schema.users.displayName), asc(schema.users.id))
         : [];
     const availableParticipants =
-      actor.role === "admin"
+      canConfigureReview
         ? [
             ...new Map(
               [...eligibleParticipants, ...participantRows].map((row) => [row.id, row] as const),
@@ -484,7 +485,7 @@ export class PhotoService {
     readonly participantIds: readonly string[];
     readonly requestId: string;
   }): Promise<ReviewCollaborationView> {
-    requirePermission(options.actor.role, "album:configure");
+    requirePermission(options.actor.role, "review:configure");
     const participantIds = [...new Set(options.participantIds)];
     if (participantIds.length === 1) {
       throw new AppError({
@@ -513,7 +514,7 @@ export class PhotoService {
     ) {
       throw new AppError({
         code: "BAD_REQUEST",
-        message: "只能选择已启用的管理员或审核员参与审核分工",
+        message: "只能选择已启用的管理员、协作员或审核员参与审核分工",
         statusCode: 400,
       });
     }
@@ -2977,7 +2978,7 @@ export class PhotoService {
 
   #assertUploadAccess(actor: InternalActor, uploaderId: string): void {
     if (actor.id === uploaderId) return;
-    if (actor.role === "admin" || actor.role === "reviewer") return;
+    if (hasPermission(actor.role, "media:review")) return;
     throw new AppError({ code: "FORBIDDEN", message: "无权操作他人的上传任务", statusCode: 403 });
   }
 
