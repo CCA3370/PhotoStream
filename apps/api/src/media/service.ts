@@ -436,37 +436,35 @@ export class PhotoService {
     }));
 
     const canConfigureReview = hasPermission(actor.role, "review:configure");
-    const eligibleParticipants =
-      canConfigureReview
-        ? await this.#database
-            .select({
-              id: schema.users.id,
-              username: schema.users.username,
-              displayName: schema.users.displayName,
-              role: schema.users.role,
-              isActive: schema.users.isActive,
-            })
-            .from(schema.users)
-            .where(
-              and(
-                eq(schema.users.isActive, true),
-                inArray(schema.users.role, ["admin", "operator", "reviewer"]),
-              ),
-            )
-            .orderBy(asc(schema.users.displayName), asc(schema.users.id))
-        : [];
-    const availableParticipants =
-      canConfigureReview
-        ? [
-            ...new Map(
-              [...eligibleParticipants, ...participantRows].map((row) => [row.id, row] as const),
-            ).values(),
-          ].sort(
-            (left, right) =>
-              left.displayName.localeCompare(right.displayName, "zh-CN") ||
-              left.id.localeCompare(right.id),
+    const eligibleParticipants = canConfigureReview
+      ? await this.#database
+          .select({
+            id: schema.users.id,
+            username: schema.users.username,
+            displayName: schema.users.displayName,
+            role: schema.users.role,
+            isActive: schema.users.isActive,
+          })
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.isActive, true),
+              inArray(schema.users.role, ["admin", "operator", "reviewer"]),
+            ),
           )
-        : [];
+          .orderBy(asc(schema.users.displayName), asc(schema.users.id))
+      : [];
+    const availableParticipants = canConfigureReview
+      ? [
+          ...new Map(
+            [...eligibleParticipants, ...participantRows].map((row) => [row.id, row] as const),
+          ).values(),
+        ].sort(
+          (left, right) =>
+            left.displayName.localeCompare(right.displayName, "zh-CN") ||
+            left.id.localeCompare(right.id),
+        )
+      : [];
 
     return {
       enabled: participants.length >= 2,
