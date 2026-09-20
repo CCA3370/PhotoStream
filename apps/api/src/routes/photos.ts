@@ -506,6 +506,27 @@ export async function registerPhotoRoutes(
     },
   );
 
+  typed.post(
+    "/api/v1/media/:id/reviewed",
+    {
+      schema: {
+        operationId: "markMediaReviewed",
+        tags: ["media"],
+        params: mediaIdParamsSchema,
+        response: { 200: okResponseSchema, ...commonErrors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await options.photoService.markMediaReviewed({
+        actor: actorFrom(session),
+        mediaId: request.params.id,
+        requestId: request.id,
+      });
+      return { ok: true as const };
+    },
+  );
+
   typed.get(
     "/api/v1/albums/:id/media",
     {
