@@ -296,10 +296,7 @@ export class OperationsService {
     readonly requestId: string;
     readonly now?: Date;
   }): Promise<DeletionTaskView> {
-    requirePermission(options.actor.role, "media:manage");
-    if (options.actor.role !== "admin") {
-      throw new AppError({ code: "FORBIDDEN", message: "仅管理员可以永久删除", statusCode: 403 });
-    }
+    requirePermission(options.actor.role, "media:delete");
     const now = options.now ?? new Date();
     assertRecentAuthentication(options.actor.authenticatedAt, now);
     const taskId = await this.#database.transaction(async (transaction) => {
@@ -394,10 +391,7 @@ export class OperationsService {
     readonly taskId: string;
     readonly now?: Date;
   }): Promise<DeletionTaskView> {
-    requirePermission(options.actor.role, "media:manage");
-    if (options.actor.role !== "admin") {
-      throw new AppError({ code: "FORBIDDEN", message: "仅管理员可以重试删除", statusCode: 403 });
-    }
+    requirePermission(options.actor.role, "media:delete");
     const now = options.now ?? new Date();
     await this.#database
       .update(schema.deletionTasks)
