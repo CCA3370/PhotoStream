@@ -24,8 +24,8 @@ import {
   reviewCollaborationViewSchema,
   signedUploadSchema,
   unlockAlbumRequestSchema,
-  updateReviewCollaborationRequestSchema,
   unlockAlbumResponseSchema,
+  updateReviewCollaborationRequestSchema,
   uploadIntentViewSchema,
 } from "@photostream/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
