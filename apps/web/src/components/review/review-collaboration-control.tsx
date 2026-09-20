@@ -1,0 +1,224 @@
+"use client";
+
+import type { ReviewCollaborationView } from "@photostream/contracts";
+import { UsersIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "@/components/ui/toast";
+import { clientMutation } from "@/lib/client-api";
+
+export type ReviewAssignmentFilter = "all" | "mine";
+
+const roleLabels = {
+  admin: "管理员",
+  reviewer: "审核员",
+  uploader: "上传员",
+} as const;
+
+export function ReviewCollaborationControl({
+  albumId,
+  assignment,
+  onAssignmentChange,
+  onValueChange,
+  value,
+  userRole,
+}: Readonly<{
+  albumId: string;
+  assignment: ReviewAssignmentFilter;
+  onAssignmentChange: (value: ReviewAssignmentFilter) => void;
+  onValueChange: (value: ReviewCollaborationView) => void;
+  value: ReviewCollaborationView;
+  userRole: "admin" | "reviewer";
+}>) {
+  const [open, setOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    new Set(value.participants.map((participant) => participant.id)),
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedIds(new Set(value.participants.map((participant) => participant.id)));
+    }
+  }, [open, value.participants]);
+
+  useEffect(() => {
+    if (assignment === "mine" && (!value.enabled || !value.currentUserParticipating)) {
+      onAssignmentChange("all");
+    }
+  }, [
+    assignment,
+    onAssignmentChange,
+    value.currentUserParticipating,
+    value.enabled,
+  ]);
+
+  const currentParticipant = useMemo(
+    () => value.participants.find((participant) => participant.id === undefined) ?? null,
+    [value.participants],
+  );
+  const mineLabel =
+    currentParticipant === null ? "只看分配给我" : `只看分配给我（${currentParticipant.assignedCount}）`;
+
+  function toggleParticipant(userId: string, checked: boolean): void {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(userId);
+      else next.delete(userId);
+      return next;
+    });
+  }
+
+  async function save(): Promise<void> {
+    if (saving || selectedIds.size === 1) return;
+    setSaving(true);
+    try {
+      const next = await clientMutation<ReviewCollaborationView>(
+        `/api/v1/albums/${albumId}/review-collaboration`,
+        {
+          method: "PATCH",
+          body: { participantIds: [...selectedIds] },
+        },
+      );
+      onValueChange(next);
+      if (!next.enabled || !next.currentUserParticipating) onAssignmentChange("all");
+      setOpen(false);
+      toast.add({
+        title: next.enabled ? `已启用审核分工（${next.participants.length} 人）` : "已关闭审核分工",
+        type: "success",
+      });
+    } catch (cause) {
+      toast.add({
+        title: cause instanceof Error ? cause.message : "保存审核分工失败",
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      {value.enabled && value.currentUserParticipating ? (
+        <Select
+          items={[
+            { label: "全部分工", value: "all" },
+            { label: mineLabel, value: "mine" },
+          ]}
+          onValueChange={(next) => onAssignmentChange((next ?? "all") as ReviewAssignmentFilter)}
+          value={assignment}
+        >
+          <SelectTrigger aria-label="审核分工筛选" className="h-8 w-44 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部分工</SelectItem>
+              <SelectItem value="mine">{mineLabel}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      ) : null}
+
+      {userRole === "admin" ? (
+        <>
+          <Button
+            className="h-8 px-2.5 text-xs"
+            onClick={() => setOpen(true)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <UsersIcon data-icon="inline-start" />
+            分工设置
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>审核分工</DialogTitle>
+                <DialogDescription>
+                  选择至少 2 个账号后，系统会将当前相册的照片尽量平均分配；之后的新照片会自动分给当前任务量最少的协作者。清空选择可关闭分工。
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="max-h-80 space-y-2 overflow-y-auto py-1">
+                {value.availableParticipants.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">暂无可参与审核的账号。</p>
+                ) : (
+                  value.availableParticipants.map((participant) => {
+                    const assigned =
+                      value.participants.find((item) => item.id === participant.id)?.assignedCount ??
+                      0;
+                    const checked = selectedIds.has(participant.id);
+                    return (
+                      <label
+                        className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5"
+                        htmlFor={`review-collaborator-${participant.id}`}
+                        key={participant.id}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          id={`review-collaborator-${participant.id}`}
+                          onCheckedChange={(next) => toggleParticipant(participant.id, next)}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {participant.displayName}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            @{participant.username} · {roleLabels[participant.role]}
+                          </span>
+                        </span>
+                        {value.enabled ? (
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            当前 {assigned} 张
+                          </span>
+                        ) : null}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              {selectedIds.size === 1 ? (
+                <p className="text-xs text-destructive">审核分工至少需要 2 个账号。</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  已选择 {selectedIds.size} 个账号
+                  {selectedIds.size === 0 ? "，保存后将关闭分工" : ""}
+                </p>
+              )}
+
+              <DialogFooter>
+                <Button disabled={saving} onClick={() => setOpen(false)} type="button" variant="outline">
+                  取消
+                </Button>
+                <Button disabled={saving || selectedIds.size === 1} onClick={() => void save()} type="button">
+                  {saving ? "保存中…" : "保存并重新分配"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
+    </>
+  );
+}
