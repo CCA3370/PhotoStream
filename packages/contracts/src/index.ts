@@ -824,6 +824,7 @@ export const reviewCollaborationViewSchema = z
     participants: z.array(reviewCollaboratorViewSchema),
     availableParticipants: z.array(reviewCollaborationCandidateSchema),
     currentUserParticipating: z.boolean(),
+    currentUserAssignedCount: z.number().int().nonnegative().nullable(),
   })
   .strict();
 export type ReviewCollaborationView = z.infer<typeof reviewCollaborationViewSchema>;
