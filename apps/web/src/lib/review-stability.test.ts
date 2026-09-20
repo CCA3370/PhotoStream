@@ -78,8 +78,8 @@ describe("management review stability guards", () => {
     expect(lightbox).toContain("useState(() => !readOnly)");
     expect(lightbox).toContain('className="flex h-full w-full overflow-hidden bg-black"');
     expect(lightbox).toContain('className="relative min-w-0 flex-1 overflow-hidden bg-black"');
-    expect(lightbox).toContain('w-[clamp(17rem,32vw,24rem)] shrink-0');
-    expect(lightbox).not.toContain('absolute inset-y-0 right-0 z-40');
+    expect(lightbox).toContain("w-[clamp(17rem,32vw,24rem)] shrink-0");
+    expect(lightbox).not.toContain("absolute inset-y-0 right-0 z-40");
     expect(lightbox).toContain("<ReviewInspector");
     expect(lightbox).toContain("                    docked");
     expect(lightbox).toContain("<PhotoEditorPanel");
