@@ -311,6 +311,23 @@ export const categories = pgTable(
   ],
 );
 
+export const albumReviewCollaborators = pgTable(
+  "album_review_collaborators",
+  {
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("album_review_collaborators_album_user_unique").on(table.albumId, table.userId),
+    index("album_review_collaborators_album_idx").on(table.albumId, table.userId),
+  ],
+);
+
 export const media = pgTable(
   "media",
   {
@@ -322,6 +339,9 @@ export const media = pgTable(
     uploaderId: uuid("uploader_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
+    reviewAssigneeId: uuid("review_assignee_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     ingestStatus: ingestStatusEnum("ingest_status").notNull().default("created"),
     publicationStatus: publicationStatusEnum("publication_status").notNull().default("draft"),
     width: integer("width").notNull(),
@@ -348,6 +368,12 @@ export const media = pgTable(
       table.id,
     ),
     index("media_album_ingest_idx").on(table.albumId, table.ingestStatus, table.createdAt),
+    index("media_album_review_assignee_idx").on(
+      table.albumId,
+      table.reviewAssigneeId,
+      table.createdAt,
+      table.id,
+    ),
   ],
 );
 
@@ -1073,6 +1099,7 @@ export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
 export type AlbumRow = typeof albums.$inferSelect;
 export type CategoryRow = typeof categories.$inferSelect;
+export type AlbumReviewCollaboratorRow = typeof albumReviewCollaborators.$inferSelect;
 export type MediaRow = typeof media.$inferSelect;
 export type MediaVariantRow = typeof mediaVariants.$inferSelect;
 export type UploadIntentRow = typeof uploadIntents.$inferSelect;
