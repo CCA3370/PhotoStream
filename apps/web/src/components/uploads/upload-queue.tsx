@@ -92,7 +92,7 @@ export function UploadQueue({
   albumTitle: string;
   bibConfig: BibConfigView;
   categories: readonly CategoryOption[];
-  role: "admin" | "uploader";
+  role: "admin" | "operator" | "uploader";
 }>) {
   const inputRef = useRef<HTMLInputElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
@@ -341,7 +341,7 @@ export function UploadQueue({
           >
             {showUploaded ? "只看进行中" : "显示已上传"}
           </Button>
-          {role === "admin" ? (
+          {role === "admin" || role === "operator" ? (
             <Link
               className={buttonVariants({ size: "sm", variant: "outline" })}
               href={`/studio/albums/${albumId}/review`}
