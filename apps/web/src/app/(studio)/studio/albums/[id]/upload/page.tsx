@@ -13,7 +13,7 @@ interface CategoryDetails {
 }
 
 export default async function UploadPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireInternalSession(["admin", "uploader"]);
+  const session = await requireInternalSession(["admin", "operator", "uploader"]);
   const { id } = await params;
   const [album, categories, bibConfig, summaries] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
