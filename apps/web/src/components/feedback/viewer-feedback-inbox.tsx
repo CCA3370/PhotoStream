@@ -462,6 +462,7 @@ export function ViewerFeedbackInbox({
           throw new Error("只读查看器不支持号码操作");
         }}
         onSelect={() => undefined}
+        onViewed={() => undefined}
         onStateAction={() => undefined}
         onToggleFeatured={() => undefined}
         onToggleVisibility={() => undefined}
