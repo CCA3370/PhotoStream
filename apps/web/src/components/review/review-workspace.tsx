@@ -516,6 +516,15 @@ export function ReviewWorkspace({
     setFeaturedIds(new Set(result.mediaIds));
   }, [albumId]);
 
+  const refreshReviewCollaboration = useCallback(async () => {
+    const next = await clientGet<ReviewCollaborationView>(
+      `/api/v1/albums/${albumId}/review-collaboration`,
+    );
+    setReviewCollaboration(next);
+    if (!next.enabled || !next.currentUserParticipating) setAssignmentFilter("all");
+    return next;
+  }, [albumId]);
+
   const buildRemoteQuery = useCallback(
     (
       publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
@@ -635,13 +644,17 @@ export function ReviewWorkspace({
         event as CustomEvent<{ readonly albumId?: string; readonly revision?: string }>
       ).detail;
       if (detail?.albumId !== albumId) return;
-      void Promise.all([refreshRemote(), refreshFeatured()]).catch((cause) =>
+      void Promise.all([
+        refreshRemote(),
+        refreshFeatured(),
+        refreshReviewCollaboration(),
+      ]).catch((cause) =>
         setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
       );
     };
     window.addEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
     return () => window.removeEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
-  }, [albumId, refreshFeatured, refreshRemote]);
+  }, [albumId, refreshFeatured, refreshRemote, refreshReviewCollaboration]);
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -2074,7 +2087,12 @@ export function ReviewWorkspace({
           aria-label="刷新审核列表"
           className="size-8"
           onClick={() =>
-            void Promise.all([refreshLocal(), refreshRemote(), refreshFeatured()]).catch((cause) =>
+            void Promise.all([
+              refreshLocal(),
+              refreshRemote(),
+              refreshFeatured(),
+              refreshReviewCollaboration(),
+            ]).catch((cause) =>
               setError(cause instanceof Error ? cause.message : "刷新失败"),
             )
           }
