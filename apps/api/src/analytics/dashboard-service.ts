@@ -1,3 +1,4 @@
+import { hasPermission } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
 import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
@@ -41,7 +42,7 @@ const bucketSeconds: Record<DashboardBucket, number> = {
 };
 
 function requireAlbumRead(actor: InternalActor): void {
-  if (actor.role !== "admin" && actor.role !== "reviewer" && actor.role !== "uploader") {
+  if (!hasPermission(actor.role, "album:read")) {
     throw new AppError({ code: "FORBIDDEN", message: "当前角色无权查看统计", statusCode: 403 });
   }
 }
