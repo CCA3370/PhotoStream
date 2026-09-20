@@ -42,19 +42,19 @@ const navigation = [
     href: "/studio",
     label: "仪表盘",
     icon: LayoutDashboardIcon,
-    roles: ["admin", "reviewer", "uploader"],
+    roles: ["admin", "operator", "reviewer", "uploader"],
   },
   {
     href: "/studio/albums",
     label: "活动",
     icon: ImagesIcon,
-    roles: ["admin", "reviewer", "uploader"],
+    roles: ["admin", "operator", "reviewer", "uploader"],
   },
   {
     href: "/studio/feedback",
     label: "反馈",
     icon: MessageSquareTextIcon,
-    roles: ["admin", "reviewer", "uploader"],
+    roles: ["admin", "operator", "reviewer", "uploader"],
   },
   { href: "/studio/users", label: "成员", icon: UsersIcon, roles: ["admin"] },
   { href: "/studio/audit", label: "审计", icon: ScrollTextIcon, roles: ["admin"] },
@@ -67,6 +67,7 @@ const navigation = [
 
 const roleLabels: Record<UserRole, string> = {
   admin: "管理员",
+  operator: "协作员",
   reviewer: "审核员",
   uploader: "上传员",
 };
