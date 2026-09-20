@@ -410,7 +410,7 @@ export class PhotoService {
       .where(eq(schema.albumReviewCollaborators.albumId, albumId))
       .orderBy(asc(schema.users.displayName), asc(schema.users.id));
 
-    const assignmentCounts = await this.#database
+    const remainingCounts = await this.#database
       .select({
         userId: schema.media.reviewAssigneeId,
         total: sql<number>`count(*)::int`,
@@ -420,18 +420,19 @@ export class PhotoService {
         and(
           eq(schema.media.albumId, albumId),
           isNotNull(schema.media.reviewAssigneeId),
+          isNull(schema.media.reviewedAt),
           sql`${schema.media.publicationStatus} <> 'deleted'`,
         ),
       )
       .groupBy(schema.media.reviewAssigneeId);
     const counts = new Map(
-      assignmentCounts
+      remainingCounts
         .filter((row): row is { userId: string; total: number } => row.userId !== null)
         .map((row) => [row.userId, row.total] as const),
     );
     const participants = participantRows.map((row) => ({
       ...row,
-      assignedCount: counts.get(row.id) ?? 0,
+      remainingCount: counts.get(row.id) ?? 0,
     }));
 
     const eligibleParticipants =
@@ -471,7 +472,7 @@ export class PhotoService {
       participants,
       availableParticipants,
       currentUserParticipating: participants.some((participant) => participant.id === actor.id),
-      currentUserAssignedCount: participants.some((participant) => participant.id === actor.id)
+      currentUserRemainingCount: participants.some((participant) => participant.id === actor.id)
         ? (counts.get(actor.id) ?? 0)
         : null,
     };
@@ -532,7 +533,9 @@ export class PhotoService {
         await transaction.execute(sql`
           with ranked_media as (
             select id,
-                   row_number() over (order by created_at, id) - 1 as rn
+                   row_number() over (
+                     order by (reviewed_at is not null), created_at, id
+                   ) - 1 as rn
             from media
             where album_id = ${options.albumId}
               and publication_status <> 'deleted'
@@ -1722,6 +1725,48 @@ export class PhotoService {
         idempotencyKey,
         requestHash,
         result: { mediaId: options.mediaId },
+      });
+    });
+  }
+
+  async markMediaReviewed(options: {
+    readonly actor: InternalActor;
+    readonly mediaId: string;
+    readonly requestId: string;
+  }): Promise<void> {
+    requirePermission(options.actor.role, "media:review");
+    await this.#database.transaction(async (transaction) => {
+      const now = new Date();
+      const [updated] = await transaction
+        .update(schema.media)
+        .set({ reviewedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(schema.media.id, options.mediaId),
+            isNull(schema.media.reviewedAt),
+            sql`${schema.media.publicationStatus} <> 'deleted'`,
+          ),
+        )
+        .returning({ id: schema.media.id });
+      if (updated === undefined) {
+        const [existing] = await transaction
+          .select({ publicationStatus: schema.media.publicationStatus })
+          .from(schema.media)
+          .where(eq(schema.media.id, options.mediaId))
+          .limit(1);
+        if (existing === undefined || existing.publicationStatus === "deleted") {
+          throw this.#uploadNotFound();
+        }
+        return;
+      }
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "media.reviewed",
+        targetType: "media",
+        targetId: options.mediaId,
+        result: "success",
+        changedFields: ["reviewedAt"],
+        requestId: options.requestId,
       });
     });
   }
