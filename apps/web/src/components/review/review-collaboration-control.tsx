@@ -196,7 +196,7 @@ export function ReviewCollaborationControl({
                         </span>
                         {value.enabled ? (
                           <span className="text-xs tabular-nums text-muted-foreground">
-                            当前 {remaining} 张
+                            待审核 {remaining} 张
                           </span>
                         ) : null}
                       </label>
