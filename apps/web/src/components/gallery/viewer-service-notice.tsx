@@ -159,7 +159,7 @@ export function ViewerServiceNotice() {
         </DialogHeader>
 
         <div className="min-h-0">
-          <div
+          <section
             aria-label="照片使用与版权说明全文"
             className="max-h-[52dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground outline-none focus:outline-none focus-visible:outline-none"
             onKeyDown={markScrollInteraction}
@@ -168,7 +168,6 @@ export function ViewerServiceNotice() {
             onTouchStart={markScrollInteraction}
             onWheel={markScrollInteraction}
             ref={scrollContainerRef}
-            role="region"
             // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users need to focus the scroll region to read the full notice.
             tabIndex={0}
           >
@@ -194,7 +193,7 @@ export function ViewerServiceNotice() {
                 浏览、下载或使用照片时，请遵守上述版权与肖像使用要求。
               </p>
             </div>
-          </div>
+          </section>
 
           {isScrollable && !hasReachedEnd && (
             <p
