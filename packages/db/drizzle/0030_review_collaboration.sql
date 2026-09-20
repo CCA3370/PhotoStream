@@ -23,9 +23,18 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- Serialize assignment with collaboration reconfiguration and concurrent uploads.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('review-collaboration:' || NEW.album_id::text, 0)
+  );
+
   SELECT collaborator.user_id
   INTO NEW.review_assignee_id
   FROM album_review_collaborators AS collaborator
+  INNER JOIN users AS reviewer
+    ON reviewer.id = collaborator.user_id
+   AND reviewer.is_active = true
+   AND reviewer.role IN ('admin', 'reviewer')
   LEFT JOIN (
     SELECT review_assignee_id, count(*) AS assigned_count
     FROM media
