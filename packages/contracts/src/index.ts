@@ -804,7 +804,7 @@ export const reviewCollaboratorViewSchema = z
     displayName: z.string().min(1).max(80),
     role: userRoleSchema,
     isActive: z.boolean(),
-    assignedCount: z.number().int().nonnegative(),
+    remainingCount: z.number().int().nonnegative(),
   })
   .strict();
 export type ReviewCollaboratorView = z.infer<typeof reviewCollaboratorViewSchema>;
@@ -826,7 +826,7 @@ export const reviewCollaborationViewSchema = z
     participants: z.array(reviewCollaboratorViewSchema),
     availableParticipants: z.array(reviewCollaborationCandidateSchema),
     currentUserParticipating: z.boolean(),
-    currentUserAssignedCount: z.number().int().nonnegative().nullable(),
+    currentUserRemainingCount: z.number().int().nonnegative().nullable(),
   })
   .strict();
 export type ReviewCollaborationView = z.infer<typeof reviewCollaborationViewSchema>;
