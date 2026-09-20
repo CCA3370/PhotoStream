@@ -7,6 +7,7 @@ import {
   hasPermission,
   type PhotoVariantKind,
   type PublicMediaView,
+  type ReviewCollaborationView,
   type UpdateAlbumRequest,
   type UploadIntentView,
   type UserRole,
@@ -371,6 +372,180 @@ export class PhotoService {
       .limit(1);
     if (row === undefined) throw this.#albumNotFound();
     return createHash("sha256").update(JSON.stringify(row), "utf8").digest("base64url");
+  }
+
+  async getReviewCollaboration(
+    actor: InternalActor,
+    albumId: string,
+  ): Promise<ReviewCollaborationView> {
+    requirePermission(actor.role, "album:read");
+    const album = await this.#albumById(this.#database, albumId);
+    if (album === null) throw this.#albumNotFound();
+
+    const participantRows = await this.#database
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        displayName: schema.users.displayName,
+        role: schema.users.role,
+      })
+      .from(schema.albumReviewCollaborators)
+      .innerJoin(schema.users, eq(schema.albumReviewCollaborators.userId, schema.users.id))
+      .where(eq(schema.albumReviewCollaborators.albumId, albumId))
+      .orderBy(asc(schema.users.displayName), asc(schema.users.id));
+
+    const assignmentCounts = await this.#database
+      .select({
+        userId: schema.media.reviewAssigneeId,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(schema.media)
+      .where(
+        and(
+          eq(schema.media.albumId, albumId),
+          isNotNull(schema.media.reviewAssigneeId),
+          sql`${schema.media.publicationStatus} <> 'deleted'`,
+        ),
+      )
+      .groupBy(schema.media.reviewAssigneeId);
+    const counts = new Map(
+      assignmentCounts
+        .filter((row): row is { userId: string; total: number } => row.userId !== null)
+        .map((row) => [row.userId, row.total] as const),
+    );
+    const participants = participantRows.map((row) => ({
+      ...row,
+      assignedCount: counts.get(row.id) ?? 0,
+    }));
+
+    const availableParticipants =
+      actor.role === "admin"
+        ? await this.#database
+            .select({
+              id: schema.users.id,
+              username: schema.users.username,
+              displayName: schema.users.displayName,
+              role: schema.users.role,
+            })
+            .from(schema.users)
+            .where(
+              and(
+                eq(schema.users.isActive, true),
+                inArray(schema.users.role, ["admin", "reviewer"]),
+              ),
+            )
+            .orderBy(asc(schema.users.displayName), asc(schema.users.id))
+        : [];
+
+    return {
+      enabled: participants.length >= 2,
+      participants,
+      availableParticipants,
+      currentUserParticipating: participants.some((participant) => participant.id === actor.id),
+    };
+  }
+
+  async updateReviewCollaboration(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly participantIds: readonly string[];
+    readonly requestId: string;
+  }): Promise<ReviewCollaborationView> {
+    requirePermission(options.actor.role, "album:configure");
+    const participantIds = [...new Set(options.participantIds)];
+    if (participantIds.length === 1) {
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "审核分工至少选择 2 个账号；清空选择可关闭分工",
+        statusCode: 400,
+      });
+    }
+    const album = await this.#albumById(this.#database, options.albumId);
+    if (album === null) throw this.#albumNotFound();
+
+    const selectedUsers =
+      participantIds.length === 0
+        ? []
+        : await this.#database
+            .select({
+              id: schema.users.id,
+              role: schema.users.role,
+              isActive: schema.users.isActive,
+            })
+            .from(schema.users)
+            .where(inArray(schema.users.id, participantIds));
+    if (
+      selectedUsers.length !== participantIds.length ||
+      selectedUsers.some((user) => !user.isActive || user.role === "uploader")
+    ) {
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "只能选择已启用的管理员或审核员参与审核分工",
+        statusCode: 400,
+      });
+    }
+
+    await this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `review-collaboration:${options.albumId}`);
+      await transaction
+        .delete(schema.albumReviewCollaborators)
+        .where(eq(schema.albumReviewCollaborators.albumId, options.albumId));
+      if (participantIds.length > 0) {
+        await transaction.insert(schema.albumReviewCollaborators).values(
+          participantIds.map((userId) => ({
+            albumId: options.albumId,
+            userId,
+          })),
+        );
+        await transaction.execute(sql`
+          with ranked_media as (
+            select id,
+                   row_number() over (order by created_at, id) - 1 as rn
+            from media
+            where album_id = ${options.albumId}
+              and publication_status <> 'deleted'
+          ), ranked_reviewers as (
+            select user_id,
+                   row_number() over (order by user_id) - 1 as rn,
+                   count(*) over () as total
+            from album_review_collaborators
+            where album_id = ${options.albumId}
+          )
+          update media as target
+          set review_assignee_id = ranked_reviewers.user_id,
+              updated_at = now()
+          from ranked_media
+          join ranked_reviewers
+            on ranked_reviewers.rn = mod(ranked_media.rn, ranked_reviewers.total)
+          where target.id = ranked_media.id
+        `);
+        await transaction
+          .update(schema.media)
+          .set({ reviewAssigneeId: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.media.albumId, options.albumId),
+              eq(schema.media.publicationStatus, "deleted"),
+            ),
+          );
+      } else {
+        await transaction
+          .update(schema.media)
+          .set({ reviewAssigneeId: null, updatedAt: new Date() })
+          .where(eq(schema.media.albumId, options.albumId));
+      }
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "album.review_collaboration.updated",
+        targetType: "album",
+        targetId: options.albumId,
+        result: "success",
+        changedFields: ["reviewCollaborators", "reviewAssigneeId"],
+        requestId: options.requestId,
+      });
+    });
+
+    return this.getReviewCollaboration(options.actor, options.albumId);
   }
 
   async createAlbum(options: {
@@ -1639,6 +1814,7 @@ export class PhotoService {
       readonly ingestGroup?: "incomplete" | "failed" | undefined;
       readonly categoryId?: string | undefined;
       readonly uploaderId?: string | undefined;
+      readonly reviewAssignment?: "mine" | undefined;
       readonly bibReviewDecision?:
         | (typeof schema.bibReviewDecisionEnum.enumValues)[number]
         | undefined;
@@ -1686,6 +1862,10 @@ export class PhotoService {
     }
     if (options.uploaderId !== undefined) {
       conditions.push(eq(schema.media.uploaderId, options.uploaderId));
+    }
+    if (options.reviewAssignment === "mine") {
+      requirePermission(actor.role, "media:review");
+      conditions.push(eq(schema.media.reviewAssigneeId, actor.id));
     }
     if (options.bibReviewDecision !== undefined) {
       const matchingReview = this.#database
@@ -1948,6 +2128,7 @@ export class PhotoService {
       readonly ingestGroup?: "incomplete" | "failed" | undefined;
       readonly categoryId?: string | undefined;
       readonly uploaderId?: string | undefined;
+      readonly reviewAssignment?: "mine" | undefined;
       readonly bibReviewDecision?:
         | (typeof schema.bibReviewDecisionEnum.enumValues)[number]
         | undefined;
@@ -1995,6 +2176,10 @@ export class PhotoService {
     }
     if (options.uploaderId !== undefined) {
       baseConditions.push(eq(schema.media.uploaderId, options.uploaderId));
+    }
+    if (options.reviewAssignment === "mine") {
+      requirePermission(actor.role, "media:review");
+      baseConditions.push(eq(schema.media.reviewAssigneeId, actor.id));
     }
     if (options.bibReviewDecision !== undefined) {
       const matchingReview = this.#database
