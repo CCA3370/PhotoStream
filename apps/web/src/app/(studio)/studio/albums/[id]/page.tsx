@@ -57,7 +57,7 @@ function recentPreview(media: InternalMediaView) {
 }
 
 export default async function AlbumOverviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireInternalSession(["admin", "reviewer"]);
+  const session = await requireInternalSession(["admin", "operator", "reviewer"]);
   const { id } = await params;
   const [album, categories, summaries, statistics, recentMedia, dataSaver] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
