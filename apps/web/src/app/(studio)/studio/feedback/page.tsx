@@ -6,7 +6,10 @@ import type { ViewerFeedbackList } from "@/lib/viewer-feedback";
 export default async function ViewerFeedbackPage() {
   const session = await requireInternalSession();
   const feedback = await serverApi<ViewerFeedbackList>("/api/v1/feedback?limit=100");
-  const canModerate = session.user.role === "admin" || session.user.role === "reviewer";
+  const canModerate =
+    session.user.role === "admin" ||
+    session.user.role === "operator" ||
+    session.user.role === "reviewer";
 
   return (
     <ViewerFeedbackInbox
