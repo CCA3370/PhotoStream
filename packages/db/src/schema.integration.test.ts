@@ -137,6 +137,22 @@ maybeDescribe("PostgreSQL identity schema", () => {
     ]);
   });
 
+  it("persists the operator role in PostgreSQL", async () => {
+    const roles = await pool.query<{ enumlabel: string }>(
+      `select enumlabel
+       from pg_enum
+       join pg_type on pg_type.oid = pg_enum.enumtypid
+       where pg_type.typname = 'user_role'
+       order by pg_enum.enumsortorder`,
+    );
+    expect(roles.rows.map((row) => row.enumlabel)).toEqual([
+      "admin",
+      "operator",
+      "reviewer",
+      "uploader",
+    ]);
+  });
+
   it("persists upload cleanup recovery and key-rotation indexes", async () => {
     const cleanupColumns = await pool.query<{ column_name: string }>(
       `select column_name
