@@ -14,7 +14,6 @@ import {
 
 import { isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export interface ReviewInspectorCategory {
   readonly id: string;
