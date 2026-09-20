@@ -4,6 +4,7 @@ import type {
   AlbumView,
   BibConfigView,
   InternalMediaList,
+  ReviewCollaborationView,
 } from "@photostream/contracts";
 
 import { AlbumContextNav } from "@/components/albums/album-context-nav";
@@ -22,8 +23,17 @@ interface CategoryDetails {
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin", "reviewer"]);
   const { id } = await params;
-  const [album, media, categories, uploaders, bibConfig, summaries, reviewRevision, reviewQueue] =
-    await Promise.all([
+  const [
+    album,
+    media,
+    categories,
+    uploaders,
+    bibConfig,
+    summaries,
+    reviewRevision,
+    reviewQueue,
+    reviewCollaboration,
+  ] = await Promise.all([
       serverApi<AlbumView>(`/api/v1/albums/${id}`),
       serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=60`),
       serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
@@ -34,6 +44,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       serverApi<{ readonly total: number }>(
         `/api/v1/albums/${id}/media-selection?publicationStatus=hidden&ingestStatus=ready&limit=1`,
       ),
+      serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
     ]);
   const summary = summaries.find((item) => item.id === id);
   const syncRevision = reviewRevision.revision;
@@ -72,6 +83,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         bibConfig={bibConfig}
         categories={categories.filter((category) => category.enabled)}
         initialPage={media}
+        initialReviewCollaboration={reviewCollaboration}
         userRole={session.user.role}
         uploaders={uploaders}
       />
