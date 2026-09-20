@@ -8,6 +8,7 @@ import type {
   InternalMediaList,
   InternalMediaView,
   MediaBatchResult,
+  ReviewCollaborationView,
 } from "@photostream/contracts";
 import {
   BadgeCheckIcon,
@@ -33,6 +34,10 @@ import {
 } from "react";
 
 import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
+import {
+  ReviewCollaborationControl,
+  type ReviewAssignmentFilter,
+} from "@/components/review/review-collaboration-control";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
 import {
   ReviewBatchInspector,
@@ -190,6 +195,7 @@ interface BatchFailure {
 }
 
 const filterModes = new Set<FilterMode>(["all", "featured", "hidden", "local", "published"]);
+const assignmentFilters = new Set<ReviewAssignmentFilter>(["all", "mine"]);
 const ingestFilters = new Set<IngestFilter>(["all", "failed", "incomplete"]);
 const bibDecisionFilters = new Set<BibDecisionFilter>([
   "all",
@@ -317,6 +323,7 @@ export function ReviewWorkspace({
   bibConfig,
   categories,
   initialPage,
+  initialReviewCollaboration,
   userRole,
   uploaders,
 }: Readonly<{
@@ -325,6 +332,7 @@ export function ReviewWorkspace({
   bibConfig: BibConfigView;
   categories: readonly CategoryOption[];
   initialPage: InternalMediaList;
+  initialReviewCollaboration: ReviewCollaborationView;
   userRole: "admin" | "reviewer";
   uploaders: readonly AlbumUploaderView[];
 }>) {
@@ -343,6 +351,8 @@ export function ReviewWorkspace({
   const [filter, setFilter] = useState<FilterMode>("all");
   const [category, setCategory] = useState("all");
   const [uploader, setUploader] = useState("all");
+  const [assignmentFilter, setAssignmentFilter] = useState<ReviewAssignmentFilter>("all");
+  const [reviewCollaboration, setReviewCollaboration] = useState(initialReviewCollaboration);
   const [ingestFilter, setIngestFilter] = useState<IngestFilter>("all");
   const [bibDecision, setBibDecision] = useState<BibDecisionFilter>("all");
   const [bibOcrStatus, setBibOcrStatus] = useState<BibOcrFilter>("all");
@@ -396,6 +406,7 @@ export function ReviewWorkspace({
     setFilter(enumQueryValue(params, "review", filterModes, "all"));
     setCategory(simpleQueryValue(params, "category"));
     setUploader(simpleQueryValue(params, "uploader"));
+    setAssignmentFilter(enumQueryValue(params, "assignment", assignmentFilters, "all"));
     setIngestFilter(enumQueryValue(params, "ingest", ingestFilters, "all"));
     setBibDecision(enumQueryValue(params, "bibDecision", bibDecisionFilters, "all"));
     setBibOcrStatus(enumQueryValue(params, "bibOcr", bibOcrFilters, "all"));
@@ -433,6 +444,7 @@ export function ReviewWorkspace({
     setOrDelete("review", filter);
     setOrDelete("category", category);
     setOrDelete("uploader", uploader);
+    setOrDelete("assignment", assignmentFilter);
     setOrDelete("ingest", ingestFilter);
     setOrDelete("bibDecision", bibDecision);
     setOrDelete("bibOcr", bibOcrStatus);
@@ -444,6 +456,7 @@ export function ReviewWorkspace({
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (next !== current) window.history.replaceState(window.history.state, "", next);
   }, [
+    assignmentFilter,
     bibDecision,
     bibOcrStatus,
     category,
@@ -512,6 +525,7 @@ export function ReviewWorkspace({
       if (publicationStatus !== undefined) query.set("publicationStatus", publicationStatus);
       if (category !== "all") query.set("categoryId", category);
       if (uploader !== "all") query.set("uploaderId", uploader);
+      if (assignmentFilter === "mine") query.set("reviewAssignment", "mine");
       if (ingestFilter !== "all") query.set("ingestGroup", ingestFilter);
       if (bibDecision !== "all") query.set("bibReviewDecision", bibDecision);
       if (bibOcrStatus !== "all") query.set("bibOcrStatus", bibOcrStatus);
@@ -522,6 +536,7 @@ export function ReviewWorkspace({
       return query;
     },
     [
+      assignmentFilter,
       bibDecision,
       bibOcrStatus,
       category,
@@ -718,6 +733,7 @@ export function ReviewWorkspace({
   const visibleItems = useMemo(
     () =>
       items.filter((item) => {
+        if (assignmentFilter === "mine" && item.source === "local") return false;
         if (category !== "all" && item.categoryId !== category) return false;
         if (uploader !== "all" && item.uploaderId !== uploader) return false;
         if (filter === "local" && item.source !== "local") return false;
@@ -745,6 +761,7 @@ export function ReviewWorkspace({
         return true;
       }),
     [
+      assignmentFilter,
       bibDecision,
       bibOcrStatus,
       category,
@@ -765,6 +782,7 @@ export function ReviewWorkspace({
   }
 
   function clearAdvancedFilters(): void {
+    setAssignmentFilter("all");
     setIngestFilter("all");
     setBibDecision("all");
     setBibOcrStatus("all");
@@ -1679,6 +1697,7 @@ export function ReviewWorkspace({
   }, [cursor, loadMore, selectingAll]);
 
   const advancedFiltersActive =
+    assignmentFilter !== "all" ||
     ingestFilter !== "all" ||
     bibDecision !== "all" ||
     bibOcrStatus !== "all" ||
@@ -1836,6 +1855,25 @@ export function ReviewWorkspace({
             </SelectContent>
           </Select>
         )}
+
+        <ReviewCollaborationControl
+          albumId={albumId}
+          assignment={assignmentFilter}
+          onAssignmentChange={(value) => {
+            setAssignmentFilter(value);
+            if (value === "mine" && filter === "local") setFilter("all");
+            resetSelection();
+          }}
+          onValueChange={(next) => {
+            setReviewCollaboration(next);
+            resetSelection();
+            void refreshRemote().catch((cause) =>
+              setError(cause instanceof Error ? cause.message : "刷新审核分工失败"),
+            );
+          }}
+          userRole={userRole}
+          value={reviewCollaboration}
+        />
 
         <Select
           items={[
