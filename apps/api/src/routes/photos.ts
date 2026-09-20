@@ -21,8 +21,10 @@ import {
   publicationStatusSchema,
   publicMediaListSchema,
   refreshedPhotoVariantSchema,
+  reviewCollaborationViewSchema,
   signedUploadSchema,
   unlockAlbumRequestSchema,
+  updateReviewCollaborationRequestSchema,
   unlockAlbumResponseSchema,
   uploadIntentViewSchema,
 } from "@photostream/contracts";
@@ -73,6 +75,7 @@ const internalMediaQuerySchema = z
     ingestGroup: z.enum(["incomplete", "failed"]).optional(),
     categoryId: z.string().uuid().optional(),
     uploaderId: z.string().uuid().optional(),
+    reviewAssignment: z.enum(["mine"]).optional(),
     bibReviewDecision: bibReviewDecisionSchema.optional(),
     bibOcrStatus: bibOcrStatusSchema.optional(),
     gradeOptionId: z.string().uuid().optional(),
@@ -102,6 +105,7 @@ const internalMediaSelectionQuerySchema = z
     ingestGroup: z.enum(["incomplete", "failed"]).optional(),
     categoryId: z.string().uuid().optional(),
     uploaderId: z.string().uuid().optional(),
+    reviewAssignment: z.enum(["mine"]).optional(),
     bibReviewDecision: bibReviewDecisionSchema.optional(),
     bibOcrStatus: bibOcrStatusSchema.optional(),
     gradeOptionId: z.string().uuid().optional(),
@@ -524,6 +528,46 @@ export async function registerPhotoRoutes(
       return options.bibService === undefined
         ? media
         : options.bibService.attachMediaStates(actor, media);
+    },
+  );
+
+  typed.get(
+    "/api/v1/albums/:id/review-collaboration",
+    {
+      schema: {
+        operationId: "getReviewCollaboration",
+        tags: ["media"],
+        params: albumIdParamsSchema,
+        response: { 200: reviewCollaborationViewSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return options.photoService.getReviewCollaboration(actorFrom(session), request.params.id);
+    },
+  );
+
+  typed.patch(
+    "/api/v1/albums/:id/review-collaboration",
+    {
+      schema: {
+        operationId: "updateReviewCollaboration",
+        tags: ["media"],
+        params: albumIdParamsSchema,
+        body: updateReviewCollaborationRequestSchema,
+        response: { 200: reviewCollaborationViewSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      return options.photoService.updateReviewCollaboration({
+        actor: actorFrom(session),
+        albumId: request.params.id,
+        participantIds: request.body.participantIds,
+        requestId: request.id,
+      });
     },
   );
 
