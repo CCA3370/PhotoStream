@@ -342,6 +342,7 @@ export const media = pgTable(
     reviewAssigneeId: uuid("review_assignee_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     ingestStatus: ingestStatusEnum("ingest_status").notNull().default("created"),
     publicationStatus: publicationStatusEnum("publication_status").notNull().default("draft"),
     width: integer("width").notNull(),
@@ -374,6 +375,11 @@ export const media = pgTable(
       table.createdAt,
       table.id,
     ),
+    index("media_album_review_workload_idx")
+      .on(table.albumId, table.reviewAssigneeId, table.reviewedAt)
+      .where(
+        sql`${table.reviewedAt} is null and ${table.publicationStatus} <> 'deleted'`,
+      ),
   ],
 );
 
