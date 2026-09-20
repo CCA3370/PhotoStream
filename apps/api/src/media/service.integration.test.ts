@@ -191,6 +191,7 @@ maybeDescribe("photo vertical slice transactions", () => {
   const operationsService = new OperationsService({ database, storage, config });
   const userAdminService = new UserAdminService({ database, passwordHasher: fakeHasher, config });
   let adminId = "";
+  let operatorId = "";
   let reviewerId = "";
   let uploaderId = "";
 
@@ -239,6 +240,14 @@ maybeDescribe("photo vertical slice transactions", () => {
           mustChangePassword: false,
         },
         {
+          username: "operator",
+          normalizedUsername: "operator",
+          displayName: "协作员",
+          role: "operator",
+          passwordHash: "hash:operator-password",
+          mustChangePassword: false,
+        },
+        {
           username: "reviewer",
           normalizedUsername: "reviewer",
           displayName: "审核员",
@@ -257,11 +266,86 @@ maybeDescribe("photo vertical slice transactions", () => {
       ])
       .returning({ id: schema.users.id, role: schema.users.role });
     adminId = inserted.find((user) => user.role === "admin")?.id ?? "";
+    operatorId = inserted.find((user) => user.role === "operator")?.id ?? "";
     reviewerId = inserted.find((user) => user.role === "reviewer")?.id ?? "";
     uploaderId = inserted.find((user) => user.role === "uploader")?.id ?? "";
   });
 
   afterAll(async () => pool.end());
+
+  it("lets operators upload and fully review media while denying album settings", async () => {
+    const created = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "协作员权限", description: "", publishMode: "review" },
+      idempotencyKey: "operator-role-album-0001",
+      requestId: "operator-role-album-create",
+    });
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      requestId: "operator-role-album-start",
+    });
+
+    const intent = await service.createPhotoUpload({
+      actor: { id: operatorId, role: "operator" },
+      input: photoRequest(created.album.id),
+      idempotencyKey: "operator-role-upload-0001",
+    });
+    expect(intent.mediaId).toBeTruthy();
+
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId: created.album.id,
+        uploaderId: uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "pending_review",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("Expected media fixture");
+
+    await service.publishMedia({
+      actor: { id: operatorId, role: "operator" },
+      mediaId: media.id,
+      requestId: "operator-role-publish",
+      idempotencyKey: "operator-role-publish-0001",
+    });
+    const [published] = await database
+      .select({ publicationStatus: schema.media.publicationStatus })
+      .from(schema.media)
+      .where(eq(schema.media.id, media.id))
+      .limit(1);
+    expect(published?.publicationStatus).toBe("published");
+
+    const collaboration = await service.updateReviewCollaboration({
+      actor: { id: operatorId, role: "operator" },
+      albumId: created.album.id,
+      participantIds: [operatorId, reviewerId],
+      requestId: "operator-role-collaboration",
+    });
+    expect(collaboration.enabled).toBe(true);
+
+    const deletion = await operationsService.requestDeletion({
+      actor: { id: operatorId, role: "operator", authenticatedAt: new Date() },
+      mediaId: media.id,
+      confirmation: created.album.title,
+      requestId: "operator-role-delete",
+    });
+    expect(deletion.mediaId).toBe(media.id);
+
+    await expect(
+      service.updateAlbum({
+        actor: { id: operatorId, role: "operator" },
+        albumId: created.album.id,
+        input: { description: "不应被允许" },
+        requestId: "operator-role-settings",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 
   it("moves one photo through review publication and persistent public replay", async () => {
     const first = await service.createAlbum({
