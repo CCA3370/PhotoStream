@@ -21,7 +21,7 @@ interface CategoryDetails {
 }
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireInternalSession(["admin", "reviewer"]);
+  const session = await requireInternalSession(["admin", "operator", "reviewer"]);
   const { id } = await params;
   const [
     album,
