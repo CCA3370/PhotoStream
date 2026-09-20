@@ -220,6 +220,7 @@ maybeDescribe("photo vertical slice transactions", () => {
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);
     await database.delete(schema.media);
+    await database.delete(schema.albumReviewCollaborators);
     await database.delete(schema.visitorSessions);
     await database.delete(schema.categories);
     await database.delete(schema.albums);
@@ -1115,6 +1116,107 @@ maybeDescribe("photo vertical slice transactions", () => {
     ).toEqual([
       expect.objectContaining({ id: uploaderId, username: "uploader", displayName: "上传者" }),
     ]);
+  });
+
+  it("splits review work evenly and scopes reviewer queries to their assignment", async () => {
+    const album = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "审核分工相册", description: "", publishMode: "review" },
+      idempotencyKey: "album-review-collaboration-idempotency",
+      requestId: "album-review-collaboration-create",
+    });
+    const existing = await database
+      .insert(schema.media)
+      .values(
+        Array.from({ length: 5 }, () => ({
+          albumId: album.album.id,
+          uploaderId,
+          ingestStatus: "ready" as const,
+          publicationStatus: "hidden" as const,
+          width: 100,
+          height: 100,
+          mediaType: "image/jpeg",
+          totalBytes: 100,
+        })),
+      )
+      .returning({ id: schema.media.id, reviewAssigneeId: schema.media.reviewAssigneeId });
+    expect(existing.every((item) => item.reviewAssigneeId === null)).toBe(true);
+
+    const collaboration = await service.updateReviewCollaboration({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      participantIds: [adminId, reviewerId],
+      requestId: "album-review-collaboration-enable",
+    });
+    expect(collaboration.enabled).toBe(true);
+    expect(collaboration.participants).toHaveLength(2);
+
+    const assigned = await database
+      .select({
+        id: schema.media.id,
+        reviewAssigneeId: schema.media.reviewAssigneeId,
+      })
+      .from(schema.media)
+      .where(eq(schema.media.albumId, album.album.id));
+    const adminAssigned = assigned.filter((item) => item.reviewAssigneeId === adminId);
+    const reviewerAssigned = assigned.filter((item) => item.reviewAssigneeId === reviewerId);
+    expect(Math.abs(adminAssigned.length - reviewerAssigned.length)).toBeLessThanOrEqual(1);
+    expect(adminAssigned.length + reviewerAssigned.length).toBe(5);
+
+    const mine = await service.listInternalMedia(
+      { id: reviewerId, role: "reviewer" },
+      { albumId: album.album.id, reviewAssignment: "mine", limit: 60 },
+    );
+    expect(new Set(mine.items.map((item) => item.id))).toEqual(
+      new Set(reviewerAssigned.map((item) => item.id)),
+    );
+
+    const selection = await service.listInternalMediaSelection(
+      { id: reviewerId, role: "reviewer" },
+      { albumId: album.album.id, reviewAssignment: "mine", limit: 1_000 },
+    );
+    expect(selection.total).toBe(reviewerAssigned.length);
+    expect(new Set(selection.items.map((item) => item.id))).toEqual(
+      new Set(reviewerAssigned.map((item) => item.id)),
+    );
+
+    const reviewerView = await service.getReviewCollaboration(
+      { id: reviewerId, role: "reviewer" },
+      album.album.id,
+    );
+    expect(reviewerView.availableParticipants).toEqual([]);
+    expect(reviewerView.currentUserParticipating).toBe(true);
+    expect(reviewerView.currentUserAssignedCount).toBe(reviewerAssigned.length);
+
+    await database.insert(schema.media).values({
+      albumId: album.album.id,
+      uploaderId,
+      ingestStatus: "ready",
+      publicationStatus: "hidden",
+      width: 100,
+      height: 100,
+      mediaType: "image/jpeg",
+      totalBytes: 100,
+    });
+    const afterInsert = await service.getReviewCollaboration(
+      { id: adminId, role: "admin" },
+      album.album.id,
+    );
+    const counts = afterInsert.participants.map((participant) => participant.assignedCount);
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+
+    const disabled = await service.updateReviewCollaboration({
+      actor: { id: adminId, role: "admin" },
+      albumId: album.album.id,
+      participantIds: [],
+      requestId: "album-review-collaboration-disable",
+    });
+    expect(disabled.enabled).toBe(false);
+    const unassigned = await database
+      .select({ reviewAssigneeId: schema.media.reviewAssigneeId })
+      .from(schema.media)
+      .where(eq(schema.media.albumId, album.album.id));
+    expect(unassigned.every((item) => item.reviewAssigneeId === null)).toBe(true);
   });
 
   it("restores an archived album to the documented ended state", async () => {
