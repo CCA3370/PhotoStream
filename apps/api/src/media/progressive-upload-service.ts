@@ -289,7 +289,10 @@ export class ProgressiveUploadService {
           statusCode: 404,
         });
       }
-      if (row.media.uploaderId !== options.actor.id && options.actor.role !== "admin") {
+      if (
+        row.media.uploaderId !== options.actor.id &&
+        !hasPermission(options.actor.role, "media:review")
+      ) {
         throw new AppError({
           code: "FORBIDDEN",
           message: "当前角色无权访问该上传任务",
