@@ -1,0 +1,48 @@
+ALTER TABLE "media" ADD COLUMN "review_assignee_id" uuid;
+--> statement-breakpoint
+CREATE TABLE "album_review_collaborators" (
+  "album_id" uuid NOT NULL,
+  "user_id" uuid NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "album_review_collaborators" ADD CONSTRAINT "album_review_collaborators_album_id_albums_id_fk" FOREIGN KEY ("album_id") REFERENCES "public"."albums"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "album_review_collaborators" ADD CONSTRAINT "album_review_collaborators_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "media" ADD CONSTRAINT "media_review_assignee_id_users_id_fk" FOREIGN KEY ("review_assignee_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "album_review_collaborators_album_user_unique" ON "album_review_collaborators" USING btree ("album_id","user_id");
+--> statement-breakpoint
+CREATE INDEX "album_review_collaborators_album_idx" ON "album_review_collaborators" USING btree ("album_id","user_id");
+--> statement-breakpoint
+CREATE INDEX "media_album_review_assignee_idx" ON "media" USING btree ("album_id","review_assignee_id","created_at","id");
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION assign_media_review_assignee()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  SELECT collaborator.user_id
+  INTO NEW.review_assignee_id
+  FROM album_review_collaborators AS collaborator
+  LEFT JOIN (
+    SELECT review_assignee_id, count(*) AS assigned_count
+    FROM media
+    WHERE album_id = NEW.album_id
+      AND publication_status <> 'deleted'
+      AND review_assignee_id IS NOT NULL
+    GROUP BY review_assignee_id
+  ) AS counts ON counts.review_assignee_id = collaborator.user_id
+  WHERE collaborator.album_id = NEW.album_id
+  ORDER BY COALESCE(counts.assigned_count, 0), collaborator.user_id
+  LIMIT 1;
+
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER "media_assign_review_assignee"
+BEFORE INSERT ON "media"
+FOR EACH ROW
+EXECUTE FUNCTION assign_media_review_assignee();
