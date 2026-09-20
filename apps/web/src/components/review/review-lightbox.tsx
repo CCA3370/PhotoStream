@@ -856,7 +856,9 @@ export function ReviewLightbox({
                         focusViewer();
                       }}
                       size="icon-sm"
-                      title={selected.canDelete ? "删除（键盘连续按两次 Delete）" : "仅管理员可删除"}
+                      title={
+                        selected.canDelete ? "删除（键盘连续按两次 Delete）" : "仅管理员可删除"
+                      }
                       type="button"
                       variant="outline"
                     >
