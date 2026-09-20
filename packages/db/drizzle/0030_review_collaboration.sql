@@ -34,6 +34,9 @@ BEGIN
   IF NEW.reviewed_at IS NULL
      AND NEW.publication_status = 'published'
      AND (TG_OP = 'INSERT' OR OLD.publication_status IS DISTINCT FROM 'published') THEN
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('review-collaboration:' || NEW.album_id::text, 0)
+    );
     NEW.reviewed_at := now();
   END IF;
   RETURN NEW;
