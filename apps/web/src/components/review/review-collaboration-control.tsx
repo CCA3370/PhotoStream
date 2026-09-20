@@ -29,6 +29,7 @@ export type ReviewAssignmentFilter = "all" | "mine";
 
 const roleLabels = {
   admin: "管理员",
+  operator: "协作员",
   reviewer: "审核员",
   uploader: "上传员",
 } as const;
@@ -46,7 +47,7 @@ export function ReviewCollaborationControl({
   onAssignmentChange: (value: ReviewAssignmentFilter) => void;
   onValueChange: (value: ReviewCollaborationView) => void;
   value: ReviewCollaborationView;
-  userRole: "admin" | "reviewer";
+  userRole: "admin" | "operator" | "reviewer";
 }>) {
   const [open, setOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
@@ -135,7 +136,7 @@ export function ReviewCollaborationControl({
         </Select>
       ) : null}
 
-      {userRole === "admin" ? (
+      {userRole === "admin" || userRole === "operator" ? (
         <>
           <Button
             className="h-8 px-2.5 text-xs"
@@ -168,7 +169,9 @@ export function ReviewCollaborationControl({
                     const checked = selectedIds.has(participant.id);
                     const eligible =
                       participant.isActive &&
-                      (participant.role === "admin" || participant.role === "reviewer");
+                      (participant.role === "admin" ||
+                        participant.role === "operator" ||
+                        participant.role === "reviewer");
                     return (
                       <label
                         className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5"
