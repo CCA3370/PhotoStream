@@ -5,7 +5,7 @@ import { z } from "zod";
 export * from "@photostream/contracts/bib";
 export * from "@photostream/contracts/face";
 
-export const userRoleSchema = z.enum(["admin", "reviewer", "uploader"]);
+export const userRoleSchema = z.enum(["admin", "operator", "reviewer", "uploader"]);
 export type UserRole = z.infer<typeof userRoleSchema>;
 
 export const permissionSchema = z.enum([
@@ -15,6 +15,8 @@ export const permissionSchema = z.enum([
   "media:upload",
   "media:review",
   "media:manage",
+  "media:delete",
+  "review:configure",
   "bib:own",
   "bib:any",
   "user:manage",
@@ -24,6 +26,15 @@ export type Permission = z.infer<typeof permissionSchema>;
 
 const permissionMatrix = {
   admin: permissionSchema.options,
+  operator: [
+    "album:read",
+    "media:upload",
+    "media:review",
+    "media:manage",
+    "media:delete",
+    "review:configure",
+    "bib:any",
+  ],
   reviewer: ["album:read", "media:review", "media:manage", "bib:any"],
   uploader: ["album:read", "media:upload", "bib:own"],
 } as const satisfies Record<UserRole, readonly Permission[]>;
