@@ -393,7 +393,7 @@ export class PhotoService {
     actor: InternalActor,
     albumId: string,
   ): Promise<ReviewCollaborationView> {
-    requirePermission(actor.role, "album:read");
+    requirePermission(actor.role, "media:review");
     const album = await this.#albumById(this.#database, albumId);
     if (album === null) throw this.#albumNotFound();
 
