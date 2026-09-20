@@ -919,7 +919,7 @@ export function ReviewWorkspace({
                 createdAt: item.createdAt,
                 capturedAt: item.remote.capturedAt,
                 bib: item.bib,
-                canDelete: (userRole === "admin" || userRole === "operator"),
+                canDelete: userRole === "admin" || userRole === "operator",
               },
         src: item.viewerUrl,
         variants: item.source === "remote" ? item.remote.variants : [],
@@ -936,7 +936,7 @@ export function ReviewWorkspace({
         localPhotoId:
           item.source === "local" ? item.local.photo.id : (item.local?.photo.id ?? null),
         bib: item.bib,
-        canDelete: item.source === "local" ? true : (userRole === "admin" || userRole === "operator"),
+        canDelete: item.source === "local" ? true : userRole === "admin" || userRole === "operator",
         pendingAction: pendingActions.get(item.key) ?? null,
       })),
     [lightboxSourceItems, pendingActions, uploaders, userRole],
@@ -995,7 +995,7 @@ export function ReviewWorkspace({
   }
 
   function canDeleteItem(item: ReviewItem): boolean {
-    if (item.source === "remote") return (userRole === "admin" || userRole === "operator");
+    if (item.source === "remote") return userRole === "admin" || userRole === "operator";
     return true;
   }
 
@@ -1048,7 +1048,7 @@ export function ReviewWorkspace({
       if (item.publicationStatus === "hidden") restorable += 1;
       if (item.featured) unfeatureable += 1;
       else featureable += 1;
-      if ((userRole === "admin" || userRole === "operator")) deletable += 1;
+      if (userRole === "admin" || userRole === "operator") deletable += 1;
     }
     return { hideable, restorable, featureable, unfeatureable, deletable };
   })();
@@ -1606,7 +1606,8 @@ export function ReviewWorkspace({
           });
         }
       }
-      const remoteTargets = (userRole === "admin" || userRole === "operator") ? selectedRemoteItems : [];
+      const remoteTargets =
+        userRole === "admin" || userRole === "operator" ? selectedRemoteItems : [];
       for (const item of remoteTargets) {
         try {
           await clientMutation(`/api/v1/media/${item.id}/direct`, { method: "DELETE" });
