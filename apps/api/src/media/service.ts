@@ -1737,11 +1737,15 @@ export class PhotoService {
     requirePermission(options.actor.role, "media:review");
     await this.#database.transaction(async (transaction) => {
       const [media] = await transaction
-        .select({ albumId: schema.media.albumId, publicationStatus: schema.media.publicationStatus })
+        .select({
+          albumId: schema.media.albumId,
+          publicationStatus: schema.media.publicationStatus,
+        })
         .from(schema.media)
         .where(eq(schema.media.id, options.mediaId))
         .limit(1);
-      if (media === undefined || media.publicationStatus === "deleted") throw this.#uploadNotFound();
+      if (media === undefined || media.publicationStatus === "deleted")
+        throw this.#uploadNotFound();
       await this.#advisoryLock(transaction, `review-collaboration:${media.albumId}`);
       const now = new Date();
       const [updated] = await transaction
