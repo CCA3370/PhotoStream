@@ -136,7 +136,7 @@ export const ReviewAndRecover: Story = {
         participants: [],
         availableParticipants: [],
         currentUserParticipating: false,
-        currentUserAssignedCount: null,
+        currentUserRemainingCount: null,
       }}
       uploaders={[{ id: uploaderId, username: "photo.teacher", displayName: "摄影老师" }]}
       userRole="admin"
