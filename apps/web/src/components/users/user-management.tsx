@@ -40,6 +40,7 @@ import { clientMutation } from "@/lib/client-api";
 
 const roleLabels: Record<UserRole, string> = {
   admin: "管理员",
+  operator: "协作员",
   reviewer: "审核员",
   uploader: "上传员",
 };
@@ -182,7 +183,7 @@ export function UserManagement({
                 <Select
                   items={Object.entries(roleLabels).map(([value, label]) => ({ value, label }))}
                   onValueChange={(value) => {
-                    if (value === "admin" || value === "reviewer" || value === "uploader") {
+                    if (value === "admin" || value === "operator" || value === "reviewer" || value === "uploader") {
                       setRole(value);
                     }
                   }}
@@ -195,6 +196,7 @@ export function UserManagement({
                     <SelectGroup>
                       <SelectItem value="uploader">上传员</SelectItem>
                       <SelectItem value="reviewer">审核员</SelectItem>
+                      <SelectItem value="operator">协作员</SelectItem>
                       <SelectItem value="admin">管理员</SelectItem>
                     </SelectGroup>
                   </SelectContent>
@@ -251,7 +253,7 @@ export function UserManagement({
                           label,
                         }))}
                         onValueChange={(value) => {
-                          if (value === "admin" || value === "reviewer" || value === "uploader") {
+                          if (value === "admin" || value === "operator" || value === "reviewer" || value === "uploader") {
                             void update(user.id, { role: value });
                           }
                         }}
