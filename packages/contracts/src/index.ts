@@ -803,6 +803,7 @@ export const reviewCollaboratorViewSchema = z
     username: usernameSchema,
     displayName: z.string().min(1).max(80),
     role: userRoleSchema,
+    isActive: z.boolean(),
     assignedCount: z.number().int().nonnegative(),
   })
   .strict();
@@ -814,6 +815,7 @@ export const reviewCollaborationCandidateSchema = z
     username: usernameSchema,
     displayName: z.string().min(1).max(80),
     role: userRoleSchema,
+    isActive: z.boolean(),
   })
   .strict();
 export type ReviewCollaborationCandidate = z.infer<typeof reviewCollaborationCandidateSchema>;
