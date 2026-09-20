@@ -34,18 +34,18 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
     reviewQueue,
     reviewCollaboration,
   ] = await Promise.all([
-      serverApi<AlbumView>(`/api/v1/albums/${id}`),
-      serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=60`),
-      serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
-      serverApi<AlbumUploaderView[]>(`/api/v1/albums/${id}/uploaders`),
-      serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
-      serverApi<AlbumSummaryView[]>("/api/v1/albums"),
-      serverApi<{ readonly revision: string }>(`/api/v1/albums/${id}/review-revision`),
-      serverApi<{ readonly total: number }>(
-        `/api/v1/albums/${id}/media-selection?publicationStatus=hidden&ingestStatus=ready&limit=1`,
-      ),
-      serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
-    ]);
+    serverApi<AlbumView>(`/api/v1/albums/${id}`),
+    serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=60`),
+    serverApi<CategoryDetails[]>(`/api/v1/albums/${id}/categories`),
+    serverApi<AlbumUploaderView[]>(`/api/v1/albums/${id}/uploaders`),
+    serverApi<BibConfigView>(`/api/v1/albums/${id}/bib-config`),
+    serverApi<AlbumSummaryView[]>("/api/v1/albums"),
+    serverApi<{ readonly revision: string }>(`/api/v1/albums/${id}/review-revision`),
+    serverApi<{ readonly total: number }>(
+      `/api/v1/albums/${id}/media-selection?publicationStatus=hidden&ingestStatus=ready&limit=1`,
+    ),
+    serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
+  ]);
   const summary = summaries.find((item) => item.id === id);
   const syncRevision = reviewRevision.revision;
 
