@@ -797,6 +797,56 @@ export const albumUploaderViewSchema = z
   .strict();
 export type AlbumUploaderView = z.infer<typeof albumUploaderViewSchema>;
 
+export const reviewCollaboratorViewSchema = z
+  .object({
+    id: z.string().uuid(),
+    username: usernameSchema,
+    displayName: z.string().min(1).max(80),
+    role: userRoleSchema,
+    assignedCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ReviewCollaboratorView = z.infer<typeof reviewCollaboratorViewSchema>;
+
+export const reviewCollaborationCandidateSchema = z
+  .object({
+    id: z.string().uuid(),
+    username: usernameSchema,
+    displayName: z.string().min(1).max(80),
+    role: userRoleSchema,
+  })
+  .strict();
+export type ReviewCollaborationCandidate = z.infer<typeof reviewCollaborationCandidateSchema>;
+
+export const reviewCollaborationViewSchema = z
+  .object({
+    enabled: z.boolean(),
+    participants: z.array(reviewCollaboratorViewSchema),
+    availableParticipants: z.array(reviewCollaborationCandidateSchema),
+    currentUserParticipating: z.boolean(),
+  })
+  .strict();
+export type ReviewCollaborationView = z.infer<typeof reviewCollaborationViewSchema>;
+
+export const updateReviewCollaborationRequestSchema = z
+  .object({ participantIds: z.array(z.string().uuid()).max(50) })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.participantIds).size !== value.participantIds.length) {
+      context.addIssue({ code: "custom", message: "审核协作者不能重复", path: ["participantIds"] });
+    }
+    if (value.participantIds.length === 1) {
+      context.addIssue({
+        code: "custom",
+        message: "审核分工至少选择 2 个账号；清空选择可关闭分工",
+        path: ["participantIds"],
+      });
+    }
+  });
+export type UpdateReviewCollaborationRequest = z.infer<
+  typeof updateReviewCollaborationRequestSchema
+>;
+
 export const mediaBatchActionSchema = z.enum(["publish", "hide", "restore", "change_category"]);
 export const mediaBatchRequestSchema = z
   .object({
