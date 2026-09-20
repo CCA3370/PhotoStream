@@ -1186,10 +1186,36 @@ maybeDescribe("photo vertical slice transactions", () => {
     );
     expect(reviewerView.availableParticipants).toEqual([]);
     expect(reviewerView.currentUserParticipating).toBe(true);
-    expect(reviewerView.currentUserAssignedCount).toBe(reviewerAssigned.length);
+    expect(reviewerView.currentUserRemainingCount).toBe(reviewerAssigned.length);
     await expect(
       service.getReviewCollaboration({ id: uploaderId, role: "uploader" }, album.album.id),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    const [publishedByVisibility, reviewedByViewer] = reviewerAssigned;
+    if (publishedByVisibility === undefined || reviewedByViewer === undefined) {
+      throw new Error("Expected reviewer to receive at least two photos");
+    }
+    await database
+      .update(schema.media)
+      .set({ publicationStatus: "published" })
+      .where(eq(schema.media.id, publishedByVisibility.id));
+    const [publishedSnapshot] = await database
+      .select({ reviewedAt: schema.media.reviewedAt })
+      .from(schema.media)
+      .where(eq(schema.media.id, publishedByVisibility.id))
+      .limit(1);
+    expect(publishedSnapshot?.reviewedAt).toBeInstanceOf(Date);
+
+    await service.markMediaReviewed({
+      actor: { id: reviewerId, role: "reviewer" },
+      mediaId: reviewedByViewer.id,
+      requestId: "review-collaboration-viewed",
+    });
+    const afterReview = await service.getReviewCollaboration(
+      { id: reviewerId, role: "reviewer" },
+      album.album.id,
+    );
+    expect(afterReview.currentUserRemainingCount).toBe(reviewerAssigned.length - 2);
 
     const [newMedia] = await database
       .insert(schema.media)
@@ -1207,15 +1233,17 @@ maybeDescribe("photo vertical slice transactions", () => {
         id: schema.media.id,
         reviewAssigneeId: schema.media.reviewAssigneeId,
       });
-    expect(newMedia?.reviewAssigneeId).not.toBeNull();
+    expect(newMedia?.reviewAssigneeId).toBe(reviewerId);
 
     const afterInsert = await service.getReviewCollaboration(
       { id: adminId, role: "admin" },
       album.album.id,
     );
-    const counts = afterInsert.participants.map((participant) => participant.assignedCount);
-    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(6);
-    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    const counts = afterInsert.participants.map((participant) => participant.remainingCount);
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(4);
+    expect(
+      afterInsert.participants.find((participant) => participant.id === reviewerId)?.remainingCount,
+    ).toBe(reviewerAssigned.length - 1);
 
     const disabled = await service.updateReviewCollaboration({
       actor: { id: adminId, role: "admin" },
