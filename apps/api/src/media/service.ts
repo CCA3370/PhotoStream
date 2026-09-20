@@ -219,6 +219,21 @@ export class PhotoService {
     const [row] = await this.#database
       .select({
         albumUpdatedAt: schema.albums.updatedAt,
+        reviewCollaborationState: sql<string>`(
+          select coalesce(
+            string_agg(
+              ${schema.albumReviewCollaborators.userId}::text || ':' ||
+              ${schema.users.isActive}::text || ':' ||
+              ${schema.users.role}::text,
+              ',' order by ${schema.albumReviewCollaborators.userId}
+            ),
+            ''
+          )
+          from ${schema.albumReviewCollaborators}
+          inner join ${schema.users}
+            on ${schema.users.id} = ${schema.albumReviewCollaborators.userId}
+          where ${schema.albumReviewCollaborators.albumId} = ${albumId}
+        )`,
         mediaCount: sql<number>`(
           select count(*)::int
           from ${schema.media}
