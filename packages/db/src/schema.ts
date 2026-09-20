@@ -18,7 +18,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "reviewer", "uploader"]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "operator", "reviewer", "uploader"]);
 export const albumStateEnum = pgEnum("album_state", ["draft", "live", "ended", "archived"]);
 export const albumAccessEnum = pgEnum("album_access", ["password", "public"]);
 export const publishModeEnum = pgEnum("publish_mode", ["review", "auto"]);
