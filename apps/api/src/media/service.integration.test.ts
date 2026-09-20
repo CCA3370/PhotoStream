@@ -1187,6 +1187,9 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(reviewerView.availableParticipants).toEqual([]);
     expect(reviewerView.currentUserParticipating).toBe(true);
     expect(reviewerView.currentUserAssignedCount).toBe(reviewerAssigned.length);
+    await expect(
+      service.getReviewCollaboration({ id: uploaderId, role: "uploader" }, album.album.id),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     const [newMedia] = await database
       .insert(schema.media)
