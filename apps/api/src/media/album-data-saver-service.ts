@@ -11,6 +11,12 @@ interface AlbumSettingsActor {
   readonly role: UserRole;
 }
 
+function requireAlbumRead(role: UserRole): void {
+  if (!hasPermission(role, "album:read")) {
+    throw new AppError({ code: "FORBIDDEN", message: "当前角色无权查看活动", statusCode: 403 });
+  }
+}
+
 function requireAlbumConfigure(role: UserRole): void {
   if (!hasPermission(role, "album:configure")) {
     throw new AppError({ code: "FORBIDDEN", message: "当前角色无权修改活动设置", statusCode: 403 });
@@ -25,7 +31,7 @@ export class AlbumDataSaverService {
   }
 
   async getForAlbum(actor: AlbumSettingsActor, albumId: string): Promise<DataSaverSettingView> {
-    requireAlbumConfigure(actor.role);
+    requireAlbumRead(actor.role);
     const [row] = await this.#database
       .select({
         albumId: schema.albums.id,
