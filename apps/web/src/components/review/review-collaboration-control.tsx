@@ -2,7 +2,7 @@
 
 import type { ReviewCollaborationView } from "@photostream/contracts";
 import { UsersIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -71,12 +71,10 @@ export function ReviewCollaborationControl({
     value.enabled,
   ]);
 
-  const currentParticipant = useMemo(
-    () => value.participants.find((participant) => participant.id === undefined) ?? null,
-    [value.participants],
-  );
   const mineLabel =
-    currentParticipant === null ? "只看分配给我" : `只看分配给我（${currentParticipant.assignedCount}）`;
+    value.currentUserAssignedCount === null
+      ? "只看分配给我"
+      : `只看分配给我（${value.currentUserAssignedCount}）`;
 
   function toggleParticipant(userId: string, checked: boolean): void {
     setSelectedIds((current) => {
