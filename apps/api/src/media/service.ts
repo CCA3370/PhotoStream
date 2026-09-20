@@ -388,6 +388,7 @@ export class PhotoService {
         username: schema.users.username,
         displayName: schema.users.displayName,
         role: schema.users.role,
+        isActive: schema.users.isActive,
       })
       .from(schema.albumReviewCollaborators)
       .innerJoin(schema.users, eq(schema.albumReviewCollaborators.userId, schema.users.id))
@@ -418,7 +419,7 @@ export class PhotoService {
       assignedCount: counts.get(row.id) ?? 0,
     }));
 
-    const availableParticipants =
+    const eligibleParticipants =
       actor.role === "admin"
         ? await this.#database
             .select({
@@ -426,6 +427,7 @@ export class PhotoService {
               username: schema.users.username,
               displayName: schema.users.displayName,
               role: schema.users.role,
+              isActive: schema.users.isActive,
             })
             .from(schema.users)
             .where(
@@ -435,6 +437,18 @@ export class PhotoService {
               ),
             )
             .orderBy(asc(schema.users.displayName), asc(schema.users.id))
+        : [];
+    const availableParticipants =
+      actor.role === "admin"
+        ? [
+            ...new Map(
+              [...eligibleParticipants, ...participantRows].map((row) => [row.id, row] as const),
+            ).values(),
+          ].sort(
+            (left, right) =>
+              left.displayName.localeCompare(right.displayName, "zh-CN") ||
+              left.id.localeCompare(right.id),
+          )
         : [];
 
     return {
