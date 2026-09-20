@@ -34,11 +34,11 @@ import {
 } from "react";
 
 import { BibReviewDialog, isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
-import {
-  ReviewCollaborationControl,
-  type ReviewAssignmentFilter,
-} from "@/components/review/review-collaboration-control";
 import { InternalCachedImage } from "@/components/media/internal-cached-image";
+import {
+  type ReviewAssignmentFilter,
+  ReviewCollaborationControl,
+} from "@/components/review/review-collaboration-control";
 import {
   ReviewBatchInspector,
   ReviewInspector,
@@ -644,12 +644,8 @@ export function ReviewWorkspace({
         event as CustomEvent<{ readonly albumId?: string; readonly revision?: string }>
       ).detail;
       if (detail?.albumId !== albumId) return;
-      void Promise.all([
-        refreshRemote(),
-        refreshFeatured(),
-        refreshReviewCollaboration(),
-      ]).catch((cause) =>
-        setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
+      void Promise.all([refreshRemote(), refreshFeatured(), refreshReviewCollaboration()]).catch(
+        (cause) => setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
       );
     };
     window.addEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
@@ -2092,9 +2088,7 @@ export function ReviewWorkspace({
               refreshRemote(),
               refreshFeatured(),
               refreshReviewCollaboration(),
-            ]).catch((cause) =>
-              setError(cause instanceof Error ? cause.message : "刷新失败"),
-            )
+            ]).catch((cause) => setError(cause instanceof Error ? cause.message : "刷新失败"))
           }
           size="icon"
           title="刷新审核列表"
