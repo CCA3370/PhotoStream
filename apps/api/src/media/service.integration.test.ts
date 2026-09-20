@@ -1188,21 +1188,30 @@ maybeDescribe("photo vertical slice transactions", () => {
     expect(reviewerView.currentUserParticipating).toBe(true);
     expect(reviewerView.currentUserAssignedCount).toBe(reviewerAssigned.length);
 
-    await database.insert(schema.media).values({
-      albumId: album.album.id,
-      uploaderId,
-      ingestStatus: "ready",
-      publicationStatus: "hidden",
-      width: 100,
-      height: 100,
-      mediaType: "image/jpeg",
-      totalBytes: 100,
-    });
+    const [newMedia] = await database
+      .insert(schema.media)
+      .values({
+        albumId: album.album.id,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "hidden",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      })
+      .returning({
+        id: schema.media.id,
+        reviewAssigneeId: schema.media.reviewAssigneeId,
+      });
+    expect(newMedia?.reviewAssigneeId).not.toBeNull();
+
     const afterInsert = await service.getReviewCollaboration(
       { id: adminId, role: "admin" },
       album.album.id,
     );
     const counts = afterInsert.participants.map((participant) => participant.assignedCount);
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(6);
     expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
 
     const disabled = await service.updateReviewCollaboration({
