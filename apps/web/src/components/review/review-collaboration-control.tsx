@@ -67,9 +67,9 @@ export function ReviewCollaborationControl({
   }, [assignment, onAssignmentChange, value.currentUserParticipating, value.enabled]);
 
   const mineLabel =
-    value.currentUserAssignedCount === null
+    value.currentUserRemainingCount === null
       ? "只看分配给我"
-      : `只看分配给我（${value.currentUserAssignedCount}）`;
+      : `只看分配给我（待审核 ${value.currentUserRemainingCount}）`;
   const invalidSelectedIds = [...selectedIds].filter((userId) => {
     const participant = value.availableParticipants.find((item) => item.id === userId);
     return participant === undefined || !participant.isActive || participant.role === "uploader";
@@ -153,7 +153,7 @@ export function ReviewCollaborationControl({
                 <DialogTitle>审核分工</DialogTitle>
                 <DialogDescription>
                   选择至少 2
-                  个账号后，系统会将当前相册的照片尽量平均分配；之后的新照片会自动分给当前任务量最少的协作者。清空选择可关闭分工。
+                  个账号后，系统会优先将当前未审核照片平均分配；之后的新照片会自动分给剩余待审核任务最少的协作者。首次显示照片或打开大图即视为审核完成。清空选择可关闭分工。
                 </DialogDescription>
               </DialogHeader>
 
@@ -162,9 +162,9 @@ export function ReviewCollaborationControl({
                   <p className="text-sm text-muted-foreground">暂无可参与审核的账号。</p>
                 ) : (
                   value.availableParticipants.map((participant) => {
-                    const assigned =
+                    const remaining =
                       value.participants.find((item) => item.id === participant.id)
-                        ?.assignedCount ?? 0;
+                        ?.remainingCount ?? 0;
                     const checked = selectedIds.has(participant.id);
                     const eligible =
                       participant.isActive &&
@@ -196,7 +196,7 @@ export function ReviewCollaborationControl({
                         </span>
                         {value.enabled ? (
                           <span className="text-xs tabular-nums text-muted-foreground">
-                            当前 {assigned} 张
+                            当前 {remaining} 张
                           </span>
                         ) : null}
                       </label>
