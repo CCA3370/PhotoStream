@@ -131,6 +131,7 @@ export function ReviewLightbox({
   onDelete,
   onEditApplied,
   onSelect,
+  onViewed,
   onToggleFeatured,
   onToggleVisibility,
   onBibStateChange,
@@ -147,6 +148,7 @@ export function ReviewLightbox({
   onDelete: (key: string) => void;
   onEditApplied: () => void | Promise<void>;
   onSelect: (key: string) => void;
+  onViewed: (key: string) => void;
   onStateAction: (key: string) => void;
   onToggleFeatured: (key: string) => void;
   onToggleVisibility: (key: string) => void;
@@ -616,6 +618,7 @@ export function ReviewLightbox({
                         onLoad={() => {
                           setLoaded(true);
                           setLoadFailed(false);
+                          if (!readOnly) onViewed(selected.key);
                         }}
                         loading="eager"
                         sizes="100vw"
