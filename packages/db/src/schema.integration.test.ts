@@ -118,6 +118,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       "retryable",
       "created_at",
       "updated_at",
+      "review_assignee_id",
     ]);
 
     const variantKinds = await pool.query<{ enumlabel: string }>(
