@@ -442,6 +442,9 @@ export class PhotoService {
       participants,
       availableParticipants,
       currentUserParticipating: participants.some((participant) => participant.id === actor.id),
+      currentUserAssignedCount: participants.some((participant) => participant.id === actor.id)
+        ? (counts.get(actor.id) ?? 0)
+        : null,
     };
   }
 
