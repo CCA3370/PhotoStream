@@ -183,7 +183,12 @@ export function UserManagement({
                 <Select
                   items={Object.entries(roleLabels).map(([value, label]) => ({ value, label }))}
                   onValueChange={(value) => {
-                    if (value === "admin" || value === "operator" || value === "reviewer" || value === "uploader") {
+                    if (
+                      value === "admin" ||
+                      value === "operator" ||
+                      value === "reviewer" ||
+                      value === "uploader"
+                    ) {
                       setRole(value);
                     }
                   }}
@@ -253,7 +258,12 @@ export function UserManagement({
                           label,
                         }))}
                         onValueChange={(value) => {
-                          if (value === "admin" || value === "operator" || value === "reviewer" || value === "uploader") {
+                          if (
+                            value === "admin" ||
+                            value === "operator" ||
+                            value === "reviewer" ||
+                            value === "uploader"
+                          ) {
                             void update(user.id, { role: value });
                           }
                         }}
