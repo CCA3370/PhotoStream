@@ -270,6 +270,7 @@ export function UserManagement({
                           <SelectGroup>
                             <SelectItem value="uploader">上传员</SelectItem>
                             <SelectItem value="reviewer">审核员</SelectItem>
+                            <SelectItem value="operator">协作员</SelectItem>
                             <SelectItem value="admin">管理员</SelectItem>
                           </SelectGroup>
                         </SelectContent>
