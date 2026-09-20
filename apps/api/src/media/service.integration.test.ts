@@ -8,6 +8,7 @@ import { PostgresAuthStore } from "../auth/postgres-store.js";
 import type { PasswordHasher } from "../auth/types.js";
 import { UserAdminService } from "../auth/user-admin-service.js";
 import { loadConfig } from "../config.js";
+import { AlbumDataSaverService } from "./album-data-saver-service.js";
 import { MediaEditService } from "./edit-service.js";
 import { LiveEventBroker } from "./live-event-broker.js";
 import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
@@ -187,6 +188,7 @@ maybeDescribe("photo vertical slice transactions", () => {
   const database = createDatabase(pool);
   const storage = new FakeObjectStorage();
   const service = new PhotoService({ database, storage, passwordHasher: fakeHasher, config });
+  const dataSaverService = new AlbumDataSaverService({ database });
   const editService = new MediaEditService({ database, storage });
   const operationsService = new OperationsService({ database, storage, config });
   const userAdminService = new UserAdminService({ database, passwordHasher: fakeHasher, config });
@@ -336,6 +338,22 @@ maybeDescribe("photo vertical slice transactions", () => {
       requestId: "operator-role-delete",
     });
     expect(deletion.mediaId).toBe(media.id);
+
+    expect(
+      await dataSaverService.getForAlbum(
+        { id: operatorId, role: "operator" },
+        created.album.id,
+      ),
+    ).toEqual({ enabled: false });
+
+    await expect(
+      dataSaverService.update({
+        actor: { id: operatorId, role: "operator" },
+        albumId: created.album.id,
+        enabled: true,
+        requestId: "operator-role-data-saver",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     await expect(
       service.updateAlbum({
