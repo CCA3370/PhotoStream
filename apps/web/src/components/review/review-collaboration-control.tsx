@@ -75,6 +75,10 @@ export function ReviewCollaborationControl({
     value.currentUserAssignedCount === null
       ? "只看分配给我"
       : `只看分配给我（${value.currentUserAssignedCount}）`;
+  const invalidSelectedIds = [...selectedIds].filter((userId) => {
+    const participant = value.availableParticipants.find((item) => item.id === userId);
+    return participant === undefined || !participant.isActive || participant.role === "uploader";
+  });
 
   function toggleParticipant(userId: string, checked: boolean): void {
     setSelectedIds((current) => {
@@ -86,7 +90,7 @@ export function ReviewCollaborationControl({
   }
 
   async function save(): Promise<void> {
-    if (saving || selectedIds.size === 1) return;
+    if (saving || selectedIds.size === 1 || invalidSelectedIds.length > 0) return;
     setSaving(true);
     try {
       const next = await clientMutation<ReviewCollaborationView>(
@@ -166,6 +170,9 @@ export function ReviewCollaborationControl({
                       value.participants.find((item) => item.id === participant.id)?.assignedCount ??
                       0;
                     const checked = selectedIds.has(participant.id);
+                    const eligible =
+                      participant.isActive &&
+                      (participant.role === "admin" || participant.role === "reviewer");
                     return (
                       <label
                         className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5"
@@ -174,6 +181,7 @@ export function ReviewCollaborationControl({
                       >
                         <Checkbox
                           checked={checked}
+                          disabled={!eligible && !checked}
                           id={`review-collaborator-${participant.id}`}
                           onCheckedChange={(next) => toggleParticipant(participant.id, next)}
                         />
@@ -183,6 +191,11 @@ export function ReviewCollaborationControl({
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             @{participant.username} · {roleLabels[participant.role]}
+                            {!participant.isActive
+                              ? " · 已停用"
+                              : participant.role === "uploader"
+                                ? " · 无审核权限"
+                                : ""}
                           </span>
                         </span>
                         {value.enabled ? (
@@ -196,7 +209,11 @@ export function ReviewCollaborationControl({
                 )}
               </div>
 
-              {selectedIds.size === 1 ? (
+              {invalidSelectedIds.length > 0 ? (
+                <p className="text-xs text-destructive">
+                  当前分工中有已停用或已失去审核权限的账号，请取消勾选后保存。
+                </p>
+              ) : selectedIds.size === 1 ? (
                 <p className="text-xs text-destructive">审核分工至少需要 2 个账号。</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -209,7 +226,11 @@ export function ReviewCollaborationControl({
                 <Button disabled={saving} onClick={() => setOpen(false)} type="button" variant="outline">
                   取消
                 </Button>
-                <Button disabled={saving || selectedIds.size === 1} onClick={() => void save()} type="button">
+                <Button
+                  disabled={saving || selectedIds.size === 1 || invalidSelectedIds.length > 0}
+                  onClick={() => void save()}
+                  type="button"
+                >
                   {saving ? "保存中…" : "保存并重新分配"}
                 </Button>
               </DialogFooter>
