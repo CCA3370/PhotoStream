@@ -131,6 +131,13 @@ export const ReviewAndRecover: Story = {
         ],
         nextCursor: null,
       }}
+      initialReviewCollaboration={{
+        enabled: false,
+        participants: [],
+        availableParticipants: [],
+        currentUserParticipating: false,
+        currentUserAssignedCount: null,
+      }}
       uploaders={[{ id: uploaderId, username: "photo.teacher", displayName: "摄影老师" }]}
       userRole="admin"
     />
