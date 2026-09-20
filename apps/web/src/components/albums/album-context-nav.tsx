@@ -1,3 +1,4 @@
+import type { UserRole } from "@photostream/contracts";
 import { LayoutDashboardIcon, SearchIcon, SettingsIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -17,7 +18,7 @@ export function AlbumContextNav({
       }
     | undefined;
   current: "overview" | "review" | "settings" | "upload";
-  role: "admin" | "reviewer" | "uploader";
+  role: UserRole;
 }>) {
   const links = [
     {
@@ -25,7 +26,7 @@ export function AlbumContextNav({
       href: `/studio/albums/${albumId}`,
       label: "概览",
       icon: LayoutDashboardIcon,
-      roles: ["admin", "reviewer"],
+      roles: ["admin", "operator", "reviewer"],
       count: undefined,
     },
     {
@@ -33,7 +34,7 @@ export function AlbumContextNav({
       href: `/studio/albums/${albumId}/upload`,
       label: "上传",
       icon: UploadIcon,
-      roles: ["admin", "uploader"],
+      roles: ["admin", "operator", "uploader"],
       count: counts?.uploadIssues,
     },
     {
@@ -41,7 +42,7 @@ export function AlbumContextNav({
       href: `/studio/albums/${albumId}/review`,
       label: "审核",
       icon: SearchIcon,
-      roles: ["admin", "reviewer"],
+      roles: ["admin", "operator", "reviewer"],
       count: counts?.pendingReview,
     },
     {
