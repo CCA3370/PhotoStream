@@ -342,6 +342,7 @@ export function ReviewWorkspace({
   const lastSelectedIndexRef = useRef<number | null>(null);
   const dragSelectionRef = useRef<DragSelectionState | null>(null);
   const filterRequestIdRef = useRef(0);
+  const reviewedMediaIdsRef = useRef<Set<string>>(new Set());
   const [remoteMedia, setRemoteMedia] = useState<readonly InternalMediaView[]>(initialPage.items);
   const [cursor, setCursor] = useState<RemoteCursor | null>(
     initialPage.nextCursor === null ? null : { kind: "single", value: initialPage.nextCursor },
@@ -1169,6 +1170,21 @@ export function ReviewWorkspace({
 
   async function stateAction(item: ReviewItem): Promise<void> {
     await toggleVisibility(item);
+  }
+
+  async function markViewedItemReviewed(key: string): Promise<void> {
+    const item = itemByKey(key);
+    if (item === null) return;
+    const mediaId = remoteId(item);
+    if (mediaId === null || reviewedMediaIdsRef.current.has(mediaId)) return;
+    reviewedMediaIdsRef.current.add(mediaId);
+    try {
+      await clientMutation<{ readonly ok: true }>(`/api/v1/media/${mediaId}/reviewed`);
+      await refreshReviewCollaboration();
+    } catch (cause) {
+      reviewedMediaIdsRef.current.delete(mediaId);
+      setError(cause instanceof Error ? cause.message : "记录审核完成状态失败");
+    }
   }
 
   const setSelectionForKey = useCallback(
@@ -2556,6 +2572,7 @@ export function ReviewWorkspace({
           await Promise.all([refreshRemote(), refreshLocal()]);
         }}
         onSelect={setActiveKey}
+        onViewed={(key) => void markViewedItemReviewed(key)}
         onStateAction={(key) => {
           const item = itemByKey(key);
           if (item !== null) void stateAction(item);
