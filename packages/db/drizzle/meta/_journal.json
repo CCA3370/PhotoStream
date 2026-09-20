@@ -218,6 +218,13 @@
       "when": 1789876800000,
       "tag": "0030_review_collaboration",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789920000000,
+      "tag": "0031_operator_role",
+      "breakpoints": true
     }
   ]
 }
