@@ -117,6 +117,15 @@ export const dashboardResponseSchema = z
         })
         .strict(),
     ),
+    faceIndexHealth: z
+      .object({
+        total: z.number().int().min(0),
+        failed: z.number().int().min(0),
+        providerUnavailable: z.number().int().min(0),
+        stuckProcessing: z.number().int().min(0),
+        stuckThresholdSeconds: z.number().int().positive(),
+      })
+      .strict(),
     searchUsage: z
       .object({
         number: z.number().int().min(0),
