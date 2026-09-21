@@ -203,6 +203,7 @@ export class DashboardService {
         schema.searchUsageEvents.createdAt,
       );
 
+    const faceStuckThreshold = new Date(now.getTime() - 10 * 60 * 1_000);
     const [
       trend,
       searchTrend,
@@ -360,38 +361,20 @@ export class DashboardService {
             lt(schema.mediaDeliveryEvents.createdAt, to),
           ),
         ),
+      this.#cdnMetrics.query({ from, to }).catch(() => failedCdnMetrics()),
       this.#database
         .select({
-          failed: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'failed')::int`,
+          failed: sql<number>`count(*) filter (
+            where ${schema.mediaFaceIndexTasks.status} = 'failed'
+          )::int`,
           providerUnavailable: sql<number>`count(*) filter (
-            where ${schema.mediaFaceIndexTasks.status} <> 'failed'
+            where ${schema.mediaFaceIndexTasks.status} not in ('failed', 'indexing')
               and ${schema.mediaFaceIndexTasks.lastErrorCode} = 'provider_unavailable'
           )::int`,
           stuckProcessing: sql<number>`count(*) filter (
             where ${schema.mediaFaceIndexTasks.status} = 'indexing'
               and ${schema.mediaFaceIndexTasks.updatedAt} <= ${faceStuckThreshold}
           )::int`,
-        })
-        .from(schema.mediaFaceIndexTasks),
-      this.#database
-        .select({
-          failed: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'failed')::int`,
-          providerUnavailable: sql<number>`count(*) filter (
-            where ${schema.faceAlbumJobs.status} <> 'failed'
-              and ${schema.faceAlbumJobs.lastErrorCode} = 'provider_unavailable'
-          )::int`,
-          stuckProcessing: sql<number>`count(*) filter (
-            where ${schema.faceAlbumJobs.status} = 'processing'
-              and ${schema.faceAlbumJobs.updatedAt} <= ${faceStuckThreshold}
-          )::int`,
-        })
-        .from(schema.faceAlbumJobs),
-      this.#cdnMetrics.query({ from, to }).catch(() => failedCdnMetrics()),
-      this.#database
-        .select({
-          failed: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'failed')::int`,
-          staleProcessing: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'indexing' and ${schema.mediaFaceIndexTasks.updatedAt} < ${new Date(now.getTime() - 10 * 60 * 1_000)})::int`,
-          providerUnavailable: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.lastErrorCode} = 'provider_unavailable')::int`,
         })
         .from(schema.mediaFaceIndexTasks)
         .innerJoin(
@@ -401,16 +384,33 @@ export class DashboardService {
         .where(eq(schema.albumFaceIndexes.enabled, true)),
       this.#database
         .select({
-          failed: sql<number>`count(*) filter (where ${schema.albumFaceIndexes.indexState} = 'failed')::int`,
-          providerUnavailable: sql<number>`count(*) filter (where ${schema.albumFaceIndexes.lastErrorCode} = 'provider_unavailable')::int`,
+          failed: sql<number>`count(*) filter (
+            where ${schema.albumFaceIndexes.indexState} = 'failed'
+          )::int`,
+          providerUnavailable: sql<number>`count(*) filter (
+            where ${schema.albumFaceIndexes.indexState} not in ('failed', 'indexing')
+              and ${schema.albumFaceIndexes.lastErrorCode} = 'provider_unavailable'
+          )::int`,
+          stuckProcessing: sql<number>`count(*) filter (
+            where ${schema.albumFaceIndexes.indexState} = 'indexing'
+              and ${schema.albumFaceIndexes.updatedAt} <= ${faceStuckThreshold}
+          )::int`,
         })
         .from(schema.albumFaceIndexes)
         .where(eq(schema.albumFaceIndexes.enabled, true)),
       this.#database
         .select({
-          failed: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'failed')::int`,
-          staleProcessing: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'processing' and ${schema.faceAlbumJobs.updatedAt} < ${new Date(now.getTime() - 10 * 60 * 1_000)})::int`,
-          providerUnavailable: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.lastErrorCode} = 'provider_unavailable')::int`,
+          failed: sql<number>`count(*) filter (
+            where ${schema.faceAlbumJobs.status} = 'failed'
+          )::int`,
+          providerUnavailable: sql<number>`count(*) filter (
+            where ${schema.faceAlbumJobs.status} not in ('failed', 'processing')
+              and ${schema.faceAlbumJobs.lastErrorCode} = 'provider_unavailable'
+          )::int`,
+          stuckProcessing: sql<number>`count(*) filter (
+            where ${schema.faceAlbumJobs.status} = 'processing'
+              and ${schema.faceAlbumJobs.updatedAt} <= ${faceStuckThreshold}
+          )::int`,
         })
         .from(schema.faceAlbumJobs)
         .innerJoin(
@@ -479,13 +479,21 @@ export class DashboardService {
           });
 
     const mediaFaceHealth = faceMediaHealth[0];
-    const albumJobHealth = faceAlbumJobHealth[0];
+    const albumFaceHealth = faceAlbumHealth[0];
+    const albumJobHealth = faceJobHealth[0];
     const faceIndexHealth = {
-      failed: (mediaFaceHealth?.failed ?? 0) + (albumJobHealth?.failed ?? 0),
+      failed:
+        (mediaFaceHealth?.failed ?? 0) +
+        (albumFaceHealth?.failed ?? 0) +
+        (albumJobHealth?.failed ?? 0),
       providerUnavailable:
-        (mediaFaceHealth?.providerUnavailable ?? 0) + (albumJobHealth?.providerUnavailable ?? 0),
+        (mediaFaceHealth?.providerUnavailable ?? 0) +
+        (albumFaceHealth?.providerUnavailable ?? 0) +
+        (albumJobHealth?.providerUnavailable ?? 0),
       stuckProcessing:
-        (mediaFaceHealth?.stuckProcessing ?? 0) + (albumJobHealth?.stuckProcessing ?? 0),
+        (mediaFaceHealth?.stuckProcessing ?? 0) +
+        (albumFaceHealth?.stuckProcessing ?? 0) +
+        (albumJobHealth?.stuckProcessing ?? 0),
       stuckThresholdSeconds: 10 * 60,
     };
 
@@ -513,20 +521,6 @@ export class DashboardService {
           attributes: row.attributes,
           face: row.face,
         })),
-      },
-      faceIndexHealth: {
-        failed:
-          (faceMediaHealth[0]?.failed ?? 0) +
-          (faceAlbumHealth[0]?.failed ?? 0) +
-          (faceJobHealth[0]?.failed ?? 0),
-        providerUnavailable:
-          (faceMediaHealth[0]?.providerUnavailable ?? 0) +
-          (faceAlbumHealth[0]?.providerUnavailable ?? 0) +
-          (faceJobHealth[0]?.providerUnavailable ?? 0),
-        staleProcessing:
-          (faceMediaHealth[0]?.staleProcessing ?? 0) +
-          (faceJobHealth[0]?.staleProcessing ?? 0),
-        thresholdMinutes: 10,
       },
       faceIndexHealth: {
         ...faceIndexHealth,
