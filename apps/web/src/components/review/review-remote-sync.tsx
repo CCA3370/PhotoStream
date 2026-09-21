@@ -68,9 +68,7 @@ export function ReviewRemoteSync({
     const connect = () => {
       if (disposed) return;
       source?.close();
-      const next = new EventSource(
-        `/api/v1/albums/${encodeURIComponent(albumId)}/review-events`,
-      );
+      const next = new EventSource(`/api/v1/albums/${encodeURIComponent(albumId)}/review-events`);
       source = next;
       next.addEventListener("review.changed", (event) => {
         try {
