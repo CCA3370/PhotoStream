@@ -9,6 +9,7 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 import { loadDerivedImage } from "@/lib/derived-image-cache";
+import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { loadOriginalImage } from "@/lib/original-image-cache";
 
 export interface WeChatDownloadSource {
@@ -39,37 +40,6 @@ function jpegFilename(filename: string): string {
 
 function isWeChatBrowser(): boolean {
   return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
-}
-
-async function convertImageToJpeg(blob: Blob): Promise<Blob> {
-  const bitmap = await createImageBitmap(blob);
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const context = canvas.getContext("2d", { alpha: false });
-    if (context === null) throw new Error("当前浏览器无法转换 JPG 图片");
-
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(bitmap, 0, 0);
-
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (jpeg) => {
-          if (jpeg === null) {
-            reject(new Error("JPG 图片转换失败"));
-            return;
-          }
-          resolve(jpeg);
-        },
-        "image/jpeg",
-        0.92,
-      );
-    });
-  } finally {
-    bitmap.close();
-  }
 }
 
 function triggerDownload(blob: Blob, filename: string): void {
