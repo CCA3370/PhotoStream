@@ -120,6 +120,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       "updated_at",
       "review_assignee_id",
       "reviewed_at",
+      "source_sha256",
     ]);
 
     const variantKinds = await pool.query<{ enumlabel: string }>(
