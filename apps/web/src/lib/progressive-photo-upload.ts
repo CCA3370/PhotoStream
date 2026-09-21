@@ -155,6 +155,8 @@ export async function createProgressiveUpload(options: {
   readonly categoryId: string | null;
   readonly file: File;
   readonly metadata: ProcessedPhotoMetadata;
+  readonly sourceHash: string;
+  readonly allowDuplicate: boolean;
   readonly signal?: AbortSignal;
 }): Promise<UploadIntentView> {
   return clientMutation<UploadIntentView>("/api/v1/uploads/progressive", {
@@ -165,6 +167,8 @@ export async function createProgressiveUpload(options: {
       height: options.metadata.height,
       totalBytes: options.file.size,
       capturedAt: options.metadata.capturedAt,
+      sourceHash: options.sourceHash,
+      allowDuplicate: options.allowDuplicate,
       original: {
         format: options.metadata.originalFormat,
         contentType: options.metadata.originalContentType,
