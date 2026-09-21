@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { clientMutation } from "@/lib/client-api";
 import { resumeLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   getLocalProcessingRuntime,
