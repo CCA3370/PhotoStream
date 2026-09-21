@@ -35,6 +35,8 @@ const progressiveUploadSchema = z
       .min(1)
       .max(50 * 1024 * 1024),
     capturedAt: z.string().datetime().nullable().default(null),
+    sourceHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    allowDuplicate: z.boolean().default(false),
     original: z
       .object({
         format: z.enum(["jpeg", "png", "webp"]),
@@ -86,6 +88,15 @@ const progressiveVariantSchema = z
   .strict();
 
 const intentParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const albumParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const duplicateCheckSchema = z
+  .object({
+    hashes: z.array(z.string().regex(/^[a-f0-9]{64}$/u)).min(1).max(200),
+  })
+  .strict();
+const duplicateCheckResponseSchema = z
+  .object({ duplicates: z.array(z.string().regex(/^[a-f0-9]{64}$/u)) })
+  .strict();
 
 function idempotencyKey(request: FastifyRequest): string | undefined {
   const value = request.headers["idempotency-key"];
@@ -106,6 +117,29 @@ export async function registerProgressiveUploadRoutes(
   },
 ): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  typed.post(
+    "/api/v1/albums/:id/media-duplicates",
+    {
+      schema: {
+        operationId: "checkAlbumMediaDuplicates",
+        tags: ["uploads", "media"],
+        params: albumParamsSchema,
+        body: duplicateCheckSchema,
+        response: { 200: duplicateCheckResponseSchema, ...commonErrors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      return {
+        duplicates: await options.progressiveUploadService.findDuplicateSourceHashes({
+          actor: actorFrom(session),
+          albumId: request.params.id,
+          hashes: request.body.hashes,
+        }),
+      };
+    },
+  );
 
   typed.post(
     "/api/v1/uploads/progressive",
