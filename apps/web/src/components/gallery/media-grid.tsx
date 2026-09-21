@@ -73,7 +73,7 @@ function MediaTile({
       className={cn(
         "group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-200 ease-out active:scale-[0.975] sm:rounded-xl sm:hover:-translate-y-0.5 sm:hover:scale-[1.012] sm:hover:shadow-md sm:hover:ring-border motion-reduce:transform-none motion-reduce:transition-none",
         animateIn &&
-          "animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
+          "animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
       )}
       data-media-id={media.id}
       style={
@@ -475,6 +475,22 @@ export function MediaGrid({
     },
     [],
   );
+
+  useEffect(() => {
+    const reveal = (event: Event) => {
+      const detail = (event as CustomEvent<{ readonly mediaIds?: readonly string[] }>).detail;
+      const ids = (detail?.mediaIds ?? []).filter((id) => mediaIds.includes(id)).slice(0, 12);
+      if (ids.length === 0) return;
+      if (freshTimerRef.current !== null) clearTimeout(freshTimerRef.current);
+      setFreshIds(new Set(ids));
+      freshTimerRef.current = window.setTimeout(() => {
+        setFreshIds(new Set());
+        freshTimerRef.current = null;
+      }, 1_400);
+    };
+    window.addEventListener("photostream:reveal-new-media", reveal);
+    return () => window.removeEventListener("photostream:reveal-new-media", reveal);
+  }, [mediaIds]);
 
   useEffect(() => {
     if (slug === undefined || shareId !== undefined || mediaIds.length === 0) return;
