@@ -15,7 +15,7 @@ import {
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import { deleteLocalPhotoEditDraft, getLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
-import type { PreparedUploadInput } from "@/lib/upload-input";
+import { sha256Blob, type PreparedUploadInput } from "@/lib/upload-input";
 import {
   createProgressiveUpload,
   registerAndUploadProgressiveVariant,
@@ -431,17 +431,22 @@ class LocalProcessingRuntime {
     this.#healthySamples = 0;
 
     const stored = await listPersistedTasks(this.#albumId);
-    const recovered: ProcessingTask[] = stored.map((task) => ({
-      ...task,
-      sourceFileName: task.sourceFileName ?? task.file.name,
-      sourceHash: task.sourceHash ?? "",
-      allowDuplicate: task.allowDuplicate ?? false,
-      status: task.status === "processing" ? "queued" : task.status,
-      error: task.status === "processing" ? null : task.error,
-      uploadedBytes: 0,
-      totalUploadBytes: task.file.size,
-      uploadStartedAt: null,
-    }));
+    const recovered: ProcessingTask[] = await Promise.all(
+      stored.map(async (task) => ({
+        ...task,
+        sourceFileName: task.sourceFileName ?? task.file.name,
+        sourceHash:
+          typeof task.sourceHash === "string" && /^[a-f0-9]{64}$/u.test(task.sourceHash)
+            ? task.sourceHash
+            : await sha256Blob(task.file),
+        allowDuplicate: task.allowDuplicate ?? false,
+        status: task.status === "processing" ? "queued" : task.status,
+        error: task.status === "processing" ? null : task.error,
+        uploadedBytes: 0,
+        totalUploadBytes: task.file.size,
+        uploadStartedAt: null,
+      })),
+    );
     for (const task of recovered) this.#tasks.set(task.id, task);
     const reset = recovered.filter((task) => task.status === "queued");
     if (reset.length > 0) await putPersistedTasks(reset.map(persistedTask));
