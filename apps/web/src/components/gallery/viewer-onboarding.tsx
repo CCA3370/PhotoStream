@@ -229,6 +229,8 @@ export function ViewerOnboarding({
   attributeFilterEnabled,
   bibSearchEnabled,
   faceSearchEnabled,
+  hasPhotos,
+  live,
   searchAvailable,
 }: ViewerOnboardingProps) {
   const [mounted, setMounted] = useState(false);
@@ -248,15 +250,19 @@ export function ViewerOnboarding({
   }, [attributeFilterEnabled, bibSearchEnabled, faceSearchEnabled]);
 
   const mainSteps = useMemo<readonly MainStep[]>(() => {
-    const steps: MainStep[] = [
-      {
+    const steps: MainStep[] = [];
+
+    if (hasPhotos) {
+      steps.push({
         target: "filters",
         title: "按分类浏览照片",
-        description: "你可以查看全部照片、精选照片，或按不同分类快速浏览。",
-      },
-    ];
+        description: live
+          ? "直播期间新照片会自动加入列表；你也可以查看全部照片、精选照片，或按分类浏览。"
+          : "你可以查看全部照片、精选照片，或按不同分类快速浏览。",
+      });
+    }
 
-    if (searchAvailable) {
+    if (hasPhotos && searchAvailable) {
       steps.push({
         target: "search",
         title: "快速找到你的照片",
@@ -271,11 +277,11 @@ export function ViewerOnboarding({
       target: "help",
       title: "帮助与反馈",
       description:
-        "点击右下角问号，可以随时重新查看使用引导，也可以提交遇到的问题或建议。我们会尽快查看并处理你的反馈，部分问题最快可在约 10 分钟内完成调整。",
+        "点击右下角问号，可以随时重新查看使用引导，也可以提交遇到的问题或建议。",
     });
 
     return steps;
-  }, [searchAvailable, searchMethods]);
+  }, [hasPhotos, live, searchAvailable, searchMethods]);
 
   const beginMain = useCallback(() => {
     setSpotlightRect(null);
@@ -307,7 +313,7 @@ export function ViewerOnboarding({
   }, [beginMain]);
 
   useEffect(() => {
-    if (!mounted || flow !== null || !hasSeenMain) return;
+    if (!mounted || flow !== null || !hasSeenMain || !hasPhotos) return;
     if (storageSeen(viewerLightboxOnboardingStorageKey)) return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -335,7 +341,7 @@ export function ViewerOnboarding({
       observer.disconnect();
       if (timer !== null) clearTimeout(timer);
     };
-  }, [flow, hasSeenMain, mounted]);
+  }, [flow, hasPhotos, hasSeenMain, mounted]);
 
   useEffect(() => {
     if (flow?.kind !== "lightbox") return;
@@ -733,7 +739,13 @@ export function ViewerOnboarding({
             id="viewer-onboarding-description"
           >
             {welcome
-              ? "活动照片将持续更新，你可以实时浏览，也可以快速找到自己的照片。"
+              ? live
+                ? hasPhotos
+                  ? "当前正在直播。新照片发布后会自动出现在列表中；当你正在浏览较早照片时，系统只会提示有新内容，不会抢走当前滚动位置。"
+                  : "当前正在直播，但暂时还没有照片。新照片发布后会自动出现在这里，无需手动刷新。"
+                : hasPhotos
+                  ? "活动照片已经可以浏览，你也可以使用筛选和找照片功能快速定位内容。"
+                  : "这个活动暂时没有可浏览的照片。你仍可以通过帮助与反馈提交问题或建议。"
               : (currentMainStep?.description ??
                 (lightboxToolbar
                   ? lightboxActions.length > 0
