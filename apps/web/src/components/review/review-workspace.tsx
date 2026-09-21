@@ -645,6 +645,13 @@ export function ReviewWorkspace({
         event as CustomEvent<{ readonly albumId?: string; readonly revision?: string }>
       ).detail;
       if (detail?.albumId !== albumId) return;
+      if (openItemKeysRef.current.size > 0) {
+        toast.add({
+          title: "审核数据已实时同步",
+          description: "当前打开的照片可能已在其他会话或操作中发生变化，已加载最新状态。",
+          type: "info",
+        });
+      }
       void Promise.all([refreshRemote(), refreshFeatured(), refreshReviewCollaboration()]).catch(
         (cause) => setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
       );
