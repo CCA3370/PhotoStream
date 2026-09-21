@@ -6,7 +6,8 @@ import { clientGet } from "@/lib/client-api";
 
 export const REVIEW_REMOTE_CHANGED_EVENT = "photostream:review-remote-changed";
 
-const pollIntervalMs = 4_000;
+const fallbackPollIntervalMs = 60_000;
+const reconnectDelayMs = 1_000;
 
 export function ReviewRemoteSync({
   albumId,
@@ -16,7 +17,6 @@ export function ReviewRemoteSync({
   initialRevision: string;
 }>) {
   const revisionRef = useRef(initialRevision);
-  const pollingRef = useRef(false);
 
   useEffect(() => {
     revisionRef.current = initialRevision;
@@ -24,49 +24,101 @@ export function ReviewRemoteSync({
 
   useEffect(() => {
     let disposed = false;
+    let source: EventSource | null = null;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let checking = false;
 
-    const poll = async (): Promise<void> => {
-      if (disposed || pollingRef.current || document.visibilityState !== "visible") return;
-      pollingRef.current = true;
+    const publishRevision = (revision: string) => {
+      if (revision === revisionRef.current) return;
+      revisionRef.current = revision;
+      window.dispatchEvent(
+        new CustomEvent(REVIEW_REMOTE_CHANGED_EVENT, {
+          detail: { albumId, revision, realtime: true },
+        }),
+      );
+    };
+
+    const checkRevision = async (): Promise<void> => {
+      if (disposed || checking || document.visibilityState !== "visible") return;
+      checking = true;
       try {
         const result = await clientGet<{ readonly revision: string }>(
           `/api/v1/albums/${encodeURIComponent(albumId)}/review-revision`,
         );
-        if (disposed) return;
-        const nextRevision = result.revision;
-        if (nextRevision === revisionRef.current) return;
-        revisionRef.current = nextRevision;
-        window.dispatchEvent(
-          new CustomEvent(REVIEW_REMOTE_CHANGED_EVENT, {
-            detail: { albumId, revision: nextRevision },
-          }),
-        );
+        if (!disposed) publishRevision(result.revision);
       } catch {
-        // The normal page-level error handling remains authoritative. A later poll retries.
+        // SSE reconnect and the next low-frequency fallback check will retry.
       } finally {
-        pollingRef.current = false;
+        checking = false;
       }
     };
 
-    const interval = window.setInterval(() => void poll(), pollIntervalMs);
-    const recover = () => void poll();
-    const visibilityChanged = () => {
-      if (document.visibilityState === "visible") void poll();
+    const stopFallback = () => {
+      if (fallbackTimer === null) return;
+      clearInterval(fallbackTimer);
+      fallbackTimer = null;
     };
 
+    const startFallback = () => {
+      if (fallbackTimer !== null || disposed) return;
+      fallbackTimer = setInterval(() => void checkRevision(), fallbackPollIntervalMs);
+    };
+
+    const connect = () => {
+      if (disposed) return;
+      source?.close();
+      const next = new EventSource(
+        `/api/v1/albums/${encodeURIComponent(albumId)}/review-events`,
+      );
+      source = next;
+      next.addEventListener("review.changed", (event) => {
+        try {
+          const parsed = JSON.parse((event as MessageEvent<string>).data) as {
+            readonly revision?: string;
+          };
+          if (typeof parsed.revision === "string") publishRevision(parsed.revision);
+        } catch {
+          void checkRevision();
+        }
+      });
+      next.addEventListener("open", () => {
+        stopFallback();
+        void checkRevision();
+      });
+      next.addEventListener("error", () => {
+        startFallback();
+        if (next.readyState !== EventSource.CLOSED || disposed || reconnectTimer !== null) return;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect();
+        }, reconnectDelayMs);
+      });
+    };
+
+    const recover = () => {
+      void checkRevision();
+      if (source?.readyState === EventSource.CLOSED) connect();
+    };
+    const visibilityChanged = () => {
+      if (document.visibilityState === "visible") recover();
+    };
+
+    connect();
+    document.addEventListener("visibilitychange", visibilityChanged);
     window.addEventListener("focus", recover);
     window.addEventListener("online", recover);
     window.addEventListener("pageshow", recover);
-    document.addEventListener("visibilitychange", visibilityChanged);
-    void poll();
 
     return () => {
       disposed = true;
-      window.clearInterval(interval);
+      source?.close();
+      stopFallback();
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      document.removeEventListener("visibilitychange", visibilityChanged);
       window.removeEventListener("focus", recover);
       window.removeEventListener("online", recover);
       window.removeEventListener("pageshow", recover);
-      document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [albumId]);
 
