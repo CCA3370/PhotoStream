@@ -367,20 +367,31 @@ export class DashboardService {
           staleProcessing: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'indexing' and ${schema.mediaFaceIndexTasks.updatedAt} < ${new Date(now.getTime() - 10 * 60 * 1_000)})::int`,
           providerUnavailable: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.lastErrorCode} = 'provider_unavailable')::int`,
         })
-        .from(schema.mediaFaceIndexTasks),
+        .from(schema.mediaFaceIndexTasks)
+        .innerJoin(
+          schema.albumFaceIndexes,
+          eq(schema.mediaFaceIndexTasks.albumId, schema.albumFaceIndexes.albumId),
+        )
+        .where(eq(schema.albumFaceIndexes.enabled, true)),
       this.#database
         .select({
           failed: sql<number>`count(*) filter (where ${schema.albumFaceIndexes.indexState} = 'failed')::int`,
           providerUnavailable: sql<number>`count(*) filter (where ${schema.albumFaceIndexes.lastErrorCode} = 'provider_unavailable')::int`,
         })
-        .from(schema.albumFaceIndexes),
+        .from(schema.albumFaceIndexes)
+        .where(eq(schema.albumFaceIndexes.enabled, true)),
       this.#database
         .select({
           failed: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'failed')::int`,
           staleProcessing: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'processing' and ${schema.faceAlbumJobs.updatedAt} < ${new Date(now.getTime() - 10 * 60 * 1_000)})::int`,
           providerUnavailable: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.lastErrorCode} = 'provider_unavailable')::int`,
         })
-        .from(schema.faceAlbumJobs),
+        .from(schema.faceAlbumJobs)
+        .innerJoin(
+          schema.albumFaceIndexes,
+          eq(schema.faceAlbumJobs.albumId, schema.albumFaceIndexes.albumId),
+        )
+        .where(eq(schema.albumFaceIndexes.enabled, true)),
     ]);
 
     const totals = trend.reduce(
