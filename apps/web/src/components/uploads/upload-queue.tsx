@@ -44,6 +44,11 @@ import {
   getLocalPhotoEditDraft,
   type LocalPhotoEditDraft,
 } from "@/lib/photo-edit/local-drafts";
+import {
+  isSupportedUploadInput,
+  prepareUploadInput,
+  type PreparedUploadInput,
+} from "@/lib/upload-input";
 import { cn } from "@/lib/utils";
 
 interface CategoryOption {
@@ -56,8 +61,6 @@ interface PreviewPhoto {
   readonly url: string;
   readonly editDraft: LocalPhotoEditDraft | null;
 }
-
-const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -104,9 +107,14 @@ export function UploadQueue({
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showUploaded, setShowUploaded] = useState(false);
+  const [duplicateInputs, setDuplicateInputs] = useState<readonly PreparedUploadInput[]>([]);
+  const knownSourceHashes = useRef(new Set<string>());
 
   const refresh = useCallback(async () => {
     const allRows = await listLocalReviewPhotos(albumId);
+    for (const photo of allRows) {
+      if (photo.sourceHash) knownSourceHashes.current.add(photo.sourceHash);
+    }
     const rows = showUploaded
       ? allRows
       : allRows.filter((photo) => photo.uploadState !== "published");
@@ -143,30 +151,76 @@ export function UploadQueue({
     return unsubscribe;
   }, [bibConfig, runtime]);
 
+  async function enqueuePrepared(inputs: readonly PreparedUploadInput[]): Promise<void> {
+    if (inputs.length === 0) return;
+    const selectedCategory = categoryId === "uncategorized" ? null : categoryId;
+    await runtime.enqueue(inputs, selectedCategory);
+    for (const input of inputs) knownSourceHashes.current.add(input.sourceHash);
+  }
+
   async function enqueue(files: readonly File[]): Promise<void> {
     if (files.length === 0) return;
     if (!localQueueSupported()) {
       toast.add({ title: "当前浏览器不支持本地上传队列", type: "error" });
       return;
     }
-    const valid = files.filter((file) => acceptedTypes.has(file.type));
-    const skipped = files.length - valid.length;
-    const selectedCategory = categoryId === "uncategorized" ? null : categoryId;
+
+    const candidates = files.filter(isSupportedUploadInput);
+    const skipped = files.length - candidates.length;
+    const prepared: PreparedUploadInput[] = [];
+    const preparationFailures: string[] = [];
+    for (const file of candidates) {
+      try {
+        prepared.push(await prepareUploadInput(file));
+      } catch (error) {
+        preparationFailures.push(
+          `${file.name}：${error instanceof Error ? error.message : "无法处理此文件"}`,
+        );
+      }
+    }
+
+    const seen = new Set(knownSourceHashes.current);
+    const unique: PreparedUploadInput[] = [];
+    const duplicates: PreparedUploadInput[] = [];
+    for (const input of prepared) {
+      if (seen.has(input.sourceHash)) {
+        duplicates.push(input);
+        continue;
+      }
+      unique.push(input);
+      seen.add(input.sourceHash);
+    }
+
     try {
-      if (valid.length > 0) {
-        await runtime.enqueue(valid, selectedCategory);
+      if (unique.length > 0) {
+        await enqueuePrepared(unique);
         toast.add({
-          title: `已开始处理并上传 ${valid.length} 张`,
+          title: `已开始处理并上传 ${unique.length} 张`,
           description:
-            "原图会立即开始上传，派生图生成后随即上传；完成后默认隐藏。原图同时保留在本机供管理端优先预览。",
+            "原图会立即开始上传，派生图生成后随即上传；完成后默认隐藏。HEIC/HEIF 会在当前设备本地转为 JPEG。",
           type: "success",
+        });
+      }
+      setDuplicateInputs(duplicates);
+      if (duplicates.length > 0) {
+        toast.add({
+          title: `已跳过 ${duplicates.length} 张重复照片`,
+          description: "已按文件内容 SHA-256 检测；可在上传区域选择“仍然上传”。",
+          type: "warning",
         });
       }
       if (skipped > 0) {
         toast.add({
           title: `已跳过 ${skipped} 个不支持的文件`,
-          description: "当前支持 JPEG、PNG 和 WebP。",
+          description: "支持 JPEG、PNG、WebP，以及当前设备可解码的 HEIC/HEIF。",
           type: "warning",
+        });
+      }
+      if (preparationFailures.length > 0) {
+        toast.add({
+          title: `${preparationFailures.length} 张照片未能加入队列`,
+          description: preparationFailures.slice(0, 2).join("；"),
+          type: "error",
         });
       }
     } catch (error) {
@@ -278,6 +332,19 @@ export function UploadQueue({
   }
 
   const visibleTasks = tasks.filter((task) => task.status !== "staged");
+  const uploadProgress = useMemo(() => {
+    const totalBytes = tasks.reduce((sum, task) => sum + task.totalUploadBytes, 0);
+    const uploadedBytes = tasks.reduce((sum, task) => sum + task.uploadedBytes, 0);
+    const bytesPerSecond = tasks.reduce((sum, task) => sum + task.bytesPerSecond, 0);
+    const completed = tasks.filter((task) => task.status === "staged").length;
+    return {
+      totalBytes,
+      uploadedBytes,
+      bytesPerSecond,
+      completed,
+      percent: totalBytes <= 0 ? 0 : Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)),
+    };
+  }, [tasks]);
 
   return (
     <UploadShell
@@ -352,7 +419,7 @@ export function UploadQueue({
         </div>
 
         <input
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           className="sr-only"
           id="photo-files"
           multiple
@@ -361,7 +428,7 @@ export function UploadQueue({
           type="file"
         />
         <input
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           className="sr-only"
           multiple
           onChange={(event) => void enqueue(Array.from(event.currentTarget.files ?? []))}
@@ -397,6 +464,76 @@ export function UploadQueue({
             上传完成后默认隐藏，可在审核页切换为显示
           </span>
         </button>
+
+        {duplicateInputs.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/35 bg-amber-500/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">检测到 {duplicateInputs.length} 张重复照片，已暂时跳过</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                使用文件内容 SHA-256 判断；若确实需要保留副本，可以继续上传。
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setDuplicateInputs([])} size="sm" type="button" variant="ghost">
+                忽略
+              </Button>
+              <Button
+                onClick={() => {
+                  const pending = duplicateInputs;
+                  setDuplicateInputs([]);
+                  void enqueuePrepared(pending)
+                    .then(() =>
+                      toast.add({
+                        title: `已允许上传 ${pending.length} 张重复照片`,
+                        type: "success",
+                      }),
+                    )
+                    .catch((error) =>
+                      toast.add({
+                        title: "重复照片加入队列失败",
+                        description: error instanceof Error ? error.message : "请稍后重试",
+                        type: "error",
+                      }),
+                    );
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                仍然上传
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {tasks.length > 0 && uploadProgress.totalBytes > 0 ? (
+          <div className="rounded-lg border bg-muted/15 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="font-medium">
+                总进度 {uploadProgress.completed}/{tasks.length} · {uploadProgress.percent}%
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {formatBytes(uploadProgress.uploadedBytes)} / {formatBytes(uploadProgress.totalBytes)}
+                {uploadProgress.bytesPerSecond > 0
+                  ? ` · ${formatBytes(uploadProgress.bytesPerSecond)}/s`
+                  : ""}
+              </span>
+            </div>
+            <div
+              aria-label="上传总进度"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={uploadProgress.percent}
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
+                style={{ width: `${uploadProgress.percent}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {role === "uploader" && items.length > 0 ? (
           <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
@@ -439,6 +576,13 @@ export function UploadQueue({
                     <p className="truncate text-sm font-medium">{task.fileName}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatBytes(task.bytes)} · {taskLabel(task.status)}
+                      {task.status === "processing" && task.totalUploadBytes > 0
+                        ? ` · ${Math.min(
+                            100,
+                            Math.round((task.uploadedBytes / task.totalUploadBytes) * 100),
+                          )}%`
+                        : ""}
+                      {task.bytesPerSecond > 0 ? ` · ${formatBytes(task.bytesPerSecond)}/s` : ""}
                     </p>
                     {task.error === null ? null : (
                       <p className="mt-1 text-xs text-destructive">{task.error}</p>
