@@ -3,6 +3,7 @@
 import type { UserRole } from "@photostream/contracts";
 import {
   AlertTriangleIcon,
+  AlertTriangleIcon,
   ArrowUpRightIcon,
   CalendarRangeIcon,
   DownloadIcon,
@@ -47,6 +48,13 @@ export interface DashboardStatistics {
   readonly sessions: number;
   readonly downloads: number;
   readonly uniqueVisitors: number;
+  readonly faceIndexHealth: {
+    readonly total: number;
+    readonly failed: number;
+    readonly providerUnavailable: number;
+    readonly stuckProcessing: number;
+    readonly stuckThresholdSeconds: number;
+  };
   readonly points: readonly {
     readonly at: string;
     readonly opens: number;
@@ -345,6 +353,12 @@ export function DashboardView({
   );
   const activeRanking = rankingMode === "downloads" ? downloadRanking : likeRanking;
   const activeRankingUnit = rankingMode === "downloads" ? "次" : "赞";
+  const cdn5xxRequests = useMemo(
+    () => data.cdn.points.reduce((sum, point) => sum + point.http5xx, 0),
+    [data.cdn.points],
+  );
+  const cdn5xxRate =
+    data.cdn.requests <= 0 ? 0 : Math.min(100, (cdn5xxRequests / data.cdn.requests) * 100);
   const cdn5xx = useMemo(
     () => data.cdn.points.reduce((sum, point) => sum + point.http5xx, 0),
     [data.cdn.points],
@@ -520,6 +534,66 @@ export function DashboardView({
                   : `当前范围 · 单桶最高 ${numberFormatter.format(cdn5xxPeak)}`}
               </p>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div
+        className={cn(
+          "grid gap-2 transition-opacity lg:grid-cols-2",
+          pending && "opacity-60",
+        )}
+      >
+        <Card className="shadow-none">
+          <CardContent className="p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">人脸索引异常</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {numberFormatter.format(data.faceIndexHealth.total)}
+                </p>
+              </div>
+              <AlertTriangleIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-4",
+                  data.faceIndexHealth.total > 0 ? "text-amber-600" : "text-muted-foreground",
+                )}
+              />
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+              failed {numberFormatter.format(data.faceIndexHealth.failed)} · provider_unavailable{" "}
+              {numberFormatter.format(data.faceIndexHealth.providerUnavailable)} · 超过{" "}
+              {Math.round(data.faceIndexHealth.stuckThresholdSeconds / 60)} 分钟未完成{" "}
+              {numberFormatter.format(data.faceIndexHealth.stuckProcessing)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-none">
+          <CardContent className="p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">CDN 5xx</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {data.cdn.status === "unavailable" || data.cdn.status === "error"
+                    ? "—"
+                    : numberFormatter.format(cdn5xxRequests)}
+                </p>
+              </div>
+              <AlertTriangleIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-4",
+                  cdn5xxRequests > 0 ? "text-destructive" : "text-muted-foreground",
+                )}
+              />
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+              {data.cdn.status === "unavailable" || data.cdn.status === "error"
+                ? (data.cdn.message ?? "CDN 监控数据暂不可用")
+                : `当前统计范围内占 CDN 请求的 ${cdn5xxRate.toFixed(cdn5xxRate >= 10 ? 1 : 2)}%`}
+            </p>
           </CardContent>
         </Card>
       </div>
