@@ -35,10 +35,6 @@ interface CategoryView {
   readonly enabled: boolean;
 }
 
-interface AlbumFeedbackSummary {
-  readonly pendingReports: number;
-}
-
 const publicationLabels: Record<InternalMediaView["publicationStatus"], string> = {
   draft: "已隐藏",
   pending_review: "已隐藏",
@@ -71,7 +67,6 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
     statistics,
     recentMedia,
     dataSaver,
-    feedbackSummary,
     reviewCollaboration,
   ] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
@@ -80,14 +75,12 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
     serverApi<AlbumStatistics>(`/api/v1/albums/${id}/statistics`),
     serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=8`),
     serverApi<DataSaverSettingView>(`/api/v1/albums/${id}/data-saver`),
-    serverApi<AlbumFeedbackSummary>(`/api/v1/albums/${id}/feedback-summary`),
     serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
   ]);
   const summary = summaries.find((item) => item.id === id);
   const incomplete = summary?.incompleteCount ?? 0;
   const pendingReview = summary?.pendingReviewCount ?? 0;
-  const pendingReports = feedbackSummary.pendingReports;
-  const hasAttention = incomplete > 0 || pendingReview > 0 || pendingReports > 0;
+  const hasAttention = incomplete > 0 || pendingReview > 0;
 
   return (
     <section aria-labelledby="album-heading" className="flex flex-col gap-4">
@@ -199,25 +192,6 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
                 {pendingReview > 0 ? "仍有照片等待审核或决定是否显示" : "当前没有待审核照片"}
               </p>
             </Link>
-            <Link
-              className="group rounded-lg border p-4 transition-colors hover:bg-muted/30"
-              href="/studio/feedback"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">图片投诉</p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums">{pendingReports}</p>
-                </div>
-                {pendingReports > 0 ? (
-                  <AlertTriangleIcon className="size-4 text-destructive" />
-                ) : (
-                  <ArrowRightIcon className="size-4 text-muted-foreground" />
-                )}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {pendingReports > 0 ? "查看仍保留在投诉中心的图片投诉" : "当前没有待处理图片投诉"}
-              </p>
-            </Link>
             {reviewCollaboration.enabled && reviewCollaboration.participants.length > 0 ? (
               <div className="rounded-lg border p-4 sm:col-span-2">
                 <div className="flex items-center justify-between gap-3">
@@ -231,7 +205,7 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
                   {reviewCollaboration.participants.map((participant) => (
                     <div
                       className="flex items-center justify-between gap-3 rounded-md bg-muted/35 px-3 py-2 text-sm"
-                      key={participant.userId}
+                      key={participant.id}
                     >
                       <span className="truncate">{participant.displayName}</span>
                       <span className="shrink-0 font-medium tabular-nums">
