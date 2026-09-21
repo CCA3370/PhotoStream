@@ -50,6 +50,7 @@ interface ProcessingTask {
   readonly file: File;
   readonly sourceFileName: string;
   readonly sourceHash: string;
+  readonly allowDuplicate: boolean;
   readonly categoryId: string | null;
   readonly createdAt: string;
   status: LocalProcessingTaskStatus;
@@ -329,6 +330,7 @@ class LocalProcessingRuntime {
       file: input.file,
       sourceFileName: input.sourceFileName,
       sourceHash: input.sourceHash,
+      allowDuplicate: input.allowDuplicate === true,
       categoryId,
       createdAt: new Date(now + index).toISOString(),
       status: "queued",
@@ -432,6 +434,7 @@ class LocalProcessingRuntime {
       ...task,
       sourceFileName: task.sourceFileName ?? task.file.name,
       sourceHash: task.sourceHash ?? "",
+      allowDuplicate: task.allowDuplicate ?? false,
       status: task.status === "processing" ? "queued" : task.status,
       error: task.status === "processing" ? null : task.error,
       uploadedBytes: 0,
@@ -535,6 +538,8 @@ class LocalProcessingRuntime {
               categoryId: task.categoryId,
               file: task.file,
               metadata: nextMetadata,
+              sourceHash: task.sourceHash,
+              allowDuplicate: task.allowDuplicate,
             });
             this.#intentPromises.set(task.id, intentPromise);
             const intent = await intentPromise;
