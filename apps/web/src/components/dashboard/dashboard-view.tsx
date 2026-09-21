@@ -462,12 +462,7 @@ export function DashboardView({
         ))}
       </div>
 
-      <div
-        className={cn(
-          "grid gap-2 transition-opacity lg:grid-cols-2",
-          pending && "opacity-60",
-        )}
-      >
+      <div className={cn("grid gap-2 transition-opacity lg:grid-cols-2", pending && "opacity-60")}>
         <Card className="shadow-none">
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-3">
