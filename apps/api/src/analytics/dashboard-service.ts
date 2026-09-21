@@ -466,6 +466,20 @@ export class DashboardService {
           face: row.face,
         })),
       },
+      faceIndexHealth: {
+        failed:
+          (faceMediaHealth[0]?.failed ?? 0) +
+          (faceAlbumHealth[0]?.failed ?? 0) +
+          (faceJobHealth[0]?.failed ?? 0),
+        providerUnavailable:
+          (faceMediaHealth[0]?.providerUnavailable ?? 0) +
+          (faceAlbumHealth[0]?.providerUnavailable ?? 0) +
+          (faceJobHealth[0]?.providerUnavailable ?? 0),
+        staleProcessing:
+          (faceMediaHealth[0]?.staleProcessing ?? 0) +
+          (faceJobHealth[0]?.staleProcessing ?? 0),
+        thresholdMinutes: 10,
+      },
       cdn: { ...cdn, browser: browserDelivery },
       topPhotos: topPhotos
         .filter((row) => row.publishSequence !== null)
