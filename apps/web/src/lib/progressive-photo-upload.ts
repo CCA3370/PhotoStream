@@ -11,17 +11,63 @@ function signalOptions(signal?: AbortSignal): { readonly signal?: AbortSignal } 
   return signal === undefined ? {} : { signal };
 }
 
-async function putSigned(path: string, blob: Blob, signal?: AbortSignal): Promise<Response> {
+export type UploadProgressCallback = (uploadedBytes: number, totalBytes: number) => void;
+
+interface UploadResponse {
+  readonly status: number;
+  readonly ok: boolean;
+  readonly headers: { get(name: string): string | null };
+}
+
+function xhrPut(
+  url: string,
+  headers: Readonly<Record<string, string>>,
+  blob: Blob,
+  signal: AbortSignal | undefined,
+  onProgress: UploadProgressCallback | undefined,
+): Promise<UploadResponse> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", url, true);
+    for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
+    const abort = () => request.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded, event.total);
+      else onProgress?.(event.loaded, blob.size);
+    });
+    request.addEventListener("load", () => {
+      signal?.removeEventListener("abort", abort);
+      onProgress?.(blob.size, blob.size);
+      resolve({
+        status: request.status,
+        ok: request.status >= 200 && request.status < 300,
+        headers: { get: (name) => request.getResponseHeader(name) },
+      });
+    });
+    request.addEventListener("error", () => {
+      signal?.removeEventListener("abort", abort);
+      reject(new Error("对象上传网络连接失败"));
+    });
+    request.addEventListener("abort", () => {
+      signal?.removeEventListener("abort", abort);
+      reject(new DOMException("上传已取消", "AbortError"));
+    });
+    request.send(blob);
+  });
+}
+
+async function putSigned(
+  path: string,
+  blob: Blob,
+  signal?: AbortSignal,
+  onProgress?: UploadProgressCallback,
+): Promise<UploadResponse> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const signed = await clientMutation<SignedUpload>(path, signalOptions(signal));
-      const response = await fetch(signed.url, {
-        method: "PUT",
-        headers: signed.headers,
-        body: blob,
-        ...(signal === undefined ? {} : { signal }),
-      });
+      const response = await xhrPut(signed.url, signed.headers, blob, signal, onProgress);
       if (response.ok || response.status === 409) return response;
       if (
         response.status < 500 &&
@@ -49,6 +95,7 @@ async function transferObject(
   kind: PhotoVariantKind,
   blob: Blob,
   signal?: AbortSignal,
+  onProgress?: UploadProgressCallback,
 ): Promise<UploadIntentView> {
   const object = intent.objects.find((candidate) => candidate.kind === kind);
   if (object === undefined) throw new Error(`上传任务缺少 ${kind}`);
@@ -57,16 +104,24 @@ async function transferObject(
   if (object.uploadMode === "multipart") {
     const parts = [...object.parts].sort((left, right) => left.partNumber - right.partNumber);
     let offset = 0;
+    let completedBytes = 0;
     for (const part of parts) {
       const start = offset;
       offset += part.expectedBytes;
-      if (part.completed) continue;
+      if (part.completed) {
+        completedBytes += part.expectedBytes;
+        onProgress?.(completedBytes, blob.size);
+        continue;
+      }
       const slice = blob.slice(start, offset, object.contentType);
+      const baseUploaded = completedBytes;
       const response = await putSigned(
         `/api/v1/uploads/${intent.id}/objects/${kind}/parts/${part.partNumber}/sign`,
         slice,
         signal,
+        (uploaded) => onProgress?.(baseUploaded + uploaded, blob.size),
       );
+      completedBytes += part.expectedBytes;
       const etag = response.headers.get("etag");
       if (etag === null) throw new Error(`分片 ${part.partNumber} 缺少 ETag`);
       await clientMutation<UploadIntentView>(
@@ -80,7 +135,12 @@ async function transferObject(
     }
     if (offset !== blob.size) throw new Error("分片规格与本地文件不一致");
   } else {
-    await putSigned(`/api/v1/uploads/${intent.id}/objects/${kind}/sign`, blob, signal);
+    await putSigned(
+      `/api/v1/uploads/${intent.id}/objects/${kind}/sign`,
+      blob,
+      signal,
+      onProgress,
+    );
   }
 
   return clientMutation<UploadIntentView>(`/api/v1/uploads/${intent.id}/objects/${kind}/complete`, {
@@ -120,14 +180,16 @@ export async function uploadProgressiveOriginal(
   intent: UploadIntentView,
   file: File,
   signal?: AbortSignal,
+  onProgress?: UploadProgressCallback,
 ): Promise<UploadIntentView> {
-  return transferObject(intent, "photo_original", file, signal);
+  return transferObject(intent, "photo_original", file, signal, onProgress);
 }
 
 export async function registerAndUploadProgressiveVariant(
   intentId: string,
   variant: ProcessedPhotoVariant,
   signal?: AbortSignal,
+  onProgress?: UploadProgressCallback,
 ): Promise<UploadIntentView> {
   const intent = await clientMutation<UploadIntentView>(`/api/v1/uploads/${intentId}/variants`, {
     body: {
@@ -140,7 +202,7 @@ export async function registerAndUploadProgressiveVariant(
     },
     ...signalOptions(signal),
   });
-  return transferObject(intent, variant.kind, variant.blob, signal);
+  return transferObject(intent, variant.kind, variant.blob, signal, onProgress);
 }
 
 function encodeCanvas(
