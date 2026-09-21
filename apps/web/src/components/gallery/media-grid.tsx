@@ -321,6 +321,7 @@ export function MediaGrid({
   const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(new Set());
   const previousIdsRef = useRef<Set<string> | null>(null);
   const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRevealIdsRef = useRef(new Set<string>());
   const transitionActiveRef = useRef(false);
   const mediaIds = useMemo(() => items.map((item) => item.id), [items]);
   const likesEnabled = shareId === undefined;
@@ -476,21 +477,32 @@ export function MediaGrid({
     [],
   );
 
+  const revealAvailableMedia = useCallback(() => {
+    const available = [...pendingRevealIdsRef.current].filter((id) => mediaIds.includes(id));
+    if (available.length === 0) return;
+    for (const id of available) pendingRevealIdsRef.current.delete(id);
+    const ids = available.slice(0, 12);
+    if (freshTimerRef.current !== null) clearTimeout(freshTimerRef.current);
+    setFreshIds(new Set(ids));
+    freshTimerRef.current = window.setTimeout(() => {
+      setFreshIds(new Set());
+      freshTimerRef.current = null;
+    }, 1_400);
+  }, [mediaIds]);
+
   useEffect(() => {
     const reveal = (event: Event) => {
       const detail = (event as CustomEvent<{ readonly mediaIds?: readonly string[] }>).detail;
-      const ids = (detail?.mediaIds ?? []).filter((id) => mediaIds.includes(id)).slice(0, 12);
-      if (ids.length === 0) return;
-      if (freshTimerRef.current !== null) clearTimeout(freshTimerRef.current);
-      setFreshIds(new Set(ids));
-      freshTimerRef.current = window.setTimeout(() => {
-        setFreshIds(new Set());
-        freshTimerRef.current = null;
-      }, 1_400);
+      for (const id of detail?.mediaIds ?? []) pendingRevealIdsRef.current.add(id);
+      revealAvailableMedia();
     };
     window.addEventListener("photostream:reveal-new-media", reveal);
     return () => window.removeEventListener("photostream:reveal-new-media", reveal);
-  }, [mediaIds]);
+  }, [revealAvailableMedia]);
+
+  useEffect(() => {
+    revealAvailableMedia();
+  }, [revealAvailableMedia]);
 
   useEffect(() => {
     if (slug === undefined || shareId !== undefined || mediaIds.length === 0) return;
