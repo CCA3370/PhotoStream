@@ -212,6 +212,9 @@ export class DashboardService {
       topLikedPhotos,
       mediaDeliveryAggregate,
       cdn,
+      faceMediaHealth,
+      faceAlbumHealth,
+      faceJobHealth,
     ] = await Promise.all([
       this.#database
         .select({
@@ -358,6 +361,26 @@ export class DashboardService {
           ),
         ),
       this.#cdnMetrics.query({ from, to }).catch(() => failedCdnMetrics()),
+      this.#database
+        .select({
+          failed: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'failed')::int`,
+          staleProcessing: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'indexing' and ${schema.mediaFaceIndexTasks.updatedAt} < ${new Date(now.getTime() - 10 * 60 * 1_000)})::int`,
+          providerUnavailable: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.lastErrorCode} = 'provider_unavailable')::int`,
+        })
+        .from(schema.mediaFaceIndexTasks),
+      this.#database
+        .select({
+          failed: sql<number>`count(*) filter (where ${schema.albumFaceIndexes.indexState} = 'failed')::int`,
+          providerUnavailable: sql<number>`count(*) filter (where ${schema.albumFaceIndexes.lastErrorCode} = 'provider_unavailable')::int`,
+        })
+        .from(schema.albumFaceIndexes),
+      this.#database
+        .select({
+          failed: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'failed')::int`,
+          staleProcessing: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'processing' and ${schema.faceAlbumJobs.updatedAt} < ${new Date(now.getTime() - 10 * 60 * 1_000)})::int`,
+          providerUnavailable: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.lastErrorCode} = 'provider_unavailable')::int`,
+        })
+        .from(schema.faceAlbumJobs),
     ]);
 
     const totals = trend.reduce(
