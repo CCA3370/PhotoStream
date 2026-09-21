@@ -18,6 +18,7 @@ import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
 import { clientGet } from "@/lib/client-api";
 import { readCachedDerivedImage } from "@/lib/derived-image-cache";
 import { fetchImageWithProgress } from "@/lib/image-download-progress";
+import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
@@ -178,7 +179,7 @@ export function SharedPhotoViewer({
             current?.kind === "preview" ? { ...current, progress: 1 } : current,
           );
         }
-        await replacePreparedImage("preview", blob);
+        await replacePreparedImage("preview", await convertImageToJpeg(blob));
       } finally {
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
