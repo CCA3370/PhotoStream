@@ -15,13 +15,13 @@ import {
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import { deleteLocalPhotoEditDraft, getLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
-import { sha256Blob, type PreparedUploadInput } from "@/lib/upload-input";
 import {
   createProgressiveUpload,
   registerAndUploadProgressiveVariant,
   uploadProgressiveMicroPreview,
   uploadProgressiveOriginal,
 } from "@/lib/progressive-photo-upload";
+import { type PreparedUploadInput, sha256Blob } from "@/lib/upload-input";
 
 export type LocalProcessingTaskStatus = "queued" | "processing" | "staged" | "failed" | "cancelled";
 
