@@ -60,23 +60,16 @@ function recentPreview(media: InternalMediaView) {
 export default async function AlbumOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin", "operator", "reviewer"]);
   const { id } = await params;
-  const [
-    album,
-    categories,
-    summaries,
-    statistics,
-    recentMedia,
-    dataSaver,
-    reviewCollaboration,
-  ] = await Promise.all([
-    serverApi<AlbumView>(`/api/v1/albums/${id}`),
-    serverApi<CategoryView[]>(`/api/v1/albums/${id}/categories`),
-    serverApi<AlbumSummaryView[]>("/api/v1/albums"),
-    serverApi<AlbumStatistics>(`/api/v1/albums/${id}/statistics`),
-    serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=8`),
-    serverApi<DataSaverSettingView>(`/api/v1/albums/${id}/data-saver`),
-    serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
-  ]);
+  const [album, categories, summaries, statistics, recentMedia, dataSaver, reviewCollaboration] =
+    await Promise.all([
+      serverApi<AlbumView>(`/api/v1/albums/${id}`),
+      serverApi<CategoryView[]>(`/api/v1/albums/${id}/categories`),
+      serverApi<AlbumSummaryView[]>("/api/v1/albums"),
+      serverApi<AlbumStatistics>(`/api/v1/albums/${id}/statistics`),
+      serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=8`),
+      serverApi<DataSaverSettingView>(`/api/v1/albums/${id}/data-saver`),
+      serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
+    ]);
   const summary = summaries.find((item) => item.id === id);
   const incomplete = summary?.incompleteCount ?? 0;
   const pendingReview = summary?.pendingReviewCount ?? 0;
@@ -197,7 +190,9 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">多人审核剩余工作量</p>
-                    <p className="mt-1 text-xs text-muted-foreground">按当前分工实时统计未审核照片</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      按当前分工实时统计未审核照片
+                    </p>
                   </div>
                   <Badge variant="outline">{reviewCollaboration.participants.length} 人协作</Badge>
                 </div>
