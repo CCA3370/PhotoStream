@@ -143,14 +143,6 @@ export const dashboardResponseSchema = z
         ),
       })
       .strict(),
-    faceIndexHealth: z
-      .object({
-        failed: z.number().int().min(0),
-        providerUnavailable: z.number().int().min(0),
-        staleProcessing: z.number().int().min(0),
-        thresholdMinutes: z.number().int().positive(),
-      })
-      .strict(),
     cdn: z
       .object({
         status: z.enum(["ok", "partial", "unavailable", "error"]),
