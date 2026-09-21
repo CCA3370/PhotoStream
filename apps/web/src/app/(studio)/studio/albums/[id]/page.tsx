@@ -4,6 +4,7 @@ import type {
   AlbumView,
   InternalMediaList,
   InternalMediaView,
+  ReviewCollaborationView,
 } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 import {
@@ -34,6 +35,10 @@ interface CategoryView {
   readonly enabled: boolean;
 }
 
+interface AlbumFeedbackSummary {
+  readonly pendingReports: number;
+}
+
 const publicationLabels: Record<InternalMediaView["publicationStatus"], string> = {
   draft: "已隐藏",
   pending_review: "已隐藏",
@@ -59,17 +64,30 @@ function recentPreview(media: InternalMediaView) {
 export default async function AlbumOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireInternalSession(["admin", "operator", "reviewer"]);
   const { id } = await params;
-  const [album, categories, summaries, statistics, recentMedia, dataSaver] = await Promise.all([
+  const [
+    album,
+    categories,
+    summaries,
+    statistics,
+    recentMedia,
+    dataSaver,
+    feedbackSummary,
+    reviewCollaboration,
+  ] = await Promise.all([
     serverApi<AlbumView>(`/api/v1/albums/${id}`),
     serverApi<CategoryView[]>(`/api/v1/albums/${id}/categories`),
     serverApi<AlbumSummaryView[]>("/api/v1/albums"),
     serverApi<AlbumStatistics>(`/api/v1/albums/${id}/statistics`),
     serverApi<InternalMediaList>(`/api/v1/albums/${id}/media?limit=8`),
     serverApi<DataSaverSettingView>(`/api/v1/albums/${id}/data-saver`),
+    serverApi<AlbumFeedbackSummary>(`/api/v1/albums/${id}/feedback-summary`),
+    serverApi<ReviewCollaborationView>(`/api/v1/albums/${id}/review-collaboration`),
   ]);
   const summary = summaries.find((item) => item.id === id);
   const incomplete = summary?.incompleteCount ?? 0;
-  const hasAttention = incomplete > 0;
+  const pendingReview = summary?.pendingReviewCount ?? 0;
+  const pendingReports = feedbackSummary.pendingReports;
+  const hasAttention = incomplete > 0 || pendingReview > 0 || pendingReports > 0;
 
   return (
     <section aria-labelledby="album-heading" className="flex flex-col gap-4">
@@ -162,6 +180,68 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
                 {incomplete > 0 ? "检查未完成或失败的媒体处理任务" : "当前没有未完成的处理任务"}
               </p>
             </Link>
+            <Link
+              className="group rounded-lg border p-4 transition-colors hover:bg-muted/30"
+              href={`/studio/albums/${id}/review`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">待审核</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">{pendingReview}</p>
+                </div>
+                {pendingReview > 0 ? (
+                  <AlertTriangleIcon className="size-4 text-amber-600" />
+                ) : (
+                  <ArrowRightIcon className="size-4 text-muted-foreground" />
+                )}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {pendingReview > 0 ? "仍有照片等待审核或决定是否显示" : "当前没有待审核照片"}
+              </p>
+            </Link>
+            <Link
+              className="group rounded-lg border p-4 transition-colors hover:bg-muted/30"
+              href="/studio/feedback"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">图片投诉</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">{pendingReports}</p>
+                </div>
+                {pendingReports > 0 ? (
+                  <AlertTriangleIcon className="size-4 text-destructive" />
+                ) : (
+                  <ArrowRightIcon className="size-4 text-muted-foreground" />
+                )}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {pendingReports > 0 ? "查看仍保留在投诉中心的图片投诉" : "当前没有待处理图片投诉"}
+              </p>
+            </Link>
+            {reviewCollaboration.enabled && reviewCollaboration.participants.length > 0 ? (
+              <div className="rounded-lg border p-4 sm:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">多人审核剩余工作量</p>
+                    <p className="mt-1 text-xs text-muted-foreground">按当前分工实时统计未审核照片</p>
+                  </div>
+                  <Badge variant="outline">{reviewCollaboration.participants.length} 人协作</Badge>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {reviewCollaboration.participants.map((participant) => (
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-md bg-muted/35 px-3 py-2 text-sm"
+                      key={participant.userId}
+                    >
+                      <span className="truncate">{participant.displayName}</span>
+                      <span className="shrink-0 font-medium tabular-nums">
+                        剩余 {participant.remainingCount} 张
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
