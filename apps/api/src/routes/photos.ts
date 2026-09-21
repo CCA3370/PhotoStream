@@ -623,7 +623,10 @@ export async function registerPhotoRoutes(
     },
     async (request, reply) => {
       const session = await requireInternalSession(request, options.authService, options.config);
-      let revision = await options.photoService.reviewRevision(actorFrom(session), request.params.id);
+      let revision = await options.photoService.reviewRevision(
+        actorFrom(session),
+        request.params.id,
+      );
 
       reply.hijack();
       reply.raw.writeHead(200, {
