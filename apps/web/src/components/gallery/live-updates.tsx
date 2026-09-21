@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { clientGet } from "@/lib/client-api";
 
@@ -15,6 +15,16 @@ const changeBatchSize = 100;
 const fallbackPollIntervalMs = 15_000;
 const safetyReconcileIntervalMs = 60_000;
 const reconnectDebounceMs = 150;
+const connectionNoticeDelayMs = 2_500;
+const nearLatestScrollY = 220;
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function viewerNearLatest(): boolean {
+  return window.scrollY <= nearLatestScrollY;
+}
 
 export function LiveUpdates({
   initialEventId,
@@ -30,25 +40,83 @@ export function LiveUpdates({
   const lastEventId = useRef(initialEventId);
   const knownIds = useRef(new Set(knownMediaIds));
   const currentSlug = useRef(slug);
+  const pendingMediaIdsRef = useRef(new Set<string>());
+  const [pendingMediaCount, setPendingMediaCount] = useState(0);
+  const [connectionInterrupted, setConnectionInterrupted] = useState(false);
 
   useEffect(() => {
     if (currentSlug.current !== slug) {
       currentSlug.current = slug;
       lastEventId.current = initialEventId;
       knownIds.current = new Set(knownMediaIds);
+      pendingMediaIdsRef.current.clear();
+      setPendingMediaCount(0);
+      setConnectionInterrupted(false);
     }
   }, [initialEventId, knownMediaIds, slug]);
+
+  const revealPendingMedia = useCallback((scroll: boolean) => {
+    const mediaIds = [...pendingMediaIdsRef.current];
+    pendingMediaIdsRef.current.clear();
+    setPendingMediaCount(0);
+    if (mediaIds.length > 0) {
+      window.dispatchEvent(
+        new CustomEvent("photostream:reveal-new-media", {
+          detail: { mediaIds },
+        }),
+      );
+    }
+    if (!scroll) return;
+    const target =
+      document.querySelector<HTMLElement>('[aria-label="活动照片网格"]') ??
+      document.querySelector<HTMLElement>("#gallery-main");
+    target?.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (pendingMediaIdsRef.current.size > 0 && viewerNearLatest()) {
+        revealPendingMedia(false);
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [revealPendingMedia]);
 
   useEffect(() => {
     let fallbackPolling: ReturnType<typeof setInterval> | null = null;
     let safetyReconcile: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let connectionNoticeTimer: ReturnType<typeof setTimeout> | null = null;
     let eventSource: EventSource | null = null;
     let disposed = false;
     let catchUpRunning = false;
     let catchUpQueued = false;
     let reconciliationRequired = true;
     const pendingSse = new Map<number, PublicChange>();
+
+    const clearConnectionNoticeTimer = () => {
+      if (connectionNoticeTimer === null) return;
+      clearTimeout(connectionNoticeTimer);
+      connectionNoticeTimer = null;
+    };
+
+    const markConnectionInterruptedSoon = () => {
+      if (disposed || connectionNoticeTimer !== null) return;
+      connectionNoticeTimer = setTimeout(() => {
+        connectionNoticeTimer = null;
+        if (!disposed) setConnectionInterrupted(true);
+      }, connectionNoticeDelayMs);
+    };
+
+    const registerPublishedMedia = (mediaId: string) => {
+      if (viewerNearLatest()) return;
+      pendingMediaIdsRef.current.add(mediaId);
+      setPendingMediaCount(pendingMediaIdsRef.current.size);
+    };
 
     const applyChange = (event: PublicChange) => {
       if (event.id <= lastEventId.current) return;
@@ -57,6 +125,7 @@ export function LiveUpdates({
       if (event.type === "media.published") {
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
+          registerPublishedMedia(event.mediaId);
           window.dispatchEvent(
             new CustomEvent("photostream:media-published", {
               detail: { mediaId: event.mediaId },
@@ -95,6 +164,8 @@ export function LiveUpdates({
           new CustomEvent("photostream:media-removed", { detail: { mediaId: event.mediaId } }),
         );
         knownIds.current.delete(event.mediaId);
+        pendingMediaIdsRef.current.delete(event.mediaId);
+        setPendingMediaCount(pendingMediaIdsRef.current.size);
         return;
       }
       if (event.type === "media.restored") {
@@ -151,6 +222,7 @@ export function LiveUpdates({
           reconciliationRequired = false;
           flushPendingSse();
         } catch {
+          markConnectionInterruptedSoon();
           if (disposed || fallbackPolling !== null) return;
           fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
         } finally {
@@ -215,10 +287,13 @@ export function LiveUpdates({
       source.addEventListener("media.restored", restored);
       source.addEventListener("media.bib.updated", bibUpdated);
       source.addEventListener("open", () => {
+        clearConnectionNoticeTimer();
+        setConnectionInterrupted(false);
         stopFallbackPolling();
         requestCatchUp();
       });
       source.addEventListener("error", () => {
+        markConnectionInterruptedSoon();
         requestCatchUp();
         if (fallbackPolling === null) {
           fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
@@ -234,6 +309,7 @@ export function LiveUpdates({
     const visibilityChanged = () => {
       if (document.visibilityState === "visible") recoverAfterPause();
     };
+    const offline = () => setConnectionInterrupted(true);
 
     connectEventSource();
     requestCatchUp();
@@ -241,20 +317,45 @@ export function LiveUpdates({
     document.addEventListener("visibilitychange", visibilityChanged);
     window.addEventListener("focus", recoverAfterPause);
     window.addEventListener("online", recoverAfterPause);
+    window.addEventListener("offline", offline);
     window.addEventListener("pageshow", recoverAfterPause);
 
     return () => {
       disposed = true;
       stopFallbackPolling();
+      clearConnectionNoticeTimer();
       if (safetyReconcile !== null) clearInterval(safetyReconcile);
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       document.removeEventListener("visibilitychange", visibilityChanged);
       window.removeEventListener("focus", recoverAfterPause);
       window.removeEventListener("online", recoverAfterPause);
+      window.removeEventListener("offline", offline);
       window.removeEventListener("pageshow", recoverAfterPause);
       closeEventSource();
     };
-  }, [router, slug]);
+  }, [router, slug, startTransition]);
 
-  return null;
+  if (!connectionInterrupted && pendingMediaCount === 0) return null;
+
+  return (
+    <div
+      aria-live="polite"
+      className="pointer-events-none fixed inset-x-0 top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] z-40 flex flex-col items-center gap-2 px-3"
+    >
+      {pendingMediaCount > 0 ? (
+        <button
+          className="pointer-events-auto rounded-full border border-border/75 bg-background/94 px-3.5 py-2 text-sm font-medium text-foreground shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+          onClick={() => revealPendingMedia(true)}
+          type="button"
+        >
+          新增 {pendingMediaCount} 张照片 · 查看最新
+        </button>
+      ) : null}
+      {connectionInterrupted ? (
+        <div className="rounded-full border border-border/70 bg-background/88 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-md">
+          实时更新暂时中断，正在重连…
+        </div>
+      ) : null}
+    </div>
+  );
 }
