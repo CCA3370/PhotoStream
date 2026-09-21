@@ -436,7 +436,14 @@ export function PhotoLightbox({
             current?.kind === "preview" ? { ...current, progress: 1 } : current,
           );
         }
-        await replacePreparedImage("preview", await convertImageToJpeg(blob));
+        let preparedBlob = blob;
+        try {
+          preparedBlob = await convertImageToJpeg(blob);
+        } catch {
+          // Some WeChat/WebView builds cannot encode JPEG. Keep the already-fetched source
+          // so long-press saving still works without another network request or an error.
+        }
+        await replacePreparedImage("preview", preparedBlob);
       } finally {
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
