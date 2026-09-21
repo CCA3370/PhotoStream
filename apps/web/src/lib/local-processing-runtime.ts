@@ -249,6 +249,7 @@ function persistedTask(task: ProcessingTask): PersistedProcessingTask {
     file: task.file,
     sourceFileName: task.sourceFileName,
     sourceHash: task.sourceHash,
+    allowDuplicate: task.allowDuplicate,
     categoryId: task.categoryId,
     createdAt: task.createdAt,
     status: task.status,
