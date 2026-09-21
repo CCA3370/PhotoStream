@@ -360,6 +360,32 @@ export class DashboardService {
             lt(schema.mediaDeliveryEvents.createdAt, to),
           ),
         ),
+      this.#database
+        .select({
+          failed: sql<number>`count(*) filter (where ${schema.mediaFaceIndexTasks.status} = 'failed')::int`,
+          providerUnavailable: sql<number>`count(*) filter (
+            where ${schema.mediaFaceIndexTasks.status} <> 'failed'
+              and ${schema.mediaFaceIndexTasks.lastErrorCode} = 'provider_unavailable'
+          )::int`,
+          stuckProcessing: sql<number>`count(*) filter (
+            where ${schema.mediaFaceIndexTasks.status} = 'indexing'
+              and ${schema.mediaFaceIndexTasks.updatedAt} <= ${faceStuckThreshold}
+          )::int`,
+        })
+        .from(schema.mediaFaceIndexTasks),
+      this.#database
+        .select({
+          failed: sql<number>`count(*) filter (where ${schema.faceAlbumJobs.status} = 'failed')::int`,
+          providerUnavailable: sql<number>`count(*) filter (
+            where ${schema.faceAlbumJobs.status} <> 'failed'
+              and ${schema.faceAlbumJobs.lastErrorCode} = 'provider_unavailable'
+          )::int`,
+          stuckProcessing: sql<number>`count(*) filter (
+            where ${schema.faceAlbumJobs.status} = 'processing'
+              and ${schema.faceAlbumJobs.updatedAt} <= ${faceStuckThreshold}
+          )::int`,
+        })
+        .from(schema.faceAlbumJobs),
       this.#cdnMetrics.query({ from, to }).catch(() => failedCdnMetrics()),
       this.#database
         .select({
@@ -452,6 +478,17 @@ export class DashboardService {
             expiresAt: thumbnailExpiresAt,
           });
 
+    const mediaFaceHealth = faceMediaHealth[0];
+    const albumJobHealth = faceAlbumJobHealth[0];
+    const faceIndexHealth = {
+      failed: (mediaFaceHealth?.failed ?? 0) + (albumJobHealth?.failed ?? 0),
+      providerUnavailable:
+        (mediaFaceHealth?.providerUnavailable ?? 0) + (albumJobHealth?.providerUnavailable ?? 0),
+      stuckProcessing:
+        (mediaFaceHealth?.stuckProcessing ?? 0) + (albumJobHealth?.stuckProcessing ?? 0),
+      stuckThresholdSeconds: 10 * 60,
+    };
+
     return {
       from: from.toISOString(),
       to: to.toISOString(),
@@ -490,6 +527,13 @@ export class DashboardService {
           (faceMediaHealth[0]?.staleProcessing ?? 0) +
           (faceJobHealth[0]?.staleProcessing ?? 0),
         thresholdMinutes: 10,
+      },
+      faceIndexHealth: {
+        ...faceIndexHealth,
+        total:
+          faceIndexHealth.failed +
+          faceIndexHealth.providerUnavailable +
+          faceIndexHealth.stuckProcessing,
       },
       cdn: { ...cdn, browser: browserDelivery },
       topPhotos: topPhotos
