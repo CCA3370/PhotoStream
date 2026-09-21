@@ -19,10 +19,6 @@ const reportParamsSchema = z
   .strict();
 const shareReportParamsSchema = z.object({ shareId: z.string().uuid() }).strict();
 const feedbackIdParamsSchema = z.object({ id: z.coerce.number().int().positive() }).strict();
-const albumFeedbackParamsSchema = z.object({ id: z.string().uuid() }).strict();
-const albumFeedbackSummarySchema = z
-  .object({ pendingReports: z.number().int().min(0) })
-  .strict();
 const feedbackKindSchema = z.enum(["problem", "suggestion", "other"]);
 const feedbackRecordKindSchema = z.enum(["problem", "suggestion", "other", "report"]);
 const reportReasonSchema = z.enum([
@@ -170,23 +166,6 @@ export async function registerViewerFeedbackRoutes(
       });
       void reply.header("cache-control", "no-store");
       return reply.status(201).send(result);
-    },
-  );
-
-  typed.get(
-    "/api/v1/albums/:id/feedback-summary",
-    {
-      schema: {
-        operationId: "getAlbumFeedbackSummary",
-        tags: ["feedback"],
-        params: albumFeedbackParamsSchema,
-        response: { 200: albumFeedbackSummarySchema, ...errors },
-      },
-    },
-    async (request, reply) => {
-      await requireInternalSession(request, options.authService, options.config);
-      void reply.header("cache-control", "no-store");
-      return { pendingReports: await options.feedbackService.countReports(request.params.id) };
     },
   );
 
