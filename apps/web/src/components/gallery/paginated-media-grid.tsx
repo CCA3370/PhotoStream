@@ -122,6 +122,31 @@ function wait(delay: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, delay));
 }
 
+function currentViewportAnchor(): { readonly mediaId: string; readonly top: number } | null {
+  if (window.scrollY <= 220) return null;
+  for (const element of document.querySelectorAll<HTMLElement>("[data-media-id]")) {
+    const rect = element.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) continue;
+    const mediaId = element.dataset.mediaId;
+    if (mediaId) return { mediaId, top: rect.top };
+  }
+  return null;
+}
+
+function restoreViewportAnchor(anchor: { readonly mediaId: string; readonly top: number } | null): void {
+  if (anchor === null) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const target = [...document.querySelectorAll<HTMLElement>("[data-media-id]")].find(
+        (element) => element.dataset.mediaId === anchor.mediaId,
+      );
+      if (target === undefined) return;
+      const delta = target.getBoundingClientRect().top - anchor.top;
+      if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: "auto" });
+    });
+  });
+}
+
 function livePreviewRetryDelay(attempt: number): number {
   return (
     livePreviewRetryDelays[Math.min(attempt, livePreviewRetryDelays.length - 1)] ??
@@ -270,6 +295,7 @@ export function PaginatedMediaGrid({
             await prepareGridPreview(media, slug);
             if (disposed || cancelledLiveIds.current.has(mediaId)) return;
 
+            const viewportAnchor = currentViewportAnchor();
             setPreparedLiveIds((current) => {
               if (current.has(media.id)) return current;
               const next = new Set(current);
@@ -280,6 +306,7 @@ export function PaginatedMediaGrid({
               const firstPage = current[0] ?? [];
               return [mergeMedia(firstPage, [media]), ...current.slice(1)];
             });
+            restoreViewportAnchor(viewportAnchor);
             setLiveError(null);
             void refreshFeatured().catch(() => undefined);
             return;
