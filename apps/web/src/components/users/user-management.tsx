@@ -5,6 +5,16 @@ import { CheckIcon, CopyIcon, KeyRoundIcon, LoaderCircleIcon, UserPlusIcon } fro
 import { useRef, useState } from "react";
 
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +65,11 @@ interface TemporaryCredential {
   readonly password: string;
 }
 
+interface PendingUserChange {
+  readonly user: AdminUserView;
+  readonly input: Partial<Pick<AdminUserView, "isActive" | "role">>;
+}
+
 export function UserManagement({
   currentUserId,
   initialUsers,
@@ -71,6 +86,7 @@ export function UserManagement({
   const [temporaryCredential, setTemporaryCredential] = useState<TemporaryCredential | null>(null);
   const [copied, setCopied] = useState(false);
   const [resetTarget, setResetTarget] = useState<AdminUserView | null>(null);
+  const [pendingChange, setPendingChange] = useState<PendingUserChange | null>(null);
   const [loginRequiredAfterCredential, setLoginRequiredAfterCredential] = useState(false);
 
   function setUserPending(userId: string, pending: boolean): void {
@@ -108,6 +124,22 @@ export function UserManagement({
     } finally {
       setCreating(false);
     }
+  }
+
+  function requestUpdate(
+    user: AdminUserView,
+    input: Partial<Pick<AdminUserView, "isActive" | "role">>,
+  ): void {
+    if (input.role !== undefined && input.role === user.role) return;
+    if (input.isActive !== undefined && input.isActive === user.isActive) return;
+    setPendingChange({ user, input });
+  }
+
+  async function confirmPendingUpdate(): Promise<void> {
+    const change = pendingChange;
+    if (change === null) return;
+    setPendingChange(null);
+    await update(change.user.id, change.input);
   }
 
   async function update(userId: string, input: Partial<Pick<AdminUserView, "isActive" | "role">>) {
@@ -264,7 +296,7 @@ export function UserManagement({
                             value === "reviewer" ||
                             value === "uploader"
                           ) {
-                            void update(user.id, { role: value });
+                            requestUpdate(user, { role: value });
                           }
                         }}
                         value={user.role}
@@ -292,7 +324,7 @@ export function UserManagement({
                           aria-label={`${user.displayName}账号启用状态`}
                           checked={user.isActive}
                           disabled={userPending}
-                          onCheckedChange={(checked) => void update(user.id, { isActive: checked })}
+                          onCheckedChange={(checked) => requestUpdate(user, { isActive: checked })}
                         />
                         <Badge variant={user.isActive ? "secondary" : "outline"}>
                           {userPending ? "更新中" : user.isActive ? "已启用" : "已停用"}
@@ -318,6 +350,46 @@ export function UserManagement({
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={pendingChange !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingChange(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingChange?.input.role !== undefined ? "确认修改成员角色" : "确认修改账号状态"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingChange === null
+                ? ""
+                : pendingChange.input.role !== undefined
+                  ? pendingChange.user.id === currentUserId
+                    ? `将你自己的角色从“${roleLabels[pendingChange.user.role]}”改为“${roleLabels[pendingChange.input.role]}”。修改后当前会话会立即失效，需要重新登录。`
+                    : pendingChange.user.role === "admin" && pendingChange.input.role !== "admin"
+                      ? `将 ${pendingChange.user.displayName} 从管理员改为“${roleLabels[pendingChange.input.role]}”。如果这是最后一个启用的管理员，系统会阻止此操作。`
+                      : pendingChange.input.role === "admin"
+                        ? `将 ${pendingChange.user.displayName} 设为管理员。管理员可以管理成员、活动设置和审计记录。`
+                        : `将 ${pendingChange.user.displayName} 的角色从“${roleLabels[pendingChange.user.role]}”改为“${roleLabels[pendingChange.input.role]}”。现有会话会被吊销。`
+                  : pendingChange.input.isActive === false
+                    ? pendingChange.user.id === currentUserId
+                      ? "停用你自己的账号后，当前会话会立即失效，需要由其他管理员重新启用。"
+                      : pendingChange.user.role === "admin"
+                        ? `停用管理员 ${pendingChange.user.displayName}，其现有会话会被吊销。如果这是最后一个启用的管理员，系统会阻止此操作。`
+                        : `停用 ${pendingChange.user.displayName}，其现有会话会被立即吊销。`
+                    : `重新启用 ${pendingChange.user.displayName} 的账号。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmPendingUpdate()}>
+              确认修改
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <PasswordConfirmDialog
         confirmLabel="确认重置"
