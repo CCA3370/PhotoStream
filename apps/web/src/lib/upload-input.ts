@@ -4,6 +4,7 @@ export interface PreparedUploadInput {
   readonly file: File;
   readonly sourceFileName: string;
   readonly sourceHash: string;
+  readonly allowDuplicate?: boolean;
 }
 
 const directlySupportedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
