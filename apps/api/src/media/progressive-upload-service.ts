@@ -25,7 +25,7 @@ export interface ProgressiveUploadInput {
   readonly height: number;
   readonly totalBytes: number;
   readonly capturedAt: string | null;
-  readonly sourceHash: string;
+  readonly sourceHash: string | null;
   readonly allowDuplicate: boolean;
   readonly original: ProgressiveOriginalInput;
 }
@@ -142,27 +142,29 @@ export class ProgressiveUploadService {
           statusCode: 409,
         });
       }
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`upload-source-hash:${album.id}:${options.input.sourceHash}`}, 0))`,
-      );
-      if (!options.input.allowDuplicate) {
-        const [duplicate] = await transaction
-          .select({ id: schema.media.id })
-          .from(schema.media)
-          .where(
-            and(
-              eq(schema.media.albumId, album.id),
-              eq(schema.media.sourceSha256, options.input.sourceHash),
-              sql`${schema.media.publicationStatus} <> 'deleted'`,
-            ),
-          )
-          .limit(1);
-        if (duplicate !== undefined) {
-          throw new AppError({
-            code: "STATE_CONFLICT",
-            message: "检测到相同文件已存在于当前活动",
-            statusCode: 409,
-          });
+      if (options.input.sourceHash !== null) {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`upload-source-hash:${album.id}:${options.input.sourceHash}`}, 0))`,
+        );
+        if (!options.input.allowDuplicate) {
+          const [duplicate] = await transaction
+            .select({ id: schema.media.id })
+            .from(schema.media)
+            .where(
+              and(
+                eq(schema.media.albumId, album.id),
+                eq(schema.media.sourceSha256, options.input.sourceHash),
+                sql`${schema.media.publicationStatus} <> 'deleted'`,
+              ),
+            )
+            .limit(1);
+          if (duplicate !== undefined) {
+            throw new AppError({
+              code: "STATE_CONFLICT",
+              message: "检测到相同文件已存在于当前活动",
+              statusCode: 409,
+            });
+          }
         }
       }
       if (options.input.categoryId !== null) {
