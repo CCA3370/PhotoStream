@@ -577,6 +577,7 @@ export class PhotoService {
         changedFields: ["reviewCollaborators", "reviewAssigneeId"],
         requestId: options.requestId,
       });
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${options.albumId})`);
     });
 
     return this.getReviewCollaboration(options.actor, options.albumId);
@@ -1778,6 +1779,7 @@ export class PhotoService {
         changedFields: ["reviewedAt"],
         requestId: options.requestId,
       });
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${media.albumId})`);
     });
   }
 
