@@ -1,7 +1,7 @@
 import { hasPermission, type UserRole } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import type { InternalActor } from "./service.js";
@@ -25,6 +25,8 @@ export interface ProgressiveUploadInput {
   readonly height: number;
   readonly totalBytes: number;
   readonly capturedAt: string | null;
+  readonly sourceHash: string;
+  readonly allowDuplicate: boolean;
   readonly original: ProgressiveOriginalInput;
 }
 
@@ -74,6 +76,34 @@ export class ProgressiveUploadService {
     this.#database = database;
   }
 
+  async findDuplicateSourceHashes(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly hashes: readonly string[];
+  }): Promise<string[]> {
+    requirePermission(options.actor.role, "media:upload");
+    if (options.hashes.length === 0) return [];
+    const [album] = await this.#database
+      .select({ id: schema.albums.id })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, options.albumId))
+      .limit(1);
+    if (album === undefined) {
+      throw new AppError({ code: "NOT_FOUND", message: "相册不存在", statusCode: 404 });
+    }
+    const rows = await this.#database
+      .select({ hash: schema.media.sourceSha256 })
+      .from(schema.media)
+      .where(
+        and(
+          eq(schema.media.albumId, options.albumId),
+          inArray(schema.media.sourceSha256, [...options.hashes]),
+          sql`${schema.media.publicationStatus} <> 'deleted'`,
+        ),
+      );
+    return [...new Set(rows.map((row) => row.hash).filter((hash): hash is string => hash !== null))];
+  }
+
   async createUpload(options: {
     readonly actor: InternalActor;
     readonly input: ProgressiveUploadInput;
@@ -111,6 +141,29 @@ export class ProgressiveUploadService {
           message: "相册未在直播中，不能创建上传任务",
           statusCode: 409,
         });
+      }
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`upload-source-hash:${album.id}:${options.input.sourceHash}`}, 0))`,
+      );
+      if (!options.input.allowDuplicate) {
+        const [duplicate] = await transaction
+          .select({ id: schema.media.id })
+          .from(schema.media)
+          .where(
+            and(
+              eq(schema.media.albumId, album.id),
+              eq(schema.media.sourceSha256, options.input.sourceHash),
+              sql`${schema.media.publicationStatus} <> 'deleted'`,
+            ),
+          )
+          .limit(1);
+        if (duplicate !== undefined) {
+          throw new AppError({
+            code: "STATE_CONFLICT",
+            message: "检测到相同文件已存在于当前活动",
+            statusCode: 409,
+          });
+        }
       }
       if (options.input.categoryId !== null) {
         const [category] = await transaction
@@ -217,6 +270,7 @@ export class ProgressiveUploadService {
           height: options.input.height,
           mediaType: options.input.original.contentType,
           totalBytes: options.input.totalBytes,
+          sourceSha256: options.input.sourceHash,
           capturedAt: options.input.capturedAt === null ? null : new Date(options.input.capturedAt),
           hiddenAt: now,
         })
