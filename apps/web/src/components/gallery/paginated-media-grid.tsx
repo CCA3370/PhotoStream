@@ -133,7 +133,9 @@ function currentViewportAnchor(): { readonly mediaId: string; readonly top: numb
   return null;
 }
 
-function restoreViewportAnchor(anchor: { readonly mediaId: string; readonly top: number } | null): void {
+function restoreViewportAnchor(
+  anchor: { readonly mediaId: string; readonly top: number } | null,
+): void {
   if (anchor === null) return;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
