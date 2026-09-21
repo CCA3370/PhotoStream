@@ -343,9 +343,6 @@ export const media = pgTable(
       onDelete: "set null",
     }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
     ingestStatus: ingestStatusEnum("ingest_status").notNull().default("created"),
     publicationStatus: publicationStatusEnum("publication_status").notNull().default("draft"),
     width: integer("width").notNull(),
