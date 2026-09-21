@@ -179,7 +179,27 @@ export function UploadQueue({
       }
     }
 
-    const seen = new Set(knownSourceHashes.current);
+    const serverDuplicates = new Set<string>();
+    try {
+      const hashes = [...new Set(prepared.map((input) => input.sourceHash))];
+      for (let index = 0; index < hashes.length; index += 200) {
+        const batch = hashes.slice(index, index + 200);
+        const result = await clientMutation<{ readonly duplicates: readonly string[] }>(
+          `/api/v1/albums/${encodeURIComponent(albumId)}/media-duplicates`,
+          { body: { hashes: batch } },
+        );
+        for (const hash of result.duplicates) serverDuplicates.add(hash);
+      }
+    } catch (error) {
+      toast.add({
+        title: "重复照片检测失败",
+        description: error instanceof Error ? error.message : "未开始上传，请稍后重试。",
+        type: "error",
+      });
+      return;
+    }
+
+    const seen = new Set([...knownSourceHashes.current, ...serverDuplicates]);
     const unique: PreparedUploadInput[] = [];
     const duplicates: PreparedUploadInput[] = [];
     for (const input of prepared) {
@@ -470,7 +490,7 @@ export function UploadQueue({
             <div>
               <p className="text-sm font-medium">检测到 {duplicateInputs.length} 张重复照片，已暂时跳过</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                使用文件内容 SHA-256 判断；若确实需要保留副本，可以继续上传。
+                使用文件内容 SHA-256 在当前活动内判断（包含其他设备已上传内容）；若确实需要保留副本，可以继续上传。
               </p>
             </div>
             <div className="flex gap-2">
@@ -479,7 +499,10 @@ export function UploadQueue({
               </Button>
               <Button
                 onClick={() => {
-                  const pending = duplicateInputs;
+                  const pending = duplicateInputs.map((input) => ({
+                    ...input,
+                    allowDuplicate: true,
+                  }));
                   setDuplicateInputs([]);
                   void enqueuePrepared(pending)
                     .then(() =>
