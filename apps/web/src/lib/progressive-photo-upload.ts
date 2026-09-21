@@ -135,12 +135,7 @@ async function transferObject(
     }
     if (offset !== blob.size) throw new Error("分片规格与本地文件不一致");
   } else {
-    await putSigned(
-      `/api/v1/uploads/${intent.id}/objects/${kind}/sign`,
-      blob,
-      signal,
-      onProgress,
-    );
+    await putSigned(`/api/v1/uploads/${intent.id}/objects/${kind}/sign`, blob, signal, onProgress);
   }
 
   return clientMutation<UploadIntentView>(`/api/v1/uploads/${intent.id}/objects/${kind}/complete`, {
