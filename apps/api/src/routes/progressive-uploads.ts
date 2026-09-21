@@ -35,7 +35,7 @@ const progressiveUploadSchema = z
       .min(1)
       .max(50 * 1024 * 1024),
     capturedAt: z.string().datetime().nullable().default(null),
-    sourceHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    sourceHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable().default(null),
     allowDuplicate: z.boolean().default(false),
     original: z
       .object({
