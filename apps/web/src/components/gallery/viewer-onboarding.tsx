@@ -276,8 +276,7 @@ export function ViewerOnboarding({
     steps.push({
       target: "help",
       title: "帮助与反馈",
-      description:
-        "点击右下角问号，可以随时重新查看使用引导，也可以提交遇到的问题或建议。",
+      description: "点击右下角问号，可以随时重新查看使用引导，也可以提交遇到的问题或建议。",
     });
 
     return steps;
