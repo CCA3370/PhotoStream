@@ -2,6 +2,7 @@
 
 import type { UserRole } from "@photostream/contracts";
 import {
+  AlertTriangleIcon,
   ArrowUpRightIcon,
   CalendarRangeIcon,
   DownloadIcon,
@@ -63,6 +64,12 @@ export interface DashboardStatistics {
       readonly attributes: number;
       readonly face: number;
     }[];
+  };
+  readonly faceIndexHealth: {
+    readonly failed: number;
+    readonly providerUnavailable: number;
+    readonly staleProcessing: number;
+    readonly thresholdMinutes: number;
   };
   readonly cdn: {
     readonly status: "ok" | "partial" | "unavailable" | "error";
@@ -338,6 +345,15 @@ export function DashboardView({
   );
   const activeRanking = rankingMode === "downloads" ? downloadRanking : likeRanking;
   const activeRankingUnit = rankingMode === "downloads" ? "次" : "赞";
+  const cdn5xx = useMemo(
+    () => data.cdn.points.reduce((sum, point) => sum + point.http5xx, 0),
+    [data.cdn.points],
+  );
+  const cdn5xxPeak = useMemo(
+    () => data.cdn.points.reduce((peak, point) => Math.max(peak, point.http5xx), 0),
+    [data.cdn.points],
+  );
+  const faceIndexAnomalies = data.faceIndexHealth.failed + data.faceIndexHealth.staleProcessing;
 
   async function loadRange(from: Date, to: Date, preset: PresetKey): Promise<boolean> {
     setPending(true);
@@ -446,6 +462,66 @@ export function DashboardView({
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      <div className={cn("grid gap-2 sm:grid-cols-2", pending && "opacity-60")}>
+        <Card className="shadow-none">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">人脸索引异常</p>
+              <AlertTriangleIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-3.5",
+                  faceIndexAnomalies > 0 ? "text-amber-600" : "text-muted-foreground",
+                )}
+              />
+            </div>
+            <div className="mt-1 flex items-baseline justify-between gap-3">
+              <p className="text-xl font-semibold tabular-nums">
+                {numberFormatter.format(faceIndexAnomalies)}
+              </p>
+              <p className="text-right text-[11px] text-muted-foreground">
+                失败 {numberFormatter.format(data.faceIndexHealth.failed)} · 超过{" "}
+                {data.faceIndexHealth.thresholdMinutes} 分钟{" "}
+                {numberFormatter.format(data.faceIndexHealth.staleProcessing)}
+              </p>
+            </div>
+            {data.faceIndexHealth.providerUnavailable > 0 ? (
+              <p className="mt-1 text-[11px] text-amber-700">
+                其中 {numberFormatter.format(data.faceIndexHealth.providerUnavailable)} 项记录到
+                provider_unavailable
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-none">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">CDN 5xx</p>
+              <AlertTriangleIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-3.5",
+                  cdn5xx > 0 ? "text-destructive" : "text-muted-foreground",
+                )}
+              />
+            </div>
+            <div className="mt-1 flex items-baseline justify-between gap-3">
+              <p className="text-xl font-semibold tabular-nums">
+                {data.cdn.status === "unavailable" || data.cdn.status === "error"
+                  ? "—"
+                  : numberFormatter.format(cdn5xx)}
+              </p>
+              <p className="text-right text-[11px] text-muted-foreground">
+                {data.cdn.status === "unavailable" || data.cdn.status === "error"
+                  ? "CDN 指标暂不可用"
+                  : `当前范围 · 单桶最高 ${numberFormatter.format(cdn5xxPeak)}`}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card
