@@ -484,7 +484,7 @@ export function MediaGrid({
     const ids = available.slice(0, 12);
     if (freshTimerRef.current !== null) clearTimeout(freshTimerRef.current);
     setFreshIds(new Set(ids));
-    freshTimerRef.current = window.setTimeout(() => {
+    freshTimerRef.current = setTimeout(() => {
       setFreshIds(new Set());
       freshTimerRef.current = null;
     }, 1_400);
