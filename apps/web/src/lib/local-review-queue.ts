@@ -46,6 +46,8 @@ export interface LocalReviewPhoto {
   readonly id: string;
   readonly albumId: string;
   readonly fileName: string;
+  readonly sourceFileName?: string;
+  readonly sourceHash?: string | null;
   readonly categoryId: string | null;
   readonly originalBlob: Blob;
   readonly originalFormat: "jpeg" | "png" | "webp";
@@ -96,6 +98,8 @@ function normalizeStoredPhoto(photo: LocalReviewPhoto): LocalReviewPhoto {
   const storedBib = (photo as LocalReviewPhoto & { readonly bib?: Partial<LocalBibState> }).bib;
   return {
     ...photo,
+    sourceFileName: photo.sourceFileName ?? photo.fileName,
+    sourceHash: photo.sourceHash ?? null,
     bib:
       storedBib === undefined
         ? { ...defaultBibState(), ocrStatus: "disabled" }
@@ -192,11 +196,15 @@ export function createLocalReviewPhoto(options: {
   readonly categoryId: string | null;
   readonly file: File;
   readonly processed: ProcessedPhoto;
+  readonly sourceFileName?: string;
+  readonly sourceHash?: string | null;
 }): LocalReviewPhoto {
   return {
     id: crypto.randomUUID(),
     albumId: options.albumId,
     fileName: options.file.name,
+    sourceFileName: options.sourceFileName ?? options.file.name,
+    sourceHash: options.sourceHash ?? null,
     categoryId: options.categoryId,
     originalBlob: options.file,
     originalFormat: options.processed.originalFormat,
