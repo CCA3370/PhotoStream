@@ -612,6 +612,74 @@ export async function registerPhotoRoutes(
   );
 
   typed.get(
+    "/api/v1/albums/:id/review-events",
+    {
+      schema: {
+        operationId: "streamReviewEvents",
+        tags: ["media"],
+        params: albumIdParamsSchema,
+        response: { ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireInternalSession(request, options.authService, options.config);
+      let revision = await options.photoService.reviewRevision(actorFrom(session), request.params.id);
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store, no-transform",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      });
+      reply.raw.flushHeaders();
+      reply.raw.write(": connected\n\n");
+      reply.raw.write(`event: review.changed\ndata: ${JSON.stringify({ revision })}\n\n`);
+
+      let running = false;
+      const flush = async () => {
+        if (running || reply.raw.destroyed) return;
+        running = true;
+        try {
+          const nextRevision = await options.photoService.reviewRevision(
+            actorFrom(session),
+            request.params.id,
+          );
+          if (nextRevision === revision || reply.raw.destroyed) return;
+          revision = nextRevision;
+          reply.raw.write(
+            `event: review.changed\ndata: ${JSON.stringify({ revision: nextRevision })}\n\n`,
+          );
+        } finally {
+          running = false;
+        }
+      };
+      const safeFlush = () => {
+        void flush().catch((error: unknown) => {
+          request.log.error({ err: error }, "Review SSE refresh failed");
+          reply.raw.end();
+        });
+      };
+      const unsubscribe = options.broker.subscribe(request.params.id, safeFlush);
+      const poll = setInterval(safeFlush, 60_000);
+      const heartbeat = setInterval(() => {
+        if (!reply.raw.destroyed) reply.raw.write(": heartbeat\n\n");
+      }, 20_000);
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        unsubscribe();
+        clearInterval(poll);
+        clearInterval(heartbeat);
+      };
+      request.raw.once("close", close);
+      reply.raw.once("error", close);
+      return reply;
+    },
+  );
+
+  typed.get(
     "/api/v1/albums/:id/media-selection",
     {
       schema: {
