@@ -67,12 +67,10 @@ export function LiveUpdates({
       );
     }
     if (!scroll) return;
-    const target =
-      document.querySelector<HTMLElement>('[aria-label="活动照片网格"]') ??
-      document.querySelector<HTMLElement>("#gallery-main");
-    target?.scrollIntoView({
+    window.scrollTo({
+      top: 0,
+      left: 0,
       behavior: prefersReducedMotion() ? "auto" : "smooth",
-      block: "start",
     });
   }, []);
 
@@ -348,7 +346,7 @@ export function LiveUpdates({
           onClick={() => revealPendingMedia(true)}
           type="button"
         >
-          新增 {pendingMediaCount} 张照片 · 查看最新
+          新增 {pendingMediaCount} 张照片 · 点击查看最新
         </button>
       ) : null}
       {connectionInterrupted ? (
