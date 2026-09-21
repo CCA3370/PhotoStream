@@ -196,14 +196,6 @@ export class ViewerFeedbackService {
     }
   }
 
-  async countReports(albumId: string): Promise<number> {
-    const [row] = await this.#database
-      .select({ value: sql<number>`count(*)::int` })
-      .from(schema.viewerFeedback)
-      .where(and(eq(schema.viewerFeedback.albumId, albumId), eq(schema.viewerFeedback.kind, "report")));
-    return row?.value ?? 0;
-  }
-
   async latestId(): Promise<number> {
     const [row] = await this.#database
       .select({ id: schema.viewerFeedback.id })
