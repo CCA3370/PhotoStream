@@ -246,10 +246,15 @@ function persistedTask(task: ProcessingTask): PersistedProcessingTask {
     albumId: task.albumId,
     localPhotoId: task.localPhotoId,
     file: task.file,
+    sourceFileName: task.sourceFileName,
+    sourceHash: task.sourceHash,
     categoryId: task.categoryId,
     createdAt: task.createdAt,
     status: task.status,
     error: task.error,
+    uploadedBytes: task.uploadedBytes,
+    totalUploadBytes: task.totalUploadBytes,
+    uploadStartedAt: task.uploadStartedAt,
   };
 }
 
