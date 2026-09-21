@@ -101,7 +101,9 @@ export class ProgressiveUploadService {
           sql`${schema.media.publicationStatus} <> 'deleted'`,
         ),
       );
-    return [...new Set(rows.map((row) => row.hash).filter((hash): hash is string => hash !== null))];
+    return [
+      ...new Set(rows.map((row) => row.hash).filter((hash): hash is string => hash !== null)),
+    ];
   }
 
   async createUpload(options: {
