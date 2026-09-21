@@ -15,6 +15,7 @@ import {
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import { deleteLocalPhotoEditDraft, getLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { type ProcessedPhotoMetadata, processPhotoInWorkerStreaming } from "@/lib/photo-processing";
+import type { PreparedUploadInput } from "@/lib/upload-input";
 import {
   createProgressiveUpload,
   registerAndUploadProgressiveVariant,
@@ -28,6 +29,9 @@ export interface LocalProcessingTaskView {
   readonly id: string;
   readonly fileName: string;
   readonly bytes: number;
+  readonly uploadedBytes: number;
+  readonly totalUploadBytes: number;
+  readonly bytesPerSecond: number;
   readonly status: LocalProcessingTaskStatus;
   readonly error: string | null;
 }
@@ -44,10 +48,15 @@ interface ProcessingTask {
   readonly albumId: string;
   readonly localPhotoId: string;
   readonly file: File;
+  readonly sourceFileName: string;
+  readonly sourceHash: string;
   readonly categoryId: string | null;
   readonly createdAt: string;
   status: LocalProcessingTaskStatus;
   error: string | null;
+  uploadedBytes: number;
+  totalUploadBytes: number;
+  uploadStartedAt: number | null;
 }
 
 interface PersistedProcessingTask extends Omit<ProcessingTask, "status"> {
@@ -252,6 +261,7 @@ class LocalProcessingRuntime {
   readonly #listeners = new Set<Listener>();
   readonly #abortControllers = new Map<string, AbortController>();
   readonly #intentPromises = new Map<string, Promise<UploadIntentView>>();
+  readonly #uploadProgress = new Map<string, Map<string, number>>();
   #bibConfig: BibConfigView | null = null;
   #initialized: Promise<void> | null = null;
   #paused = false;
@@ -275,8 +285,16 @@ class LocalProcessingRuntime {
       paused: this.#paused,
       tasks: [...this.#tasks.values()].map((task) => ({
         id: task.id,
-        fileName: task.file.name,
+        fileName: task.sourceFileName,
         bytes: task.file.size,
+        uploadedBytes: task.uploadedBytes,
+        totalUploadBytes: task.totalUploadBytes,
+        bytesPerSecond:
+          task.uploadStartedAt === null || task.uploadedBytes <= 0
+            ? 0
+            : Math.round(
+                task.uploadedBytes / Math.max(0.25, (Date.now() - task.uploadStartedAt) / 1_000),
+              ),
         status: task.status,
         error: task.error,
       })),
@@ -295,19 +313,24 @@ class LocalProcessingRuntime {
     return this.#initialized;
   }
 
-  async enqueue(files: readonly File[], categoryId: string | null): Promise<void> {
-    if (files.length === 0) return;
+  async enqueue(inputs: readonly PreparedUploadInput[], categoryId: string | null): Promise<void> {
+    if (inputs.length === 0) return;
     await this.initialize();
     const now = Date.now();
-    const created = files.map<ProcessingTask>((file, index) => ({
+    const created = inputs.map<ProcessingTask>((input, index) => ({
       id: crypto.randomUUID(),
       albumId: this.#albumId,
       localPhotoId: crypto.randomUUID(),
-      file,
+      file: input.file,
+      sourceFileName: input.sourceFileName,
+      sourceHash: input.sourceHash,
       categoryId,
       createdAt: new Date(now + index).toISOString(),
       status: "queued",
       error: null,
+      uploadedBytes: 0,
+      totalUploadBytes: input.file.size,
+      uploadStartedAt: null,
     }));
     await putPersistedTasks(created.map(persistedTask));
     for (const task of created) this.#tasks.set(task.id, task);
@@ -402,8 +425,13 @@ class LocalProcessingRuntime {
     const stored = await listPersistedTasks(this.#albumId);
     const recovered: ProcessingTask[] = stored.map((task) => ({
       ...task,
+      sourceFileName: task.sourceFileName ?? task.file.name,
+      sourceHash: task.sourceHash ?? "",
       status: task.status === "processing" ? "queued" : task.status,
       error: task.status === "processing" ? null : task.error,
+      uploadedBytes: 0,
+      totalUploadBytes: task.file.size,
+      uploadStartedAt: null,
     }));
     for (const task of recovered) this.#tasks.set(task.id, task);
     const reset = recovered.filter((task) => task.status === "queued");
@@ -416,6 +444,20 @@ class LocalProcessingRuntime {
   #emit(): void {
     const snapshot = this.snapshot();
     for (const listener of this.#listeners) listener(snapshot);
+  }
+
+  #reportUploadProgress(
+    task: ProcessingTask,
+    key: string,
+    uploadedBytes: number,
+    totalBytes: number,
+  ): void {
+    if (task.uploadStartedAt === null) task.uploadStartedAt = Date.now();
+    const progress = this.#uploadProgress.get(task.id) ?? new Map<string, number>();
+    progress.set(key, Math.min(totalBytes, Math.max(0, uploadedBytes)));
+    this.#uploadProgress.set(task.id, progress);
+    task.uploadedBytes = [...progress.values()].reduce((sum, value) => sum + value, 0);
+    this.#emit();
   }
 
   #pump(): void {
@@ -437,6 +479,10 @@ class LocalProcessingRuntime {
     if (bibConfig === null || task.status !== "queued") return;
     task.status = "processing";
     task.error = null;
+    task.uploadedBytes = 0;
+    task.totalUploadBytes = task.file.size;
+    task.uploadStartedAt = null;
+    this.#uploadProgress.set(task.id, new Map());
     const controller = new AbortController();
     this.#abortControllers.set(task.id, controller);
     this.#runningTasks += 1;
@@ -458,6 +504,8 @@ class LocalProcessingRuntime {
               albumId: this.#albumId,
               categoryId: task.categoryId,
               file: task.file,
+              sourceFileName: task.sourceFileName,
+              sourceHash: task.sourceHash,
               processed: { ...nextMetadata, variants: [] },
             });
             const localPhoto = {
@@ -520,10 +568,16 @@ class LocalProcessingRuntime {
             }
 
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-            uploads.push(uploadProgressiveOriginal(intent, task.file, controller.signal));
+            uploads.push(
+              uploadProgressiveOriginal(intent, task.file, controller.signal, (uploaded, total) =>
+                this.#reportUploadProgress(task, "photo_original", uploaded, total),
+              ),
+            );
           },
           onVariant: async (variant) => {
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
+            task.totalUploadBytes += variant.blob.size;
+            this.#emit();
             await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
               ...current,
               variants: [
@@ -538,6 +592,8 @@ class LocalProcessingRuntime {
               intent.id,
               variant,
               controller.signal,
+              (uploadedBytes, totalBytes) =>
+                this.#reportUploadProgress(task, variant.kind, uploadedBytes, totalBytes),
             );
             uploads.push(uploaded);
             if (variant.kind === "photo_480") {
@@ -570,6 +626,7 @@ class LocalProcessingRuntime {
       await deletePersistedTask(task.id);
       task.status = "staged";
       task.error = null;
+      task.uploadedBytes = task.totalUploadBytes;
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : "本地处理或上传失败";
@@ -591,6 +648,7 @@ class LocalProcessingRuntime {
     } finally {
       this.#abortControllers.delete(task.id);
       this.#intentPromises.delete(task.id);
+      this.#uploadProgress.delete(task.id);
       this.#runningTasks = Math.max(0, this.#runningTasks - 1);
       this.#runningInputBytes = Math.max(0, this.#runningInputBytes - task.file.size);
       this.#emit();
