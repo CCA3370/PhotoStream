@@ -35,7 +35,11 @@ const progressiveUploadSchema = z
       .min(1)
       .max(50 * 1024 * 1024),
     capturedAt: z.string().datetime().nullable().default(null),
-    sourceHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable().default(null),
+    sourceHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .nullable()
+      .default(null),
     allowDuplicate: z.boolean().default(false),
     original: z
       .object({
@@ -91,7 +95,10 @@ const intentParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const albumParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const duplicateCheckSchema = z
   .object({
-    hashes: z.array(z.string().regex(/^[a-f0-9]{64}$/u)).min(1).max(200),
+    hashes: z
+      .array(z.string().regex(/^[a-f0-9]{64}$/u))
+      .min(1)
+      .max(200),
   })
   .strict();
 const duplicateCheckResponseSchema = z
