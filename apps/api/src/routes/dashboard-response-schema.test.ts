@@ -15,6 +15,13 @@ describe("dashboard response schema", () => {
       sessions: 8,
       downloads: 5,
       uniqueVisitors: 6,
+      faceIndexHealth: {
+        total: 0,
+        failed: 0,
+        providerUnavailable: 0,
+        stuckProcessing: 0,
+        stuckThresholdSeconds: 600,
+      },
       points: [],
       searchUsage: {
         number: 0,
