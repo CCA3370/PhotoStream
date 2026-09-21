@@ -333,7 +333,7 @@ export function LiveUpdates({
       window.removeEventListener("pageshow", recoverAfterPause);
       closeEventSource();
     };
-  }, [router, slug, startTransition]);
+  }, [router, slug]);
 
   if (!connectionInterrupted && pendingMediaCount === 0) return null;
 
