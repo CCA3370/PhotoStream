@@ -349,6 +349,7 @@ export const media = pgTable(
     height: integer("height").notNull(),
     mediaType: varchar("media_type", { length: 80 }).notNull(),
     totalBytes: bigint("total_bytes", { mode: "number" }).notNull(),
+    sourceSha256: varchar("source_sha256", { length: 64 }),
     capturedAt: timestamp("captured_at", { withTimezone: true }),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     publishSequence: bigint("publish_sequence", { mode: "number" }),
@@ -369,6 +370,7 @@ export const media = pgTable(
       table.id,
     ),
     index("media_album_ingest_idx").on(table.albumId, table.ingestStatus, table.createdAt),
+    index("media_album_source_sha256_idx").on(table.albumId, table.sourceSha256),
     index("media_album_review_assignee_idx").on(
       table.albumId,
       table.reviewAssigneeId,
