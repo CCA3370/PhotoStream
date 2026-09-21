@@ -225,6 +225,13 @@
       "when": 1789920000000,
       "tag": "0031_operator_role",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790008200000,
+      "tag": "0032_media_source_hash",
+      "breakpoints": true
     }
   ]
 }
