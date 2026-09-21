@@ -46,8 +46,8 @@ import {
 } from "@/lib/photo-edit/local-drafts";
 import {
   isSupportedUploadInput,
-  prepareUploadInput,
   type PreparedUploadInput,
+  prepareUploadInput,
 } from "@/lib/upload-input";
 import { cn } from "@/lib/utils";
 
@@ -488,13 +488,21 @@ export function UploadQueue({
         {duplicateInputs.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/35 bg-amber-500/5 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">检测到 {duplicateInputs.length} 张重复照片，已暂时跳过</p>
+              <p className="text-sm font-medium">
+                检测到 {duplicateInputs.length} 张重复照片，已暂时跳过
+              </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                使用文件内容 SHA-256 在当前活动内判断（包含其他设备已上传内容）；若确实需要保留副本，可以继续上传。
+                使用文件内容 SHA-256
+                在当前活动内判断（包含其他设备已上传内容）；若确实需要保留副本，可以继续上传。
               </p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => setDuplicateInputs([])} size="sm" type="button" variant="ghost">
+              <Button
+                onClick={() => setDuplicateInputs([])}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
                 忽略
               </Button>
               <Button
@@ -536,7 +544,8 @@ export function UploadQueue({
                 总进度 {uploadProgress.completed}/{tasks.length} · {uploadProgress.percent}%
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatBytes(uploadProgress.uploadedBytes)} / {formatBytes(uploadProgress.totalBytes)}
+                {formatBytes(uploadProgress.uploadedBytes)} /{" "}
+                {formatBytes(uploadProgress.totalBytes)}
                 {uploadProgress.bytesPerSecond > 0
                   ? ` · ${formatBytes(uploadProgress.bytesPerSecond)}/s`
                   : ""}
