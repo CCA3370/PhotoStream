@@ -346,7 +346,7 @@ export function LiveUpdates({
           onClick={() => revealPendingMedia(true)}
           type="button"
         >
-          有 {pendingMediaCount} 张新照片，点击查看最新
+          有{pendingMediaCount}张新照片
         </button>
       ) : null}
       {connectionInterrupted ? (
