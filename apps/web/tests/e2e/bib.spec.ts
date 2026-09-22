@@ -283,6 +283,16 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
       const findPhotos = viewerPage.getByRole("button", { name: "找照片", exact: true });
       await expectReactHydrated(findPhotos);
       await findPhotos.click();
+      await expect(
+        viewerPage.getByRole("heading", { name: "先了解三种找照片方式" }),
+      ).toBeVisible();
+      await expect(viewerPage.getByText("人脸找图", { exact: true })).toBeVisible();
+      await expect(viewerPage.getByText("号码找图", { exact: true })).toBeVisible();
+      await expect(viewerPage.getByText("年级班级", { exact: true })).toBeVisible();
+      await expect(
+        viewerPage.getByText(/人脸找图通常最好用。.*不依赖号码是否被拍进画面/u),
+      ).toBeVisible();
+      await viewerPage.getByRole("button", { name: "开始找照片" }).click();
       const searchInput = viewerPage.getByLabel("输入号码找照片");
       await expect(searchInput).toBeVisible();
       await searchInput.fill("101999");
@@ -294,6 +304,9 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
       const reloadedFindPhotos = viewerPage.getByRole("button", { name: "找照片", exact: true });
       await expectReactHydrated(reloadedFindPhotos);
       await reloadedFindPhotos.click();
+      await expect(
+        viewerPage.getByRole("heading", { name: "先了解三种找照片方式" }),
+      ).toHaveCount(0);
       await expect(viewerPage.getByLabel("输入号码找照片")).toHaveValue("");
     } finally {
       await viewer.close();

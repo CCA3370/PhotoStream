@@ -70,6 +70,9 @@ interface FaceSearchOptions {
 
 type SearchMode = "attributes" | "face" | "number";
 type ResultMode = "attributes" | "face" | "number";
+
+const FIND_PHOTOS_ONBOARDING_STORAGE_KEY = "photostream:find-photos-onboarding:v1";
+
 type FaceStage =
   | "consent"
   | "choose"
@@ -137,6 +140,7 @@ export function BibSearchPanel({
   slug: string;
 }>) {
   const [open, setOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [mode, setMode] = useState<SearchMode>(faceSearch !== undefined ? "face" : "number");
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [number, setNumber] = useState("");
@@ -425,6 +429,26 @@ export function BibSearchPanel({
     setFaceCloseWarning(false);
   }
 
+  function openSearchDialog(): void {
+    let seen = false;
+    try {
+      seen = window.localStorage.getItem(FIND_PHOTOS_ONBOARDING_STORAGE_KEY) === "seen";
+    } catch {
+      // If storage is unavailable, keep the onboarding available rather than silently skipping it.
+    }
+    setShowOnboarding(!seen);
+    setOpen(true);
+  }
+
+  function finishSearchOnboarding(): void {
+    try {
+      window.localStorage.setItem(FIND_PHOTOS_ONBOARDING_STORAGE_KEY, "seen");
+    } catch {
+      // The current dialog can still continue even when storage is unavailable.
+    }
+    setShowOnboarding(false);
+  }
+
   function requestDialogChange(nextOpen: boolean): void {
     if (!nextOpen && mode === "face" && isFaceWorking(faceView, faceStage)) {
       setFaceCloseWarning(true);
@@ -478,7 +502,7 @@ export function BibSearchPanel({
       <div className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm">
         <button
           className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
-          onClick={() => setOpen(true)}
+          onClick={openSearchDialog}
           type="button"
         >
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
@@ -547,15 +571,73 @@ export function BibSearchPanel({
         <DialogContent className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none max-sm:data-open:slide-in-from-bottom-full max-sm:data-open:zoom-in-100 max-sm:data-closed:slide-out-to-bottom-full max-sm:data-closed:zoom-out-100 max-sm:duration-300 sm:max-w-md sm:rounded-3xl motion-reduce:duration-0">
           <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20 sm:hidden" />
           <DialogHeader className="shrink-0 px-5 pt-3 pb-2.5 pr-12 sm:pt-5 sm:pb-3">
-            <DialogTitle className="text-base">找照片</DialogTitle>
+            <DialogTitle className="text-base">
+              {showOnboarding ? "先了解三种找照片方式" : "找照片"}
+            </DialogTitle>
             <DialogDescription className="text-xs leading-5">
-              选择一种方式快速筛选照片
+              {showOnboarding
+                ? "第一次使用时，先看看每种方式适合什么场景"
+                : "选择一种方式快速筛选照片"}
             </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 overflow-y-auto px-4 py-3 overscroll-contain sm:px-5 sm:pb-4">
-            <div className="flex flex-col gap-3.5">
-              <ToggleGroup
+            {showOnboarding ? (
+              <div className="flex flex-col gap-3">
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <ScanFaceIcon aria-hidden="true" className="size-4.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold">人脸找图</p>
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground">
+                          {faceSearch === undefined ? "支持时推荐" : "优先推荐"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        人脸找图通常最好用。提交一张清晰单人照，就能在本相册中查找可能包含同一人物的照片；它不依赖号码是否被拍进画面。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-muted/15 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted/70 text-muted-foreground">
+                      <SearchIcon aria-hidden="true" className="size-4.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">号码找图</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        输入照片中的号码进行查找。只有号码被清晰、完整地拍到并成功识别时才容易找到；号码太小、被遮挡、模糊或没有入镜时，可能没有结果。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-muted/15 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted/70 text-muted-foreground">
+                      <ScanSearchIcon aria-hidden="true" className="size-4.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">年级班级</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        按识别到的号码所属年级、班级筛选，适合快速缩小范围。它同样依赖号码能否被拍清楚，因此也可能漏掉一些实际存在的照片。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="px-1 text-xs leading-5 text-muted-foreground">
+                  建议找自己时优先使用人脸找图。号码或年级班级没有找到，不代表相册里一定没有相关照片，也可以换一种方式再试。
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3.5">
+                <ToggleGroup
                 aria-label="找照片方式"
                 className="relative grid w-full rounded-2xl border bg-muted/30 p-1"
                 onValueChange={(values) => {
@@ -842,10 +924,19 @@ export function BibSearchPanel({
                 ) : null}
               </div>
             </div>
+            )}
           </div>
 
           <DialogFooter className="shrink-0 border-t bg-background/95 px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-5 sm:py-3">
-            {mode === "face" && faceSearch !== undefined ? (
+            {showOnboarding ? (
+              <Button
+                className="h-12 rounded-xl max-sm:w-full sm:min-w-36"
+                onClick={finishSearchOnboarding}
+                type="button"
+              >
+                开始找照片
+              </Button>
+            ) : mode === "face" && faceSearch !== undefined ? (
               <>
                 {faceWorking ? (
                   <Button
