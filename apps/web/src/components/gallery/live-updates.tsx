@@ -342,11 +342,11 @@ export function LiveUpdates({
     >
       {pendingMediaCount > 0 ? (
         <button
-          className="pointer-events-auto rounded-full border border-border/75 bg-background/94 px-3.5 py-2 text-sm font-medium text-foreground shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+          className="pointer-events-auto rounded-full border border-blue-600 bg-blue-600 px-3.5 py-2 text-sm font-medium text-white shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 motion-reduce:transition-none"
           onClick={() => revealPendingMedia(true)}
           type="button"
         >
-          新增 {pendingMediaCount} 张照片 · 点击查看最新
+          新增 {pendingMediaCount} 张照片，点击查看最新
         </button>
       ) : null}
       {connectionInterrupted ? (
