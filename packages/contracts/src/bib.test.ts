@@ -71,7 +71,7 @@ describe("bib rule engine", () => {
     ).toMatchObject({ usable: false });
   });
 
-  it("evaluates OR patterns and overlapping AND constraints", () => {
+  it("evaluates OR branches and overlapping AND conditions", () => {
     expect(validateBibRuleSet(patterns)).toMatchObject({ usable: true, issues: [] });
     expect(evaluateBibNumber("101000", patterns).valid).toBe(true);
     expect(evaluateBibNumber("199000", patterns).valid).toBe(false);
@@ -111,6 +111,52 @@ describe("bib rule engine", () => {
         },
       ]),
     ).toMatchObject({ usable: false });
+  });
+
+  it("supports dependent digit ranges with separate OR branches", () => {
+    const conditionalBranches: BibPatternInput[] = [
+      {
+        totalLength: 4,
+        sortOrder: 0,
+        enabled: true,
+        constraints: [
+          { startPosition: 1, width: 1, sortOrder: 0, ranges: [{ start: "1", end: "1" }] },
+          { startPosition: 3, width: 1, sortOrder: 1, ranges: [{ start: "2", end: "5" }] },
+        ],
+      },
+      {
+        totalLength: 4,
+        sortOrder: 1,
+        enabled: true,
+        constraints: [
+          { startPosition: 1, width: 1, sortOrder: 0, ranges: [{ start: "2", end: "2" }] },
+          { startPosition: 3, width: 1, sortOrder: 1, ranges: [{ start: "6", end: "9" }] },
+        ],
+      },
+    ];
+
+    expect(validateBibRuleSet(conditionalBranches)).toMatchObject({ usable: true, issues: [] });
+    expect(evaluateBibNumber("1020", conditionalBranches).valid).toBe(true);
+    expect(evaluateBibNumber("1060", conditionalBranches).valid).toBe(false);
+    expect(evaluateBibNumber("2060", conditionalBranches).valid).toBe(true);
+    expect(evaluateBibNumber("2020", conditionalBranches).valid).toBe(false);
+    expect(evaluateBibNumber("3060", conditionalBranches).valid).toBe(false);
+  });
+
+  it("rejects enabled branches without any conditions", () => {
+    expect(
+      validateBibRuleSet([
+        {
+          totalLength: 6,
+          sortOrder: 0,
+          enabled: true,
+          constraints: [],
+        },
+      ]),
+    ).toMatchObject({
+      usable: false,
+      issues: [expect.objectContaining({ code: "EMPTY_PATTERN" })],
+    });
   });
 
   it("rejects conflicting attribute mappings and derives both dimensions from one number", () => {
