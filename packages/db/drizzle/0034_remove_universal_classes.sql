@@ -42,6 +42,10 @@ WHERE "id" IN (SELECT "id" FROM invalid_classes);
 --> statement-breakpoint
 ALTER TABLE "bib_attribute_options" DROP CONSTRAINT IF EXISTS "bib_attribute_options_grade_parent_check";
 --> statement-breakpoint
+ALTER TABLE "bib_attribute_options" DROP CONSTRAINT IF EXISTS "bib_attribute_options_parent_grade_option_id_bib_attribute_options_id_fk";
+--> statement-breakpoint
+ALTER TABLE "bib_attribute_options" ADD CONSTRAINT "bib_attribute_options_parent_grade_option_id_bib_attribute_options_id_fk" FOREIGN KEY ("parent_grade_option_id") REFERENCES "public"."bib_attribute_options"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
 ALTER TABLE "bib_attribute_options" ADD CONSTRAINT "bib_attribute_options_hierarchy_check" CHECK (
   ("dimension" = 'grade' AND "parent_grade_option_id" IS NULL)
   OR
