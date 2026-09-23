@@ -2252,7 +2252,10 @@ export function ReviewWorkspace({
                     disabled={batchBusy}
                     inputMode="numeric"
                     maxLength={12}
-                    onChange={(event) => setBatchBibNumber(event.currentTarget.value)}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setBatchBibNumber(value);
+                    }}
                     placeholder="统一号码"
                     value={batchBibNumber}
                   />
