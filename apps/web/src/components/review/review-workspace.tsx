@@ -406,10 +406,7 @@ export function ReviewWorkspace({
   );
 
   useEffect(() => {
-    if (
-      classOption !== "all" &&
-      !classOptions.some((option) => option.id === classOption)
-    ) {
+    if (classOption !== "all" && !classOptions.some((option) => option.id === classOption)) {
       setClassOption("all");
     }
   }, [classOption, classOptions]);
