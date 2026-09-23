@@ -687,6 +687,41 @@ set_slot_release() {
   fi
 }
 
+slot_release() {
+  local slot=$1 field=$2
+  case "$slot:$field" in
+    blue:revision) printf '%s\n' "$BLUE_REVISION" ;;
+    blue:api_image) printf '%s\n' "$BLUE_API_IMAGE" ;;
+    blue:web_image) printf '%s\n' "$BLUE_WEB_IMAGE" ;;
+    green:revision) printf '%s\n' "$GREEN_REVISION" ;;
+    green:api_image) printf '%s\n' "$GREEN_API_IMAGE" ;;
+    green:web_image) printf '%s\n' "$GREEN_WEB_IMAGE" ;;
+    *) die "无效部署槽或发布字段：$slot/$field" ;;
+  esac
+}
+
+rollback_target_slot() {
+  case "$ACTIVE_SLOT" in
+    blue) printf '%s\n' green ;;
+    green) printf '%s\n' blue ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_slot_images_present() {
+  local slot=$1 api_image web_image
+  api_image=$(slot_release "$slot" api_image)
+  web_image=$(slot_release "$slot" web_image)
+  [[ -n "$api_image" && "$api_image" != photostream-api:pending ]] || \
+    die "$slot 槽没有可用的 API 回滚镜像记录。"
+  [[ -n "$web_image" && "$web_image" != photostream-web:pending ]] || \
+    die "$slot 槽没有可用的 Web 回滚镜像记录。"
+  docker image inspect "$api_image" >/dev/null 2>&1 || \
+    die "回滚所需 API 镜像不在本机：$api_image。不要执行 docker image prune；请先恢复该镜像。"
+  docker image inspect "$web_image" >/dev/null 2>&1 || \
+    die "回滚所需 Web 镜像不在本机：$web_image。不要执行 docker image prune；请先恢复该镜像。"
+}
+
 prune_stale_release_images() {
   local image_rows referenced_images repository tag image
   if ! image_rows=$(docker image ls --format '{{.Repository}}\t{{.Tag}}'); then
@@ -918,10 +953,18 @@ rollback_command() {
   load_settings
   load_state
   [[ "$ACTIVE_SLOT" == blue || "$ACTIVE_SLOT" == green ]] || die "没有可回滚的活动部署。"
-  local target target_revision
-  [[ "$ACTIVE_SLOT" == blue ]] && target=green || target=blue
-  [[ "$target" == blue ]] && target_revision=$BLUE_REVISION || target_revision=$GREEN_REVISION
+
+  local previous target previous_revision target_revision
+  previous=$ACTIVE_SLOT
+  target=$(rollback_target_slot) || die "无法确定回滚目标槽。"
+  previous_revision=$(slot_release "$previous" revision)
+  target_revision=$(slot_release "$target" revision)
   [[ -n "$target_revision" ]] || die "上一槽没有部署记录。"
+
+  ensure_slot_images_present "$target"
+  log "准备回滚：$previous 槽 ${previous_revision:-未知版本} -> $target 槽 $target_revision。"
+  log "数据库迁移不会逆向执行；仅切换到保留的上一应用镜像。"
+
   render_runtime_envs
   compose up -d postgres caddy
   wait_healthy postgres 180
@@ -929,7 +972,7 @@ rollback_command() {
   compose --profile "$target" up -d --no-deps "api-$target" "web-$target"
   wait_healthy "api-$target" 180
   wait_healthy "web-$target" 180
-  local previous=$ACTIVE_SLOT
+
   reload_caddy_for_slot "$target" "$previous"
   if ! public_smoke; then
     warn "回滚槽公网冒烟失败，恢复 $previous 槽。"
@@ -937,8 +980,10 @@ rollback_command() {
     compose --profile "$target" stop -t 30 "api-$target" "web-$target" || true
     die "回滚槽公网健康检查失败，流量已恢复到原活动槽。"
   fi
+
   ACTIVE_SLOT=$target
   save_state
+  log "回滚切流已通过公网健康检查；等待 15 秒让在途请求完成。"
   sleep 15
   compose --profile "$previous" stop -t 30 "api-$previous" "web-$previous"
   log "已回滚到 $target 槽，提交 $target_revision。数据库迁移保持当前版本。"
@@ -947,8 +992,13 @@ rollback_command() {
 status_command() {
   load_settings
   load_state
-  printf '主站：https://%s\n活动槽：%s\n蓝槽提交：%s\n绿槽提交：%s\n' \
-    "$APP_HOST" "${ACTIVE_SLOT:-未部署}" "${BLUE_REVISION:-无}" "${GREEN_REVISION:-无}"
+  local rollback_slot='' rollback_revision=''
+  if rollback_slot=$(rollback_target_slot 2>/dev/null); then
+    rollback_revision=$(slot_release "$rollback_slot" revision)
+  fi
+  printf '主站：https://%s\n活动槽：%s\n蓝槽提交：%s\n绿槽提交：%s\n回滚目标：%s\n' \
+    "$APP_HOST" "${ACTIVE_SLOT:-未部署}" "${BLUE_REVISION:-无}" "${GREEN_REVISION:-无}" \
+    "$([[ -n "$rollback_revision" ]] && printf '%s (%s)' "$rollback_slot" "$rollback_revision" || printf '无')"
   if command -v docker >/dev/null 2>&1 && [[ -f "$COMPOSE_ENV_FILE" ]]; then
     compose --profile blue --profile green ps
   fi
