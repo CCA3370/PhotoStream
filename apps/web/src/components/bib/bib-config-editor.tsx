@@ -269,11 +269,23 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function removeOption(optionId: string): void {
-    setConfig((current) => ({
-      ...current,
-      attributeOptions: current.attributeOptions.filter((option) => option.id !== optionId),
-      mappings: current.mappings.filter((mapping) => mapping.outputOptionId !== optionId),
-    }));
+    setConfig((current) => {
+      const removed = current.attributeOptions.find((option) => option.id === optionId);
+      if (removed === undefined) return current;
+      const remaining = current.attributeOptions.filter((option) => option.id !== optionId);
+      const sortOrderById = new Map(
+        orderedOptions(remaining, removed.dimension).map((option, index) => [option.id, index]),
+      );
+      return {
+        ...current,
+        attributeOptions: remaining.map((option) =>
+          option.dimension === removed.dimension
+            ? { ...option, sortOrder: sortOrderById.get(option.id) ?? option.sortOrder }
+            : option,
+        ),
+        mappings: current.mappings.filter((mapping) => mapping.outputOptionId !== optionId),
+      };
+    });
   }
 
   function updateMapping(
@@ -307,7 +319,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             id: crypto.randomUUID(),
             dimension,
             displayName,
-            sortOrder: existing.length,
+            sortOrder:
+              existing.reduce((maximum, option) => Math.max(maximum, option.sortOrder), -1) + 1,
             enabled: true,
           },
         ],
@@ -316,8 +329,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function addMapping(dimension: BibAttributeDimension): void {
-    const output = config.attributeOptions.find(
-      (option) => option.dimension === dimension && option.enabled,
+    const output = orderedOptions(config.attributeOptions, dimension).find(
+      (option) => option.enabled,
     );
     if (output === undefined) {
       setError(dimension === "grade" ? "请先创建启用的年级选项" : "请先创建启用的班级选项");
@@ -851,9 +864,14 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {config.mappings.length === 0 ? (
+            <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+              尚未设置号码映射。添加后，系统可以根据号码中的指定位置自动派生年级或班级。
+            </div>
+          ) : null}
           {config.mappings.map((mapping, mappingIndex) => {
-            const optionItems = config.attributeOptions
-              .filter((option) => option.dimension === mapping.dimension && option.enabled)
+            const optionItems = orderedOptions(config.attributeOptions, mapping.dimension)
+              .filter((option) => option.enabled)
               .map((option) => ({ value: option.id, label: optionLabel(option) }));
             return (
               <Card
