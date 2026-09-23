@@ -947,7 +947,7 @@ export const bibAttributeOptions = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     parentGradeOptionId: uuid("parent_grade_option_id").references(
       (): AnyPgColumn => bibAttributeOptions.id,
-      { onDelete: "set null" },
+      { onDelete: "cascade" },
     ),
     ...timestampColumns(),
   },
