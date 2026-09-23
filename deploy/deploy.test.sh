@@ -163,24 +163,86 @@ assert_file_excludes "$prune_trace" 'nss_scenery_core-admin-api:latest'
 rollback_trace="$TEST_ROOT/rollback.trace"
 if (
   ACTIVE_SLOT=blue
+  BLUE_REVISION=current-release
   GREEN_REVISION=previous-release
+  BLUE_API_IMAGE=photostream-api:current-release
+  BLUE_WEB_IMAGE=photostream-web:current-release
+  GREEN_API_IMAGE=photostream-api:previous-release
+  GREEN_WEB_IMAGE=photostream-web:previous-release
   load_settings() { :; }
   load_state() { :; }
   render_runtime_envs() { :; }
+  docker() {
+    [[ "$1" == image && "$2" == inspect ]] || return 1
+    printf 'inspect %s\n' "$3" >>"$rollback_trace"
+  }
   compose() { printf 'compose' >>"$rollback_trace"; printf ' <%s>' "$@" >>"$rollback_trace"; printf '\n' >>"$rollback_trace"; }
   wait_healthy() { :; }
   reload_caddy_for_slot() { printf 'reload %s:%s\n' "$1" "$2" >>"$rollback_trace"; }
   public_smoke() { return 1; }
   save_state() { :; }
   warn() { :; }
+  log() { :; }
   die() { exit 97; }
   rollback_command
 ); then
   fail 'rollback must fail when the target public smoke check fails'
 fi
+assert_file_contains "$rollback_trace" 'inspect photostream-api:previous-release'
+assert_file_contains "$rollback_trace" 'inspect photostream-web:previous-release'
 assert_file_contains "$rollback_trace" 'reload green:blue'
 assert_file_contains "$rollback_trace" 'reload blue:green'
 assert_file_contains "$rollback_trace" 'compose <--profile> <green> <stop>'
+
+rollback_success_trace="$TEST_ROOT/rollback-success.trace"
+if ! (
+  ACTIVE_SLOT=blue
+  BLUE_REVISION=current-release
+  GREEN_REVISION=previous-release
+  BLUE_API_IMAGE=photostream-api:current-release
+  BLUE_WEB_IMAGE=photostream-web:current-release
+  GREEN_API_IMAGE=photostream-api:previous-release
+  GREEN_WEB_IMAGE=photostream-web:previous-release
+  load_settings() { :; }
+  load_state() { :; }
+  render_runtime_envs() { :; }
+  docker() {
+    [[ "$1" == image && "$2" == inspect ]] || return 1
+    printf 'inspect %s\n' "$3" >>"$rollback_success_trace"
+  }
+  compose() { printf 'compose' >>"$rollback_success_trace"; printf ' <%s>' "$@" >>"$rollback_success_trace"; printf '\n' >>"$rollback_success_trace"; }
+  wait_healthy() { :; }
+  reload_caddy_for_slot() { printf 'reload %s:%s\n' "$1" "$2" >>"$rollback_success_trace"; }
+  public_smoke() { return 0; }
+  save_state() { printf 'active=%s\n' "$ACTIVE_SLOT" >>"$rollback_success_trace"; }
+  sleep() { :; }
+  warn() { :; }
+  log() { :; }
+  rollback_command
+); then
+  fail 'rollback must succeed when the retained slot is healthy'
+fi
+assert_file_contains "$rollback_success_trace" 'reload green:blue'
+assert_file_contains "$rollback_success_trace" 'active=green'
+assert_file_contains "$rollback_success_trace" 'compose <--profile> <blue> <stop>'
+
+if (
+  ACTIVE_SLOT=blue
+  BLUE_REVISION=current-release
+  GREEN_REVISION=previous-release
+  BLUE_API_IMAGE=photostream-api:current-release
+  BLUE_WEB_IMAGE=photostream-web:current-release
+  GREEN_API_IMAGE=photostream-api:previous-release
+  GREEN_WEB_IMAGE=photostream-web:previous-release
+  load_settings() { :; }
+  load_state() { :; }
+  docker() { return 1; }
+  compose() { fail 'rollback touched compose before validating retained images'; }
+  die() { exit 97; }
+  rollback_command
+) 2>/dev/null; then
+  fail 'rollback must fail before cutover when a retained image is missing'
+fi
 
 bootstrap_source="$TEST_ROOT/bootstrap-source"
 bootstrap_target="$TEST_ROOT/managed checkout"
