@@ -274,7 +274,10 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
                 <FieldLabel htmlFor="face-delete-confirmation">输入“删除人脸索引”确认</FieldLabel>
                 <Input
                   id="face-delete-confirmation"
-                  onChange={(event) => setDeleteConfirmation(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setDeleteConfirmation(value);
+                  }}
                   value={deleteConfirmation}
                 />
               </Field>
