@@ -97,6 +97,29 @@ function canonicalMappings(mappings: readonly BibAttributeMappingInput[]): strin
   );
 }
 
+function canonicalAttributeHierarchy(options: readonly BibAttributeOptionInput[]): string {
+  return JSON.stringify(
+    options
+      .map((option) => ({
+        id: option.id,
+        dimension: option.dimension,
+        parentGradeOptionId: option.parentGradeOptionId ?? null,
+      }))
+      .toSorted((left, right) => left.id.localeCompare(right.id)),
+  );
+}
+
+function deriveHierarchicalBibAttributes(number: string, document: BibDocument) {
+  const derived = deriveHierarchicalBibAttributes(number, document);
+  if (derived.classOptionId === null) return derived;
+  const classOption = document.attributeOptions.find(
+    (option) => option.id === derived.classOptionId && option.dimension === "class",
+  );
+  const parentGradeOptionId = classOption?.parentGradeOptionId ?? null;
+  if (parentGradeOptionId === null || parentGradeOptionId === derived.gradeOptionId) return derived;
+  return { ...derived, classOptionId: null };
+}
+
 async function assertConfigIdsAvailable(
   requestedIds: readonly (string | undefined)[],
   currentIds: ReadonlySet<string>,
@@ -328,7 +351,9 @@ export class BibService {
       const ruleChanged =
         canonicalPatterns(current.patterns) !== canonicalPatterns(normalized.patterns);
       const mappingChanged =
-        canonicalMappings(current.mappings) !== canonicalMappings(normalized.mappings);
+        canonicalMappings(current.mappings) !== canonicalMappings(normalized.mappings) ||
+        canonicalAttributeHierarchy(current.attributeOptions) !==
+          canonicalAttributeHierarchy(normalized.attributeOptions);
       const ruleVersion = album.bibRuleVersion + (ruleChanged ? 1 : 0);
       const mappingVersion = album.bibMappingVersion + (mappingChanged ? 1 : 0);
 
@@ -356,7 +381,9 @@ export class BibService {
             ),
           );
       }
-      for (const option of normalized.attributeOptions) {
+      for (const option of normalized.attributeOptions.toSorted(
+        (left, right) => Number(left.dimension === "class") - Number(right.dimension === "class"),
+      )) {
         const [existing] = await transaction
           .select({
             albumId: schema.bibAttributeOptions.albumId,
@@ -381,7 +408,11 @@ export class BibService {
         }
         await transaction
           .insert(schema.bibAttributeOptions)
-          .values({ ...option, albumId: options.albumId })
+          .values({
+            ...option,
+            albumId: options.albumId,
+            parentGradeOptionId: option.parentGradeOptionId ?? null,
+          })
           .onConflictDoUpdate({
             target: schema.bibAttributeOptions.id,
             set: {
@@ -389,6 +420,7 @@ export class BibService {
               displayName: option.displayName,
               sortOrder: option.sortOrder,
               enabled: option.enabled,
+              parentGradeOptionId: option.parentGradeOptionId ?? null,
               updatedAt: new Date(),
             },
           });
@@ -512,7 +544,7 @@ export class BibService {
     const document = await this.#loadDocument(this.#database, albumId);
     const evaluation = evaluateBibNumber(number, document.patterns);
     const attributes = evaluation.valid
-      ? deriveBibAttributes(number, document.mappings)
+      ? deriveHierarchicalBibAttributes(number, document)
       : { gradeOptionId: null, classOptionId: null, matchedMappingIds: [] };
     return {
       normalizedNumber: number,
@@ -1391,7 +1423,7 @@ export class BibService {
                 .where(eq(schema.mediaBibReviews.mediaId, tag.mediaId));
             }
           } else {
-            const attributes = deriveBibAttributes(number, document.mappings);
+            const attributes = deriveHierarchicalBibAttributes(number, document);
             await transaction
               .update(schema.mediaBibTags)
               .set({
@@ -1728,7 +1760,7 @@ export class BibService {
         ),
       )
       .limit(1);
-    const attributes = deriveBibAttributes(options.number, document.mappings);
+    const attributes = deriveHierarchicalBibAttributes(options.number, document);
     const now = new Date();
     let tagId: string;
     if (existing !== undefined) {
@@ -1802,7 +1834,7 @@ export class BibService {
     if (!album.bibRuleUsable || !evaluateBibNumber(number, document.patterns).valid) {
       throw this.#invalidNumber();
     }
-    const attributes = deriveBibAttributes(number, document.mappings);
+    const attributes = deriveHierarchicalBibAttributes(number, document);
     const now = new Date();
     await transaction
       .update(schema.mediaBibTags)
@@ -2141,6 +2173,7 @@ export class BibService {
         displayName: option.displayName,
         sortOrder: option.sortOrder,
         enabled: option.enabled,
+        parentGradeOptionId: option.parentGradeOptionId,
       })),
       mappings: mappings.map((mapping) => ({
         id: mapping.id,
