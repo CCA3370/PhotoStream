@@ -938,8 +938,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         </CardContent>
       </Card>
 
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>年级与班级</CardTitle>
