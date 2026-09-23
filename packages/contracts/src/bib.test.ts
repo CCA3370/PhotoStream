@@ -159,6 +159,29 @@ describe("bib rule engine", () => {
     });
   });
 
+  it("ignores disabled branches when determining rule usability", () => {
+    expect(
+      validateBibRuleSet([
+        {
+          totalLength: 4,
+          sortOrder: 0,
+          enabled: true,
+          constraints: [
+            { startPosition: 1, width: 1, sortOrder: 0, ranges: [{ start: "1", end: "1" }] },
+          ],
+        },
+        {
+          totalLength: 2,
+          sortOrder: 1,
+          enabled: false,
+          constraints: [
+            { startPosition: 2, width: 2, sortOrder: 0, ranges: [{ start: "00", end: "99" }] },
+          ],
+        },
+      ]),
+    ).toMatchObject({ usable: true, issues: [] });
+  });
+
   it("rejects conflicting attribute mappings and derives both dimensions from one number", () => {
     const gradeOne = "019d0000-0000-7000-8000-000000000001";
     const gradeTwo = "019d0000-0000-7000-8000-000000000002";
