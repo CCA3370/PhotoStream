@@ -292,6 +292,16 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
       await expect(
         viewerPage.getByText(/人脸找图通常最好用。.*不依赖号码是否被拍进画面/u),
       ).toBeVisible();
+
+      await viewerPage.keyboard.press("Escape");
+      await expect(
+        viewerPage.getByRole("heading", { name: "先了解三种找照片方式" }),
+      ).toHaveCount(0);
+      await findPhotos.click();
+      await expect(
+        viewerPage.getByRole("heading", { name: "先了解三种找照片方式" }),
+      ).toBeVisible();
+
       await viewerPage.getByRole("button", { name: "开始找照片" }).click();
       const searchInput = viewerPage.getByLabel("输入号码找照片");
       await expect(searchInput).toBeVisible();
