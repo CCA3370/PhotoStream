@@ -46,6 +46,7 @@ export const bibAttributeOptionInputSchema = z
     displayName: z.string().trim().min(1).max(60),
     sortOrder: z.number().int().min(0).max(10_000).default(0),
     enabled: z.boolean().default(true),
+    parentGradeOptionId: z.string().uuid().nullable().optional(),
   })
   .strict();
 export type BibAttributeOptionInput = z.infer<typeof bibAttributeOptionInputSchema>;
@@ -104,6 +105,29 @@ export const bibConfigUpdateSchema = z
         context.addIssue({ code: "custom", message: "配置实体 ID 不能重复", path: [group.path] });
       }
     }
+
+    const optionById = new Map(value.attributeOptions.map((option) => [option.id, option]));
+    value.attributeOptions.forEach((option, index) => {
+      const parentGradeOptionId = option.parentGradeOptionId ?? null;
+      if (option.dimension === "grade" && parentGradeOptionId !== null) {
+        context.addIssue({
+          code: "custom",
+          message: "年级不能隶属于其他年级",
+          path: ["attributeOptions", index, "parentGradeOptionId"],
+        });
+        return;
+      }
+      if (option.dimension === "class" && parentGradeOptionId !== null) {
+        const parent = optionById.get(parentGradeOptionId);
+        if (parent === undefined || parent.dimension !== "grade") {
+          context.addIssue({
+            code: "custom",
+            message: "班级必须关联当前配置中的有效年级",
+            path: ["attributeOptions", index, "parentGradeOptionId"],
+          });
+        }
+      }
+    });
   });
 export type BibConfigUpdate = z.infer<typeof bibConfigUpdateSchema>;
 
