@@ -472,15 +472,22 @@ export function validateBibRuleSet(patterns: readonly BibPatternInput[]): {
   const issues: BibValidationIssue[] = [];
   const enabled = patterns.filter((pattern) => pattern.enabled);
   if (enabled.length === 0) {
-    issues.push({ code: "NO_ENABLED_PATTERN", path: "patterns", message: "至少启用一条号码模式" });
+    issues.push({ code: "NO_ENABLED_PATTERN", path: "patterns", message: "至少启用一个有效分支" });
   }
   patterns.forEach((pattern, patternIndex) => {
+    if (pattern.enabled && pattern.constraints.length === 0) {
+      issues.push({
+        code: "EMPTY_PATTERN",
+        path: `patterns.${patternIndex}.constraints`,
+        message: "启用的分支至少需要一个条件",
+      });
+    }
     const constraints = pattern.constraints.map((constraint, constraintIndex) => {
       if (constraint.startPosition + constraint.width - 1 > pattern.totalLength) {
         issues.push({
           code: "CONSTRAINT_OUT_OF_BOUNDS",
           path: `patterns.${patternIndex}.constraints.${constraintIndex}`,
-          message: "约束位置超出模式总位数",
+          message: "条件位置超出号码总位数",
         });
       }
       const normalized = normalizeBibRanges(constraint.ranges, constraint.width);
@@ -488,14 +495,14 @@ export function validateBibRuleSet(patterns: readonly BibPatternInput[]): {
         issues.push({
           code: "INVALID_RANGE_WIDTH",
           path: `patterns.${patternIndex}.constraints.${constraintIndex}.ranges`,
-          message: "区间必须与约束宽度一致且起点不大于终点",
+          message: "允许范围必须与读取位数一致，且起点不能大于终点",
         });
       }
       if (normalized.length === 0) {
         issues.push({
           code: "EMPTY_CONSTRAINT",
           path: `patterns.${patternIndex}.constraints.${constraintIndex}.ranges`,
-          message: "约束没有有效区间",
+          message: "条件没有有效允许范围",
         });
       }
       return {
@@ -512,7 +519,7 @@ export function validateBibRuleSet(patterns: readonly BibPatternInput[]): {
       issues.push({
         code: "UNSATISFIABLE_PATTERN",
         path: `patterns.${patternIndex}`,
-        message: "约束互相冲突，没有号码可以通过",
+        message: "分支内条件互相冲突，没有号码可以通过",
       });
     }
   });
