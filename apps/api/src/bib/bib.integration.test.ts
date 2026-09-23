@@ -98,8 +98,22 @@ function validConfig(overrides: Partial<BibConfigUpdate> = {}): BibConfigUpdate 
     attributeOptions: [
       { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
       { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, enabled: true },
-      { id: classOne, dimension: "class", displayName: "一班", sortOrder: 0, enabled: true },
-      { id: classTwo, dimension: "class", displayName: "二班", sortOrder: 1, enabled: true },
+      {
+        id: classOne,
+        dimension: "class",
+        displayName: "一班",
+        sortOrder: 0,
+        enabled: true,
+        parentGradeOptionId: gradeOne,
+      },
+      {
+        id: classTwo,
+        dimension: "class",
+        displayName: "二班",
+        sortOrder: 1,
+        enabled: true,
+        parentGradeOptionId: gradeOne,
+      },
     ],
     mappings: [
       {
