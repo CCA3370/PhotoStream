@@ -15,7 +15,7 @@ import {
   validateBibMappings,
   validateBibRuleSet,
 } from "@photostream/contracts";
-import { FlaskConicalIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, FlaskConicalIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -92,6 +92,24 @@ function optionLabel(option: BibAttributeOptionInput): string {
   return option.dimension === "grade" ? "未命名年级" : "未命名班级";
 }
 
+function dimensionLabel(dimension: BibAttributeDimension): string {
+  return dimension === "grade" ? "年级" : "班级";
+}
+
+function orderedOptions(
+  options: readonly BibAttributeOptionInput[],
+  dimension: BibAttributeDimension,
+): BibAttributeOptionInput[] {
+  return options
+    .filter((option) => option.dimension === dimension)
+    .toSorted(
+      (left, right) =>
+        left.sortOrder - right.sortOrder ||
+        left.displayName.localeCompare(right.displayName, "zh-CN") ||
+        left.id.localeCompare(right.id),
+    );
+}
+
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
   if (value.trim().length === 0) return false;
   const parsed = Number(value);
@@ -147,17 +165,35 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   const validation = useMemo(() => {
     const rule = validateBibRuleSet(config.patterns);
     const mapping = validateBibMappings(config.patterns, config.attributeOptions, config.mappings);
-    const optionIssues = config.attributeOptions.flatMap((option, index) =>
-      option.displayName.trim().length > 0
+    const optionIssues = config.attributeOptions.flatMap((option, index) => {
+      const displayName = option.displayName.trim();
+      if (displayName.length === 0) {
+        return [
+          {
+            code: "EMPTY_ATTRIBUTE_OPTION_NAME",
+            path: `attributeOptions.${index}.displayName`,
+            message: `${dimensionLabel(option.dimension)}名称不能为空`,
+          },
+        ];
+      }
+      const duplicateIndex = config.attributeOptions.findIndex(
+        (candidate, candidateIndex) =>
+          candidateIndex < index &&
+          candidate.dimension === option.dimension &&
+          candidate.displayName.trim().localeCompare(displayName, "zh-CN", {
+            sensitivity: "accent",
+          }) === 0,
+      );
+      return duplicateIndex === -1
         ? []
         : [
             {
-              code: "EMPTY_ATTRIBUTE_OPTION_NAME",
+              code: "DUPLICATE_ATTRIBUTE_OPTION_NAME",
               path: `attributeOptions.${index}.displayName`,
-              message: option.dimension === "grade" ? "年级名称不能为空" : "班级名称不能为空",
+              message: `${dimensionLabel(option.dimension)}名称不能重复`,
             },
-          ],
-    );
+          ];
+    });
     return { rule, mapping, issues: [...rule.issues, ...mapping.issues, ...optionIssues] };
   }, [config]);
   const localTestResult = useMemo(() => {
@@ -197,14 +233,46 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function updateOption(
-    optionIndex: number,
+    optionId: string,
     update: (option: BibAttributeOptionInput) => BibAttributeOptionInput,
   ) {
     setConfig((current) => ({
       ...current,
-      attributeOptions: current.attributeOptions.map((option, index) =>
-        index === optionIndex ? update(option) : option,
+      attributeOptions: current.attributeOptions.map((option) =>
+        option.id === optionId ? update(option) : option,
       ),
+    }));
+  }
+
+  function moveOption(optionId: string, direction: -1 | 1): void {
+    setConfig((current) => {
+      const option = current.attributeOptions.find((item) => item.id === optionId);
+      if (option === undefined) return current;
+      const ordered = orderedOptions(current.attributeOptions, option.dimension);
+      const index = ordered.findIndex((item) => item.id === optionId);
+      const targetIndex = index + direction;
+      if (index === -1 || targetIndex < 0 || targetIndex >= ordered.length) return current;
+      const reordered = [...ordered];
+      const [moving] = reordered.splice(index, 1);
+      if (moving === undefined) return current;
+      reordered.splice(targetIndex, 0, moving);
+      const sortOrderById = new Map(reordered.map((item, order) => [item.id, order]));
+      return {
+        ...current,
+        attributeOptions: current.attributeOptions.map((item) =>
+          item.dimension === option.dimension
+            ? { ...item, sortOrder: sortOrderById.get(item.id) ?? item.sortOrder }
+            : item,
+        ),
+      };
+    });
+  }
+
+  function removeOption(optionId: string): void {
+    setConfig((current) => ({
+      ...current,
+      attributeOptions: current.attributeOptions.filter((option) => option.id !== optionId),
+      mappings: current.mappings.filter((mapping) => mapping.outputOptionId !== optionId),
     }));
   }
 
@@ -221,20 +289,30 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function addOption(dimension: BibAttributeDimension): void {
-    setConfig((current) => ({
-      ...current,
-      attributeOptions: [
-        ...current.attributeOptions,
-        {
-          id: crypto.randomUUID(),
-          dimension,
-          displayName: dimension === "grade" ? "新年级" : "新班级",
-          sortOrder: current.attributeOptions.filter((option) => option.dimension === dimension)
-            .length,
-          enabled: true,
-        },
-      ],
-    }));
+    setConfig((current) => {
+      const existing = orderedOptions(current.attributeOptions, dimension);
+      const usedNames = new Set(existing.map((option) => option.displayName.trim()));
+      const baseName = dimension === "grade" ? "新年级" : "新班级";
+      let displayName = baseName;
+      let suffix = 2;
+      while (usedNames.has(displayName)) {
+        displayName = `${baseName} ${suffix}`;
+        suffix += 1;
+      }
+      return {
+        ...current,
+        attributeOptions: [
+          ...current.attributeOptions,
+          {
+            id: crypto.randomUUID(),
+            dimension,
+            displayName,
+            sortOrder: existing.length,
+            enabled: true,
+          },
+        ],
+      };
+    });
   }
 
   function addMapping(dimension: BibAttributeDimension): void {
@@ -264,8 +342,13 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
   async function save(): Promise<void> {
     if (pending) return;
-    if (config.attributeOptions.some((option) => option.displayName.trim().length === 0)) {
-      setError("年级和班级名称不能为空");
+    const attributeOptionIssue = validation.issues.find(
+      (issue) =>
+        issue.code === "EMPTY_ATTRIBUTE_OPTION_NAME" ||
+        issue.code === "DUPLICATE_ATTRIBUTE_OPTION_NAME",
+    );
+    if (attributeOptionIssue !== undefined) {
+      setError(attributeOptionIssue.message);
       return;
     }
     if (
@@ -609,82 +692,163 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
       <Card>
         <CardHeader>
-          <CardTitle>年级与班级选项</CardTitle>
-          <CardDescription>只保存类别，不导入姓名、学号或号码到个人身份映射。</CardDescription>
+          <CardTitle>年级与班级</CardTitle>
+          <CardDescription>
+            设置观众按年级、班级找照片时使用的选项。显示顺序可直接调整；删除选项时会同时移除尚未保存的关联映射。
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {config.attributeOptions.map((option, optionIndex) => {
-            const emptyName = option.displayName.trim().length === 0;
+        <CardContent className="grid gap-4 lg:grid-cols-2">
+          {(["grade", "class"] as const).map((dimension) => {
+            const options = orderedOptions(config.attributeOptions, dimension);
+            const enabledCount = options.filter((option) => option.enabled).length;
             return (
-              <FieldGroup
-                className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto_auto]"
-                key={option.id}
+              <section
+                aria-label={`${dimensionLabel(dimension)}设置`}
+                className="flex min-w-0 flex-col gap-3 rounded-2xl border bg-muted/10 p-4"
+                key={dimension}
               >
-                <Field data-invalid={emptyName || undefined}>
-                  <FieldLabel htmlFor={`bib-option-${option.id}`}>
-                    {option.dimension === "grade" ? "年级名称" : "班级名称"}
-                  </FieldLabel>
-                  <Input
-                    aria-invalid={emptyName || undefined}
-                    id={`bib-option-${option.id}`}
-                    onChange={(event) => {
-                      const { value } = event.currentTarget;
-                      updateOption(optionIndex, (current) => ({
-                        ...current,
-                        displayName: value,
-                      }));
-                    }}
-                    value={option.displayName}
-                  />
-                  {emptyName ? <FieldDescription>名称不能为空</FieldDescription> : null}
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={`bib-option-sort-${option.id}`}>排序</FieldLabel>
-                  <DraftNumberInput
-                    id={`bib-option-sort-${option.id}`}
-                    min={0}
-                    onValueChange={(value) =>
-                      updateOption(optionIndex, (current) => ({
-                        ...current,
-                        sortOrder: value,
-                      }))
-                    }
-                    value={option.sortOrder}
-                  />
-                </Field>
-                <Field className="self-end">
-                  <FieldLabel className="sr-only" htmlFor={`bib-option-enabled-${option.id}`}>
-                    {optionLabel(option)}启用状态
-                  </FieldLabel>
-                  <Switch
-                    checked={option.enabled}
-                    id={`bib-option-enabled-${option.id}`}
-                    onCheckedChange={(checked) =>
-                      updateOption(optionIndex, (current) => ({ ...current, enabled: checked }))
-                    }
-                  />
-                </Field>
-                <Badge variant="outline">{option.dimension === "grade" ? "年级" : "班级"}</Badge>
-              </FieldGroup>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold">{dimensionLabel(dimension)}</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {dimension === "grade"
+                        ? "例如：初一、初二、高一。用于年级筛选和号码映射。"
+                        : "例如：1班、2班。班级与年级分别映射，观众端会按实际照片组合筛选。"}
+                    </p>
+                  </div>
+                  <Badge className="shrink-0" variant="secondary">
+                    {enabledCount}/{options.length} 启用
+                  </Badge>
+                </div>
+
+                {options.length === 0 ? (
+                  <div className="rounded-xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
+                    暂无{dimensionLabel(dimension)}，可先添加一个选项。
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {options.map((option, optionIndex) => {
+                      const emptyName = option.displayName.trim().length === 0;
+                      const duplicateName = options.some(
+                        (candidate) =>
+                          candidate.id !== option.id &&
+                          candidate.displayName.trim().length > 0 &&
+                          candidate.displayName.trim().localeCompare(option.displayName.trim(), "zh-CN", {
+                            sensitivity: "accent",
+                          }) === 0,
+                      );
+                      const invalidName = emptyName || duplicateName;
+                      const linkedMappingCount = config.mappings.filter(
+                        (mapping) => mapping.outputOptionId === option.id,
+                      ).length;
+                      return (
+                        <div
+                          className="grid gap-3 rounded-xl border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+                          key={option.id}
+                        >
+                          <Field data-invalid={invalidName || undefined}>
+                            <FieldLabel htmlFor={`bib-option-${option.id}`}>
+                              {dimensionLabel(dimension)}名称
+                            </FieldLabel>
+                            <Input
+                              aria-invalid={invalidName || undefined}
+                              id={`bib-option-${option.id}`}
+                              maxLength={60}
+                              onChange={(event) => {
+                                const { value } = event.currentTarget;
+                                updateOption(option.id, (current) => ({
+                                  ...current,
+                                  displayName: value,
+                                }));
+                              }}
+                              value={option.displayName}
+                            />
+                            {invalidName ? (
+                              <FieldDescription>
+                                {emptyName ? "名称不能为空" : "同一类别下名称不能重复"}
+                              </FieldDescription>
+                            ) : linkedMappingCount > 0 ? (
+                              <FieldDescription>
+                                已被 {linkedMappingCount} 条号码映射使用
+                              </FieldDescription>
+                            ) : null}
+                          </Field>
+
+                          <div className="flex items-end justify-between gap-2 sm:justify-end">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                aria-label={`上移${optionLabel(option)}`}
+                                disabled={optionIndex === 0}
+                                onClick={() => moveOption(option.id, -1)}
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <ArrowUpIcon />
+                              </Button>
+                              <Button
+                                aria-label={`下移${optionLabel(option)}`}
+                                disabled={optionIndex === options.length - 1}
+                                onClick={() => moveOption(option.id, 1)}
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <ArrowDownIcon />
+                              </Button>
+                            </div>
+                            <Field className="flex-row items-center gap-2">
+                              <FieldLabel className="text-xs" htmlFor={`bib-option-enabled-${option.id}`}>
+                                {option.enabled ? "启用" : "停用"}
+                              </FieldLabel>
+                              <Switch
+                                checked={option.enabled}
+                                id={`bib-option-enabled-${option.id}`}
+                                onCheckedChange={(checked) =>
+                                  updateOption(option.id, (current) => ({
+                                    ...current,
+                                    enabled: checked,
+                                  }))
+                                }
+                              />
+                            </Field>
+                            <Button
+                              aria-label={`删除${optionLabel(option)}`}
+                              onClick={() => removeOption(option.id)}
+                              size="icon-sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Trash2Icon />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Button
+                  className="mt-auto"
+                  onClick={() => addOption(dimension)}
+                  type="button"
+                  variant="outline"
+                >
+                  <PlusIcon data-icon="inline-start" />
+                  添加{dimensionLabel(dimension)}
+                </Button>
+              </section>
             );
           })}
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => addOption("grade")} type="button" variant="outline">
-              <PlusIcon data-icon="inline-start" />
-              添加年级
-            </Button>
-            <Button onClick={() => addOption("class")} type="button" variant="outline">
-              <PlusIcon data-icon="inline-start" />
-              添加班级
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>属性映射</CardTitle>
-          <CardDescription>同一号码同一维度命中不同输出时不能启用。</CardDescription>
+          <CardTitle>号码到年级/班级的映射</CardTitle>
+          <CardDescription>
+            指定号码中的哪几位对应哪个年级或班级。同一合法号码不能映射到同一类别的两个不同选项。
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {config.mappings.map((mapping, mappingIndex) => {
@@ -700,7 +864,24 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                 size="sm"
               >
                 <CardHeader>
-                  <CardTitle>{mapping.dimension === "grade" ? "年级映射" : "班级映射"}</CardTitle>
+                  <CardTitle>
+                    {dimensionLabel(mapping.dimension)}映射 ·{" "}
+                    {optionLabel(
+                      config.attributeOptions.find(
+                        (option) => option.id === mapping.outputOptionId,
+                      ) ?? {
+                        id: mapping.outputOptionId,
+                        dimension: mapping.dimension,
+                        displayName: "",
+                        sortOrder: 0,
+                        enabled: false,
+                      },
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    读取第 {mapping.startPosition}–
+                    {mapping.startPosition + mapping.width - 1} 位
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
                   <FieldGroup className="md:grid md:grid-cols-3">
@@ -735,7 +916,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       />
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor={`mapping-output-${mappingIndex}`}>输出选项</FieldLabel>
+                      <FieldLabel htmlFor={`mapping-output-${mappingIndex}`}>
+                        对应{dimensionLabel(mapping.dimension)}
+                      </FieldLabel>
                       <Select
                         items={optionItems}
                         onValueChange={(value) => {
@@ -863,9 +1046,11 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           })}
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => addMapping("grade")} type="button" variant="outline">
+              <PlusIcon data-icon="inline-start" />
               添加年级映射
             </Button>
             <Button onClick={() => addMapping("class")} type="button" variant="outline">
+              <PlusIcon data-icon="inline-start" />
               添加班级映射
             </Button>
           </div>
