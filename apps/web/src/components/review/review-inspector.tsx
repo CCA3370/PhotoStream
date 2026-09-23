@@ -464,7 +464,10 @@ export function ReviewBatchInspector({
                   disabled={busy}
                   inputMode="numeric"
                   maxLength={12}
-                  onChange={(event) => onBibNumberChange(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    onBibNumberChange(value);
+                  }}
                   placeholder="统一号码"
                   value={bibNumber}
                 />
