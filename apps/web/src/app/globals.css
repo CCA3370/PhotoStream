@@ -391,6 +391,18 @@ button[title="隐藏 (Space)"]:hover {
   }
 }
 
+/* Keep the thumbnail's own image layer rounded. The image is promoted to a composited
+   layer for hover/View Transition animation; relying only on the tile parent's
+   overflow clipping can expose square corners for a frame when the lightbox closes. */
+.public-theme .group[data-media-id] > span {
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.public-theme .group[data-media-id] > span > img {
+  border-radius: inherit;
+}
+
 /* Smooth desktop thumbnail hover instead of an abrupt scale jump. */
 @media (hover: hover) and (pointer: fine) {
   .public-theme .group[data-media-id] {
