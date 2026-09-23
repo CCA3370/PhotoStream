@@ -389,19 +389,38 @@ export function MediaGrid({
     const source = lightboxTransitionElement();
     const target = thumbnailTransitionElement(selectedId);
     const targetBounds = target?.getBoundingClientRect();
-    const targetVisible =
+    const galleryMain = target?.closest<HTMLElement>("#gallery-main") ?? null;
+    const galleryShell = galleryMain?.closest<HTMLElement>(".public-theme") ?? null;
+    const galleryHeaderBottom =
+      galleryShell
+        ?.querySelector<HTMLElement>(":scope > header")
+        ?.getBoundingClientRect().bottom ?? 0;
+    const galleryFooterTop =
+      galleryShell
+        ?.querySelector<HTMLElement>(":scope > footer")
+        ?.getBoundingClientRect().top ?? window.innerHeight;
+    const filterNavBottom =
+      galleryMain
+        ?.querySelector<HTMLElement>('nav[aria-label="相册筛选"]')
+        ?.getBoundingClientRect().bottom ?? galleryHeaderBottom;
+    const visibleTop = Math.max(0, galleryHeaderBottom, filterNavBottom);
+    const visibleBottom = Math.min(window.innerHeight, galleryFooterTop);
+    // Native View Transition snapshots are painted in the top layer, so they are not clipped
+    // by the sticky gallery header/filter/footer. Only shrink back to a thumbnail when the
+    // entire destination is inside the unobscured gallery viewport.
+    const targetFullyVisible =
       targetBounds !== undefined &&
-      targetBounds.bottom > 0 &&
-      targetBounds.top < window.innerHeight &&
-      targetBounds.right > 0 &&
-      targetBounds.left < window.innerWidth;
+      targetBounds.top >= visibleTop &&
+      targetBounds.bottom <= visibleBottom &&
+      targetBounds.left >= 0 &&
+      targetBounds.right <= window.innerWidth;
 
     if (
       transitionActiveRef.current ||
       documentWithTransition.startViewTransition === undefined ||
       source === null ||
       target === null ||
-      !targetVisible ||
+      !targetFullyVisible ||
       prefersReducedMotion()
     ) {
       setSelectedId(null);
