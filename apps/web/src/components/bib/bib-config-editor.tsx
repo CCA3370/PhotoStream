@@ -427,20 +427,23 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       const otherOptionCount = current.attributeOptions.length - existing.length;
       const classCount = Math.max(0, Math.min(requestedCount, 30, 100 - otherOptionCount));
       const retainedIds = new Set(existing.slice(0, classCount).map((option) => option.id));
-      const nextClasses = Array.from({ length: Math.max(classCount, existing.length) }, (_, index) => {
-        const currentClass = existing[index];
-        if (index >= classCount && currentClass !== undefined) {
-          return { ...currentClass, enabled: false };
-        }
-        return {
-          id: currentClass?.id ?? crypto.randomUUID(),
-          dimension: "class" as const,
-          displayName: `${index + 1}班`,
-          sortOrder: index,
-          enabled: true,
-          parentGradeOptionId: gradeOptionId,
-        };
-      });
+      const nextClasses = Array.from(
+        { length: Math.max(classCount, existing.length) },
+        (_, index) => {
+          const currentClass = existing[index];
+          if (index >= classCount && currentClass !== undefined) {
+            return { ...currentClass, enabled: false };
+          }
+          return {
+            id: currentClass?.id ?? crypto.randomUUID(),
+            dimension: "class" as const,
+            displayName: `${index + 1}班`,
+            sortOrder: index,
+            enabled: true,
+            parentGradeOptionId: gradeOptionId,
+          };
+        },
+      );
       const retiredIds = new Set(
         existing.filter((option) => !retainedIds.has(option.id)).map((option) => option.id),
       );
