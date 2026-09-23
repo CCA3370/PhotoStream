@@ -110,6 +110,28 @@ function orderedOptions(
     );
 }
 
+function classesForGrade(
+  options: readonly BibAttributeOptionInput[],
+  gradeOptionId: string,
+): BibAttributeOptionInput[] {
+  return orderedOptions(options, "class").filter(
+    (option) => option.parentGradeOptionId === gradeOptionId,
+  );
+}
+
+function mappingOptionLabel(
+  option: BibAttributeOptionInput,
+  options: readonly BibAttributeOptionInput[],
+): string {
+  if (option.dimension !== "class" || option.parentGradeOptionId == null) {
+    return optionLabel(option);
+  }
+  const grade = options.find(
+    (candidate) => candidate.id === option.parentGradeOptionId && candidate.dimension === "grade",
+  );
+  return grade === undefined ? optionLabel(option) : `${optionLabel(grade)} · ${optionLabel(option)}`;
+}
+
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
   if (value.trim().length === 0) return false;
   const parsed = Number(value);
@@ -176,10 +198,40 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           },
         ];
       }
+      const parentGradeOptionId = option.parentGradeOptionId ?? null;
+      if (
+        option.dimension === "grade" &&
+        parentGradeOptionId !== null
+      ) {
+        return [
+          {
+            code: "INVALID_ATTRIBUTE_HIERARCHY",
+            path: `attributeOptions.${index}.parentGradeOptionId`,
+            message: "年级不能隶属于其他年级",
+          },
+        ];
+      }
+      if (
+        option.dimension === "class" &&
+        parentGradeOptionId !== null &&
+        !config.attributeOptions.some(
+          (candidate) => candidate.id === parentGradeOptionId && candidate.dimension === "grade",
+        )
+      ) {
+        return [
+          {
+            code: "INVALID_ATTRIBUTE_HIERARCHY",
+            path: `attributeOptions.${index}.parentGradeOptionId`,
+            message: "班级关联的年级不存在",
+          },
+        ];
+      }
       const duplicateIndex = config.attributeOptions.findIndex(
         (candidate, candidateIndex) =>
           candidateIndex < index &&
           candidate.dimension === option.dimension &&
+          (option.dimension === "grade" ||
+            (candidate.parentGradeOptionId ?? null) === parentGradeOptionId) &&
           candidate.displayName.trim().localeCompare(displayName, "zh-CN", {
             sensitivity: "accent",
           }) === 0,
@@ -190,7 +242,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             {
               code: "DUPLICATE_ATTRIBUTE_OPTION_NAME",
               path: `attributeOptions.${index}.displayName`,
-              message: `${dimensionLabel(option.dimension)}名称不能重复`,
+              message:
+                option.dimension === "grade"
+                  ? "年级名称不能重复"
+                  : "同一年级下班级名称不能重复",
             },
           ];
     });
@@ -200,9 +255,20 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     const normalizedNumber = normalizeBibNumber(testNumber);
     if (normalizedNumber === null) return null;
     const evaluation = evaluateBibNumber(normalizedNumber, config.patterns);
-    const attributes = evaluation.valid
+    const derived = evaluation.valid
       ? deriveBibAttributes(normalizedNumber, config.mappings)
       : { gradeOptionId: null, classOptionId: null, matchedMappingIds: [] };
+    const classOption =
+      derived.classOptionId === null
+        ? undefined
+        : config.attributeOptions.find(
+            (option) => option.id === derived.classOptionId && option.dimension === "class",
+          );
+    const attributes =
+      classOption?.parentGradeOptionId != null &&
+      classOption.parentGradeOptionId !== derived.gradeOptionId
+        ? { ...derived, classOptionId: null }
+        : derived;
     return { normalizedNumber, ...evaluation, ...attributes };
   }, [config, testNumber]);
   const testNumberInvalid = testNumber.length > 0 && localTestResult === null;
@@ -272,18 +338,29 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     setConfig((current) => {
       const removed = current.attributeOptions.find((option) => option.id === optionId);
       if (removed === undefined) return current;
-      const remaining = current.attributeOptions.filter((option) => option.id !== optionId);
-      const sortOrderById = new Map(
-        orderedOptions(remaining, removed.dimension).map((option, index) => [option.id, index]),
+      const removedIds = new Set([
+        optionId,
+        ...(removed.dimension === "grade"
+          ? current.attributeOptions
+              .filter(
+                (option) =>
+                  option.dimension === "class" && option.parentGradeOptionId === removed.id,
+              )
+              .map((option) => option.id)
+          : []),
+      ]);
+      const remaining = current.attributeOptions.filter((option) => !removedIds.has(option.id));
+      const gradeSortOrderById = new Map(
+        orderedOptions(remaining, "grade").map((option, index) => [option.id, index]),
       );
       return {
         ...current,
         attributeOptions: remaining.map((option) =>
-          option.dimension === removed.dimension
-            ? { ...option, sortOrder: sortOrderById.get(option.id) ?? option.sortOrder }
+          option.dimension === "grade"
+            ? { ...option, sortOrder: gradeSortOrderById.get(option.id) ?? option.sortOrder }
             : option,
         ),
-        mappings: current.mappings.filter((mapping) => mapping.outputOptionId !== optionId),
+        mappings: current.mappings.filter((mapping) => !removedIds.has(mapping.outputOptionId)),
       };
     });
   }
@@ -300,11 +377,11 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     }));
   }
 
-  function addOption(dimension: BibAttributeDimension): void {
+  function addGrade(): void {
     setConfig((current) => {
-      const existing = orderedOptions(current.attributeOptions, dimension);
+      const existing = orderedOptions(current.attributeOptions, "grade");
       const usedNames = new Set(existing.map((option) => option.displayName.trim()));
-      const baseName = dimension === "grade" ? "新年级" : "新班级";
+      const baseName = "新年级";
       let displayName = baseName;
       let suffix = 2;
       while (usedNames.has(displayName)) {
@@ -317,13 +394,81 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           ...current.attributeOptions,
           {
             id: crypto.randomUUID(),
-            dimension,
+            dimension: "grade",
             displayName,
             sortOrder:
               existing.reduce((maximum, option) => Math.max(maximum, option.sortOrder), -1) + 1,
             enabled: true,
+            parentGradeOptionId: null,
           },
         ],
+      };
+    });
+  }
+
+  function setGradeClassCount(gradeOptionId: string, requestedCount: number): void {
+    setConfig((current) => {
+      const grade = current.attributeOptions.find(
+        (option) => option.id === gradeOptionId && option.dimension === "grade",
+      );
+      if (grade === undefined) return current;
+      const existing = classesForGrade(current.attributeOptions, gradeOptionId);
+      const otherOptionCount = current.attributeOptions.length - existing.length;
+      const classCount = Math.max(0, Math.min(requestedCount, 30, 100 - otherOptionCount));
+      const nextClasses = Array.from({ length: classCount }, (_, index) => {
+        const currentClass = existing[index];
+        return {
+          id: currentClass?.id ?? crypto.randomUUID(),
+          dimension: "class" as const,
+          displayName: `${index + 1}班`,
+          sortOrder: index,
+          enabled: grade.enabled,
+          parentGradeOptionId: gradeOptionId,
+        };
+      });
+      const removedIds = new Set(existing.slice(classCount).map((option) => option.id));
+      return {
+        ...current,
+        attributeOptions: [
+          ...current.attributeOptions.filter(
+            (option) =>
+              !(
+                option.dimension === "class" &&
+                option.parentGradeOptionId === gradeOptionId
+              ),
+          ),
+          ...nextClasses,
+        ],
+        mappings: current.mappings.filter((mapping) => !removedIds.has(mapping.outputOptionId)),
+      };
+    });
+  }
+
+  function setGradeEnabled(gradeOptionId: string, enabled: boolean): void {
+    setConfig((current) => ({
+      ...current,
+      attributeOptions: current.attributeOptions.map((option) =>
+        option.id === gradeOptionId || option.parentGradeOptionId === gradeOptionId
+          ? { ...option, enabled }
+          : option,
+      ),
+    }));
+  }
+
+  function assignLegacyClass(classOptionId: string, gradeOptionId: string): void {
+    setConfig((current) => {
+      const siblings = classesForGrade(current.attributeOptions, gradeOptionId);
+      return {
+        ...current,
+        attributeOptions: current.attributeOptions.map((option) =>
+          option.id === classOptionId
+            ? {
+                ...option,
+                parentGradeOptionId: gradeOptionId,
+                sortOrder: siblings.length,
+              }
+            : option,
+        ),
       };
     });
   }
@@ -358,7 +503,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     const attributeOptionIssue = validation.issues.find(
       (issue) =>
         issue.code === "EMPTY_ATTRIBUTE_OPTION_NAME" ||
-        issue.code === "DUPLICATE_ATTRIBUTE_OPTION_NAME",
+        issue.code === "DUPLICATE_ATTRIBUTE_OPTION_NAME" ||
+        issue.code === "INVALID_ATTRIBUTE_HIERARCHY",
     );
     if (attributeOptionIssue !== undefined) {
       setError(attributeOptionIssue.message);
