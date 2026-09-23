@@ -117,13 +117,20 @@ function orderedOptions(
     );
 }
 
-function classesForGrade(
+function allClassesForGrade(
   options: readonly BibAttributeOptionInput[],
   gradeOptionId: string,
 ): BibAttributeOptionInput[] {
   return orderedOptions(options, "class").filter(
     (option) => option.parentGradeOptionId === gradeOptionId,
   );
+}
+
+function classesForGrade(
+  options: readonly BibAttributeOptionInput[],
+  gradeOptionId: string,
+): BibAttributeOptionInput[] {
+  return allClassesForGrade(options, gradeOptionId).filter((option) => option.enabled);
 }
 
 function mappingOptionLabel(
@@ -416,11 +423,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         (option) => option.id === gradeOptionId && option.dimension === "grade",
       );
       if (grade === undefined) return current;
-      const existing = classesForGrade(current.attributeOptions, gradeOptionId);
+      const existing = allClassesForGrade(current.attributeOptions, gradeOptionId);
       const otherOptionCount = current.attributeOptions.length - existing.length;
       const classCount = Math.max(0, Math.min(requestedCount, 30, 100 - otherOptionCount));
-      const nextClasses = Array.from({ length: classCount }, (_, index) => {
+      const retainedIds = new Set(existing.slice(0, classCount).map((option) => option.id));
+      const nextClasses = Array.from({ length: Math.max(classCount, existing.length) }, (_, index) => {
         const currentClass = existing[index];
+        if (index >= classCount && currentClass !== undefined) {
+          return { ...currentClass, enabled: false };
+        }
         return {
           id: currentClass?.id ?? crypto.randomUUID(),
           dimension: "class" as const,
@@ -430,7 +441,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           parentGradeOptionId: gradeOptionId,
         };
       });
-      const removedIds = new Set(existing.slice(classCount).map((option) => option.id));
+      const retiredIds = new Set(
+        existing.filter((option) => !retainedIds.has(option.id)).map((option) => option.id),
+      );
       return {
         ...current,
         attributeOptions: [
@@ -440,7 +453,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           ),
           ...nextClasses,
         ],
-        mappings: current.mappings.filter((mapping) => !removedIds.has(mapping.outputOptionId)),
+        mappings: current.mappings.filter((mapping) => !retiredIds.has(mapping.outputOptionId)),
       };
     });
   }
@@ -874,9 +887,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     }) === 0,
                 );
                 const invalidName = emptyName || duplicateName;
+                const allGradeClasses = allClassesForGrade(config.attributeOptions, grade.id);
                 const maxClassCount = Math.max(
                   0,
-                  Math.min(30, 100 - (config.attributeOptions.length - gradeClasses.length)),
+                  Math.min(30, 100 - (config.attributeOptions.length - allGradeClasses.length)),
                 );
                 const linkedMappingCount = config.mappings.filter(
                   (mapping) =>
