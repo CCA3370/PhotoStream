@@ -944,12 +944,22 @@ export const bibAttributeOptions = pgTable(
     displayName: varchar("display_name", { length: 60 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     enabled: boolean("enabled").notNull().default(true),
+    parentGradeOptionId: uuid("parent_grade_option_id").references(
+      (): AnyPgColumn => bibAttributeOptions.id,
+      { onDelete: "set null" },
+    ),
     ...timestampColumns(),
   },
   (table) => [
     index("bib_attribute_options_album_dimension_sort_idx").on(
       table.albumId,
       table.dimension,
+      table.sortOrder,
+      table.id,
+    ),
+    index("bib_attribute_options_parent_grade_sort_idx").on(
+      table.albumId,
+      table.parentGradeOptionId,
       table.sortOrder,
       table.id,
     ),
