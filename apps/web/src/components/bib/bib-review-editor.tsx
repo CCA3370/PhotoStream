@@ -439,7 +439,8 @@ export function BibReviewEditor({
             inputMode="text"
             maxLength={255}
             onChange={(event) => {
-              setNumber(event.currentTarget.value);
+              const { value } = event.currentTarget;
+              setNumber(value);
               setDirty(true);
               setValidationError(null);
             }}
