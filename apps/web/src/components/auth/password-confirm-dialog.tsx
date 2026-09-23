@@ -74,7 +74,7 @@ export function PasswordConfirmDialog({
               autoComplete="current-password"
               autoFocus
               id="password-confirmation"
-              onChange={(event) => setPassword(event.currentTarget.value)}
+              onChange={(event) => {\n                const { value } = event.currentTarget;\n                setPassword(value);\n              }}
               type="password"
               value={password}
             />
