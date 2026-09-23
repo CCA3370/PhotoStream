@@ -126,7 +126,7 @@ function DraftNumberInput({
         if (!numberDraftIsValid(draft, min, max)) setDraft(String(value));
       }}
       onChange={(event) => {
-        const next = event.currentTarget.value;
+        const { value: next } = event.currentTarget;
         setDraft(next);
         if (!numberDraftIsValid(next, min, max)) return;
         onValueChange(Number(next));
@@ -502,7 +502,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                                 id={`range-start-${patternIndex}-${constraintIndex}-${rangeIndex}`}
                                 inputMode="numeric"
                                 onChange={(event) => {
-                                  const value = event.currentTarget.value;
+                                  const { value } = event.currentTarget;
                                   updateConstraint(patternIndex, constraintIndex, (current) => ({
                                     ...current,
                                     ranges: current.ranges.map((currentRange, index) =>
@@ -523,7 +523,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                                 id={`range-end-${patternIndex}-${constraintIndex}-${rangeIndex}`}
                                 inputMode="numeric"
                                 onChange={(event) => {
-                                  const value = event.currentTarget.value;
+                                  const { value } = event.currentTarget;
                                   updateConstraint(patternIndex, constraintIndex, (current) => ({
                                     ...current,
                                     ranges: current.ranges.map((currentRange, index) =>
@@ -628,7 +628,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     aria-invalid={emptyName || undefined}
                     id={`bib-option-${option.id}`}
                     onChange={(event) => {
-                      const value = event.currentTarget.value;
+                      const { value } = event.currentTarget;
                       updateOption(optionIndex, (current) => ({
                         ...current,
                         displayName: value,
@@ -776,7 +776,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                           id={`mapping-range-start-${mappingIndex}-${rangeIndex}`}
                           inputMode="numeric"
                           onChange={(event) => {
-                            const value = event.currentTarget.value;
+                            const { value } = event.currentTarget;
                             updateMapping(mappingIndex, (current) => ({
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
@@ -795,7 +795,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                           id={`mapping-range-end-${mappingIndex}-${rangeIndex}`}
                           inputMode="numeric"
                           onChange={(event) => {
-                            const value = event.currentTarget.value;
+                            const { value } = event.currentTarget;
                             updateMapping(mappingIndex, (current) => ({
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
@@ -899,7 +899,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
               id="bib-test-number"
               inputMode="numeric"
               maxLength={12}
-              onChange={(event) => setTestNumber(event.currentTarget.value)}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setTestNumber(value);
+              }}
               value={testNumber}
             />
           </Field>
