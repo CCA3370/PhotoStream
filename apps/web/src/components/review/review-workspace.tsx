@@ -394,9 +394,25 @@ export function ReviewWorkspace({
   );
   const classOptions = useMemo(
     () =>
-      bibConfig.attributeOptions.filter((option) => option.enabled && option.dimension === "class"),
-    [bibConfig.attributeOptions],
+      bibConfig.attributeOptions.filter(
+        (option) =>
+          option.enabled &&
+          option.dimension === "class" &&
+          (gradeOption === "all" ||
+            option.parentGradeOptionId == null ||
+            option.parentGradeOptionId === gradeOption),
+      ),
+    [bibConfig.attributeOptions, gradeOption],
   );
+
+  useEffect(() => {
+    if (
+      classOption !== "all" &&
+      !classOptions.some((option) => option.id === classOption)
+    ) {
+      setClassOption("all");
+    }
+  }, [classOption, classOptions]);
 
   const showNotice = useCallback((text: string, type: "success" | "warning" = "success") => {
     toast.add({ title: text, type });
