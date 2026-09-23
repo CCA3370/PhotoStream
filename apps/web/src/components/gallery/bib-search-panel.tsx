@@ -207,6 +207,7 @@ export function BibSearchPanel({
     if (pending || mode === "face") return;
     if (mode === "number" && number.length === 0) return;
     if (mode === "attributes" && gradeOptionId === null) return;
+    if (cursor === undefined) markSearchOnboardingSeen();
     setPending(true);
     setError(null);
     try {
@@ -324,6 +325,7 @@ export function BibSearchPanel({
 
   async function chooseFace(file: File | undefined): Promise<void> {
     if (file === undefined || faceSearch === undefined || facePending) return;
+    markSearchOnboardingSeen();
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
@@ -433,7 +435,6 @@ export function BibSearchPanel({
     let seen = false;
     try {
       seen = window.localStorage.getItem(FIND_PHOTOS_ONBOARDING_STORAGE_KEY) === "seen";
-      if (!seen) window.localStorage.setItem(FIND_PHOTOS_ONBOARDING_STORAGE_KEY, "seen");
     } catch {
       // If storage is unavailable, keep the onboarding available rather than silently skipping it.
     }
@@ -443,6 +444,14 @@ export function BibSearchPanel({
 
   function finishSearchOnboarding(): void {
     setShowOnboarding(false);
+  }
+
+  function markSearchOnboardingSeen(): void {
+    try {
+      window.localStorage.setItem(FIND_PHOTOS_ONBOARDING_STORAGE_KEY, "seen");
+    } catch {
+      // Searching still works when storage is unavailable; onboarding may appear again next time.
+    }
   }
 
   function requestDialogChange(nextOpen: boolean): void {
