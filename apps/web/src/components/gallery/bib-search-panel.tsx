@@ -912,7 +912,7 @@ export function BibSearchPanel({
                         >
                           <AlertTitle>本次检索未完整完成</AlertTitle>
                           <AlertDescription>
-                            当前结果不完整，请重新尝试；未完成的任务不会显示为“没有找到”。
+                            当前结果不完整，请重新尝试。
                           </AlertDescription>
                         </Alert>
                       ) : null}
