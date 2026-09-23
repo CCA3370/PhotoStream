@@ -131,7 +131,10 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
               <Input
                 aria-label="搜索审计记录"
                 className="h-8 pr-8 pl-8"
-                onChange={(event) => setQuery(event.currentTarget.value)}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  setQuery(value);
+                }}
                 placeholder="搜索动作、目标或字段"
                 value={query}
               />
