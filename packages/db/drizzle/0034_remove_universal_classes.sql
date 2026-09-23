@@ -1,20 +1,4 @@
 WITH invalid_classes AS (
-  SELECT class_option.id, class_option.album_id
-  FROM "bib_attribute_options" AS class_option
-  LEFT JOIN "bib_attribute_options" AS grade_option
-    ON grade_option.id = class_option.parent_grade_option_id
-    AND grade_option.album_id = class_option.album_id
-    AND grade_option.dimension = 'grade'
-  WHERE class_option.dimension = 'class'
-    AND grade_option.id IS NULL
-)
-UPDATE "albums"
-SET
-  "bib_mapping_version" = "bib_mapping_version" + 1,
-  "updated_at" = now()
-WHERE "id" IN (SELECT DISTINCT "album_id" FROM invalid_classes);
---> statement-breakpoint
-WITH invalid_classes AS (
   SELECT class_option.id
   FROM "bib_attribute_options" AS class_option
   LEFT JOIN "bib_attribute_options" AS grade_option
