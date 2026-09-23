@@ -80,7 +80,10 @@ export function FaceIndexExclusionButton({
             <Input
               aria-invalid={error === null ? undefined : true}
               id="face-exclusion-confirmation"
-              onChange={(event) => setConfirmation(event.currentTarget.value)}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setConfirmation(value);
+              }}
               value={confirmation}
             />
             <FieldDescription>
