@@ -1640,7 +1640,13 @@ export class BibService {
         : selectedOptions.find(
             (option) => option.id === options.classOptionId && option.dimension === "class",
           );
-    if (grade === undefined || (options.classOptionId !== undefined && classOption === undefined)) {
+    if (
+      grade === undefined ||
+      (options.classOptionId !== undefined && classOption === undefined) ||
+      (classOption?.parentGradeOptionId !== null &&
+        classOption?.parentGradeOptionId !== undefined &&
+        classOption.parentGradeOptionId !== options.gradeOptionId)
+    ) {
       throw this.#publicSearchUnavailable();
     }
     const [activeTask] = await this.#database
