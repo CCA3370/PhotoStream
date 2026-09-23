@@ -117,7 +117,15 @@ export const bibConfigUpdateSchema = z
         });
         return;
       }
-      if (option.dimension === "class" && parentGradeOptionId !== null) {
+      if (option.dimension === "class") {
+        if (parentGradeOptionId === null) {
+          context.addIssue({
+            code: "custom",
+            message: "班级必须隶属于具体年级",
+            path: ["attributeOptions", index, "parentGradeOptionId"],
+          });
+          return;
+        }
         const parent = optionById.get(parentGradeOptionId);
         if (parent === undefined || parent.dimension !== "grade") {
           context.addIssue({
@@ -570,21 +578,26 @@ export function validateBibMappings(
         message: "映射输出选项不存在、维度不符或已停用",
       });
     }
-    if (
-      mapping.dimension === "class" &&
-      option?.dimension === "class" &&
-      option.parentGradeOptionId != null &&
-      !mappings.some(
-        (candidate) =>
-          candidate.dimension === "grade" &&
-          candidate.outputOptionId === option.parentGradeOptionId,
-      )
-    ) {
-      issues.push({
-        code: "CLASS_PARENT_GRADE_UNMAPPED",
-        path: `mappings.${mappingIndex}.outputOptionId`,
-        message: "班级所属年级尚未设置号码映射",
-      });
+    if (mapping.dimension === "class" && option?.dimension === "class") {
+      if (option.parentGradeOptionId == null) {
+        issues.push({
+          code: "CLASS_WITHOUT_PARENT_GRADE",
+          path: `mappings.${mappingIndex}.outputOptionId`,
+          message: "班级必须隶属于具体年级",
+        });
+      } else if (
+        !mappings.some(
+          (candidate) =>
+            candidate.dimension === "grade" &&
+            candidate.outputOptionId === option.parentGradeOptionId,
+        )
+      ) {
+        issues.push({
+          code: "CLASS_PARENT_GRADE_UNMAPPED",
+          path: `mappings.${mappingIndex}.outputOptionId`,
+          message: "班级所属年级尚未设置号码映射",
+        });
+      }
     }
     const normalizedRanges = normalizeBibRanges(mapping.ranges, mapping.width);
     if (mapping.ranges.some((range) => !bibRangeValidForWidth(range, mapping.width))) {
@@ -627,9 +640,9 @@ export function validateBibMappings(
         continue;
       }
       if (left.dimension === "class") {
-        const leftParent = optionById.get(left.outputOptionId)?.parentGradeOptionId ?? null;
-        const rightParent = optionById.get(right.outputOptionId)?.parentGradeOptionId ?? null;
-        if (leftParent !== null && rightParent !== null && leftParent !== rightParent) {
+        const leftParent = optionById.get(left.outputOptionId)?.parentGradeOptionId;
+        const rightParent = optionById.get(right.outputOptionId)?.parentGradeOptionId;
+        if (leftParent !== undefined && rightParent !== undefined && leftParent !== rightParent) {
           continue;
         }
       }
@@ -680,8 +693,7 @@ export function deriveBibAttributes(
       ? classMappings[0]
       : classMappings.find((mapping) => {
           const output = optionById.get(mapping.outputOptionId);
-          const parentGradeOptionId = output?.parentGradeOptionId ?? null;
-          return parentGradeOptionId === null || parentGradeOptionId === gradeOptionId;
+          return output?.parentGradeOptionId === gradeOptionId;
         });
   const selectedMappings = [gradeMapping, classMapping].filter(
     (mapping): mapping is BibAttributeMappingInput => mapping !== undefined,
