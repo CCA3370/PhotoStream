@@ -1208,8 +1208,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
                                 index === rangeIndex
-                                        ? { ...currentRange, start: value }
-                                        : currentRange,
+                                  ? { ...currentRange, start: value }
+                                  : currentRange,
                               ),
                             }));
                           }}
@@ -1229,8 +1229,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
                                 index === rangeIndex
-                                        ? { ...currentRange, end: value }
-                                        : currentRange,
+                                  ? { ...currentRange, end: value }
+                                  : currentRange,
                               ),
                             }));
                           }}
