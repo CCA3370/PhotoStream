@@ -352,7 +352,10 @@ export function AlbumSettings({
                       <Input
                         id="settings-title"
                         maxLength={120}
-                        onChange={(event) => setTitle(event.currentTarget.value)}
+                        onChange={(event) => {
+                          const { value } = event.currentTarget;
+                          setTitle(value);
+                        }}
                         required
                         value={title}
                       />
@@ -363,7 +366,10 @@ export function AlbumSettings({
                         className="min-h-24 resize-y"
                         id="settings-description"
                         maxLength={1_000}
-                        onChange={(event) => setDescription(event.currentTarget.value)}
+                        onChange={(event) => {
+                          const { value } = event.currentTarget;
+                          setDescription(value);
+                        }}
                         value={description}
                       />
                     </Field>
@@ -409,7 +415,10 @@ export function AlbumSettings({
                       className="min-h-24 resize-y"
                       id="privacy-notice"
                       maxLength={2_000}
-                      onChange={(event) => setPrivacyNotice(event.currentTarget.value)}
+                      onChange={(event) => {
+                        const { value } = event.currentTarget;
+                        setPrivacyNotice(value);
+                      }}
                       placeholder="可选。这里的内容会作为本活动的隐私补充说明显示。"
                       value={privacyNotice}
                     />
