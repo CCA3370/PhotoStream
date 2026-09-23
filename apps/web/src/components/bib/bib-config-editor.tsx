@@ -15,7 +15,14 @@ import {
   validateBibMappings,
   validateBibRuleSet,
 } from "@photostream/contracts";
-import { ArrowDownIcon, ArrowUpIcon, FlaskConicalIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  FlaskConicalIcon,
+  PlusIcon,
+  SaveIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -129,7 +136,9 @@ function mappingOptionLabel(
   const grade = options.find(
     (candidate) => candidate.id === option.parentGradeOptionId && candidate.dimension === "grade",
   );
-  return grade === undefined ? optionLabel(option) : `${optionLabel(grade)} · ${optionLabel(option)}`;
+  return grade === undefined
+    ? optionLabel(option)
+    : `${optionLabel(grade)} · ${optionLabel(option)}`;
 }
 
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
@@ -199,10 +208,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         ];
       }
       const parentGradeOptionId = option.parentGradeOptionId ?? null;
-      if (
-        option.dimension === "grade" &&
-        parentGradeOptionId !== null
-      ) {
+      if (option.dimension === "grade" && parentGradeOptionId !== null) {
         return [
           {
             code: "INVALID_ATTRIBUTE_HIERARCHY",
@@ -243,9 +249,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
               code: "DUPLICATE_ATTRIBUTE_OPTION_NAME",
               path: `attributeOptions.${index}.displayName`,
               message:
-                option.dimension === "grade"
-                  ? "年级名称不能重复"
-                  : "同一年级下班级名称不能重复",
+                option.dimension === "grade" ? "年级名称不能重复" : "同一年级下班级名称不能重复",
             },
           ];
     });
@@ -432,10 +436,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         attributeOptions: [
           ...current.attributeOptions.filter(
             (option) =>
-              !(
-                option.dimension === "class" &&
-                option.parentGradeOptionId === gradeOptionId
-              ),
+              !(option.dimension === "class" && option.parentGradeOptionId === gradeOptionId),
           ),
           ...nextClasses,
         ],
@@ -741,7 +742,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                                   updateConstraint(patternIndex, constraintIndex, (current) => ({
                                     ...current,
                                     ranges: current.ranges.map((currentRange, index) =>
-                                      index === rangeIndex ? { ...currentRange, start: value } : currentRange,
+                                      index === rangeIndex
+                                        ? { ...currentRange, start: value }
+                                        : currentRange,
                                     ),
                                   }));
                                 }}
@@ -762,7 +765,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                                   updateConstraint(patternIndex, constraintIndex, (current) => ({
                                     ...current,
                                     ranges: current.ranges.map((currentRange, index) =>
-                                      index === rangeIndex ? { ...currentRange, end: value } : currentRange,
+                                      index === rangeIndex
+                                        ? { ...currentRange, end: value }
+                                        : currentRange,
                                     ),
                                   }));
                                 }}
@@ -846,7 +851,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <CardHeader>
           <CardTitle>年级与班级</CardTitle>
           <CardDescription>
-            先创建年级，再直接填写该年级的班级数量。系统会自动生成 1班、2班……并把这些班级绑定到对应年级。
+            先创建年级，再直接填写该年级的班级数量。系统会自动生成
+            1班、2班……并把这些班级绑定到对应年级。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -1118,8 +1124,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     )}
                   </CardTitle>
                   <CardDescription>
-                    读取第 {mapping.startPosition}–
-                    {mapping.startPosition + mapping.width - 1} 位
+                    读取第 {mapping.startPosition}–{mapping.startPosition + mapping.width - 1} 位
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
@@ -1202,7 +1207,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             updateMapping(mappingIndex, (current) => ({
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
-                                index === rangeIndex ? { ...currentRange, start: value } : currentRange,
+                                index === rangeIndex
+                                        ? { ...currentRange, start: value }
+                                        : currentRange,
                               ),
                             }));
                           }}
@@ -1221,7 +1228,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             updateMapping(mappingIndex, (current) => ({
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
-                                index === rangeIndex ? { ...currentRange, end: value } : currentRange,
+                                index === rangeIndex
+                                        ? { ...currentRange, end: value }
+                                        : currentRange,
                               ),
                             }));
                           }}
