@@ -692,7 +692,9 @@ export function BibSearchPanel({
                         id="public-bib-number"
                         inputMode="numeric"
                         maxLength={12}
-                        onChange={(event) => setNumber(event.currentTarget.value.replace(/\D/gu, ""))}
+                        onChange={(event) =>
+                          setNumber(event.currentTarget.value.replace(/\D/gu, ""))
+                        }
                         onKeyDown={(event) => {
                           if (event.key === "Enter" && numberValid) void search();
                         }}
@@ -797,7 +799,8 @@ export function BibSearchPanel({
                               </p>
                               <p>
                                 参考照片会在查找结束后删除，异常情况下最长保留 1
-                                小时；本次候选结果最长保留 2 小时。结果可能存在漏检、误匹配或无结果。
+                                小时；本次候选结果最长保留 2
+                                小时。结果可能存在漏检、误匹配或无结果。
                               </p>
                               <p>请仅提交本人或已取得明确授权的人物照片。</p>
                             </AlertDescription>
@@ -917,9 +920,7 @@ export function BibSearchPanel({
                           variant="destructive"
                         >
                           <AlertTitle>本次检索未完整完成</AlertTitle>
-                          <AlertDescription>
-                            当前结果不完整，请重新尝试。
-                          </AlertDescription>
+                          <AlertDescription>当前结果不完整，请重新尝试。</AlertDescription>
                         </Alert>
                       ) : null}
 
