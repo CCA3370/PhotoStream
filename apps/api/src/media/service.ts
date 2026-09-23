@@ -2453,13 +2453,14 @@ export class PhotoService {
             .orderBy(asc(schema.bibPatterns.totalLength))
         ).map((pattern) => pattern.totalLength)
       : [];
-    const bibAttributeOptions = bibSearchEnabled
+    const bibAttributeOptionRows = bibSearchEnabled
       ? await this.#database
           .select({
             id: schema.bibAttributeOptions.id,
             dimension: schema.bibAttributeOptions.dimension,
             displayName: schema.bibAttributeOptions.displayName,
             sortOrder: schema.bibAttributeOptions.sortOrder,
+            parentGradeOptionId: schema.bibAttributeOptions.parentGradeOptionId,
           })
           .from(schema.bibAttributeOptions)
           .where(
@@ -2474,6 +2475,9 @@ export class PhotoService {
             asc(schema.bibAttributeOptions.id),
           )
       : [];
+    const bibAttributeOptions = bibAttributeOptionRows.map(
+      ({ parentGradeOptionId: _parentGradeOptionId, ...option }) => option,
+    );
     const [mappingTask] = bibSearchEnabled
       ? await this.#database
           .select({ id: schema.bibRecalculationTasks.id })
@@ -2489,16 +2493,20 @@ export class PhotoService {
       : [];
     const bibAttributeFilterEnabled =
       bibSearchEnabled && album.bibMappingUsable && mappingTask === undefined;
-    const gradeOptionIds = bibAttributeOptions
+    const gradeOptionIds = bibAttributeOptionRows
       .filter((option) => option.dimension === "grade")
       .map((option) => option.id);
-    const classOptionIds = bibAttributeOptions
-      .filter((option) => option.dimension === "class")
-      .map((option) => option.id);
+    const classOptions = bibAttributeOptionRows.filter((option) => option.dimension === "class");
     const bibAttributePairs = bibAttributeFilterEnabled
       ? gradeOptionIds.flatMap((gradeOptionId) => [
           { gradeOptionId, classOptionId: null },
-          ...classOptionIds.map((classOptionId) => ({ gradeOptionId, classOptionId })),
+          ...classOptions
+            .filter(
+              (classOption) =>
+                classOption.parentGradeOptionId === null ||
+                classOption.parentGradeOptionId === gradeOptionId,
+            )
+            .map((classOption) => ({ gradeOptionId, classOptionId: classOption.id })),
         ])
       : [];
     return {
