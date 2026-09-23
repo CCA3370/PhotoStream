@@ -444,7 +444,10 @@ export function UploadQueue({
           className="sr-only"
           id="photo-files"
           multiple
-          onChange={(event) => void enqueue(Array.from(event.currentTarget.files ?? []))}
+          onChange={(event) => {
+            const { files } = event.currentTarget;
+            void enqueue(Array.from(files ?? []));
+          }}
           ref={inputRef}
           type="file"
         />
@@ -452,7 +455,10 @@ export function UploadQueue({
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           className="sr-only"
           multiple
-          onChange={(event) => void enqueue(Array.from(event.currentTarget.files ?? []))}
+          onChange={(event) => {
+            const { files } = event.currentTarget;
+            void enqueue(Array.from(files ?? []));
+          }}
           ref={directoryInputRef}
           type="file"
         />
