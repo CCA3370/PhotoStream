@@ -174,6 +174,8 @@ export function BibSearchPanel({
     numberLengths.length === 0
       ? "输入完整号码"
       : `输入号码（${numberLengths.map((length) => `${length} 位`).join("或")}）`;
+  const numberValid =
+    number.length > 0 && (numberLengths.length === 0 || numberLengths.includes(number.length));
   const searchModes: { label: string; value: SearchMode }[] = [];
   if (faceSearch !== undefined) searchModes.push({ label: "人脸", value: "face" });
   if (bibSearchEnabled) searchModes.push({ label: "号码", value: "number" });
@@ -205,7 +207,7 @@ export function BibSearchPanel({
 
   async function search(cursor?: string): Promise<void> {
     if (pending || mode === "face") return;
-    if (mode === "number" && number.length === 0) return;
+    if (mode === "number" && !numberValid) return;
     if (mode === "attributes" && gradeOptionId === null) return;
     if (cursor === undefined) markSearchOnboardingSeen();
     setPending(true);
@@ -692,7 +694,7 @@ export function BibSearchPanel({
                         maxLength={12}
                         onChange={(event) => setNumber(event.currentTarget.value.replace(/\D/gu, ""))}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter" && number.length > 0) void search();
+                          if (event.key === "Enter" && numberValid) void search();
                         }}
                         placeholder={numberPlaceholder}
                         value={number}
@@ -983,7 +985,7 @@ export function BibSearchPanel({
               <Button
                 className="h-12 rounded-xl text-base font-medium max-sm:w-full sm:min-w-36"
                 disabled={
-                  pending || (mode === "number" ? number.length === 0 : gradeOptionId === null)
+                  pending || (mode === "number" ? !numberValid : gradeOptionId === null)
                 }
                 onClick={() => void search()}
                 type="button"
