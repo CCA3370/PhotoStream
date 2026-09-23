@@ -115,7 +115,10 @@ export function AlbumManagementList({
             <Input
               aria-label="搜索活动"
               className="h-8 pr-8 pl-8"
-              onChange={(event) => setQuery(event.currentTarget.value)}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setQuery(value);
+              }}
               placeholder="搜索名称、说明或路径"
               value={query}
             />
