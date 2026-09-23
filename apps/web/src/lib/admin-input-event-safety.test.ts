@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const componentsRoot = fileURLToPath(new URL("../components", import.meta.url));
 const excludedDirectories = new Set(["gallery", "ui"]);
-const directDomValueAccess = /\.(?:currentTarget|target)\.(?:value|valueAsNumber|files)\b/gu;
+const directDomValueAccess = /\.(?:currentTarget|target)\.(?:value|valueAsNumber|checked|files|selectedOptions)\b/gu;
 
 function managementComponentFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
