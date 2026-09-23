@@ -120,7 +120,14 @@ describe("bib rule engine", () => {
     const options: BibAttributeOptionInput[] = [
       { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
       { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, enabled: true },
-      { id: classOne, dimension: "class", displayName: "一班", sortOrder: 0, enabled: true },
+      {
+        id: classOne,
+        dimension: "class",
+        displayName: "一班",
+        sortOrder: 0,
+        enabled: true,
+        parentGradeOptionId: gradeOne,
+      },
     ];
     const mappings: BibAttributeMappingInput[] = [
       {
