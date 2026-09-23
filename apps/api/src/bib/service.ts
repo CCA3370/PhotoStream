@@ -115,8 +115,7 @@ function deriveHierarchicalBibAttributes(number: string, document: BibDocument) 
   const classOption = document.attributeOptions.find(
     (option) => option.id === derived.classOptionId && option.dimension === "class",
   );
-  const parentGradeOptionId = classOption?.parentGradeOptionId ?? null;
-  if (parentGradeOptionId === null || parentGradeOptionId === derived.gradeOptionId) return derived;
+  if (classOption?.parentGradeOptionId === derived.gradeOptionId) return derived;
   return { ...derived, classOptionId: null };
 }
 
@@ -1643,9 +1642,7 @@ export class BibService {
     if (
       grade === undefined ||
       (options.classOptionId !== undefined && classOption === undefined) ||
-      (classOption?.parentGradeOptionId !== null &&
-        classOption?.parentGradeOptionId !== undefined &&
-        classOption.parentGradeOptionId !== options.gradeOptionId)
+      (classOption !== undefined && classOption.parentGradeOptionId !== options.gradeOptionId)
     ) {
       throw this.#publicSearchUnavailable();
     }
