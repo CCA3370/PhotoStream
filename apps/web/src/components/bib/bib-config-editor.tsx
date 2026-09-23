@@ -70,13 +70,17 @@ function newPattern(): BibPatternInput {
 }
 
 function requestFrom(config: BibConfigView): BibConfigUpdate {
+  const attributeOptions = config.attributeOptions.filter(
+    (option) => option.dimension === "grade" || option.parentGradeOptionId != null,
+  );
+  const optionIds = new Set(attributeOptions.map((option) => option.id));
   return {
     recognitionEnabled: config.recognitionEnabled,
     searchEnabled: config.searchEnabled,
     modelVersion: config.modelVersion,
     patterns: config.patterns,
-    attributeOptions: config.attributeOptions,
-    mappings: config.mappings,
+    attributeOptions,
+    mappings: config.mappings.filter((mapping) => optionIds.has(mapping.outputOptionId)),
   };
 }
 
@@ -137,7 +141,7 @@ function mappingOptionLabel(
   option: BibAttributeOptionInput,
   options: readonly BibAttributeOptionInput[],
 ): string {
-  if (option.dimension !== "class" || option.parentGradeOptionId == null) {
+  if (option.dimension !== "class") {
     return optionLabel(option);
   }
   const grade = options.find(
@@ -224,20 +228,29 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           },
         ];
       }
-      if (
-        option.dimension === "class" &&
-        parentGradeOptionId !== null &&
-        !config.attributeOptions.some(
-          (candidate) => candidate.id === parentGradeOptionId && candidate.dimension === "grade",
-        )
-      ) {
-        return [
-          {
-            code: "INVALID_ATTRIBUTE_HIERARCHY",
-            path: `attributeOptions.${index}.parentGradeOptionId`,
-            message: "班级关联的年级不存在",
-          },
-        ];
+      if (option.dimension === "class") {
+        if (parentGradeOptionId === null) {
+          return [
+            {
+              code: "INVALID_ATTRIBUTE_HIERARCHY",
+              path: `attributeOptions.${index}.parentGradeOptionId`,
+              message: "班级必须隶属于具体年级",
+            },
+          ];
+        }
+        if (
+          !config.attributeOptions.some(
+            (candidate) => candidate.id === parentGradeOptionId && candidate.dimension === "grade",
+          )
+        ) {
+          return [
+            {
+              code: "INVALID_ATTRIBUTE_HIERARCHY",
+              path: `attributeOptions.${index}.parentGradeOptionId`,
+              message: "班级关联的年级不存在",
+            },
+          ];
+        }
       }
       const duplicateIndex = config.attributeOptions.findIndex(
         (candidate, candidateIndex) =>
@@ -463,24 +476,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
   function setGradeEnabled(gradeOptionId: string, enabled: boolean): void {
     updateOption(gradeOptionId, (grade) => ({ ...grade, enabled }));
-  }
-
-  function assignLegacyClass(classOptionId: string, gradeOptionId: string): void {
-    setConfig((current) => {
-      const siblings = classesForGrade(current.attributeOptions, gradeOptionId);
-      return {
-        ...current,
-        attributeOptions: current.attributeOptions.map((option) =>
-          option.id === classOptionId
-            ? {
-                ...option,
-                parentGradeOptionId: gradeOptionId,
-                sortOrder: siblings.length,
-              }
-            : option,
-        ),
-      };
-    });
   }
 
   function addMapping(dimension: BibAttributeDimension): void {
@@ -1028,71 +1023,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             添加年级
           </Button>
 
-          {orderedOptions(config.attributeOptions, "class").some(
-            (option) => option.parentGradeOptionId == null,
-          ) ? (
-            <div className="rounded-xl border border-dashed p-4">
-              <div className="mb-3">
-                <p className="text-sm font-medium">旧版通用班级</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  这些班级来自旧配置，尚未归属具体年级。可选择归属年级完成迁移；迁移前仍按旧逻辑对所有年级可用。
-                </p>
-              </div>
-              <div className="flex flex-col gap-2">
-                {orderedOptions(config.attributeOptions, "class")
-                  .filter((option) => option.parentGradeOptionId == null)
-                  .map((classOption) => {
-                    const gradeItems = orderedOptions(config.attributeOptions, "grade").map(
-                      (grade) => ({ value: grade.id, label: optionLabel(grade) }),
-                    );
-                    return (
-                      <div
-                        className="grid gap-2 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end"
-                        key={classOption.id}
-                      >
-                        <div>
-                          <p className="text-sm font-medium">{optionLabel(classOption)}</p>
-                          <p className="text-xs text-muted-foreground">未归属年级</p>
-                        </div>
-                        <Field>
-                          <FieldLabel>归属年级</FieldLabel>
-                          <Select
-                            items={gradeItems}
-                            onValueChange={(value) => {
-                              if (typeof value === "string") {
-                                assignLegacyClass(classOption.id, value);
-                              }
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="选择年级" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectGroup>
-                                {gradeItems.map((grade) => (
-                                  <SelectItem key={grade.value} value={grade.value}>
-                                    {grade.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                        <Button
-                          aria-label={`删除旧版班级${optionLabel(classOption)}`}
-                          onClick={() => removeOption(classOption.id)}
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Trash2Icon />
-                        </Button>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 
