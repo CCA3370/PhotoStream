@@ -69,7 +69,10 @@ function RangeControl({
         disabled={disabled}
         max={maximum}
         min={minimum}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        onChange={(event) => {
+          const { value } = event.currentTarget;
+          onChange(Number(value));
+        }}
         step={step}
         type="range"
         value={value}
