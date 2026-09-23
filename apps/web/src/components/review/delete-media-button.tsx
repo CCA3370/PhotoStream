@@ -61,7 +61,7 @@ export function DeleteMediaButton({
             </FieldLabel>
             <Input
               id={`delete-confirm-${mediaId}`}
-              onChange={(event) => setConfirmation(event.currentTarget.value)}
+              onChange={(event) => {\n                const { value } = event.currentTarget;\n                setConfirmation(value);\n              }}
               value={confirmation}
             />
           </Field>
