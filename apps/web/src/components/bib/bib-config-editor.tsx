@@ -422,7 +422,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           dimension: "class" as const,
           displayName: `${index + 1}班`,
           sortOrder: index,
-          enabled: grade.enabled,
+          enabled: true,
           parentGradeOptionId: gradeOptionId,
         };
       });
@@ -445,14 +445,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function setGradeEnabled(gradeOptionId: string, enabled: boolean): void {
-    setConfig((current) => ({
-      ...current,
-      attributeOptions: current.attributeOptions.map((option) =>
-        option.id === gradeOptionId || option.parentGradeOptionId === gradeOptionId
-          ? { ...option, enabled }
-          : option,
-      ),
-    }));
+    updateOption(gradeOptionId, (grade) => ({ ...grade, enabled }));
   }
 
   function assignLegacyClass(classOptionId: string, gradeOptionId: string): void {
@@ -1002,7 +995,12 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             </div>
           )}
 
-          <Button onClick={addGrade} type="button" variant="outline">
+          <Button
+            disabled={config.attributeOptions.length >= 100}
+            onClick={addGrade}
+            type="button"
+            variant="outline"
+          >
             <PlusIcon data-icon="inline-start" />
             添加年级
           </Button>
