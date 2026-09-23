@@ -1022,7 +1022,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             <PlusIcon data-icon="inline-start" />
             添加年级
           </Button>
-
         </CardContent>
       </Card>
 
