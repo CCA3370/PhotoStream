@@ -5,6 +5,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -962,6 +963,10 @@ export const bibAttributeOptions = pgTable(
       table.parentGradeOptionId,
       table.sortOrder,
       table.id,
+    ),
+    check(
+      "bib_attribute_options_hierarchy_check",
+      sql`(${table.dimension} = 'grade' and ${table.parentGradeOptionId} is null) or (${table.dimension} = 'class' and ${table.parentGradeOptionId} is not null)`,
     ),
   ],
 );
