@@ -59,14 +59,47 @@ function newConstraint(): BibConstraintInput {
   };
 }
 
-function newPattern(): BibPatternInput {
+function newPattern(totalLength = 6): BibPatternInput {
   return {
     id: crypto.randomUUID(),
-    totalLength: 6,
+    totalLength,
     sortOrder: 0,
     enabled: true,
-    constraints: [],
+    constraints: [newConstraint()],
   };
+}
+
+function cloneConstraint(constraint: BibConstraintInput): BibConstraintInput {
+  return {
+    ...constraint,
+    id: crypto.randomUUID(),
+    ranges: constraint.ranges.map((range) => ({ ...range, id: crypto.randomUUID() })),
+  };
+}
+
+function clonePattern(pattern: BibPatternInput): BibPatternInput {
+  return {
+    ...pattern,
+    id: crypto.randomUUID(),
+    constraints: pattern.constraints.map(cloneConstraint),
+  };
+}
+
+function constraintSummary(constraint: BibConstraintInput): string {
+  const endPosition = constraint.startPosition + constraint.width - 1;
+  const position =
+    constraint.width === 1
+      ? `第 ${constraint.startPosition} 位`
+      : `第 ${constraint.startPosition}–${endPosition} 位`;
+  const ranges = constraint.ranges
+    .map((range) => (range.start === range.end ? range.start : `${range.start}–${range.end}`))
+    .join("、");
+  return `${position}为 ${ranges || "未设置范围"}`;
+}
+
+function branchSummary(pattern: BibPatternInput): string {
+  if (pattern.constraints.length === 0) return "尚未设置条件";
+  return pattern.constraints.map(constraintSummary).join(" 且 ");
 }
 
 function requestFrom(config: BibConfigView): BibConfigUpdate {
@@ -601,34 +634,53 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
       <Card>
         <CardHeader>
-          <CardTitle>号码模式</CardTitle>
-          <CardDescription>模式之间为 OR；同一模式内约束为 AND，位置从 1 开始。</CardDescription>
+          <CardTitle>号码规则</CardTitle>
+          <CardDescription>
+            满足任意一个有效分支即可。分支之间为 OR；同一分支中的条件全部满足才通过（AND）。
+            例如可设置“第 1 位为 1 时，第 3 位为 0–5”和“第 1 位为 2 时，第 3 位为 6–9”两个分支。
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {config.patterns.length === 0 ? (
+            <div className="rounded-xl border border-dashed px-4 py-6 text-center">
+              <p className="text-sm font-medium">尚未设置有效分支</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                添加一个分支后，再设置“当哪几位是什么范围时，这个号码有效”。
+              </p>
+            </div>
+          ) : null}
           {config.patterns.map((pattern, patternIndex) => {
             const coverage = digitCoverage(pattern);
             return (
               <Card key={pattern.id ?? `${pattern.totalLength}-${pattern.sortOrder}`} size="sm">
                 <CardHeader>
-                  <CardTitle>模式 {patternIndex + 1}</CardTitle>
-                  <CardDescription>
-                    <span className="flex flex-wrap gap-1">
-                      <span className="sr-only">号码位预览</span>
-                      {coverage.map(({ constrained, position }) => (
-                        <Badge
-                          key={`${pattern.id ?? pattern.totalLength}-digit-${position}`}
-                          variant={constrained ? "secondary" : "outline"}
-                        >
-                          {position}：{constrained ? "约束" : "任意"}
-                        </Badge>
-                      ))}
-                    </span>
-                  </CardDescription>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <CardTitle>有效分支 {patternIndex + 1}</CardTitle>
+                      <CardDescription className="mt-1">
+                        {pattern.enabled ? branchSummary(pattern) : "此分支已停用"}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={pattern.enabled ? "secondary" : "outline"}>
+                      {pattern.enabled ? "参与匹配" : "已停用"}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <span className="sr-only">号码位预览</span>
+                    {coverage.map(({ constrained, position }) => (
+                      <Badge
+                        key={`${pattern.id ?? pattern.totalLength}-digit-${position}`}
+                        variant={constrained ? "secondary" : "outline"}
+                      >
+                        {position}：{constrained ? "受条件限制" : "任意"}
+                      </Badge>
+                    ))}
+                  </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  <FieldGroup className="md:grid md:grid-cols-3">
+                  <FieldGroup className="md:grid md:grid-cols-[1fr_auto_auto_auto] md:items-end">
                     <Field>
-                      <FieldLabel htmlFor={`pattern-length-${patternIndex}`}>总位数</FieldLabel>
+                      <FieldLabel htmlFor={`pattern-length-${patternIndex}`}>号码总位数</FieldLabel>
                       <DraftNumberInput
                         id={`pattern-length-${patternIndex}`}
                         max={12}
@@ -643,7 +695,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       />
                     </Field>
                     <Field orientation="horizontal">
-                      <FieldLabel htmlFor={`pattern-enabled-${patternIndex}`}>启用模式</FieldLabel>
+                      <FieldLabel htmlFor={`pattern-enabled-${patternIndex}`}>启用分支</FieldLabel>
                       <Switch
                         checked={pattern.enabled}
                         id={`pattern-enabled-${patternIndex}`}
@@ -659,6 +711,22 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       onClick={() =>
                         setConfig((current) => ({
                           ...current,
+                          patterns: [
+                            ...current.patterns.slice(0, patternIndex + 1),
+                            clonePattern(pattern),
+                            ...current.patterns.slice(patternIndex + 1),
+                          ],
+                        }))
+                      }
+                      type="button"
+                      variant="outline"
+                    >
+                      复制分支
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        setConfig((current) => ({
+                          ...current,
                           patterns: current.patterns.filter((_, index) => index !== patternIndex),
                         }))
                       }
@@ -666,7 +734,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       variant="destructive"
                     >
                       <Trash2Icon data-icon="inline-start" />
-                      删除模式
+                      删除分支
                     </Button>
                   </FieldGroup>
 
@@ -676,8 +744,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       size="sm"
                     >
                       <CardHeader>
-                        <CardTitle>约束 {constraintIndex + 1}</CardTitle>
-                        <CardDescription>区间端点必须保持与宽度相同的位数。</CardDescription>
+                        <CardTitle>
+                          {constraintIndex === 0 ? "当" : "并且"} · 条件 {constraintIndex + 1}
+                        </CardTitle>
+                        <CardDescription>
+                          {constraintSummary(constraint)}
+                          {constraintIndex === 0
+                            ? "。该条件与本分支后续条件共同决定是否通过。"
+                            : "。必须与本分支前面的条件同时满足。"}
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-col gap-3">
                         <FieldGroup className="md:grid md:grid-cols-3">
@@ -685,7 +760,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             <FieldLabel
                               htmlFor={`constraint-start-${patternIndex}-${constraintIndex}`}
                             >
-                              起始位置
+                              从第几位开始
                             </FieldLabel>
                             <DraftNumberInput
                               id={`constraint-start-${patternIndex}-${constraintIndex}`}
@@ -704,7 +779,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             <FieldLabel
                               htmlFor={`constraint-width-${patternIndex}-${constraintIndex}`}
                             >
-                              连续宽度
+                              连续读取几位
                             </FieldLabel>
                             <DraftNumberInput
                               id={`constraint-width-${patternIndex}-${constraintIndex}`}
@@ -720,6 +795,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             />
                           </Field>
                           <Button
+                            disabled={pattern.constraints.length === 1}
                             onClick={() =>
                               updatePattern(patternIndex, (current) => ({
                                 ...current,
@@ -731,7 +807,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             type="button"
                             variant="outline"
                           >
-                            删除约束
+                            删除条件
                           </Button>
                         </FieldGroup>
                         {constraint.ranges.map((range, rangeIndex) => (
@@ -743,7 +819,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               <FieldLabel
                                 htmlFor={`range-start-${patternIndex}-${constraintIndex}-${rangeIndex}`}
                               >
-                                区间起点
+                                允许范围起点
                               </FieldLabel>
                               <Input
                                 id={`range-start-${patternIndex}-${constraintIndex}-${rangeIndex}`}
@@ -766,7 +842,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               <FieldLabel
                                 htmlFor={`range-end-${patternIndex}-${constraintIndex}-${rangeIndex}`}
                               >
-                                区间终点
+                                允许范围终点
                               </FieldLabel>
                               <Input
                                 id={`range-end-${patternIndex}-${constraintIndex}-${rangeIndex}`}
@@ -786,7 +862,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               />
                             </Field>
                             <Button
-                              aria-label={`删除模式 ${patternIndex + 1} 约束 ${constraintIndex + 1} 区间 ${rangeIndex + 1}`}
+                              aria-label={`删除分支 ${patternIndex + 1} 条件 ${constraintIndex + 1} 范围 ${rangeIndex + 1}`}
+                              disabled={constraint.ranges.length === 1}
                               onClick={() =>
                                 updateConstraint(patternIndex, constraintIndex, (current) => ({
                                   ...current,
@@ -820,7 +897,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                           variant="outline"
                         >
                           <PlusIcon data-icon="inline-start" />
-                          添加区间
+                          添加另一个允许范围（OR）
                         </Button>
                       </CardContent>
                     </Card>
@@ -836,7 +913,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     variant="outline"
                   >
                     <PlusIcon data-icon="inline-start" />
-                    添加 AND 约束
+                    添加并且条件（AND）
                   </Button>
                 </CardContent>
               </Card>
@@ -846,16 +923,21 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             onClick={() =>
               setConfig((current) => ({
                 ...current,
-                patterns: [...current.patterns, newPattern()],
+                patterns: [
+                  ...current.patterns,
+                  newPattern(current.patterns.at(-1)?.totalLength ?? 6),
+                ],
               }))
             }
             type="button"
             variant="outline"
           >
             <PlusIcon data-icon="inline-start" />
-            添加 OR 模式
+            添加另一个有效分支（OR）
           </Button>
         </CardContent>
+      </Card>
+
       </Card>
 
       <Card>
@@ -1313,9 +1395,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <ul className="flex list-disc flex-col gap-1 pl-5">
                     {localTestResult.patterns.map((pattern) => (
                       <li key={`local-test-pattern-${pattern.patternIndex}`}>
-                        模式 {pattern.patternIndex + 1}：
+                        分支 {pattern.patternIndex + 1}：
                         {pattern.lengthMatched ? "位数符合" : "位数不符"}，
-                        {pattern.matched ? "全部约束通过" : "未通过"}
+                        {pattern.matched ? "全部条件满足" : "未通过"}
                         {pattern.constraints.length === 0 ? null : (
                           <ul className="list-disc pl-5">
                             {pattern.constraints.map((constraint) => (
