@@ -392,17 +392,14 @@ export function MediaGrid({
     const galleryMain = target?.closest<HTMLElement>("#gallery-main") ?? null;
     const galleryShell = galleryMain?.closest<HTMLElement>(".public-theme") ?? null;
     const galleryHeaderBottom =
-      galleryShell
-        ?.querySelector<HTMLElement>(":scope > header")
-        ?.getBoundingClientRect().bottom ?? 0;
+      galleryShell?.querySelector<HTMLElement>(":scope > header")?.getBoundingClientRect().bottom ??
+      0;
     const galleryFooterTop =
-      galleryShell
-        ?.querySelector<HTMLElement>(":scope > footer")
-        ?.getBoundingClientRect().top ?? window.innerHeight;
+      galleryShell?.querySelector<HTMLElement>(":scope > footer")?.getBoundingClientRect().top ??
+      window.innerHeight;
     const filterNavBottom =
-      galleryMain
-        ?.querySelector<HTMLElement>('nav[aria-label="相册筛选"]')
-        ?.getBoundingClientRect().bottom ?? galleryHeaderBottom;
+      galleryMain?.querySelector<HTMLElement>('nav[aria-label="相册筛选"]')?.getBoundingClientRect()
+        .bottom ?? galleryHeaderBottom;
     const visibleTop = Math.max(0, galleryHeaderBottom, filterNavBottom);
     const visibleBottom = Math.min(window.innerHeight, galleryFooterTop);
     // Native View Transition snapshots are painted in the top layer, so they are not clipped
