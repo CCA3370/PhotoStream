@@ -239,6 +239,13 @@
       "when": 1790179200000,
       "tag": "0033_grade_class_hierarchy",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790181000000,
+      "tag": "0034_remove_universal_classes",
+      "breakpoints": true
     }
   ]
 }
