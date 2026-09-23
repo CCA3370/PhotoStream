@@ -141,9 +141,10 @@ export function BibReviewControls({
               disabled={tag.status === "rejected"}
               id={`bib-number-${tag.id}`}
               inputMode="numeric"
-              onChange={(event) =>
-                setNumbers((current) => ({ ...current, [tag.id]: event.currentTarget.value }))
-              }
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setNumbers((current) => ({ ...current, [tag.id]: value }));
+              }}
               value={numbers[tag.id] ?? tag.number}
             />
           </Field>
@@ -205,7 +206,10 @@ export function BibReviewControls({
         <Input
           id={`manual-bib-${mediaId}`}
           inputMode="numeric"
-          onChange={(event) => setManualNumber(event.currentTarget.value)}
+          onChange={(event) => {
+            const { value } = event.currentTarget;
+            setManualNumber(value);
+          }}
           value={manualNumber}
         />
         <FieldDescription>历史照片也只通过此人工入口补录，不自动补扫。</FieldDescription>
