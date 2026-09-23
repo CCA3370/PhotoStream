@@ -71,7 +71,7 @@ interface FaceSearchOptions {
 type SearchMode = "attributes" | "face" | "number";
 type ResultMode = "attributes" | "face" | "number";
 
-const FIND_PHOTOS_ONBOARDING_STORAGE_KEY = "photostream:find-photos-onboarding:v1";
+const FIND_PHOTOS_ONBOARDING_STORAGE_KEY = "photostream:find-photos-onboarding:v2";
 
 type FaceStage =
   | "consent"
