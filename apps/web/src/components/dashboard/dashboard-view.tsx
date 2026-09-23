@@ -687,7 +687,10 @@ export function DashboardView({
               <Label htmlFor="dashboard-from">开始时间</Label>
               <Input
                 id="dashboard-from"
-                onChange={(event) => setCustomFrom(event.target.value)}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  setCustomFrom(value);
+                }}
                 type="datetime-local"
                 value={customFrom}
               />
@@ -696,7 +699,10 @@ export function DashboardView({
               <Label htmlFor="dashboard-to">结束时间</Label>
               <Input
                 id="dashboard-to"
-                onChange={(event) => setCustomTo(event.target.value)}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  setCustomTo(value);
+                }}
                 type="datetime-local"
                 value={customTo}
               />
