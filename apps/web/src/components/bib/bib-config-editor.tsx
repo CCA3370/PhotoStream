@@ -256,7 +256,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     if (normalizedNumber === null) return null;
     const evaluation = evaluateBibNumber(normalizedNumber, config.patterns);
     const derived = evaluation.valid
-      ? deriveBibAttributes(normalizedNumber, config.mappings)
+      ? deriveBibAttributes(normalizedNumber, config.mappings, config.attributeOptions)
       : { gradeOptionId: null, classOptionId: null, matchedMappingIds: [] };
     const classOption =
       derived.classOptionId === null
