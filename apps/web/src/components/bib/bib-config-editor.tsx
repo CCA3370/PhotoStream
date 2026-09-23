@@ -111,7 +111,14 @@ function requestFrom(config: BibConfigView): BibConfigUpdate {
     recognitionEnabled: config.recognitionEnabled,
     searchEnabled: config.searchEnabled,
     modelVersion: config.modelVersion,
-    patterns: config.patterns,
+    patterns: config.patterns.map((pattern, patternIndex) => ({
+      ...pattern,
+      sortOrder: patternIndex,
+      constraints: pattern.constraints.map((constraint, constraintIndex) => ({
+        ...constraint,
+        sortOrder: constraintIndex,
+      })),
+    })),
     attributeOptions,
     mappings: config.mappings.filter((mapping) => optionIds.has(mapping.outputOptionId)),
   };
