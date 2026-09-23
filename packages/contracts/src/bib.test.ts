@@ -174,6 +174,79 @@ describe("bib rule engine", () => {
     ).toMatchObject({ usable: false });
   });
 
+  it("scopes identical class numbers to their parent grade", () => {
+    const gradeOne = "019d0000-0000-7000-8000-000000000101";
+    const gradeTwo = "019d0000-0000-7000-8000-000000000102";
+    const gradeOneClassOne = "019d0000-0000-7000-8000-000000000111";
+    const gradeTwoClassOne = "019d0000-0000-7000-8000-000000000112";
+    const options: BibAttributeOptionInput[] = [
+      { id: gradeOne, dimension: "grade", displayName: "高一", sortOrder: 0, enabled: true },
+      { id: gradeTwo, dimension: "grade", displayName: "高二", sortOrder: 1, enabled: true },
+      {
+        id: gradeOneClassOne,
+        dimension: "class",
+        displayName: "1班",
+        sortOrder: 0,
+        enabled: true,
+        parentGradeOptionId: gradeOne,
+      },
+      {
+        id: gradeTwoClassOne,
+        dimension: "class",
+        displayName: "1班",
+        sortOrder: 0,
+        enabled: true,
+        parentGradeOptionId: gradeTwo,
+      },
+    ];
+    const mappings: BibAttributeMappingInput[] = [
+      {
+        dimension: "grade",
+        startPosition: 1,
+        width: 1,
+        ranges: [{ start: "1", end: "1" }],
+        outputOptionId: gradeOne,
+        sortOrder: 0,
+      },
+      {
+        dimension: "grade",
+        startPosition: 1,
+        width: 1,
+        ranges: [{ start: "2", end: "2" }],
+        outputOptionId: gradeTwo,
+        sortOrder: 1,
+      },
+      {
+        dimension: "class",
+        startPosition: 2,
+        width: 2,
+        ranges: [{ start: "01", end: "01" }],
+        outputOptionId: gradeOneClassOne,
+        sortOrder: 0,
+      },
+      {
+        dimension: "class",
+        startPosition: 2,
+        width: 2,
+        ranges: [{ start: "01", end: "01" }],
+        outputOptionId: gradeTwoClassOne,
+        sortOrder: 1,
+      },
+    ];
+    expect(validateBibMappings(patterns, options, mappings)).toMatchObject({
+      usable: true,
+      issues: [],
+    });
+    expect(deriveBibAttributes("101999", mappings, options)).toMatchObject({
+      gradeOptionId: gradeOne,
+      classOptionId: gradeOneClassOne,
+    });
+    expect(deriveBibAttributes("201999", mappings, options)).toMatchObject({
+      gradeOptionId: gradeTwo,
+      classOptionId: gradeTwoClassOne,
+    });
+  });
+
   it("filters invalid OCR text and merges overlapping duplicate boxes by confidence", () => {
     const box: NonNullable<BibCandidateInput["quadrilateral"]> = [
       { x: 0.1, y: 0.1 },
