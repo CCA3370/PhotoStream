@@ -853,152 +853,225 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <CardHeader>
           <CardTitle>年级与班级</CardTitle>
           <CardDescription>
-            设置观众按年级、班级找照片时使用的选项。显示顺序可直接调整；删除选项时会同时移除尚未保存的关联映射。
+            先创建年级，再直接填写该年级的班级数量。系统会自动生成 1班、2班……并把这些班级绑定到对应年级。
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-2">
-          {(["grade", "class"] as const).map((dimension) => {
-            const options = orderedOptions(config.attributeOptions, dimension);
-            const enabledCount = options.filter((option) => option.enabled).length;
-            return (
-              <section
-                aria-label={`${dimensionLabel(dimension)}设置`}
-                className="flex min-w-0 flex-col gap-3 rounded-2xl border bg-muted/10 p-4"
-                key={dimension}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold">{dimensionLabel(dimension)}</h3>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {dimension === "grade"
-                        ? "例如：初一、初二、高一。用于年级筛选和号码映射。"
-                        : "例如：1班、2班。班级与年级分别映射，观众端会按实际照片组合筛选。"}
-                    </p>
-                  </div>
-                  <Badge className="shrink-0" variant="secondary">
-                    {enabledCount}/{options.length} 启用
-                  </Badge>
-                </div>
+        <CardContent className="flex flex-col gap-4">
+          {orderedOptions(config.attributeOptions, "grade").length === 0 ? (
+            <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              暂无年级。添加年级后，可直接设置该年级包含多少个班。
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {orderedOptions(config.attributeOptions, "grade").map((grade, gradeIndex, grades) => {
+                const gradeClasses = classesForGrade(config.attributeOptions, grade.id);
+                const emptyName = grade.displayName.trim().length === 0;
+                const duplicateName = grades.some(
+                  (candidate) =>
+                    candidate.id !== grade.id &&
+                    candidate.displayName.trim().length > 0 &&
+                    candidate.displayName.trim().localeCompare(grade.displayName.trim(), "zh-CN", {
+                      sensitivity: "accent",
+                    }) === 0,
+                );
+                const invalidName = emptyName || duplicateName;
+                const maxClassCount = Math.max(
+                  0,
+                  Math.min(30, 100 - (config.attributeOptions.length - gradeClasses.length)),
+                );
+                const linkedMappingCount = config.mappings.filter(
+                  (mapping) =>
+                    mapping.outputOptionId === grade.id ||
+                    gradeClasses.some((classOption) => classOption.id === mapping.outputOptionId),
+                ).length;
 
-                {options.length === 0 ? (
-                  <div className="rounded-xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
-                    暂无{dimensionLabel(dimension)}，可先添加一个选项。
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {options.map((option, optionIndex) => {
-                      const emptyName = option.displayName.trim().length === 0;
-                      const duplicateName = options.some(
-                        (candidate) =>
-                          candidate.id !== option.id &&
-                          candidate.displayName.trim().length > 0 &&
-                          candidate.displayName.trim().localeCompare(option.displayName.trim(), "zh-CN", {
-                            sensitivity: "accent",
-                          }) === 0,
-                      );
-                      const invalidName = emptyName || duplicateName;
-                      const linkedMappingCount = config.mappings.filter(
-                        (mapping) => mapping.outputOptionId === option.id,
-                      ).length;
-                      return (
-                        <div
-                          className="grid gap-3 rounded-xl border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
-                          key={option.id}
-                        >
-                          <Field data-invalid={invalidName || undefined}>
-                            <FieldLabel htmlFor={`bib-option-${option.id}`}>
-                              {dimensionLabel(dimension)}名称
-                            </FieldLabel>
-                            <Input
-                              aria-invalid={invalidName || undefined}
-                              id={`bib-option-${option.id}`}
-                              maxLength={60}
-                              onChange={(event) => {
-                                const { value } = event.currentTarget;
-                                updateOption(option.id, (current) => ({
-                                  ...current,
-                                  displayName: value,
-                                }));
-                              }}
-                              value={option.displayName}
-                            />
-                            {invalidName ? (
-                              <FieldDescription>
-                                {emptyName ? "名称不能为空" : "同一类别下名称不能重复"}
-                              </FieldDescription>
-                            ) : linkedMappingCount > 0 ? (
-                              <FieldDescription>
-                                已被 {linkedMappingCount} 条号码映射使用
-                              </FieldDescription>
-                            ) : null}
-                          </Field>
-
-                          <div className="flex items-end justify-between gap-2 sm:justify-end">
-                            <div className="flex items-center gap-1">
-                              <Button
-                                aria-label={`上移${optionLabel(option)}`}
-                                disabled={optionIndex === 0}
-                                onClick={() => moveOption(option.id, -1)}
-                                size="icon-sm"
-                                type="button"
-                                variant="ghost"
-                              >
-                                <ArrowUpIcon />
-                              </Button>
-                              <Button
-                                aria-label={`下移${optionLabel(option)}`}
-                                disabled={optionIndex === options.length - 1}
-                                onClick={() => moveOption(option.id, 1)}
-                                size="icon-sm"
-                                type="button"
-                                variant="ghost"
-                              >
-                                <ArrowDownIcon />
-                              </Button>
-                            </div>
-                            <Field className="flex-row items-center gap-2">
-                              <FieldLabel className="text-xs" htmlFor={`bib-option-enabled-${option.id}`}>
-                                {option.enabled ? "启用" : "停用"}
-                              </FieldLabel>
-                              <Switch
-                                checked={option.enabled}
-                                id={`bib-option-enabled-${option.id}`}
-                                onCheckedChange={(checked) =>
-                                  updateOption(option.id, (current) => ({
-                                    ...current,
-                                    enabled: checked,
-                                  }))
-                                }
-                              />
-                            </Field>
-                            <Button
-                              aria-label={`删除${optionLabel(option)}`}
-                              onClick={() => removeOption(option.id)}
-                              size="icon-sm"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <Trash2Icon />
-                            </Button>
-                          </div>
+                return (
+                  <Card key={grade.id} size="sm">
+                    <CardHeader className="gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <CardTitle>{optionLabel(grade)}</CardTitle>
+                          <CardDescription>
+                            {gradeClasses.length} 个班
+                            {linkedMappingCount > 0 ? ` · ${linkedMappingCount} 条号码映射` : ""}
+                          </CardDescription>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="flex items-center gap-1">
+                          <Button
+                            aria-label={`上移${optionLabel(grade)}`}
+                            disabled={gradeIndex === 0}
+                            onClick={() => moveOption(grade.id, -1)}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <ArrowUpIcon />
+                          </Button>
+                          <Button
+                            aria-label={`下移${optionLabel(grade)}`}
+                            disabled={gradeIndex === grades.length - 1}
+                            onClick={() => moveOption(grade.id, 1)}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <ArrowDownIcon />
+                          </Button>
+                          <Button
+                            aria-label={`删除${optionLabel(grade)}及其班级`}
+                            onClick={() => removeOption(grade.id)}
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-4">
+                      <FieldGroup className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+                        <Field data-invalid={invalidName || undefined}>
+                          <FieldLabel htmlFor={`bib-grade-${grade.id}`}>年级名称</FieldLabel>
+                          <Input
+                            aria-invalid={invalidName || undefined}
+                            id={`bib-grade-${grade.id}`}
+                            maxLength={60}
+                            onChange={(event) => {
+                              const { value } = event.currentTarget;
+                              updateOption(grade.id, (current) => ({
+                                ...current,
+                                displayName: value,
+                              }));
+                            }}
+                            value={grade.displayName}
+                          />
+                          {invalidName ? (
+                            <FieldDescription>
+                              {emptyName ? "名称不能为空" : "年级名称不能重复"}
+                            </FieldDescription>
+                          ) : null}
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`bib-grade-class-count-${grade.id}`}>
+                            班级数量
+                          </FieldLabel>
+                          <DraftNumberInput
+                            id={`bib-grade-class-count-${grade.id}`}
+                            max={maxClassCount}
+                            min={0}
+                            onValueChange={(value) => setGradeClassCount(grade.id, value)}
+                            value={gradeClasses.length}
+                          />
+                        </Field>
+                        <Field className="flex-row items-center gap-2 pb-2">
+                          <FieldLabel className="text-xs" htmlFor={`bib-grade-enabled-${grade.id}`}>
+                            {grade.enabled ? "启用" : "停用"}
+                          </FieldLabel>
+                          <Switch
+                            checked={grade.enabled}
+                            id={`bib-grade-enabled-${grade.id}`}
+                            onCheckedChange={(checked) => setGradeEnabled(grade.id, checked)}
+                          />
+                        </Field>
+                      </FieldGroup>
 
-                <Button
-                  className="mt-auto"
-                  onClick={() => addOption(dimension)}
-                  type="button"
-                  variant="outline"
-                >
-                  <PlusIcon data-icon="inline-start" />
-                  添加{dimensionLabel(dimension)}
-                </Button>
-              </section>
-            );
-          })}
+                      <div className="rounded-xl bg-muted/35 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium">自动派生班级</span>
+                          <span className="text-xs text-muted-foreground">
+                            调整数量会自动增删末尾班级
+                          </span>
+                        </div>
+                        {gradeClasses.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">当前未设置班级。</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {gradeClasses.map((classOption) => (
+                              <Badge key={classOption.id} variant="outline">
+                                {optionLabel(classOption)}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          <Button onClick={addGrade} type="button" variant="outline">
+            <PlusIcon data-icon="inline-start" />
+            添加年级
+          </Button>
+
+          {orderedOptions(config.attributeOptions, "class").some(
+            (option) => option.parentGradeOptionId == null,
+          ) ? (
+            <div className="rounded-xl border border-dashed p-4">
+              <div className="mb-3">
+                <p className="text-sm font-medium">旧版通用班级</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  这些班级来自旧配置，尚未归属具体年级。可选择归属年级完成迁移；迁移前仍按旧逻辑对所有年级可用。
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {orderedOptions(config.attributeOptions, "class")
+                  .filter((option) => option.parentGradeOptionId == null)
+                  .map((classOption) => {
+                    const gradeItems = orderedOptions(config.attributeOptions, "grade").map(
+                      (grade) => ({ value: grade.id, label: optionLabel(grade) }),
+                    );
+                    return (
+                      <div
+                        className="grid gap-2 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end"
+                        key={classOption.id}
+                      >
+                        <div>
+                          <p className="text-sm font-medium">{optionLabel(classOption)}</p>
+                          <p className="text-xs text-muted-foreground">未归属年级</p>
+                        </div>
+                        <Field>
+                          <FieldLabel>归属年级</FieldLabel>
+                          <Select
+                            items={gradeItems}
+                            onValueChange={(value) => {
+                              if (typeof value === "string") {
+                                assignLegacyClass(classOption.id, value);
+                              }
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择年级" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {gradeItems.map((grade) => (
+                                  <SelectItem key={grade.value} value={grade.value}>
+                                    {grade.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Button
+                          aria-label={`删除旧版班级${optionLabel(classOption)}`}
+                          onClick={() => removeOption(classOption.id)}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -1018,7 +1091,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           {config.mappings.map((mapping, mappingIndex) => {
             const optionItems = orderedOptions(config.attributeOptions, mapping.dimension)
               .filter((option) => option.enabled)
-              .map((option) => ({ value: option.id, label: optionLabel(option) }));
+              .map((option) => ({
+                value: option.id,
+                label: mappingOptionLabel(option, config.attributeOptions),
+              }));
             return (
               <Card
                 key={
@@ -1039,6 +1115,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                         displayName: "",
                         sortOrder: 0,
                         enabled: false,
+                        parentGradeOptionId: null,
                       },
                     )}
                   </CardTitle>
