@@ -380,6 +380,10 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
     await expectReactHydrated(bibTab);
     await bibTab.click();
     await expect(page.getByText(/规则版本 \d+ · 映射版本 \d+/u)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "号码规则" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "有效分支 1" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "复制分支" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "添加另一个有效分支（OR）" })).toBeVisible();
     await expect(page.getByRole("button", { name: "保存号码规则与映射" })).toBeVisible();
     await expectNoAxeViolations(page);
   } finally {
