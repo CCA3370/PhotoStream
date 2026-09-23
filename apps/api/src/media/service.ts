@@ -2504,11 +2504,7 @@ export class PhotoService {
       ? gradeOptionIds.flatMap((gradeOptionId) => [
           { gradeOptionId, classOptionId: null },
           ...classOptions
-            .filter(
-              (classOption) =>
-                classOption.parentGradeOptionId === null ||
-                classOption.parentGradeOptionId === gradeOptionId,
-            )
+            .filter((classOption) => classOption.parentGradeOptionId === gradeOptionId)
             .map((classOption) => ({ gradeOptionId, classOptionId: classOption.id })),
         ])
       : [];
