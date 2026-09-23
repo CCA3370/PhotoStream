@@ -842,7 +842,9 @@ export function BibSearchPanel({
                                 accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                                 className="sr-only"
                                 id="face-reference-file"
-                                onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
+                                onChange={(event) =>
+                                  void chooseFace(event.currentTarget.files?.[0])
+                                }
                                 type="file"
                               />
                             </label>
@@ -857,7 +859,9 @@ export function BibSearchPanel({
                                 capture="environment"
                                 className="sr-only"
                                 id="face-reference-camera"
-                                onChange={(event) => void chooseFace(event.currentTarget.files?.[0])}
+                                onChange={(event) =>
+                                  void chooseFace(event.currentTarget.files?.[0])
+                                }
                                 type="file"
                               />
                             </label>
@@ -984,9 +988,7 @@ export function BibSearchPanel({
             ) : (
               <Button
                 className="h-12 rounded-xl text-base font-medium max-sm:w-full sm:min-w-36"
-                disabled={
-                  pending || (mode === "number" ? !numberValid : gradeOptionId === null)
-                }
+                disabled={pending || (mode === "number" ? !numberValid : gradeOptionId === null)}
                 onClick={() => void search()}
                 type="button"
               >
