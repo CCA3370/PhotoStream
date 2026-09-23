@@ -501,16 +501,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               <Input
                                 id={`range-start-${patternIndex}-${constraintIndex}-${rangeIndex}`}
                                 inputMode="numeric"
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
                                   updateConstraint(patternIndex, constraintIndex, (current) => ({
                                     ...current,
                                     ranges: current.ranges.map((currentRange, index) =>
-                                      index === rangeIndex
-                                        ? { ...currentRange, start: event.currentTarget.value }
-                                        : currentRange,
+                                      index === rangeIndex ? { ...currentRange, start: value } : currentRange,
                                     ),
-                                  }))
-                                }
+                                  }));
+                                }}
                                 value={range.start}
                               />
                             </Field>
@@ -523,16 +522,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                               <Input
                                 id={`range-end-${patternIndex}-${constraintIndex}-${rangeIndex}`}
                                 inputMode="numeric"
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
                                   updateConstraint(patternIndex, constraintIndex, (current) => ({
                                     ...current,
                                     ranges: current.ranges.map((currentRange, index) =>
-                                      index === rangeIndex
-                                        ? { ...currentRange, end: event.currentTarget.value }
-                                        : currentRange,
+                                      index === rangeIndex ? { ...currentRange, end: value } : currentRange,
                                     ),
-                                  }))
-                                }
+                                  }));
+                                }}
                                 value={range.end}
                               />
                             </Field>
@@ -629,12 +627,13 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <Input
                     aria-invalid={emptyName || undefined}
                     id={`bib-option-${option.id}`}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
                       updateOption(optionIndex, (current) => ({
                         ...current,
-                        displayName: event.currentTarget.value,
-                      }))
-                    }
+                        displayName: value,
+                      }));
+                    }}
                     value={option.displayName}
                   />
                   {emptyName ? <FieldDescription>名称不能为空</FieldDescription> : null}
@@ -776,16 +775,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                         <Input
                           id={`mapping-range-start-${mappingIndex}-${rangeIndex}`}
                           inputMode="numeric"
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
                             updateMapping(mappingIndex, (current) => ({
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
-                                index === rangeIndex
-                                  ? { ...currentRange, start: event.currentTarget.value }
-                                  : currentRange,
+                                index === rangeIndex ? { ...currentRange, start: value } : currentRange,
                               ),
-                            }))
-                          }
+                            }));
+                          }}
                           value={range.start}
                         />
                       </Field>
@@ -796,16 +794,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                         <Input
                           id={`mapping-range-end-${mappingIndex}-${rangeIndex}`}
                           inputMode="numeric"
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
                             updateMapping(mappingIndex, (current) => ({
                               ...current,
                               ranges: current.ranges.map((currentRange, index) =>
-                                index === rangeIndex
-                                  ? { ...currentRange, end: event.currentTarget.value }
-                                  : currentRange,
+                                index === rangeIndex ? { ...currentRange, end: value } : currentRange,
                               ),
-                            }))
-                          }
+                            }));
+                          }}
                           value={range.end}
                         />
                       </Field>
