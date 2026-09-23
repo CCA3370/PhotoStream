@@ -475,7 +475,8 @@ export function validateBibRuleSet(patterns: readonly BibPatternInput[]): {
     issues.push({ code: "NO_ENABLED_PATTERN", path: "patterns", message: "至少启用一个有效分支" });
   }
   patterns.forEach((pattern, patternIndex) => {
-    if (pattern.enabled && pattern.constraints.length === 0) {
+    if (!pattern.enabled) return;
+    if (pattern.constraints.length === 0) {
       issues.push({
         code: "EMPTY_PATTERN",
         path: `patterns.${patternIndex}.constraints`,
@@ -512,7 +513,6 @@ export function validateBibRuleSet(patterns: readonly BibPatternInput[]): {
       };
     });
     if (
-      pattern.enabled &&
       !issues.some((issue) => issue.path.startsWith(`patterns.${patternIndex}.`)) &&
       !hasSatisfyingNumber(pattern.totalLength, constraints)
     ) {
