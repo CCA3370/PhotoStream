@@ -715,6 +715,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       />
                     </Field>
                     <Button
+                      disabled={config.patterns.length >= 20}
                       onClick={() =>
                         setConfig((current) => ({
                           ...current,
@@ -886,6 +887,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                           </FieldGroup>
                         ))}
                         <Button
+                          disabled={constraint.ranges.length >= 50}
                           onClick={() =>
                             updateConstraint(patternIndex, constraintIndex, (current) => ({
                               ...current,
@@ -910,6 +912,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     </Card>
                   ))}
                   <Button
+                    disabled={pattern.constraints.length >= 30}
                     onClick={() =>
                       updatePattern(patternIndex, (current) => ({
                         ...current,
@@ -927,6 +930,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             );
           })}
           <Button
+            disabled={config.patterns.length >= 20}
             onClick={() =>
               setConfig((current) => ({
                 ...current,
