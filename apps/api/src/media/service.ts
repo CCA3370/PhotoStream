@@ -2475,9 +2475,12 @@ export class PhotoService {
             asc(schema.bibAttributeOptions.id),
           )
       : [];
-    const bibAttributeOptions = bibAttributeOptionRows.map(
-      ({ parentGradeOptionId: _parentGradeOptionId, ...option }) => option,
-    );
+    const bibAttributeOptions = bibAttributeOptionRows.map((option) => ({
+      id: option.id,
+      dimension: option.dimension,
+      displayName: option.displayName,
+      sortOrder: option.sortOrder,
+    }));
     const [mappingTask] = bibSearchEnabled
       ? await this.#database
           .select({ id: schema.bibRecalculationTasks.id })
