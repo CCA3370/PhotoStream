@@ -570,6 +570,22 @@ export function validateBibMappings(
         message: "映射输出选项不存在、维度不符或已停用",
       });
     }
+    if (
+      mapping.dimension === "class" &&
+      option?.dimension === "class" &&
+      option.parentGradeOptionId != null &&
+      !mappings.some(
+        (candidate) =>
+          candidate.dimension === "grade" &&
+          candidate.outputOptionId === option.parentGradeOptionId,
+      )
+    ) {
+      issues.push({
+        code: "CLASS_PARENT_GRADE_UNMAPPED",
+        path: `mappings.${mappingIndex}.outputOptionId`,
+        message: "班级所属年级尚未设置号码映射",
+      });
+    }
     const normalizedRanges = normalizeBibRanges(mapping.ranges, mapping.width);
     if (mapping.ranges.some((range) => !bibRangeValidForWidth(range, mapping.width))) {
       issues.push({
@@ -610,6 +626,13 @@ export function validateBibMappings(
       ) {
         continue;
       }
+      if (left.dimension === "class") {
+        const leftParent = optionById.get(left.outputOptionId)?.parentGradeOptionId ?? null;
+        const rightParent = optionById.get(right.outputOptionId)?.parentGradeOptionId ?? null;
+        if (leftParent !== null && rightParent !== null && leftParent !== rightParent) {
+          continue;
+        }
+      }
       const conflicts = patterns.some((pattern) => {
         if (!pattern.enabled) return false;
         if (
@@ -639,6 +662,7 @@ export function validateBibMappings(
 export function deriveBibAttributes(
   number: string,
   mappings: readonly BibAttributeMappingInput[],
+  options: readonly BibAttributeOptionInput[] = [],
 ): {
   readonly gradeOptionId: string | null;
   readonly classOptionId: string | null;
@@ -647,13 +671,25 @@ export function deriveBibAttributes(
   const matching = mappings.filter((mapping) =>
     constraintMatches(number, mappingConstraint(mapping)),
   );
-  const grade = matching.find((mapping) => mapping.dimension === "grade")?.outputOptionId ?? null;
-  const classOption =
-    matching.find((mapping) => mapping.dimension === "class")?.outputOptionId ?? null;
+  const gradeMapping = matching.find((mapping) => mapping.dimension === "grade");
+  const gradeOptionId = gradeMapping?.outputOptionId ?? null;
+  const classMappings = matching.filter((mapping) => mapping.dimension === "class");
+  const optionById = new Map(options.map((option) => [option.id, option]));
+  const classMapping =
+    options.length === 0
+      ? classMappings[0]
+      : classMappings.find((mapping) => {
+          const output = optionById.get(mapping.outputOptionId);
+          const parentGradeOptionId = output?.parentGradeOptionId ?? null;
+          return parentGradeOptionId === null || parentGradeOptionId === gradeOptionId;
+        });
+  const selectedMappings = [gradeMapping, classMapping].filter(
+    (mapping): mapping is BibAttributeMappingInput => mapping !== undefined,
+  );
   return {
-    gradeOptionId: grade,
-    classOptionId: classOption,
-    matchedMappingIds: matching.flatMap((mapping) =>
+    gradeOptionId,
+    classOptionId: classMapping?.outputOptionId ?? null,
+    matchedMappingIds: selectedMappings.flatMap((mapping) =>
       mapping.id === undefined ? [] : [mapping.id],
     ),
   };
