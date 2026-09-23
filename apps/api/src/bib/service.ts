@@ -110,7 +110,7 @@ function canonicalAttributeHierarchy(options: readonly BibAttributeOptionInput[]
 }
 
 function deriveHierarchicalBibAttributes(number: string, document: BibDocument) {
-  const derived = deriveBibAttributes(number, document.mappings);
+  const derived = deriveBibAttributes(number, document.mappings, document.attributeOptions);
   if (derived.classOptionId === null) return derived;
   const classOption = document.attributeOptions.find(
     (option) => option.id === derived.classOptionId && option.dimension === "class",
