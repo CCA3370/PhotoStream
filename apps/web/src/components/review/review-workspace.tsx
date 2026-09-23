@@ -398,9 +398,7 @@ export function ReviewWorkspace({
         (option) =>
           option.enabled &&
           option.dimension === "class" &&
-          (gradeOption === "all" ||
-            option.parentGradeOptionId == null ||
-            option.parentGradeOptionId === gradeOption),
+          (gradeOption === "all" || option.parentGradeOptionId === gradeOption),
       ),
     [bibConfig.attributeOptions, gradeOption],
   );
