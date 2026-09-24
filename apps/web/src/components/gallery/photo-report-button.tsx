@@ -1,9 +1,10 @@
 "use client";
 
-import { FlagIcon, LoaderCircleIcon } from "lucide-react";
+import { FlagIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -183,7 +184,7 @@ export function PhotoReportButton({
             type="button"
           >
             {submitting ? (
-              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+              <Spinner className="animate-spin" data-icon="inline-start"  />
             ) : null}
             提交投诉
           </Button>
