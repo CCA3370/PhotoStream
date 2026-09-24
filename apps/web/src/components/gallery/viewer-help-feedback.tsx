@@ -149,7 +149,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
         <Button
           aria-expanded={menuOpen}
           aria-label="帮助与反馈"
-          className="relative size-9 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md after:absolute after:-inset-1.5 after:content-[''] hover:text-foreground sm:size-8"
+          className="size-9 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground sm:size-8"
           data-viewer-help-trigger
           data-viewer-onboarding-target="help"
           onClick={() => setMenuOpen((open) => !open)}
