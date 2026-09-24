@@ -286,7 +286,8 @@ export function ViewerFeedbackInbox({
         <Badge className="w-fit gap-1.5" variant={connected ? "secondary" : "outline"}>
           <span
             aria-hidden="true"
-            className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted-foreground/45"}`} />
+            className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted-foreground/45"}`}
+          />
           {connected ? "实时连接" : "正在重连"}
         </Badge>
       </section>
