@@ -1016,7 +1016,7 @@ export function BibSearchPanel({
         </DialogContent>
       </Dialog>
 
-      <ErrorDialog message={error} onClose={() => setError(null)} title="找照片失败" />
+      <ErrorDialog message={error} nested onClose={() => setError(null)} title="找照片失败" />
     </div>
   );
 }
