@@ -661,7 +661,7 @@ export function DashboardView({
       </Card>
 
       <Dialog open={rankingOpen} onOpenChange={setRankingOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-hidden p-0 sm:max-w-2xl">
+        <DialogContent className="max-h-[85dvh] overflow-hidden p-0 sm:max-w-2xl" padding="none">
           <DialogHeader className="px-5 pt-5 pb-4 pr-12">
             <DialogTitle>{rankingMode === "downloads" ? "下载排行" : "点赞排行"}</DialogTitle>
             <DialogDescription>
