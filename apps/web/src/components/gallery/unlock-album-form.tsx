@@ -92,7 +92,8 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
                 placeholder="输入相册口令"
                 spellCheck={false}
                 style={{ boxShadow: "none", outline: "none" }}
-                type={showPassword ? "text" : "password"} />
+                type={showPassword ? "text" : "password"}
+              />
               <InputGroupAddon align="inline-end" className="pr-2.5 has-[>button]:mr-0">
                 <InputGroupButton
                   aria-label={showPassword ? "隐藏口令" : "显示口令"}
@@ -126,10 +127,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           >
             {pending ? (
               <>
-                <Spinner
-                  aria-hidden="true"
-                  className="animate-spin"
-                  data-icon="inline-start" />
+                <Spinner aria-hidden="true" className="animate-spin" data-icon="inline-start" />
                 正在验证…
               </>
             ) : (
