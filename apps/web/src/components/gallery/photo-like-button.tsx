@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { publicMutation } from "@/lib/client-api";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 
 export interface PhotoLikeState {
@@ -104,7 +105,7 @@ export function PhotoLikeButton({
       onChange(result);
     } catch (caught) {
       onChange(previous);
-      setError(caught instanceof Error ? caught.message : "点赞操作失败，请稍后重试。");
+      setError(userFacingErrorMessage(caught, "点赞操作失败，请稍后重试。"));
     } finally {
       setPending(false);
     }
