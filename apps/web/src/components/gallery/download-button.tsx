@@ -2,7 +2,7 @@
 
 import type { DownloadKind } from "@photostream/contracts";
 import { DownloadIcon } from "lucide-react";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
@@ -64,6 +64,7 @@ export function DownloadButton({
   showBytes = true,
   showIcon = true,
   slug,
+  variant = "outline",
 }: Readonly<{
   bytes: number;
   className?: string;
@@ -76,6 +77,7 @@ export function DownloadButton({
   showBytes?: boolean;
   showIcon?: boolean;
   slug: string;
+  variant?: ComponentProps<typeof Button>["variant"];
 }>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +156,7 @@ export function DownloadButton({
         disabled={pending}
         onClick={() => void download()}
         type="button"
-        variant="outline"
+        variant={variant}
       >
         {showIcon ? <DownloadIcon data-icon="inline-start" /> : null}
         {pending ? "正在准备…" : showBytes || weChat ? `${label}（${formatBytes(bytes)}）` : label}
