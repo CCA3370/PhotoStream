@@ -200,15 +200,6 @@ textarea {
   color: white;
 }
 
-/* Keep the fullscreen photo viewer above gallery chrome but below onboarding. */
-[data-slot="dialog-content"]:has([data-lightbox-transition-image]) {
-  z-index: 70 !important;
-}
-
-[data-slot="dialog-overlay"]:has(~ [data-slot="dialog-content"] [data-lightbox-transition-image]) {
-  z-index: 70 !important;
-}
-
 /* Desktop photo-search entry: compact utility pill instead of a full-width card. */
 @media (min-width: 1024px) {
   .public-theme [data-gallery-search-toolbar] {
@@ -285,5 +276,55 @@ textarea {
     transition-property: transform, opacity, filter !important;
     transition-duration: 320ms !important;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+  }
+}
+
+@layer utilities {
+  .layer-skip-link {
+    z-index: 70;
+  }
+
+  .layer-gallery-lightbox {
+    z-index: 70;
+  }
+
+  .layer-nested-dialog-overlay {
+    z-index: 71;
+  }
+
+  .layer-nested-dialog {
+    z-index: 72;
+  }
+
+  .layer-nested-popover {
+    z-index: 73;
+  }
+
+  .layer-onboarding {
+    z-index: 80;
+  }
+
+  .layer-onboarding-arrow {
+    z-index: 81;
+  }
+
+  .layer-onboarding-card {
+    z-index: 82;
+  }
+
+  .layer-service-notice-overlay {
+    z-index: 90;
+  }
+
+  .layer-service-notice {
+    z-index: 100;
+  }
+
+  .layer-transient-status {
+    z-index: 100;
+  }
+
+  .layer-save-hint {
+    z-index: 200;
   }
 }
