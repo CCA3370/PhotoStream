@@ -188,6 +188,36 @@ textarea {
   }
 }
 
+
+html:has(.public-theme),
+body:has(.public-theme) {
+  background-color: oklch(1 0 0);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:has(.public-theme),
+  body:has(.public-theme) {
+    background-color: oklch(0.208 0.042 265.755);
+    color-scheme: dark;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-lightbox-controls] button {
+    min-height: 3rem;
+  }
+
+  [data-lightbox-controls] button[data-size^="icon"] {
+    min-width: 3rem;
+  }
+
+  [data-lightbox-controls] button svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+}
+
 [data-review-publication-toggle] {
   border-color: rgb(37 99 235);
   background: rgb(37 99 235);
@@ -216,7 +246,7 @@ textarea {
   }
 
   .public-theme [data-viewer-onboarding-target="search"] {
-    flex: 0 0 auto !important;
+    flex: 0 0 auto;
     height: 2.4rem;
     gap: 0.45rem;
     padding-inline: 0.5rem 0.7rem;
