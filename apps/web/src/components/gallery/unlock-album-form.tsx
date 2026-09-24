@@ -5,7 +5,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   KeyRoundIcon,
-  LoaderCircleIcon,
   LockKeyholeIcon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -13,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
@@ -128,11 +128,11 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           >
             {pending ? (
               <>
-                <LoaderCircleIcon
+                <Spinner
                   aria-hidden="true"
                   className="animate-spin"
                   data-icon="inline-start"
-                />
+                 />
                 正在验证…
               </>
             ) : (
