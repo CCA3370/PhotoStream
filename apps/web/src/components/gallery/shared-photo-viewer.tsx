@@ -23,8 +23,7 @@ import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
-const toolbarButtonClass =
-  "h-11 rounded-xl border-white/10 bg-white/[0.07] px-2.5 text-xs text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:scale-[0.97] sm:px-3 sm:text-sm motion-reduce:transform-none motion-reduce:transition-none";
+const toolbarButtonClass = "h-11 rounded-xl px-2.5 text-xs sm:px-3 sm:text-sm";
 
 function bestPreview(media: PublicMediaView) {
   return (
@@ -352,6 +351,7 @@ export function SharedPhotoViewer({
                 mediaId={media.id}
                 shareId={shareId}
                 slug={slug}
+                variant="lightbox"
               />
 
               {canDownload ? (
@@ -359,7 +359,7 @@ export function SharedPhotoViewer({
                   className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
                   onClick={() => setDownloadMenuOpen(true)}
                   type="button"
-                  variant="outline"
+                  variant="lightbox"
                 >
                   <DownloadIcon data-icon="inline-start" />
                   {weChat ? "保存至相册" : "下载"}
@@ -395,6 +395,7 @@ export function SharedPhotoViewer({
                       showBytes={false}
                       showIcon={false}
                       slug={slug}
+                      variant="lightbox"
                     />
                   ) : null}
                   {canDownloadOriginal && media.downloads.originalBytes !== null ? (
@@ -413,6 +414,7 @@ export function SharedPhotoViewer({
                       showBytes={false}
                       showIcon={false}
                       slug={slug}
+                      variant="lightbox"
                     />
                   ) : null}
                   <Button
