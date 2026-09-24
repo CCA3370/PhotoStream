@@ -440,11 +440,13 @@ export function PaginatedMediaGrid({
       ) : null}
       <ErrorDialog
         message={loadMoreError}
+        nested
         onClose={() => setLoadMoreError(null)}
         title="无法继续加载"
       />
       <ErrorDialog
         message={liveError}
+        nested
         onClose={() => setLiveError(null)}
         title="无法实时更新照片"
       />
