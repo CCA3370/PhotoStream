@@ -7,7 +7,7 @@ import type {
   UpdateAlbumRequest,
 } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
-import { CopyIcon, ExternalLinkIcon, KeyRoundIcon, LoaderCircleIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, KeyRoundIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -384,7 +385,7 @@ export function AlbumSettings({
                       type="submit"
                     >
                       {isPending("basic") ? (
-                        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                        <Spinner className="animate-spin" data-icon="inline-start"  />
                       ) : null}
                       {isPending("basic") ? "保存中" : "保存"}
                     </Button>
@@ -433,7 +434,7 @@ export function AlbumSettings({
                       type="submit"
                     >
                       {isPending("privacy") ? (
-                        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                        <Spinner className="animate-spin" data-icon="inline-start"  />
                       ) : null}
                       {isPending("privacy") ? "保存中" : "保存"}
                     </Button>
@@ -459,7 +460,7 @@ export function AlbumSettings({
                   title="公开访问"
                 >
                   {isPending("access") ? (
-                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    <Spinner className="size-4 animate-spin text-muted-foreground"  />
                   ) : (
                     <Switch
                       aria-label="公开访问"
@@ -490,7 +491,7 @@ export function AlbumSettings({
                       render={<Button size="sm" type="button" variant="outline" />}
                     >
                       {isPending("password") ? (
-                        <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                        <Spinner className="animate-spin" data-icon="inline-start"  />
                       ) : (
                         <KeyRoundIcon data-icon="inline-start" />
                       )}
@@ -522,7 +523,7 @@ export function AlbumSettings({
               <CardContent className="divide-y p-0">
                 <SettingRow description="允许观众下载普通尺寸图片" title="普通图下载">
                   {isPending("previewDownload") ? (
-                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    <Spinner className="size-4 animate-spin text-muted-foreground"  />
                   ) : (
                     <Switch
                       aria-label="普通图下载"
@@ -542,7 +543,7 @@ export function AlbumSettings({
                   title="原图下载"
                 >
                   {isPending("originalDownload") ? (
-                    <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                    <Spinner className="size-4 animate-spin text-muted-foreground"  />
                   ) : (
                     <Switch
                       aria-label="原图下载"
@@ -619,7 +620,7 @@ export function AlbumSettings({
             <TabsContent value="bib">
               {featureLoading && bibConfig === null ? (
                 <div className="flex min-h-40 items-center justify-center rounded-lg border text-sm text-muted-foreground">
-                  <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2 size-4 animate-spin"  />
                   正在加载号码识别配置
                 </div>
               ) : bibConfig === null ? null : (
@@ -629,7 +630,7 @@ export function AlbumSettings({
             <TabsContent value="face">
               {featureLoading && faceConfig === null ? (
                 <div className="flex min-h-40 items-center justify-center rounded-lg border text-sm text-muted-foreground">
-                  <LoaderCircleIcon className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2 size-4 animate-spin"  />
                   正在加载人脸找图配置
                 </div>
               ) : faceConfig === null ? null : (
