@@ -506,9 +506,13 @@ export function BibSearchPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm">
+      <div
+        className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm"
+        data-gallery-search-toolbar
+      >
         <button
           className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
+          data-viewer-onboarding-target="search"
           onClick={openSearchDialog}
           type="button"
         >
