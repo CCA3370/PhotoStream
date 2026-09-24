@@ -63,7 +63,7 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-4 z-[100] mx-auto w-auto max-w-sm outline-none sm:right-auto sm:left-4 sm:mx-0 sm:w-full",
+        "layer-transient-status pointer-events-none fixed inset-x-4 bottom-4 mx-auto w-auto max-w-sm outline-none sm:right-auto sm:left-4 sm:mx-0 sm:w-full",
         className,
       )}
       {...props}
@@ -299,7 +299,7 @@ function WeChatSaveHintToast({ toastItem }: { toastItem: ToastPrimitive.Root.Pro
   return (
     <ToastPrimitive.Root
       aria-live="polite"
-      className="dark public-theme pointer-events-none fixed inset-0 z-[200] grid place-items-center px-4 text-white opacity-100 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0"
+      className="dark public-theme layer-save-hint pointer-events-none fixed inset-0 grid place-items-center px-4 text-white opacity-100 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0"
       toast={toastItem}
     >
       <div className="flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 text-left shadow-xl shadow-black/30 backdrop-blur-md">
