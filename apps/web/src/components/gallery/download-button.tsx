@@ -2,11 +2,12 @@
 
 import type { DownloadKind } from "@photostream/contracts";
 import { DownloadIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { toast } from "@/components/ui/toast";
+import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { publicMutation } from "@/lib/client-api";
 import { loadDerivedImage } from "@/lib/derived-image-cache";
 import { convertImageToJpeg } from "@/lib/image-jpeg";
@@ -36,10 +37,6 @@ function downloadErrorMessage(caught: unknown): string {
 function jpegFilename(filename: string): string {
   const base = filename.replace(/\.[^./\\]+$/u, "").trim();
   return `${base || "photo"}.jpg`;
-}
-
-function isWeChatBrowser(): boolean {
-  return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
 }
 
 function triggerDownload(blob: Blob, filename: string): void {
@@ -82,11 +79,7 @@ export function DownloadButton({
 }>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [weChat, setWeChat] = useState(false);
-
-  useEffect(() => {
-    setWeChat(isWeChatBrowser());
-  }, []);
+  const weChat = useWeChatBrowser();
 
   async function download(): Promise<void> {
     if (pending) return;
