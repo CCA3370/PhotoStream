@@ -8,7 +8,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 import { viewerOnboardingReplayEvent } from "@/lib/viewer-onboarding";
-
 const feedbackKinds = [
   { value: "problem", label: "遇到问题" },
   { value: "suggestion", label: "建议" },
@@ -199,8 +198,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="例如：切换照片时有点卡；希望增加……"
                 rows={5}
-                value={message}
-              />
+                value={message} />
               <div className="flex items-start justify-between gap-3 text-[11px] leading-5 text-muted-foreground">
                 <p>我们只会记录你当前所在的页面，方便了解问题，不会收集额外的设备信息。</p>
                 <span className="shrink-0 tabular-nums">{message.length}/2000</span>
@@ -222,7 +220,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
               onClick={() => void submitFeedback()}
               type="button"
             >
-              {submitting ? <Spinner className="size-4 animate-spin"  /> : null}
+              {submitting ? <Spinner className="size-4 animate-spin" /> : null}
               {submitting ? "正在发送" : "发送反馈"}
             </Button>
           </DialogFooter>

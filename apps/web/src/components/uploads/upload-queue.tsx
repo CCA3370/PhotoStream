@@ -15,7 +15,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { UploadShell } from "@/components/shells/upload-shell";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Select,
@@ -25,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { clientMutation } from "@/lib/client-api";
 import { resumeLocalBibOcr } from "@/lib/local-bib-ocr";
@@ -51,7 +51,6 @@ import {
   prepareUploadInput,
 } from "@/lib/upload-input";
 import { cn } from "@/lib/utils";
-
 interface CategoryOption {
   readonly id: string;
   readonly name: string;
@@ -449,8 +448,7 @@ export function UploadQueue({
             void enqueue(Array.from(files ?? []));
           }}
           ref={inputRef}
-          type="file"
-        />
+          type="file" />
         <input
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           className="sr-only"
@@ -460,8 +458,7 @@ export function UploadQueue({
             void enqueue(Array.from(files ?? []));
           }}
           ref={directoryInputRef}
-          type="file"
-        />
+          type="file" />
 
         <button
           className={cn(
@@ -568,8 +565,7 @@ export function UploadQueue({
             >
               <div
                 className="h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
-                style={{ width: `${uploadProgress.percent}%` }}
-              />
+                style={{ width: `${uploadProgress.percent}%` }} />
             </div>
           </div>
         ) : null}
@@ -602,7 +598,7 @@ export function UploadQueue({
                 >
                   <div className="mt-0.5 text-muted-foreground">
                     {task.status === "processing" ? (
-                      <Spinner className="size-4 animate-spin"  />
+                      <Spinner className="size-4 animate-spin" />
                     ) : task.status === "failed" ? (
                       <CircleAlertIcon className="size-4 text-destructive" />
                     ) : task.status === "cancelled" ? (
@@ -672,8 +668,7 @@ export function UploadQueue({
                       fill
                       sizes="200px"
                       src={url}
-                      unoptimized
-                    />
+                      unoptimized />
                     {photo.uploadState === "published" || photo.uploadState === "local" ? (
                       <Button
                         aria-label="删除本机照片副本"

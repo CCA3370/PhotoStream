@@ -61,7 +61,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -72,6 +71,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { LOCAL_BIB_SERVER_STATE_EVENT, resumeLocalBibOcr } from "@/lib/local-bib-ocr";
@@ -88,7 +88,6 @@ import {
 } from "@/lib/local-review-queue";
 import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { cn } from "@/lib/utils";
-
 async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
   await Promise.all([
     deleteLocalReviewPhoto(localPhotoId),
@@ -1916,8 +1915,7 @@ export function ReviewWorkspace({
             );
           }}
           userRole={userRole}
-          value={reviewCollaboration}
-        />
+          value={reviewCollaboration} />
 
         <Select
           items={[
@@ -2162,7 +2160,7 @@ export function ReviewWorkspace({
             variant="outline"
           >
             {selectingAll ? (
-              <Spinner className="animate-spin" data-icon="inline-start"  />
+              <Spinner className="animate-spin" data-icon="inline-start" />
             ) : null}
             选择全部匹配
           </Button>
@@ -2268,8 +2266,7 @@ export function ReviewWorkspace({
                       setBatchBibNumber(value);
                     }}
                     placeholder="统一号码"
-                    value={batchBibNumber}
-                  />
+                    value={batchBibNumber} />
                   <Button
                     disabled={batchBusy || batchBibNumber.trim().length === 0}
                     onClick={() => void batchAddBibNumber()}
@@ -2380,8 +2377,7 @@ export function ReviewWorkspace({
                                 (variant) => variant.url === item.previewUrl,
                               )?.kind
                             : undefined
-                        }
-                      />
+                        } />
                     )}
                   </button>
                   {selectionMode ? (
@@ -2426,7 +2422,7 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {pendingAction === "featured" ? (
-                        <Spinner className="size-4 animate-spin"  />
+                        <Spinner className="size-4 animate-spin" />
                       ) : (
                         <StarIcon className={cn("size-4", item.featured && "fill-current")} />
                       )}
@@ -2446,7 +2442,7 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {pendingAction === "state" ? (
-                        <Spinner className="size-4 animate-spin"  />
+                        <Spinner className="size-4 animate-spin" />
                       ) : published ? (
                         <EyeIcon className="size-4" />
                       ) : hidden ? (
@@ -2481,7 +2477,7 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {bibBlocked ? (
-                        <Spinner className="size-4 animate-spin"   />
+                        <Spinner className="size-4 animate-spin" />
                       ) : bibConfirmed ? (
                         <BadgeCheckIcon className="size-4" />
                       ) : (
@@ -2511,7 +2507,7 @@ export function ReviewWorkspace({
                       variant="destructive"
                     >
                       {pendingAction === "delete" ? (
-                        <Spinner className="size-4 animate-spin"  />
+                        <Spinner className="size-4 animate-spin" />
                       ) : (
                         <Trash2Icon className="size-4" />
                       )}
@@ -2526,7 +2522,7 @@ export function ReviewWorkspace({
 
       <div className="flex h-8 items-center justify-center" ref={sentinelRef}>
         {loadingMore || selectingAll ? (
-          <Spinner className="size-4 animate-spin text-muted-foreground"  />
+          <Spinner className="size-4 animate-spin text-muted-foreground" />
         ) : null}
       </div>
 
@@ -2553,8 +2549,7 @@ export function ReviewWorkspace({
             onHide={() => void batchHide()}
             onRestore={() => void batchRestore()}
             onUnfeature={() => void batchSetFeatured(false)}
-            stats={selectionStats}
-          />
+            stats={selectionStats} />
         </div>
       ) : null}
 
@@ -2569,8 +2564,7 @@ export function ReviewWorkspace({
             onDelete={() => setInspectorDeleteOpen(true)}
             onOpenBib={() => setBibDialogKey(inspectorSourceItem.key)}
             onStateAction={() => void stateAction(inspectorSourceItem)}
-            onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)}
-          />
+            onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)} />
         </div>
       ) : null}
 
@@ -2607,8 +2601,7 @@ export function ReviewWorkspace({
           const item = itemByKey(key);
           if (item !== null) void toggleVisibility(item);
         }}
-        selectedKey={activeKey}
-      />
+        selectedKey={activeKey} />
 
       <BibReviewDialog
         localActions={bibDialogLocalActions}
@@ -2624,8 +2617,7 @@ export function ReviewWorkspace({
           if (!open) setBibDialogKey(null);
         }}
         open={bibDialogItem !== null}
-        state={bibDialogItem?.bib ?? null}
-      />
+        state={bibDialogItem?.bib ?? null} />
 
       <AlertDialog open={inspectorDeleteOpen} onOpenChange={setInspectorDeleteOpen}>
         <AlertDialogContent>

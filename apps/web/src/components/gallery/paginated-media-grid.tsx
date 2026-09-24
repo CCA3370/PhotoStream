@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MediaGrid } from "@/components/gallery/media-grid";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { ErrorDialog } from "@/components/ui/error-dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { ClientApiError, clientGet } from "@/lib/client-api";
 import {
   getWarmDerivedImageUrl,
@@ -16,7 +16,6 @@ import {
   markDerivedImageDecoded,
 } from "@/lib/derived-image-cache";
 import { orderFeaturedMedia } from "@/lib/featured-order";
-
 interface MediaPage {
   readonly items: readonly PublicMediaView[];
   readonly nextCursor: string | null;
@@ -409,11 +408,10 @@ export function PaginatedMediaGrid({
       <MediaGrid
         {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
         items={visibleItems}
-        slug={slug}
-      />
+        slug={slug} />
       {featuredOnly && cursor !== null ? (
         <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
-          <Spinner className="size-4 animate-spin"  />
+          <Spinner className="size-4 animate-spin" />
           正在整理精选照片…
         </div>
       ) : cursor === null ? null : (
@@ -428,7 +426,7 @@ export function PaginatedMediaGrid({
         >
           {loading ? (
             <>
-              <Spinner className="size-3.5 animate-spin"  />
+              <Spinner className="size-3.5 animate-spin" />
               正在加载…
             </>
           ) : (
@@ -442,13 +440,11 @@ export function PaginatedMediaGrid({
       <ErrorDialog
         message={loadMoreError}
         onClose={() => setLoadMoreError(null)}
-        title="无法继续加载"
-      />
+        title="无法继续加载" />
       <ErrorDialog
         message={liveError}
         onClose={() => setLiveError(null)}
-        title="无法实时更新照片"
-      />
+        title="无法实时更新照片" />
     </div>
   );
 }

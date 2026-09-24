@@ -4,18 +4,17 @@ import { LinkIcon, Share2Icon } from "lucide-react";
 import { type ComponentProps, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
-
 interface ShareResponse {
   readonly shareId: string;
 }
@@ -146,8 +145,7 @@ export function PhotoShareButton({
           <Spinner
             aria-hidden="true"
             className="animate-spin motion-reduce:animate-none"
-            data-icon="inline-start"
-           />
+            data-icon="inline-start" />
         ) : weChat ? (
           <LinkIcon data-icon="inline-start" />
         ) : (

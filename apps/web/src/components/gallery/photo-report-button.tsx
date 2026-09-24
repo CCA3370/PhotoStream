@@ -4,7 +4,6 @@ import { FlagIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -23,11 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 import type { ViewerReportReason } from "@/lib/viewer-feedback";
-
 const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonly label: string }> =
   [
     { value: "privacy", label: "侵犯了我的隐私或肖像权" },
@@ -163,8 +162,7 @@ export function PhotoReportButton({
               onChange={(event) => setMessage(event.target.value)}
               placeholder="请说明需要处理的具体内容，例如涉及哪位同学、哪部分信息或其他情况。"
               rows={5}
-              value={message}
-            />
+              value={message} />
             <p className="text-right text-xs text-muted-foreground">{message.length}/2000</p>
           </div>
         </div>
@@ -184,7 +182,7 @@ export function PhotoReportButton({
             type="button"
           >
             {submitting ? (
-              <Spinner className="animate-spin" data-icon="inline-start"  />
+              <Spinner className="animate-spin" data-icon="inline-start" />
             ) : null}
             提交投诉
           </Button>

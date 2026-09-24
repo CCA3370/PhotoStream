@@ -18,7 +18,6 @@ import { ViewerFeedbackMonitor } from "@/components/feedback/viewer-feedback-mon
 import { InternalProviders } from "@/components/internal-providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Sidebar,
   SidebarContent,
@@ -35,8 +34,8 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
-
 const navigation = [
   {
     href: "/studio",
@@ -199,7 +198,7 @@ export function StudioShell({
                   variant="ghost"
                 >
                   {loggingOut ? (
-                    <Spinner aria-hidden="true" className="size-4 animate-spin"  />
+                    <Spinner aria-hidden="true" className="size-4 animate-spin" />
                   ) : (
                     <LogOutIcon aria-hidden="true" className="size-4" />
                   )}
