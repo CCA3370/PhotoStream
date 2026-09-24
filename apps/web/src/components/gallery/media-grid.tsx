@@ -597,6 +597,7 @@ export function MediaGrid({
       />
       <ErrorDialog
         message={likeError}
+        nested={selectedId !== null}
         onClose={() => setLikeError(null)}
         title="点赞信息加载失败"
       />
