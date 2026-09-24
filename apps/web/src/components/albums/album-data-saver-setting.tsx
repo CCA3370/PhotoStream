@@ -5,6 +5,7 @@ import { LoaderCircleIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Switch } from "@/components/ui/switch";
@@ -62,7 +63,7 @@ export function AlbumDataSaverSetting({
             </div>
             <div className="shrink-0">
               {pending ? (
-                <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+                <Spinner className="size-4 animate-spin text-muted-foreground"  />
               ) : (
                 <Switch
                   aria-label="省流模式"
