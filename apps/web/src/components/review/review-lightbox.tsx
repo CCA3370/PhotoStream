@@ -926,6 +926,7 @@ export function ReviewLightbox({
         <BibReviewDialog
           localActions={localActions}
           mediaId={selected.mediaId}
+          nested
           onChange={(state) => {
             if (selected.mediaId !== null) onBibStateChange(selected.mediaId, state);
           }}
