@@ -107,7 +107,9 @@ export function CreateAlbumForm() {
               </FieldGroup>
               <DialogFooter>
                 <Button disabled={pending} type="submit">
-                  {submitting ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
+                  {submitting ? (
+                    <Spinner className="animate-spin" data-icon="inline-start" />
+                  ) : null}
                   {submitting ? "正在创建…" : "创建活动"}
                 </Button>
               </DialogFooter>
