@@ -4,7 +4,6 @@ import type { UserRole } from "@photostream/contracts";
 import {
   ImagesIcon,
   LayoutDashboardIcon,
-  LoaderCircleIcon,
   LogOutIcon,
   MessageSquareTextIcon,
   ScrollTextIcon,
@@ -19,6 +18,7 @@ import { ViewerFeedbackMonitor } from "@/components/feedback/viewer-feedback-mon
 import { InternalProviders } from "@/components/internal-providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Sidebar,
   SidebarContent,
@@ -199,7 +199,7 @@ export function StudioShell({
                   variant="ghost"
                 >
                   {loggingOut ? (
-                    <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" />
+                    <Spinner aria-hidden="true" className="size-4 animate-spin"  />
                   ) : (
                     <LogOutIcon aria-hidden="true" className="size-4" />
                   )}
