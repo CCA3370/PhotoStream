@@ -564,7 +564,8 @@ export function PhotoLightbox({
               settling={swipeSettling}
               slug={slug}
               viewportHeight={stageHeight}
-              viewportWidth={stageWidth} />
+              viewportWidth={stageWidth}
+            />
 
             <div
               className={cn(
@@ -626,7 +627,8 @@ export function PhotoLightbox({
                           })}
                       scope={slug ?? "public-media"}
                       sizes="100vw"
-                      sourceUrl={large.url} />
+                      sourceUrl={large.url}
+                    />
                   ) : (
                     <Image
                       alt={activePreparedImage.kind === "original" ? "活动照片原图" : "活动照片"}
@@ -848,7 +850,8 @@ export function PhotoLightbox({
                           showBytes={false}
                           showIcon={false}
                           slug={slug}
-                          variant="lightbox" />
+                          variant="lightbox"
+                        />
                       ) : null}
                       {canDownloadOriginal &&
                       slug !== undefined &&
@@ -867,7 +870,8 @@ export function PhotoLightbox({
                           showBytes={false}
                           showIcon={false}
                           slug={slug}
-                          variant="lightbox" />
+                          variant="lightbox"
+                        />
                       ) : null}
                       <Button
                         aria-label="收起下载选项"
