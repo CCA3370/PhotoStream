@@ -15,6 +15,7 @@ import {
   markDerivedImageDecoded,
 } from "@/lib/derived-image-cache";
 import { orderFeaturedMedia } from "@/lib/featured-order";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
 interface MediaPage {
   readonly items: readonly PublicMediaView[];
