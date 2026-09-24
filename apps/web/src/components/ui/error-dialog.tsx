@@ -29,7 +29,7 @@ export function ErrorDialog({
             <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive">
               <CircleAlertIcon aria-hidden="true" className="size-5" />
             </div>
-            <div className="min-w-0 space-y-2">
+            <div className="flex min-w-0 flex-col gap-2">
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription className="whitespace-pre-wrap break-words">
                 {message ?? "发生未知错误"}
