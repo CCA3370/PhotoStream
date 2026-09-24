@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { clientGet } from "@/lib/client-api";
+
 type ResultFilter = "all" | "failed" | "success";
 
 const auditDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -126,7 +127,8 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
             <div className="relative sm:w-64">
               <SearchIcon
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+              />
               <Input
                 aria-label="搜索审计记录"
                 className="h-8 pr-8 pl-8"

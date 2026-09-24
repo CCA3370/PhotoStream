@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  EyeIcon,
-  EyeOffIcon,
-  ImageIcon,
-  MessageSquareTextIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { EyeIcon, EyeOffIcon, ImageIcon, MessageSquareTextIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { ReviewLightbox, type ReviewLightboxItem } from "@/components/review/review-lightbox";
@@ -33,6 +27,7 @@ import {
   viewerFeedbackKindLabel,
   viewerReportReasonLabel,
 } from "@/lib/viewer-feedback";
+
 function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;

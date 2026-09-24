@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
+
 const stateLabels: Record<FaceConfigView["indexState"], string> = {
   disabled: "已关闭",
   provisioning: "正在建立索引",
@@ -188,14 +189,13 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {pending ? (
-                <Spinner className="size-4 animate-spin text-muted-foreground" />
-              ) : null}
+              {pending ? <Spinner className="size-4 animate-spin text-muted-foreground" /> : null}
               <Switch
                 aria-label="人脸找图"
                 checked={config.enabled}
                 disabled={pending}
-                onCheckedChange={(checked) => void toggle(checked)} />
+                onCheckedChange={(checked) => void toggle(checked)}
+              />
             </div>
           </div>
         </CardContent>
@@ -301,7 +301,8 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
         onOpenChange={setDeletePasswordOpen}
         open={deletePasswordOpen}
         title="确认删除整册人脸索引"
-        variant="destructive" />
+        variant="destructive"
+      />
 
       <ErrorDialog
         message={dialogError}

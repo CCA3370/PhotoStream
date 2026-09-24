@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
+
 export interface BibReviewLocalActions {
   readonly confirmNumbers: (numbers: readonly string[]) => Promise<BibMediaState>;
   readonly confirmNoNumber: () => Promise<BibMediaState>;
@@ -528,7 +529,8 @@ export function BibReviewDialog({
           mediaId={mediaId}
           onChange={onChange}
           onError={onError}
-          state={state} />
+          state={state}
+        />
       </DialogContent>
     </Dialog>
   );

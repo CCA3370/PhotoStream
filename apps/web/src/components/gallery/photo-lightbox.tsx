@@ -41,6 +41,7 @@ import { fetchImageWithProgress } from "@/lib/image-download-progress";
 import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
+
 const toolbarButtonClass = "h-11 rounded-xl px-3 sm:h-9";
 
 async function decodeImageUrl(url: string): Promise<void> {
@@ -550,9 +551,7 @@ export function PhotoLightbox({
             {!loaded && activePreparedImage === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
-                  <Spinner
-                    aria-hidden="true"
-                    className="size-4 animate-spin motion-reduce:animate-none" />
+                  <Spinner aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
                   正在加载高清图片…
                 </div>
               </div>
@@ -596,7 +595,8 @@ export function PhotoLightbox({
                       settling={false}
                       slug={slug}
                       viewportHeight={stageHeight}
-                      viewportWidth={stageWidth} />
+                      viewportWidth={stageWidth}
+                    />
                   ) : null}
                   {activePreparedImage === null ? (
                     <CachedPhotoImage
@@ -637,7 +637,8 @@ export function PhotoLightbox({
                       priority
                       sizes="100vw"
                       src={activePreparedImage.url}
-                      unoptimized />
+                      unoptimized
+                    />
                   )}
                 </div>
               </div>
@@ -669,7 +670,8 @@ export function PhotoLightbox({
                 <PhotoReportButton
                   className="h-11 rounded-full border-white/10 bg-black/30 px-3 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.96] sm:h-10 motion-reduce:transform-none motion-reduce:transition-none"
                   mediaId={selected.id}
-                  slug={slug} />
+                  slug={slug}
+                />
               ) : null}
             </div>
             <div className="pointer-events-auto flex items-center gap-1.5">
@@ -688,12 +690,14 @@ export function PhotoLightbox({
                       className={cn(
                         "absolute size-5 transition-[opacity,transform] duration-150 motion-reduce:transition-none",
                         fullscreen ? "scale-75 opacity-0" : "scale-100 opacity-100",
-                      )} />
+                      )}
+                    />
                     <Minimize2Icon
                       className={cn(
                         "absolute size-5 transition-[opacity,transform] duration-150 motion-reduce:transition-none",
                         fullscreen ? "scale-100 opacity-100" : "scale-75 opacity-0",
-                      )} />
+                      )}
+                    />
                   </span>
                 </Button>
               ) : null}
@@ -788,7 +792,8 @@ export function PhotoLightbox({
                         mode="toolbar"
                         onChange={onLikeChange}
                         slug={slug}
-                        state={selectedLikeState} />
+                        state={selectedLikeState}
+                      />
                     )}
 
                     {slug === undefined ? null : (
@@ -797,7 +802,8 @@ export function PhotoLightbox({
                         mediaId={selected.id}
                         {...(shareId === undefined ? {} : { shareId })}
                         slug={slug}
-                        variant="lightbox" />
+                        variant="lightbox"
+                      />
                     )}
 
                     {canDownload ? (

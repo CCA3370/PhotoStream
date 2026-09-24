@@ -48,6 +48,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
+
 interface PasswordRotation {
   readonly album: AlbumView;
   readonly generatedPassword: string;
@@ -381,9 +382,7 @@ export function AlbumSettings({
                       size="sm"
                       type="submit"
                     >
-                      {isPending("basic") ? (
-                        <Spinner className="animate-spin" data-icon="inline-start" />
-                      ) : null}
+                      {isPending("basic") ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
                       {isPending("basic") ? "保存中" : "保存"}
                     </Button>
                   </div>
@@ -429,9 +428,7 @@ export function AlbumSettings({
                       size="sm"
                       type="submit"
                     >
-                      {isPending("privacy") ? (
-                        <Spinner className="animate-spin" data-icon="inline-start" />
-                      ) : null}
+                      {isPending("privacy") ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
                       {isPending("privacy") ? "保存中" : "保存"}
                     </Button>
                   </div>
@@ -483,7 +480,8 @@ export function AlbumSettings({
                   <AlertDialog>
                     <AlertDialogTrigger
                       disabled={isPending("password")}
-                      render={<Button size="sm" type="button" variant="outline" />}
+                      render={<Button size="sm" type="button" variant="outline"
+                    />
                     >
                       {isPending("password") ? (
                         <Spinner className="animate-spin" data-icon="inline-start" />

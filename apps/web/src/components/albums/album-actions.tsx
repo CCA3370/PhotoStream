@@ -18,6 +18,7 @@ import {
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
+
 type AlbumAction = "archive" | "end" | "restore" | "start";
 
 export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {

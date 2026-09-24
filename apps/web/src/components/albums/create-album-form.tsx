@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  ArrowRightIcon,
-  CheckIcon,
-  CopyIcon,
-  KeyRoundIcon,
-  PlusIcon,
-} from "lucide-react";
+import { ArrowRightIcon, CheckIcon, CopyIcon, KeyRoundIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -26,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { clientMutation } from "@/lib/client-api";
+
 interface CreatedAlbumResponse {
   readonly album: { readonly id: string; readonly title: string };
   readonly generatedPassword: string;
@@ -112,9 +107,7 @@ export function CreateAlbumForm() {
               </FieldGroup>
               <DialogFooter>
                 <Button disabled={pending} type="submit">
-                  {submitting ? (
-                    <Spinner className="animate-spin" data-icon="inline-start" />
-                  ) : null}
+                  {submitting ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
                   {submitting ? "正在创建…" : "创建活动"}
                 </Button>
               </DialogFooter>

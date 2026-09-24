@@ -9,6 +9,7 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
+
 export function AlbumDataSaverSetting({
   albumId,
   initialSetting,
@@ -66,7 +67,8 @@ export function AlbumDataSaverSetting({
                 <Switch
                   aria-label="省流模式"
                   checked={setting.enabled}
-                  onCheckedChange={(checked) => void update(checked)} />
+                  onCheckedChange={(checked) => void update(checked)}
+                />
               )}
             </div>
           </div>

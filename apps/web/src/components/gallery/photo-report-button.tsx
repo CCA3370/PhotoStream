@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
 import type { ViewerReportReason } from "@/lib/viewer-feedback";
+
 const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonly label: string }> =
   [
     { value: "privacy", label: "侵犯了我的隐私或肖像权" },
@@ -93,7 +94,8 @@ export function PhotoReportButton({
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger
         render={
-          <Button aria-label="投诉这张图片" className={className} type="button" variant="outline" />
+          <Button aria-label="投诉这张图片" className={className} type="button" variant="outline"
+      />
         }
       >
         <FlagIcon className="size-4" />
@@ -181,9 +183,7 @@ export function PhotoReportButton({
             onClick={() => void submit()}
             type="button"
           >
-            {submitting ? (
-              <Spinner className="animate-spin" data-icon="inline-start" />
-            ) : null}
+            {submitting ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
             提交投诉
           </Button>
         </DialogFooter>
