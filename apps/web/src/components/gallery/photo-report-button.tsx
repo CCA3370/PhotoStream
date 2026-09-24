@@ -164,7 +164,8 @@ export function PhotoReportButton({
               onChange={(event) => setMessage(event.target.value)}
               placeholder="请说明需要处理的具体内容，例如涉及哪位同学、哪部分信息或其他情况。"
               rows={5}
-              value={message} />
+              value={message}
+            />
             <p className="text-right text-xs text-muted-foreground">{message.length}/2000</p>
           </div>
         </div>
