@@ -507,6 +507,7 @@ export function BibReviewDialog({
   onChange,
   onError,
   localActions,
+  nested = false,
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -515,10 +516,15 @@ export function BibReviewDialog({
   onChange: (state: BibMediaState) => void;
   onError: (message: string) => void;
   localActions?: BibReviewLocalActions | undefined;
+  nested?: boolean;
 }>) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className={nested ? "layer-nested-dialog sm:max-w-lg" : "sm:max-w-lg"}
+        forceOverlay={nested}
+        overlayClassName={nested ? "layer-nested-dialog-overlay" : undefined}
+      >
         <DialogHeader>
           <DialogTitle>号码确认</DialogTitle>
           <DialogDescription>
