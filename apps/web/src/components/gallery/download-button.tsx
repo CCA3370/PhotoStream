@@ -161,7 +161,7 @@ export function DownloadButton({
         {showIcon ? <DownloadIcon data-icon="inline-start" /> : null}
         {pending ? "正在准备…" : showBytes || weChat ? `${label}（${formatBytes(bytes)}）` : label}
       </Button>
-      <ErrorDialog message={error} onClose={() => setError(null)} title="下载失败" />
+      <ErrorDialog message={error} nested onClose={() => setError(null)} title="下载失败" />
     </>
   );
 }
