@@ -42,8 +42,7 @@ import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
-const toolbarButtonClass =
-  "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
+const toolbarButtonClass = "h-11 rounded-xl px-3 sm:h-9";
 
 async function decodeImageUrl(url: string): Promise<void> {
   if (typeof window === "undefined") return;
@@ -806,6 +805,7 @@ export function PhotoLightbox({
                         mediaId={selected.id}
                         {...(shareId === undefined ? {} : { shareId })}
                         slug={slug}
+                        variant="lightbox"
                       />
                     )}
 
@@ -815,7 +815,7 @@ export function PhotoLightbox({
                         data-viewer-onboarding-action="download"
                         onClick={() => setDownloadMenuOpen(true)}
                         type="button"
-                        variant="outline"
+                        variant="lightbox"
                       >
                         <DownloadIcon data-icon="inline-start" />
                         {weChat ? "保存至相册" : "下载"}
@@ -851,6 +851,7 @@ export function PhotoLightbox({
                           showBytes={false}
                           showIcon={false}
                           slug={slug}
+                          variant="lightbox"
                         />
                       ) : null}
                       {canDownloadOriginal &&
@@ -870,6 +871,7 @@ export function PhotoLightbox({
                           showBytes={false}
                           showIcon={false}
                           slug={slug}
+                          variant="lightbox"
                         />
                       ) : null}
                       <Button
