@@ -61,10 +61,7 @@ export function GalleryFilterNav({
       let contentRight = navRect.right - paddingRight;
 
       if (reserveSearchSpace) {
-        const searchButton = Array.from(
-          document.querySelectorAll<HTMLButtonElement>("#gallery-main button"),
-        ).find((button) => button.querySelector("svg.lucide-search") !== null);
-        const searchToolbar = searchButton?.parentElement ?? searchButton;
+        const searchToolbar = document.querySelector<HTMLElement>("[data-gallery-search-toolbar]");
 
         if (searchToolbar !== undefined && searchToolbar !== null) {
           const searchRect = searchToolbar.getBoundingClientRect();
@@ -97,12 +94,9 @@ export function GalleryFilterNav({
     resizeObserver.observe(nav);
     resizeObserver.observe(itemRow);
 
-    const searchButton = reserveSearchSpace
-      ? Array.from(document.querySelectorAll<HTMLButtonElement>("#gallery-main button")).find(
-          (button) => button.querySelector("svg.lucide-search") !== null,
-        )
-      : undefined;
-    const searchToolbar = searchButton?.parentElement ?? searchButton;
+    const searchToolbar = reserveSearchSpace
+      ? document.querySelector<HTMLElement>("[data-gallery-search-toolbar]")
+      : null;
     if (searchToolbar !== undefined && searchToolbar !== null)
       resizeObserver.observe(searchToolbar);
 
@@ -117,6 +111,7 @@ export function GalleryFilterNav({
   return (
     <nav
       aria-label="相册筛选"
+      data-viewer-onboarding-target="filters"
       className={cn(
         "sticky top-[var(--public-gallery-header-height)] z-30 -mx-2.5 -mt-2.5 mb-2 flex h-11 min-h-11 max-h-11 shrink-0 items-stretch gap-0 overflow-y-hidden border-b bg-background/92 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82 sm:-mx-5 sm:-mt-3 sm:mb-3 sm:px-5 lg:-mx-8 lg:-mt-5 lg:h-14 lg:min-h-14 lg:max-h-14 lg:px-8 lg:bg-background/96 xl:-mx-10 xl:px-10 2xl:-mx-12 2xl:px-12",
         scrollable ? "overflow-x-auto" : "overflow-x-hidden",
