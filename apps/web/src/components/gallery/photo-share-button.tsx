@@ -1,7 +1,7 @@
 "use client";
 
 import { LinkIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,11 +58,13 @@ export function PhotoShareButton({
   mediaId,
   shareId,
   slug,
+  variant = "outline",
 }: Readonly<{
   className?: string;
   mediaId: string;
   shareId?: string;
   slug: string;
+  variant?: ComponentProps<typeof Button>["variant"];
 }>) {
   const [pending, setPending] = useState(false);
   const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
@@ -137,7 +139,7 @@ export function PhotoShareButton({
         disabled={pending}
         onClick={() => void sharePhoto()}
         type="button"
-        variant="outline"
+        variant={variant}
       >
         {pending ? (
           <LoaderCircleIcon
