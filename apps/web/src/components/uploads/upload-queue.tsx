@@ -51,6 +51,7 @@ import {
   prepareUploadInput,
 } from "@/lib/upload-input";
 import { cn } from "@/lib/utils";
+
 interface CategoryOption {
   readonly id: string;
   readonly name: string;
@@ -448,7 +449,8 @@ export function UploadQueue({
             void enqueue(Array.from(files ?? []));
           }}
           ref={inputRef}
-          type="file" />
+          type="file"
+        />
         <input
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           className="sr-only"
@@ -458,7 +460,8 @@ export function UploadQueue({
             void enqueue(Array.from(files ?? []));
           }}
           ref={directoryInputRef}
-          type="file" />
+          type="file"
+        />
 
         <button
           className={cn(
@@ -565,7 +568,8 @@ export function UploadQueue({
             >
               <div
                 className="h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
-                style={{ width: `${uploadProgress.percent}%` }} />
+                style={{ width: `${uploadProgress.percent}%` }}
+              />
             </div>
           </div>
         ) : null}
@@ -668,7 +672,8 @@ export function UploadQueue({
                       fill
                       sizes="200px"
                       src={url}
-                      unoptimized />
+                      unoptimized
+                    />
                     {photo.uploadState === "published" || photo.uploadState === "local" ? (
                       <Button
                         aria-label="删除本机照片副本"
