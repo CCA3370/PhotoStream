@@ -523,7 +523,7 @@ export function BibReviewDialog({
       <DialogContent
         className={nested ? "layer-nested-dialog sm:max-w-lg" : "sm:max-w-lg"}
         forceOverlay={nested}
-        overlayClassName={nested ? "layer-nested-dialog-overlay" : undefined}
+        {...(nested ? { overlayClassName: "layer-nested-dialog-overlay" } : {})}
       >
         <DialogHeader>
           <DialogTitle>号码确认</DialogTitle>
