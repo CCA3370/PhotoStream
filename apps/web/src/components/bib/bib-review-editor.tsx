@@ -448,7 +448,8 @@ export function BibReviewEditor({
             placeholder={
               noNumber ? "输入号码以修改，如 101,102" : "多个号码用英文逗号分隔，如 101,102"
             }
-            value={number} />
+            value={number}
+          />
           <Button
             className={cn(
               "shrink-0",
