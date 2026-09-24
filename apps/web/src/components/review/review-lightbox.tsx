@@ -8,7 +8,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   ImageIcon,
-  LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   PanelRightCloseIcon,
@@ -868,7 +867,7 @@ export function ReviewLightbox({
                       variant="outline"
                     >
                       {selected.pendingAction === "delete" ? (
-                        <LoaderCircleIcon className="animate-spin"  />
+                        <Spinner className="animate-spin"   />
                       ) : (
                         <Trash2Icon />
                       )}
