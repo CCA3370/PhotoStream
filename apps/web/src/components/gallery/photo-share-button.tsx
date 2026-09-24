@@ -133,6 +133,7 @@ export function PhotoShareButton({
       <Button
         className={cn(className)}
         data-photo-share-action
+        data-viewer-onboarding-action="share"
         disabled={pending}
         onClick={() => void sharePhoto()}
         type="button"
