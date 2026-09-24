@@ -779,7 +779,7 @@ export function PhotoLightbox({
                 {activePreparedImage?.kind === "original" ? " · 原图" : null}
               </div>
 
-              <div className="ml-auto grid w-full min-w-0 items-center overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:w-auto sm:max-w-full">
+              <div className="ml-auto grid w-full min-w-0 items-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05] p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl sm:w-auto sm:max-w-full">
                 <div
                   aria-hidden={downloadMenuOpen}
                   inert={downloadMenuOpen}
