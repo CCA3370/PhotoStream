@@ -28,7 +28,7 @@ export function ErrorDialog({
       <DialogContent
         className={nested ? "layer-nested-dialog sm:max-w-md" : "sm:max-w-md"}
         forceOverlay={nested}
-        overlayClassName={nested ? "layer-nested-dialog-overlay" : undefined}
+        {...(nested ? { overlayClassName: "layer-nested-dialog-overlay" } : {})}
       >
         <DialogHeader>
           <div className="flex items-start gap-3 pr-7">
