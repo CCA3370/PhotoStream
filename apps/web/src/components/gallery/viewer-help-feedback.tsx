@@ -155,6 +155,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
           aria-label="帮助与反馈"
           className="size-8 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground"
           data-viewer-help-trigger
+          data-viewer-onboarding-target="help"
           onClick={() => setMenuOpen((open) => !open)}
           size="icon-sm"
           type="button"
