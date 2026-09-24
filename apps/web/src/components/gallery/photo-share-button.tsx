@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { clientGet, publicMutation } from "@/lib/client-api";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 
 interface ShareResponse {
@@ -115,8 +116,10 @@ export function PhotoShareButton({
     } catch (caught) {
       toast.add({
         title: "分享失败",
-        description:
-          caught instanceof Error ? caught.message : "暂时无法创建分享链接，请稍后重试。",
+        description: userFacingErrorMessage(
+          caught,
+          "暂时无法创建分享链接，请稍后重试。",
+        ),
         type: "error",
         timeout: 4_000,
       });
