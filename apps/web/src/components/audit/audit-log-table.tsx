@@ -137,7 +137,8 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
                   setQuery(value);
                 }}
                 placeholder="搜索动作、目标或字段"
-                value={query} />
+                value={query}
+              />
               {query.length > 0 ? (
                 <Button
                   aria-label="清除搜索"
