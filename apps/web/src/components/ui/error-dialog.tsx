@@ -14,16 +14,22 @@ import {
 
 export function ErrorDialog({
   message,
+  nested = false,
   onClose,
   title = "操作失败",
 }: Readonly<{
   message: string | null;
+  nested?: boolean;
   onClose: () => void;
   title?: string;
 }>) {
   return (
     <Dialog open={message !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className={nested ? "layer-nested-dialog sm:max-w-md" : "sm:max-w-md"}
+        forceOverlay={nested}
+        overlayClassName={nested ? "layer-nested-dialog-overlay" : undefined}
+      >
         <DialogHeader>
           <div className="flex items-start gap-3 pr-7">
             <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive">
