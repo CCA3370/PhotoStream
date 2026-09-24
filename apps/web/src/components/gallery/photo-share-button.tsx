@@ -152,8 +152,9 @@ export function PhotoShareButton({
 
       <Dialog open={copyNoticeOpen} onOpenChange={setCopyNoticeOpen}>
         <DialogContent
-          className="dark public-theme max-w-[20rem] rounded-2xl border border-white/10 bg-background p-5 text-foreground ring-0 shadow-2xl shadow-black/35"
-          overlayClassName="bg-black/45"
+          className="dark public-theme layer-nested-dialog max-w-[20rem] rounded-2xl border border-white/10 bg-background p-5 text-foreground ring-0 shadow-2xl shadow-black/35"
+          forceOverlay
+          overlayClassName="layer-nested-dialog-overlay bg-black/45"
           showCloseButton={false}
         >
           <DialogTitle className="text-base font-semibold">链接已复制</DialogTitle>
