@@ -879,7 +879,7 @@ export function PhotoLightbox({
                       ) : null}
                       <Button
                         aria-label="收起下载选项"
-                        className="size-11 shrink-0 rounded-xl border-white/10 bg-white/[0.07] text-white transition-[transform,background-color] duration-150 hover:bg-white/[0.13] hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none"
+                        className="size-11 shrink-0 rounded-xl border-white/10 bg-input/30 text-white transition-[transform,background-color] duration-150 hover:bg-input/50 hover:text-white active:scale-[0.94] sm:size-9 motion-reduce:transform-none motion-reduce:transition-none"
                         onClick={() => setDownloadMenuOpen(false)}
                         size="icon"
                         title="关闭下载选项"
