@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  EyeIcon,
-  EyeOffIcon,
-  ImageIcon,
-  LoaderCircleIcon,
-  MessageSquareTextIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { EyeIcon, EyeOffIcon, ImageIcon, MessageSquareTextIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { ReviewLightbox, type ReviewLightboxItem } from "@/components/review/review-lightbox";
@@ -23,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { internalImageKey } from "@/lib/internal-media-url";
@@ -395,7 +389,7 @@ export function ViewerFeedbackInbox({
                           variant="outline"
                         >
                           {previewLoadingMediaId === mediaId ? (
-                            <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                            <Spinner className="animate-spin" data-icon="inline-start" />
                           ) : (
                             <ImageIcon data-icon="inline-start" />
                           )}
@@ -415,7 +409,7 @@ export function ViewerFeedbackInbox({
                             variant={mediaVisible ? "destructive" : "outline"}
                           >
                             {changing ? (
-                              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                              <Spinner className="animate-spin" data-icon="inline-start" />
                             ) : mediaHidden ? (
                               <EyeIcon data-icon="inline-start" />
                             ) : (
@@ -491,7 +485,7 @@ export function ViewerFeedbackInbox({
               variant="destructive"
             >
               {deletingFeedbackId !== null ? (
-                <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                <Spinner className="animate-spin" data-icon="inline-start" />
               ) : (
                 <Trash2Icon data-icon="inline-start" />
               )}

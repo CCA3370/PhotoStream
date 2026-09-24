@@ -4,7 +4,6 @@ import type { UserRole } from "@photostream/contracts";
 import {
   ImagesIcon,
   LayoutDashboardIcon,
-  LoaderCircleIcon,
   LogOutIcon,
   MessageSquareTextIcon,
   ScrollTextIcon,
@@ -35,6 +34,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
 
 const navigation = [
@@ -199,7 +199,7 @@ export function StudioShell({
                   variant="ghost"
                 >
                   {loggingOut ? (
-                    <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" />
+                    <Spinner aria-hidden="true" className="size-4 animate-spin" />
                   ) : (
                     <LogOutIcon aria-hidden="true" className="size-4" />
                   )}

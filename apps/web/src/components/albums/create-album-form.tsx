@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ArrowRightIcon,
-  CheckIcon,
-  CopyIcon,
-  KeyRoundIcon,
-  LoaderCircleIcon,
-  PlusIcon,
-} from "lucide-react";
+import { ArrowRightIcon, CheckIcon, CopyIcon, KeyRoundIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -24,6 +17,7 @@ import {
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { clientMutation } from "@/lib/client-api";
 
@@ -114,7 +108,7 @@ export function CreateAlbumForm() {
               <DialogFooter>
                 <Button disabled={pending} type="submit">
                   {submitting ? (
-                    <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                    <Spinner className="animate-spin" data-icon="inline-start" />
                   ) : null}
                   {submitting ? "正在创建…" : "创建活动"}
                 </Button>

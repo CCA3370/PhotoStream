@@ -1,12 +1,13 @@
 "use client";
 
-import { LoaderCircleIcon, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
 
 export function CategoryForm({ albumId }: Readonly<{ albumId: string }>) {
@@ -50,11 +51,7 @@ export function CategoryForm({ albumId }: Readonly<{ albumId: string }>) {
         />
         <Button disabled={pending} size="sm" type="submit" variant="outline">
           {pending ? (
-            <LoaderCircleIcon
-              aria-hidden="true"
-              className="animate-spin"
-              data-icon="inline-start"
-            />
+            <Spinner aria-hidden="true" className="animate-spin" data-icon="inline-start" />
           ) : (
             <PlusIcon aria-hidden="true" data-icon="inline-start" />
           )}

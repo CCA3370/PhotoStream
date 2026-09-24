@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, CircleHelpIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   viewerLightboxOnboardingStorageKey,
+  viewerOnboardingReplayEvent,
   viewerOnboardingStorageKey,
   viewerServiceNoticeDismissedEvent,
   viewerServiceNoticeStorageKey,
@@ -76,58 +77,28 @@ function elementVisible(element: HTMLElement): boolean {
 }
 
 function lightboxOpen(): boolean {
-  return document.querySelector<HTMLElement>('[aria-label="照片画布"]') !== null;
+  return (
+    document.querySelector<HTMLElement>('[data-viewer-onboarding-target="lightbox-canvas"]') !==
+    null
+  );
 }
 
 function lightboxActionButtons(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>("button")).filter((button) => {
-    if (!elementVisible(button)) return false;
-    const label = button.getAttribute("aria-label") ?? "";
-    const text = button.textContent ?? "";
-    return (
-      label === "点赞" ||
-      label === "取消点赞" ||
-      label.includes("分享") ||
-      label.includes("下载") ||
-      text.includes("分享") ||
-      text.includes("下载")
-    );
-  });
+  return Array.from(
+    container.querySelectorAll<HTMLElement>("[data-viewer-onboarding-action]"),
+  ).filter(elementVisible);
 }
 
 function resolveTarget(kind: TargetKind): HTMLElement | null {
-  if (kind === "filters") {
-    return document.querySelector<HTMLElement>('nav[aria-label="相册筛选"]');
-  }
-
-  if (kind === "search") {
-    const buttons = Array.from(
-      document.querySelectorAll<HTMLButtonElement>("#gallery-main button"),
-    );
-    return (
-      buttons.find((button) => (button.textContent ?? "").includes("找照片")) ??
-      buttons.find((button) => button.querySelector("svg.lucide-search") !== null) ??
-      null
-    );
-  }
-
-  if (kind === "help") {
-    return document.querySelector<HTMLElement>("[data-viewer-help-trigger]");
-  }
-
   if (kind === "lightbox-navigation") {
-    const next = document.querySelector<HTMLElement>('button[aria-label="下一张照片"]');
+    const next = document.querySelector<HTMLElement>(
+      '[data-viewer-onboarding-target="lightbox-navigation"]',
+    );
     if (next !== null && elementVisible(next)) return next;
-    return document.querySelector<HTMLElement>('[aria-label="照片画布"]');
+    return document.querySelector<HTMLElement>('[data-viewer-onboarding-target="lightbox-canvas"]');
   }
 
-  const controls = Array.from(document.querySelectorAll<HTMLElement>("[data-lightbox-controls]"));
-  const visibleControls = controls.filter(elementVisible);
-  return (
-    visibleControls.find((control) => lightboxActionButtons(control).length > 0) ??
-    visibleControls.at(-1) ??
-    null
-  );
+  return document.querySelector<HTMLElement>(`[data-viewer-onboarding-target="${kind}"]`);
 }
 
 function unionBounds(elements: readonly HTMLElement[]): DOMRect | null {
@@ -146,7 +117,10 @@ function targetBounds(kind: TargetKind, target: HTMLElement): DOMRect {
     if (actionBounds !== null) return actionBounds;
   }
 
-  if (kind === "lightbox-navigation" && target.matches('[aria-label="照片画布"]')) {
+  if (
+    kind === "lightbox-navigation" &&
+    target.matches('[data-viewer-onboarding-target="lightbox-canvas"]')
+  ) {
     const bounds = target.getBoundingClientRect();
     const width = Math.min(bounds.width * 0.7, 420);
     const height = Math.min(bounds.height * 0.36, 280);
@@ -164,19 +138,13 @@ function targetBounds(kind: TargetKind, target: HTMLElement): DOMRect {
 function readLightboxActions(): string[] {
   const toolbar = resolveTarget("lightbox-toolbar");
   if (toolbar === null) return [];
+  const actionKinds = new Set(
+    lightboxActionButtons(toolbar).map((button) => button.dataset.viewerOnboardingAction),
+  );
   const actions: string[] = [];
-  const buttons = lightboxActionButtons(toolbar);
-  if (
-    buttons.some((button) => {
-      const label = button.getAttribute("aria-label");
-      return label === "点赞" || label === "取消点赞";
-    })
-  ) {
-    actions.push("点赞");
-  }
-  const text = buttons.map((button) => button.textContent ?? "").join(" ");
-  if (text.includes("分享")) actions.push("分享");
-  if (text.includes("下载")) actions.push("下载");
+  if (actionKinds.has("like")) actions.push("点赞");
+  if (actionKinds.has("share")) actions.push("分享");
+  if (actionKinds.has("download")) actions.push("下载");
   return actions;
 }
 
@@ -606,6 +574,11 @@ export function ViewerOnboarding({
     setFlow({ kind: "main", step: -1 });
   }, []);
 
+  useEffect(() => {
+    window.addEventListener(viewerOnboardingReplayEvent, replayMain);
+    return () => window.removeEventListener(viewerOnboardingReplayEvent, replayMain);
+  }, [replayMain]);
+
   const currentMainStep =
     flow?.kind === "main" && flow.step >= 0 ? (mainSteps[flow.step] ?? null) : null;
   const welcome = flow?.kind === "main" && flow.step < 0;
@@ -614,7 +587,7 @@ export function ViewerOnboarding({
 
   const overlay =
     !mounted || flow === null ? null : (
-      <div className="fixed inset-0 z-[80] overflow-hidden">
+      <div className="layer-onboarding fixed inset-0 overflow-hidden">
         {spotlightRect === null ? (
           <div className="pointer-events-none absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
         ) : (
@@ -647,7 +620,7 @@ export function ViewerOnboarding({
         {pointerPath === null ? null : (
           <svg
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[81] size-full"
+            className="layer-onboarding-arrow pointer-events-none absolute inset-0 size-full"
             preserveAspectRatio="none"
           >
             <defs>
@@ -693,7 +666,7 @@ export function ViewerOnboarding({
           aria-describedby="viewer-onboarding-description"
           aria-labelledby="viewer-onboarding-title"
           aria-modal="true"
-          className="public-theme fixed z-[82] rounded-2xl border border-border/80 bg-background/98 p-4 text-foreground shadow-2xl shadow-black/35 backdrop-blur-xl outline-none sm:p-5"
+          className="public-theme layer-onboarding-card fixed rounded-2xl border border-border/80 bg-background/98 p-4 text-foreground shadow-2xl shadow-black/35 backdrop-blur-xl outline-none sm:p-5"
           ref={cardRef}
           role="dialog"
           style={cardPosition}
@@ -723,7 +696,7 @@ export function ViewerOnboarding({
 
             <Button
               aria-label="跳过使用引导"
-              className="-mt-1 -mr-1 shrink-0"
+              className="-mt-1 -mr-1 size-11 shrink-0 sm:size-7"
               onClick={flow.kind === "main" ? finishMain : finishLightbox}
               size="icon-sm"
               type="button"
@@ -752,10 +725,15 @@ export function ViewerOnboarding({
                     : "这里可以对当前照片进行点赞、分享或下载等操作。"
                   : "手机上左右滑动即可切换照片；电脑上也可以使用左右方向键或两侧按钮快速切换。"))}
           </p>
+          {lightboxToolbar ? (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              网页中的图片清晰度受到限制，如需查看原图，请下载所需图片。
+            </p>
+          ) : null}
 
           <div className="mt-4 flex items-center justify-between gap-3">
             <Button
-              className={welcome ? "invisible" : undefined}
+              className={welcome ? "min-h-11 invisible sm:min-h-0" : "min-h-11 sm:min-h-0"}
               disabled={welcome}
               onClick={previous}
               size="sm"
@@ -768,6 +746,7 @@ export function ViewerOnboarding({
 
             <div className="flex items-center gap-2">
               <Button
+                className="min-h-11 sm:min-h-0"
                 onClick={flow.kind === "main" ? finishMain : finishLightbox}
                 size="sm"
                 type="button"
@@ -775,7 +754,7 @@ export function ViewerOnboarding({
               >
                 跳过
               </Button>
-              <Button onClick={next} size="sm" type="button">
+              <Button className="min-h-11 sm:min-h-0" onClick={next} size="sm" type="button">
                 {welcome
                   ? "开始了解"
                   : flow.kind === "main" && flow.step >= mainSteps.length - 1
@@ -793,22 +772,5 @@ export function ViewerOnboarding({
       </div>
     );
 
-  return (
-    <>
-      {mounted && flow === null && hasSeenMain ? (
-        <Button
-          aria-label="重新查看使用引导"
-          className="fixed right-2.5 bottom-[calc(2.5rem+env(safe-area-inset-bottom))] z-30 h-8 rounded-full bg-background/82 px-2.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground sm:right-4 sm:px-3"
-          onClick={replayMain}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <CircleHelpIcon className="size-3.5" />
-          <span className="hidden sm:inline">使用帮助</span>
-        </Button>
-      ) : null}
-      {overlay === null ? null : createPortal(overlay, document.body)}
-    </>
-  );
+  return overlay === null ? null : createPortal(overlay, document.body);
 }

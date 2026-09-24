@@ -5,7 +5,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   KeyRoundIcon,
-  LoaderCircleIcon,
   LockKeyholeIcon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -20,8 +19,8 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 import { responseErrorMessage } from "@/lib/user-facing-error";
-
 export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +69,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           </p>
         </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 flex flex-col gap-4">
           <Field data-invalid={error === null ? undefined : true}>
             <FieldLabel className="text-xs font-medium text-foreground/85" htmlFor="album-password">
               访问口令
@@ -128,11 +127,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           >
             {pending ? (
               <>
-                <LoaderCircleIcon
-                  aria-hidden="true"
-                  className="animate-spin"
-                  data-icon="inline-start"
-                />
+                <Spinner aria-hidden="true" className="animate-spin" data-icon="inline-start" />
                 正在验证…
               </>
             ) : (

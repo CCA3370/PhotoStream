@@ -150,7 +150,7 @@ export default function HomePage() {
         <section id="about">
           <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[0.8fr_2.2fr] lg:gap-16 lg:px-8 lg:py-16">
             <h2 className="text-2xl font-semibold tracking-tight">关于平台</h2>
-            <div className="max-w-3xl space-y-4 text-sm leading-7 text-muted-foreground sm:text-[15px]">
+            <div className="flex max-w-3xl flex-col gap-4 text-sm leading-7 text-muted-foreground sm:text-[15px]">
               <p>
                 中学部影像直播用于北航实验学校中学部暨北航实验学校分校校内活动照片的发布与受控观看，由活动组织人员提供具体访问入口。
               </p>

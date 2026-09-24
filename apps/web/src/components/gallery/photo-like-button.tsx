@@ -136,16 +136,16 @@ export function PhotoLikeButton({
         aria-pressed={liked}
         className={cn(
           mode === "thumbnail"
-            ? "relative top-0.5 h-7 touch-manipulation gap-1 rounded-full border-0 bg-transparent px-1.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white"
-            : "h-11 touch-manipulation gap-1.5 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md hover:border-white/20 hover:bg-white/[0.13] hover:text-white lg:h-12 lg:gap-2 lg:px-4 lg:text-sm",
-          "active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] transition-[transform,background-color,border-color] duration-150 motion-reduce:transform-none motion-reduce:transition-none",
+            ? "relative top-0.5 h-7 touch-manipulation gap-1 rounded-full border-0 bg-transparent px-1.5 text-white shadow-none drop-shadow-sm hover:bg-transparent hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] transition-[transform,background-color,border-color] duration-150 motion-reduce:transform-none motion-reduce:transition-none"
+            : "h-11 touch-manipulation gap-1.5 rounded-xl px-3 lg:h-12 lg:gap-2 lg:px-4 lg:text-sm",
           className,
         )}
+        data-viewer-onboarding-action={mode === "toolbar" ? "like" : undefined}
         disabled={pending || state === null}
         onClick={() => void toggle()}
         title={liked ? "取消点赞" : "点赞"}
         type="button"
-        variant="outline"
+        variant={mode === "toolbar" ? "lightbox" : "outline"}
       >
         {heart}
         <span

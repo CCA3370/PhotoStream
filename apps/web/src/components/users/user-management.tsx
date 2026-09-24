@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminUserView, UserRole } from "@photostream/contracts";
-import { CheckIcon, CopyIcon, KeyRoundIcon, LoaderCircleIcon, UserPlusIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, KeyRoundIcon, UserPlusIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -241,7 +242,7 @@ export function UserManagement({
               </Field>
               <Button className="md:mb-0" disabled={creating} type="submit">
                 {creating ? (
-                  <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+                  <Spinner className="animate-spin" data-icon="inline-start" />
                 ) : (
                   <UserPlusIcon data-icon="inline-start" />
                 )}

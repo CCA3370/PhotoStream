@@ -1,11 +1,13 @@
 "use client";
 
-import { LinkIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { LinkIcon, Share2Icon } from "lucide-react";
+import { type ComponentProps, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +17,6 @@ interface ShareResponse {
 
 interface ShareView {
   readonly title: string;
-}
-
-function isWeChatBrowser(): boolean {
-  return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
 }
 
 async function copyShareLink(value: string): Promise<void> {
@@ -56,19 +54,17 @@ export function PhotoShareButton({
   mediaId,
   shareId,
   slug,
+  variant = "outline",
 }: Readonly<{
   className?: string;
   mediaId: string;
   shareId?: string;
   slug: string;
+  variant?: ComponentProps<typeof Button>["variant"];
 }>) {
   const [pending, setPending] = useState(false);
   const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
-  const [weChat, setWeChat] = useState(false);
-
-  useEffect(() => {
-    setWeChat(isWeChatBrowser());
-  }, []);
+  const weChat = useWeChatBrowser();
 
   async function sharePhoto(): Promise<void> {
     if (pending) return;
@@ -87,7 +83,7 @@ export function PhotoShareButton({
         window.location.origin,
       ).toString();
 
-      if (isWeChatBrowser()) {
+      if (weChat) {
         await copyShareLink(shareUrl);
         setCopyNoticeOpen(true);
         return;
@@ -99,7 +95,7 @@ export function PhotoShareButton({
             `/api/v1/public/shares/${encodeURIComponent(resolvedShareId)}`,
           );
           await navigator.share({
-            title: `${share.title} · PhotoStream`,
+            title: `${share.title} · 影像直播`,
             text: `查看「${share.title}」活动中的这张照片`,
             url: shareUrl,
           });
@@ -131,46 +127,17 @@ export function PhotoShareButton({
 
   return (
     <>
-      <style>{`
-        button[data-photo-share-action] + button:has(svg.lucide-download) {
-          font-size: 0 !important;
-        }
-
-        button[data-photo-share-action] + button:has(svg.lucide-download)::after {
-          content: "保存至相册";
-          font-size: 0.875rem;
-          line-height: 1.25rem;
-          white-space: nowrap;
-        }
-
-        @media (max-width: 639px) {
-          button[data-photo-share-action] {
-            flex: 0.85 1 0% !important;
-            padding-inline: 0.625rem !important;
-          }
-
-          button[data-photo-share-action] + button:has(svg.lucide-download) {
-            flex: 1.15 1 0% !important;
-            padding-inline: 0.75rem !important;
-          }
-
-          button[data-photo-share-action] + button:has(svg.lucide-download)::after {
-            font-size: 0.8125rem;
-            line-height: 1rem;
-          }
-        }
-      `}</style>
-
       <Button
         className={cn(className)}
         data-photo-share-action
+        data-viewer-onboarding-action="share"
         disabled={pending}
         onClick={() => void sharePhoto()}
         type="button"
-        variant="outline"
+        variant={variant}
       >
         {pending ? (
-          <LoaderCircleIcon
+          <Spinner
             aria-hidden="true"
             className="animate-spin motion-reduce:animate-none"
             data-icon="inline-start"
@@ -183,35 +150,23 @@ export function PhotoShareButton({
         {weChat ? "复制链接" : "分享"}
       </Button>
 
-      {copyNoticeOpen && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              aria-describedby="wechat-copy-notice-description"
-              aria-labelledby="wechat-copy-notice-title"
-              aria-modal="true"
-              className="dark public-theme fixed inset-0 z-[400] grid place-items-center bg-black/45 px-5"
-              role="alertdialog"
-            >
-              <div className="w-full max-w-[20rem] rounded-2xl border border-white/10 bg-background p-5 text-foreground shadow-2xl shadow-black/35">
-                <p className="text-base font-semibold" id="wechat-copy-notice-title">
-                  链接已复制
-                </p>
-                <p
-                  className="mt-2 text-sm leading-6 text-muted-foreground"
-                  id="wechat-copy-notice-description"
-                >
-                  分享链接已复制，可直接粘贴发送给其他人。
-                </p>
-                <div className="mt-5 flex justify-end">
-                  <Button autoFocus onClick={() => setCopyNoticeOpen(false)} type="button">
-                    OK
-                  </Button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      <Dialog open={copyNoticeOpen} onOpenChange={setCopyNoticeOpen}>
+        <DialogContent
+          className="dark public-theme max-w-[20rem] rounded-2xl border border-white/10 bg-background p-5 text-foreground ring-0 shadow-2xl shadow-black/35"
+          overlayClassName="bg-black/45"
+          showCloseButton={false}
+        >
+          <DialogTitle className="text-base font-semibold">链接已复制</DialogTitle>
+          <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+            分享链接已复制，可直接粘贴发送给其他人。
+          </DialogDescription>
+          <div className="mt-1 flex justify-end">
+            <Button onClick={() => setCopyNoticeOpen(false)} type="button">
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

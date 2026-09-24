@@ -25,73 +25,11 @@ export function PublicGalleryShell({
 
   return (
     <Toaster>
-      <style>{`
-        html,
-        body {
-          background-color: oklch(1 0 0);
-          color-scheme: light;
-        }
-
-        @media (prefers-color-scheme: dark) {
-          html,
-          body {
-            background-color: oklch(0.208 0.042 265.755);
-            color-scheme: dark;
-          }
-        }
-
-        button[aria-label="重新查看使用引导"] {
-          display: none;
-        }
-
-        body:has([aria-label="照片画布"])
-          #viewer-onboarding-description:has(+ div svg[data-icon="inline-end"])::after {
-          display: block;
-          margin-top: 0.5rem;
-          content: "网页中的图片清晰度受到限制，如需查看原图，请下载所需图片。";
-        }
-
-        @media (min-width: 1024px) {
-          [data-lightbox-controls] button {
-            min-height: 3rem;
-          }
-
-          [data-lightbox-controls] button[aria-label] {
-            min-width: 3rem;
-          }
-
-          [data-lightbox-controls] button svg {
-            width: 1.125rem;
-            height: 1.125rem;
-          }
-
-          button[aria-label="上一张照片"],
-          button[aria-label="下一张照片"] {
-            width: 3.5rem !important;
-            height: 3.5rem !important;
-            min-width: 3.5rem !important;
-            min-height: 3.5rem !important;
-          }
-
-          button[aria-label="上一张照片"] svg,
-          button[aria-label="下一张照片"] svg {
-            width: 1.5rem;
-            height: 1.5rem;
-          }
-
-          button[aria-label="上一张照片"]:active,
-          button[aria-label="下一张照片"]:active {
-            translate: 0 -50% !important;
-            --tw-translate-y: -50% !important;
-          }
-        }
-      `}</style>
-
       <div
         className={`public-theme min-h-dvh bg-background pb-[calc(2rem+env(safe-area-inset-bottom))] text-foreground ${headerHeightClass}`}
       >
         <a
-          className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70]"
+          className="sr-only layer-skip-link rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
           href="#gallery-main"
         >
           跳到主要内容

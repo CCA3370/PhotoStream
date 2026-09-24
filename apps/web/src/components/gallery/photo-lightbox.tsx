@@ -5,7 +5,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
-  LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   XIcon,
@@ -28,8 +27,10 @@ import { PhotoReportButton } from "@/components/gallery/photo-report-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
+import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { clientGet } from "@/lib/client-api";
 import {
   isWarmDerivedImageDecoded,
@@ -41,8 +42,7 @@ import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { readCachedOriginalImage, writeCachedOriginalImage } from "@/lib/original-image-cache";
 import { cn } from "@/lib/utils";
 
-const toolbarButtonClass =
-  "h-11 rounded-xl border-white/10 bg-white/[0.07] px-3 text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] sm:h-9 motion-reduce:transform-none motion-reduce:transition-none";
+const toolbarButtonClass = "h-11 rounded-xl px-3 sm:h-9";
 
 async function decodeImageUrl(url: string): Promise<void> {
   if (typeof window === "undefined") return;
@@ -93,6 +93,7 @@ export function PhotoLightbox({
   onLikeChange: (state: PhotoLikeState) => void;
   onSelect: (mediaId: string) => void;
 }>) {
+  const weChat = useWeChatBrowser();
   const selectedIndex =
     selectedId === null ? -1 : items.findIndex((item) => item.id === selectedId);
   const selected = selectedIndex < 0 ? null : (items[selectedIndex] ?? null);
@@ -509,7 +510,9 @@ export function PhotoLightbox({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="dark public-theme inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-200 data-open:zoom-in-100 data-closed:zoom-out-100 data-closed:duration-150 sm:max-w-none motion-reduce:duration-0"
+        className="dark public-theme layer-gallery-lightbox inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-200 data-open:zoom-in-100 data-closed:zoom-out-100 data-closed:duration-150 sm:max-w-none motion-reduce:duration-0"
+        overlayClassName="layer-gallery-lightbox"
+        padding="none"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">照片查看器</DialogTitle>
@@ -531,6 +534,7 @@ export function PhotoLightbox({
           )}
           <div
             aria-label="照片画布"
+            data-viewer-onboarding-target="lightbox-canvas"
             className={cn(
               "absolute inset-0 touch-none select-none",
               zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
@@ -547,7 +551,7 @@ export function PhotoLightbox({
             {!loaded && activePreparedImage === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
-                  <LoaderCircleIcon
+                  <Spinner
                     aria-hidden="true"
                     className="size-4 animate-spin motion-reduce:animate-none"
                   />
@@ -722,10 +726,11 @@ export function PhotoLightbox({
               <Button
                 aria-label="上一张照片"
                 className={cn(
-                  "absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none",
+                  "absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:-translate-y-1/2 active:scale-[0.94] md:flex lg:size-14 motion-reduce:transition-none",
                   controlsVisible ? "opacity-100" : "pointer-events-none -translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
+                data-lightbox-navigation="previous"
                 inert={!controlsVisible}
                 onClick={() => animateOffset(-1)}
                 size="icon"
@@ -733,15 +738,17 @@ export function PhotoLightbox({
                 type="button"
                 variant="outline"
               >
-                <ChevronLeftIcon className="size-5" />
+                <ChevronLeftIcon className="size-5 lg:size-6" />
               </Button>
               <Button
                 aria-label="下一张照片"
                 className={cn(
-                  "absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none",
+                  "absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:-translate-y-1/2 active:scale-[0.94] md:flex lg:size-14 motion-reduce:transition-none",
                   controlsVisible ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
+                data-lightbox-navigation="next"
+                data-viewer-onboarding-target="lightbox-navigation"
                 inert={!controlsVisible}
                 onClick={() => animateOffset(1)}
                 size="icon"
@@ -749,7 +756,7 @@ export function PhotoLightbox({
                 type="button"
                 variant="outline"
               >
-                <ChevronRightIcon className="size-5" />
+                <ChevronRightIcon className="size-5 lg:size-6" />
               </Button>
             </>
           ) : null}
@@ -763,6 +770,7 @@ export function PhotoLightbox({
                 : "pointer-events-none translate-y-3 opacity-0",
             )}
             data-lightbox-controls
+            data-viewer-onboarding-target="lightbox-toolbar"
             inert={!controlsVisible}
           >
             <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
@@ -800,18 +808,20 @@ export function PhotoLightbox({
                         mediaId={selected.id}
                         {...(shareId === undefined ? {} : { shareId })}
                         slug={slug}
+                        variant="lightbox"
                       />
                     )}
 
                     {canDownload ? (
                       <Button
                         className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
+                        data-viewer-onboarding-action="download"
                         onClick={() => setDownloadMenuOpen(true)}
                         type="button"
-                        variant="outline"
+                        variant="lightbox"
                       >
                         <DownloadIcon data-icon="inline-start" />
-                        下载
+                        {weChat ? "保存至相册" : "下载"}
                       </Button>
                     ) : null}
                   </div>
@@ -844,6 +854,7 @@ export function PhotoLightbox({
                           showBytes={false}
                           showIcon={false}
                           slug={slug}
+                          variant="lightbox"
                         />
                       ) : null}
                       {canDownloadOriginal &&
@@ -863,6 +874,7 @@ export function PhotoLightbox({
                           showBytes={false}
                           showIcon={false}
                           slug={slug}
+                          variant="lightbox"
                         />
                       ) : null}
                       <Button

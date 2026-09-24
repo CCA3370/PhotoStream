@@ -8,7 +8,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   ImageIcon,
-  LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   PanelRightCloseIcon,
@@ -24,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import {
   BibReviewDialog,
   BibReviewEditor,
@@ -42,14 +42,14 @@ import {
 } from "@/components/review/review-inspector";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import { resolveMediaEditSource } from "@/lib/photo-edit/source-resolver";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
 const maxZoom = 5;
-const toolbarButtonClass =
-  "rounded-lg border-white/10 bg-white/[0.06] text-white shadow-none backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12] hover:text-white active:not-aria-[haspopup]:translate-y-0 disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35";
+const toolbarButtonClass = "rounded-lg";
 
 type Point = { x: number; y: number };
 type Gesture =
@@ -539,6 +539,7 @@ export function ReviewLightbox({
       <Dialog open onOpenChange={(open) => !open && onClose()}>
         <DialogContent
           className="inset-0 left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
+          padding="none"
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
@@ -652,13 +653,9 @@ export function ReviewLightbox({
                       size="sm"
                       title={viewingOriginal ? "返回 1920 预览" : "查看上传原图"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
-                      {originalLoading ? (
-                        <LoaderCircleIcon className="animate-spin" />
-                      ) : (
-                        <ImageIcon />
-                      )}
+                      {originalLoading ? <Spinner className="animate-spin" /> : <ImageIcon />}
                       <span>{viewingOriginal ? "返回 1920" : "查看原图"}</span>
                     </Button>
                   ) : null}
@@ -784,10 +781,10 @@ export function ReviewLightbox({
                       size="icon-sm"
                       title={selected.featured ? "取消精选 (Enter)" : "精选 (Enter)"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {selected.pendingAction === "featured" ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <Spinner className="animate-spin" />
                       ) : (
                         <StarIcon className={cn(selected.featured && "fill-current")} />
                       )}
@@ -800,6 +797,7 @@ export function ReviewLightbox({
                         published &&
                           "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
                       )}
+                      data-review-publication-toggle
                       disabled={busy || !canToggleVisibility}
                       onClick={(event) => {
                         event.currentTarget.blur();
@@ -818,16 +816,16 @@ export function ReviewLightbox({
                       }
                       title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "等待上传完成"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {selected.pendingAction === "state" ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <Spinner className="animate-spin" />
                       ) : published ? (
                         <EyeIcon />
                       ) : hidden ? (
                         <EyeOffIcon />
                       ) : (
-                        <LoaderCircleIcon className="opacity-60" />
+                        <Spinner className="opacity-60" />
                       )}
                     </Button>
                     <Button
@@ -845,7 +843,7 @@ export function ReviewLightbox({
                       size="icon-sm"
                       title={inspectorOpen ? "关闭照片属性" : "打开照片属性"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {inspectorOpen ? <PanelRightCloseIcon /> : <PanelRightOpenIcon />}
                     </Button>
@@ -866,7 +864,7 @@ export function ReviewLightbox({
                       variant="outline"
                     >
                       {selected.pendingAction === "delete" ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <Spinner className="animate-spin" />
                       ) : (
                         <Trash2Icon />
                       )}

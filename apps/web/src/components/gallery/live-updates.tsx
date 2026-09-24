@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
+import { Button } from "@/components/ui/button";
 import { clientGet } from "@/lib/client-api";
 
 interface PublicChange {
@@ -341,13 +342,14 @@ export function LiveUpdates({
       className="pointer-events-none fixed inset-x-0 top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] z-40 flex flex-col items-center gap-2 px-3"
     >
       {pendingMediaCount > 0 ? (
-        <button
-          className="pointer-events-auto rounded-full border border-blue-600 bg-blue-600 px-3.5 py-2 text-sm font-medium text-white shadow-lg shadow-black/10 backdrop-blur-md transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 motion-reduce:transition-none"
+        <Button
+          className="pointer-events-auto h-11 rounded-full border-blue-600 bg-blue-600 px-3.5 text-sm text-white shadow-lg shadow-black/10 backdrop-blur-md hover:border-blue-700 hover:bg-blue-700 hover:text-white focus-visible:border-blue-500 focus-visible:ring-blue-500/50 active:not-aria-[haspopup]:translate-y-0 motion-reduce:transition-none sm:h-9"
           onClick={() => revealPendingMedia(true)}
           type="button"
+          variant="outline"
         >
           有{pendingMediaCount}张新照片，点击查看
-        </button>
+        </Button>
       ) : null}
       {connectionInterrupted ? (
         <div className="rounded-full border border-border/70 bg-background/88 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-md">

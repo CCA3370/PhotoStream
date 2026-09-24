@@ -1,7 +1,7 @@
 "use client";
 
 import type { FaceConfigView, FaceOperationDiagnostic } from "@photostream/contracts";
-import { LoaderCircleIcon, RefreshCcwIcon, Trash2Icon } from "lucide-react";
+import { RefreshCcwIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
 
@@ -188,9 +189,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {pending ? (
-                <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
-              ) : null}
+              {pending ? <Spinner className="size-4 animate-spin text-muted-foreground" /> : null}
               <Switch
                 aria-label="人脸找图"
                 checked={config.enabled}

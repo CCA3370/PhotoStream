@@ -1,6 +1,6 @@
 "use client";
 
-import { FlagIcon, LoaderCircleIcon } from "lucide-react";
+import { FlagIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
@@ -100,9 +101,9 @@ export function PhotoReportButton({
         <span>投诉</span>
       </DialogTrigger>
       <DialogContent
-        className="public-theme dark z-[70] max-w-md bg-background text-foreground"
+        className="public-theme dark layer-nested-dialog max-w-md bg-background text-foreground"
         forceOverlay
-        overlayClassName="z-[60] bg-black/55"
+        overlayClassName="layer-nested-dialog-overlay bg-black/55"
       >
         <DialogHeader>
           <DialogTitle>投诉这张图片</DialogTitle>
@@ -130,13 +131,13 @@ export function PhotoReportButton({
               }}
               value={reason}
             >
-              <SelectTrigger className="w-full" id="photo-report-reason">
+              <SelectTrigger className="h-11 w-full sm:h-8" id="photo-report-reason">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent
                 align="start"
                 className="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)]"
-                positionerClassName="z-[80]"
+                positionerClassName="layer-nested-popover"
               >
                 <SelectGroup>
                   {reportReasons.map((item) => (
@@ -182,9 +183,7 @@ export function PhotoReportButton({
             onClick={() => void submit()}
             type="button"
           >
-            {submitting ? (
-              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
-            ) : null}
+            {submitting ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
             提交投诉
           </Button>
         </DialogFooter>

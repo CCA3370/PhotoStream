@@ -1,7 +1,7 @@
 "use client";
 
 import type { AuditLogList, AuditLogView } from "@photostream/contracts";
-import { LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
+import { SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -205,7 +206,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
           type="button"
           variant="outline"
         >
-          {pending ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : null}
+          {pending ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
           {pending ? "加载中…" : "加载更早记录"}
         </Button>
       )}

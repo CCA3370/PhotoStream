@@ -41,18 +41,19 @@ function DialogContent({
   children,
   forceOverlay = false,
   overlayClassName,
+  padding = "default",
+  presentation = "center",
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
   forceOverlay?: boolean;
   overlayClassName?: string;
+  padding?: "default" | "none";
+  presentation?: "center" | "mobile-bottom-sheet";
   showCloseButton?: boolean;
 }) {
-  const isMobileBottomSheet =
-    typeof className === "string" &&
-    className.includes("max-sm:top-auto") &&
-    className.includes("max-sm:bottom-0");
-  const isPaddingless = typeof className === "string" && className.includes("p-0");
+  const isMobileBottomSheet = presentation === "mobile-bottom-sheet";
+  const isPaddingless = padding === "none";
 
   return (
     <DialogPortal>

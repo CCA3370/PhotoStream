@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  BookOpenCheckIcon,
-  CircleHelpIcon,
-  LoaderCircleIcon,
-  MessageSquareTextIcon,
-} from "lucide-react";
+import { BookOpenCheckIcon, CircleHelpIcon, MessageSquareTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,9 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
+import { viewerOnboardingReplayEvent } from "@/lib/viewer-onboarding";
 
 const feedbackKinds = [
   { value: "problem", label: "遇到问题" },
@@ -59,7 +56,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
 
   function replayGuide(): void {
     setMenuOpen(false);
-    document.querySelector<HTMLButtonElement>('button[aria-label="重新查看使用引导"]')?.click();
+    window.dispatchEvent(new Event(viewerOnboardingReplayEvent));
   }
 
   async function submitFeedback(): Promise<void> {
@@ -152,8 +149,9 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
         <Button
           aria-expanded={menuOpen}
           aria-label="帮助与反馈"
-          className="size-8 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground"
+          className="size-11 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground sm:size-8"
           data-viewer-help-trigger
+          data-viewer-onboarding-target="help"
           onClick={() => setMenuOpen((open) => !open)}
           size="icon-sm"
           type="button"
@@ -178,6 +176,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
               {feedbackKinds.map((item) => (
                 <Button
                   aria-pressed={kind === item.value}
+                  className="min-h-11 sm:min-h-0"
                   key={item.value}
                   onClick={() => setKind(item.value)}
                   size="sm"
@@ -219,7 +218,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
               onClick={() => void submitFeedback()}
               type="button"
             >
-              {submitting ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
+              {submitting ? <Spinner className="size-4 animate-spin" /> : null}
               {submitting ? "正在发送" : "发送反馈"}
             </Button>
           </DialogFooter>

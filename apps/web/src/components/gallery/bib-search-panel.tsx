@@ -506,18 +506,28 @@ export function BibSearchPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm">
+      <div
+        className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm"
+        data-gallery-search-toolbar
+      >
         <button
-          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
+          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg lg:flex-none px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
+          data-viewer-onboarding-target="search"
           onClick={openSearchDialog}
           type="button"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
+          <span
+            className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
+            data-gallery-search-icon
+          >
             <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{resultLabel}</span>
-            <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+            <span
+              className="block truncate text-[11px] leading-4 text-muted-foreground"
+              data-gallery-search-summary
+            >
               {resultSummary}
             </span>
           </span>
@@ -526,6 +536,7 @@ export function BibSearchPanel({
           <Button
             aria-label="清除找照片条件"
             className="shrink-0 rounded-lg animate-in fade-in-0 zoom-in-90 duration-200 motion-reduce:animate-none"
+            data-gallery-search-clear
             onClick={clearResult}
             size="icon-sm"
             type="button"
@@ -575,7 +586,11 @@ export function BibSearchPanel({
       )}
 
       <Dialog open={open} onOpenChange={requestDialogChange}>
-        <DialogContent className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none max-sm:data-open:slide-in-from-bottom-full max-sm:data-open:zoom-in-100 max-sm:data-closed:slide-out-to-bottom-full max-sm:data-closed:zoom-out-100 max-sm:duration-300 sm:max-w-md sm:rounded-3xl motion-reduce:duration-0">
+        <DialogContent
+          className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none max-sm:data-open:slide-in-from-bottom-full max-sm:data-open:zoom-in-100 max-sm:data-closed:slide-out-to-bottom-full max-sm:data-closed:zoom-out-100 max-sm:duration-300 sm:max-w-md sm:rounded-3xl motion-reduce:duration-0"
+          padding="none"
+          presentation="mobile-bottom-sheet"
+        >
           <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20 sm:hidden" />
           <DialogHeader className="shrink-0 px-5 pt-3 pb-2.5 pr-12 sm:pt-5 sm:pb-3">
             <DialogTitle className="text-base">

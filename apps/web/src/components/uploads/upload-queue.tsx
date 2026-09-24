@@ -7,7 +7,6 @@ import {
   CircleXIcon,
   FolderOpenIcon,
   ImagePlusIcon,
-  LoaderCircleIcon,
   Trash2Icon,
 } from "lucide-react";
 import Image from "next/image";
@@ -25,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { clientMutation } from "@/lib/client-api";
 import { resumeLocalBibOcr } from "@/lib/local-bib-ocr";
@@ -602,7 +602,7 @@ export function UploadQueue({
                 >
                   <div className="mt-0.5 text-muted-foreground">
                     {task.status === "processing" ? (
-                      <LoaderCircleIcon className="size-4 animate-spin" />
+                      <Spinner className="size-4 animate-spin" />
                     ) : task.status === "failed" ? (
                       <CircleAlertIcon className="size-4 text-destructive" />
                     ) : task.status === "cancelled" ? (

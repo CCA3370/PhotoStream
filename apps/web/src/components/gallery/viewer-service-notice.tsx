@@ -145,8 +145,8 @@ export function ViewerServiceNotice() {
       }}
     >
       <DialogContent
-        className="public-theme z-[100] max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-md"
-        overlayClassName="z-[90]"
+        className="public-theme layer-service-notice max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-md"
+        overlayClassName="layer-service-notice-overlay"
         showCloseButton={false}
       >
         <DialogHeader>
@@ -161,7 +161,7 @@ export function ViewerServiceNotice() {
         <div className="min-h-0">
           <section
             aria-label="照片使用与版权说明全文"
-            className="max-h-[52dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground outline-none focus:outline-none focus-visible:outline-none"
+            className="flex max-h-[52dvh] flex-col gap-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground outline-none focus:outline-none focus-visible:outline-none"
             onKeyDown={markScrollInteraction}
             onPointerDown={markScrollInteraction}
             onScroll={handleNoticeScroll}
@@ -204,7 +204,7 @@ export function ViewerServiceNotice() {
         </div>
 
         <DialogFooter className="gap-3 sm:flex-col sm:items-stretch">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label
               className="flex cursor-pointer items-start gap-2.5 text-sm leading-5 text-foreground"
               htmlFor="viewer-service-notice-acknowledgement"

@@ -2,11 +2,12 @@
 
 import type { DownloadKind } from "@photostream/contracts";
 import { DownloadIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ComponentProps, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { toast } from "@/components/ui/toast";
+import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { publicMutation } from "@/lib/client-api";
 import { loadDerivedImage } from "@/lib/derived-image-cache";
 import { convertImageToJpeg } from "@/lib/image-jpeg";
@@ -38,10 +39,6 @@ function jpegFilename(filename: string): string {
   return `${base || "photo"}.jpg`;
 }
 
-function isWeChatBrowser(): boolean {
-  return typeof navigator !== "undefined" && /MicroMessenger/i.test(navigator.userAgent);
-}
-
 function triggerDownload(blob: Blob, filename: string): void {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -67,6 +64,7 @@ export function DownloadButton({
   showBytes = true,
   showIcon = true,
   slug,
+  variant = "outline",
 }: Readonly<{
   bytes: number;
   className?: string;
@@ -79,14 +77,11 @@ export function DownloadButton({
   showBytes?: boolean;
   showIcon?: boolean;
   slug: string;
+  variant?: ComponentProps<typeof Button>["variant"];
 }>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [weChat, setWeChat] = useState(false);
-
-  useEffect(() => {
-    setWeChat(isWeChatBrowser());
-  }, []);
+  const weChat = useWeChatBrowser();
 
   async function download(): Promise<void> {
     if (pending) return;
@@ -161,7 +156,7 @@ export function DownloadButton({
         disabled={pending}
         onClick={() => void download()}
         type="button"
-        variant="outline"
+        variant={variant}
       >
         {showIcon ? <DownloadIcon data-icon="inline-start" /> : null}
         {pending ? "正在准备…" : showBytes || weChat ? `${label}（${formatBytes(bytes)}）` : label}
