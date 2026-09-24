@@ -277,7 +277,8 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
                     const { value } = event.currentTarget;
                     setDeleteConfirmation(value);
                   }}
-                  value={deleteConfirmation} />
+                  value={deleteConfirmation}
+                />
               </Field>
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
@@ -310,7 +311,8 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
           setError(null);
           setStatusErrorOpen(false);
         }}
-        title={statusErrorOpen ? "人脸功能错误详情" : "人脸功能操作失败"} />
+        title={statusErrorOpen ? "人脸功能错误详情" : "人脸功能操作失败"}
+      />
     </div>
   );
 }
