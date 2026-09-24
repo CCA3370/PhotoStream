@@ -37,6 +37,7 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { clientGet, publicMutation } from "@/lib/client-api";
 import { preprocessFaceReference } from "@/lib/face-reference";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
 type Stage = "consent" | "choose" | "preparing" | "uploading" | "searching" | "results";
 
