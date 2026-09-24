@@ -729,6 +729,7 @@ export function PhotoLightbox({
                   controlsVisible ? "opacity-100" : "pointer-events-none -translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
+                data-lightbox-navigation="previous"
                 inert={!controlsVisible}
                 onClick={() => animateOffset(-1)}
                 size="icon"
@@ -745,6 +746,7 @@ export function PhotoLightbox({
                   controlsVisible ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
+                data-lightbox-navigation="next"
                 data-viewer-onboarding-target="lightbox-navigation"
                 inert={!controlsVisible}
                 onClick={() => animateOffset(1)}
