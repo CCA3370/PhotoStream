@@ -16,7 +16,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   HashIcon,
-  LoaderCircleIcon,
   PanelRightOpenIcon,
   RefreshCwIcon,
   SquareIcon,
@@ -2482,7 +2481,7 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {bibBlocked ? (
-                        <LoaderCircleIcon className="size-4 animate-spin"  />
+                        <Spinner className="size-4 animate-spin"   />
                       ) : bibConfirmed ? (
                         <BadgeCheckIcon className="size-4" />
                       ) : (
