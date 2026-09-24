@@ -2,11 +2,12 @@
 
 import type { BibMediaState, BibTagView } from "@photostream/contracts";
 import { normalizeBibNumber } from "@photostream/contracts";
-import { BadgeCheckIcon, CheckIcon, HashIcon, LoaderCircleIcon, ScanTextIcon } from "lucide-react";
+import { BadgeCheckIcon, CheckIcon, HashIcon, ScanTextIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -329,7 +330,7 @@ export function BibReviewEditor({
           dark ? "border-white/10 bg-black/35 text-white/65" : "bg-muted/20 text-muted-foreground",
         )}
       >
-        <LoaderCircleIcon className="size-4 animate-spin" />
+        <Spinner className="size-4 animate-spin"  />
         加载号码状态…
       </div>
     );
@@ -461,7 +462,7 @@ export function BibReviewEditor({
             variant={dark ? "outline" : "default"}
           >
             {busy ? (
-              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+              <Spinner className="animate-spin" data-icon="inline-start"  />
             ) : (
               <CheckIcon data-icon="inline-start" />
             )}
