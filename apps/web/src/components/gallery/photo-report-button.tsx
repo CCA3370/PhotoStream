@@ -94,8 +94,7 @@ export function PhotoReportButton({
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger
         render={
-          <Button aria-label="投诉这张图片" className={className} type="button" variant="outline"
-      />
+          <Button aria-label="投诉这张图片" className={className} type="button" variant="outline" />
         }
       >
         <FlagIcon className="size-4" />
