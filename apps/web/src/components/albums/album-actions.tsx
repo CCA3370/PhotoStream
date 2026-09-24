@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -17,8 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorDialog } from "@/components/ui/error-dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
-
 type AlbumAction = "archive" | "end" | "restore" | "start";
 
 export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
@@ -50,7 +49,7 @@ export function AlbumActions({ album }: Readonly<{ album: AlbumView }>) {
 
   function icon(action: AlbumAction, fallback: ReactNode): ReactNode {
     return pendingAction === action ? (
-      <Spinner aria-hidden="true" className="animate-spin" data-icon="inline-start"  />
+      <Spinner aria-hidden="true" className="animate-spin" data-icon="inline-start" />
     ) : (
       fallback
     );

@@ -33,7 +33,6 @@ import {
   viewerFeedbackKindLabel,
   viewerReportReasonLabel,
 } from "@/lib/viewer-feedback";
-
 function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -292,8 +291,7 @@ export function ViewerFeedbackInbox({
         <Badge className="w-fit gap-1.5" variant={connected ? "secondary" : "outline"}>
           <span
             aria-hidden="true"
-            className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted-foreground/45"}`}
-          />
+            className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted-foreground/45"}`} />
           {connected ? "实时连接" : "正在重连"}
         </Badge>
       </section>
@@ -395,7 +393,7 @@ export function ViewerFeedbackInbox({
                           variant="outline"
                         >
                           {previewLoadingMediaId === mediaId ? (
-                            <Spinner className="animate-spin" data-icon="inline-start"  />
+                            <Spinner className="animate-spin" data-icon="inline-start" />
                           ) : (
                             <ImageIcon data-icon="inline-start" />
                           )}
@@ -415,7 +413,7 @@ export function ViewerFeedbackInbox({
                             variant={mediaVisible ? "destructive" : "outline"}
                           >
                             {changing ? (
-                              <Spinner className="animate-spin" data-icon="inline-start"  />
+                              <Spinner className="animate-spin" data-icon="inline-start" />
                             ) : mediaHidden ? (
                               <EyeIcon data-icon="inline-start" />
                             ) : (
@@ -467,8 +465,7 @@ export function ViewerFeedbackInbox({
         onToggleFeatured={() => undefined}
         onToggleVisibility={() => undefined}
         readOnly
-        selectedKey={previewItem?.key ?? null}
-      />
+        selectedKey={previewItem?.key ?? null} />
 
       <AlertDialog
         onOpenChange={(open) => {
@@ -491,7 +488,7 @@ export function ViewerFeedbackInbox({
               variant="destructive"
             >
               {deletingFeedbackId !== null ? (
-                <Spinner className="animate-spin" data-icon="inline-start"  />
+                <Spinner className="animate-spin" data-icon="inline-start" />
               ) : (
                 <Trash2Icon data-icon="inline-start" />
               )}

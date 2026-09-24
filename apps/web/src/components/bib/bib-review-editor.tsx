@@ -7,7 +7,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -16,9 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
-
 export interface BibReviewLocalActions {
   readonly confirmNumbers: (numbers: readonly string[]) => Promise<BibMediaState>;
   readonly confirmNoNumber: () => Promise<BibMediaState>;
@@ -330,7 +329,7 @@ export function BibReviewEditor({
           dark ? "border-white/10 bg-black/35 text-white/65" : "bg-muted/20 text-muted-foreground",
         )}
       >
-        <Spinner className="size-4 animate-spin"  />
+        <Spinner className="size-4 animate-spin" />
         加载号码状态…
       </div>
     );
@@ -448,8 +447,7 @@ export function BibReviewEditor({
             placeholder={
               noNumber ? "输入号码以修改，如 101,102" : "多个号码用英文逗号分隔，如 101,102"
             }
-            value={number}
-          />
+            value={number} />
           <Button
             className={cn(
               "shrink-0",
@@ -462,7 +460,7 @@ export function BibReviewEditor({
             variant={dark ? "outline" : "default"}
           >
             {busy ? (
-              <Spinner className="animate-spin" data-icon="inline-start"  />
+              <Spinner className="animate-spin" data-icon="inline-start" />
             ) : (
               <CheckIcon data-icon="inline-start" />
             )}
@@ -530,8 +528,7 @@ export function BibReviewDialog({
           mediaId={mediaId}
           onChange={onChange}
           onError={onError}
-          state={state}
-        />
+          state={state} />
       </DialogContent>
     </Dialog>
   );

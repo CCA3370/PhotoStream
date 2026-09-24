@@ -188,7 +188,6 @@ textarea {
   }
 }
 
-
 html:has(.public-theme),
 body:has(.public-theme) {
   background-color: oklch(1 0 0);

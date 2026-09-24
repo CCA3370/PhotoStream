@@ -18,14 +18,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
-
 const stateLabels: Record<FaceConfigView["indexState"], string> = {
   disabled: "已关闭",
   provisioning: "正在建立索引",
@@ -190,14 +189,13 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {pending ? (
-                <Spinner className="size-4 animate-spin text-muted-foreground"  />
+                <Spinner className="size-4 animate-spin text-muted-foreground" />
               ) : null}
               <Switch
                 aria-label="人脸找图"
                 checked={config.enabled}
                 disabled={pending}
-                onCheckedChange={(checked) => void toggle(checked)}
-              />
+                onCheckedChange={(checked) => void toggle(checked)} />
             </div>
           </div>
         </CardContent>
@@ -279,8 +277,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
                     const { value } = event.currentTarget;
                     setDeleteConfirmation(value);
                   }}
-                  value={deleteConfirmation}
-                />
+                  value={deleteConfirmation} />
               </Field>
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
@@ -304,8 +301,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
         onOpenChange={setDeletePasswordOpen}
         open={deletePasswordOpen}
         title="确认删除整册人脸索引"
-        variant="destructive"
-      />
+        variant="destructive" />
 
       <ErrorDialog
         message={dialogError}
@@ -313,8 +309,7 @@ export function FaceConfigEditor({ initial }: Readonly<{ initial: FaceConfigView
           setError(null);
           setStatusErrorOpen(false);
         }}
-        title={statusErrorOpen ? "人脸功能错误详情" : "人脸功能操作失败"}
-      />
+        title={statusErrorOpen ? "人脸功能错误详情" : "人脸功能操作失败"} />
     </div>
   );
 }

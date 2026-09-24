@@ -1,7 +1,6 @@
 "use client";
 
 import type { PublicMediaView } from "@photostream/contracts";
-import { LoaderCircleIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import { BibSearchPanel } from "@/components/gallery/bib-search-panel";
@@ -14,7 +13,6 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { clientGet } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
-
 interface MediaPage {
   readonly items: readonly PublicMediaView[];
   readonly nextCursor: string | null;
@@ -160,8 +158,7 @@ export function GalleryBrowser({
       {...(state.revision === 0 && initialSelectedId !== undefined ? { initialSelectedId } : {})}
       initialVisibilityNow={state.visibilityNow}
       key={`${state.filterKey}:${state.revision}`}
-      slug={slug}
-    />
+      slug={slug} />
   );
 
   return (
@@ -171,8 +168,7 @@ export function GalleryBrowser({
         onSelect={(selection) => void selectFilter(selection)}
         pendingKey={pendingKey}
         reserveSearchSpace={inlineSearch}
-        selectedKey={state.filterKey}
-      />
+        selectedKey={state.filterKey} />
 
       {pendingKey !== null ? (
         <div
@@ -183,8 +179,7 @@ export function GalleryBrowser({
           <div className="flex size-11 items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur">
             <Spinner
               aria-hidden="true"
-              className="size-5 animate-spin text-foreground/80"
-             />
+              className="size-5 animate-spin text-foreground/80" />
             <span className="sr-only">正在加载照片</span>
           </div>
         </div>

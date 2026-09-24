@@ -1,16 +1,14 @@
 "use client";
 
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
-import { LoaderCircleIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
-
 export function AlbumDataSaverSetting({
   albumId,
   initialSetting,
@@ -63,13 +61,12 @@ export function AlbumDataSaverSetting({
             </div>
             <div className="shrink-0">
               {pending ? (
-                <Spinner className="size-4 animate-spin text-muted-foreground"  />
+                <Spinner className="size-4 animate-spin text-muted-foreground" />
               ) : (
                 <Switch
                   aria-label="省流模式"
                   checked={setting.enabled}
-                  onCheckedChange={(checked) => void update(checked)}
-                />
+                  onCheckedChange={(checked) => void update(checked)} />
               )}
             </div>
           </div>

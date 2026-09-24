@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -19,7 +19,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { clientGet } from "@/lib/client-api";
-
 type ResultFilter = "all" | "failed" | "success";
 
 const auditDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -127,8 +126,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
             <div className="relative sm:w-64">
               <SearchIcon
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-              />
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="搜索审计记录"
                 className="h-8 pr-8 pl-8"
@@ -137,8 +135,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
                   setQuery(value);
                 }}
                 placeholder="搜索动作、目标或字段"
-                value={query}
-              />
+                value={query} />
               {query.length > 0 ? (
                 <Button
                   aria-label="清除搜索"
@@ -206,7 +203,7 @@ export function AuditLogTable({ initial }: Readonly<{ initial: AuditLogList }>) 
           type="button"
           variant="outline"
         >
-          {pending ? <Spinner className="animate-spin" data-icon="inline-start"  /> : null}
+          {pending ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
           {pending ? "加载中…" : "加载更早记录"}
         </Button>
       )}

@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
-
 export function CategoryForm({ albumId }: Readonly<{ albumId: string }>) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -47,15 +46,13 @@ export function CategoryForm({ albumId }: Readonly<{ albumId: string }>) {
           maxLength={60}
           name="name"
           placeholder="新增分类"
-          required
-        />
+          required />
         <Button disabled={pending} size="sm" type="submit" variant="outline">
           {pending ? (
             <Spinner
               aria-hidden="true"
               className="animate-spin"
-              data-icon="inline-start"
-             />
+              data-icon="inline-start" />
           ) : (
             <PlusIcon aria-hidden="true" data-icon="inline-start" />
           )}
