@@ -77,9 +77,10 @@ function elementVisible(element: HTMLElement): boolean {
 }
 
 function lightboxOpen(): boolean {
-  return document.querySelector<HTMLElement>(
-    '[data-viewer-onboarding-target="lightbox-canvas"]',
-  ) !== null;
+  return (
+    document.querySelector<HTMLElement>('[data-viewer-onboarding-target="lightbox-canvas"]') !==
+    null
+  );
 }
 
 function lightboxActionButtons(container: HTMLElement): HTMLElement[] {
@@ -94,14 +95,10 @@ function resolveTarget(kind: TargetKind): HTMLElement | null {
       '[data-viewer-onboarding-target="lightbox-navigation"]',
     );
     if (next !== null && elementVisible(next)) return next;
-    return document.querySelector<HTMLElement>(
-      '[data-viewer-onboarding-target="lightbox-canvas"]',
-    );
+    return document.querySelector<HTMLElement>('[data-viewer-onboarding-target="lightbox-canvas"]');
   }
 
-  return document.querySelector<HTMLElement>(
-    `[data-viewer-onboarding-target="${kind}"]`,
-  );
+  return document.querySelector<HTMLElement>(`[data-viewer-onboarding-target="${kind}"]`);
 }
 
 function unionBounds(elements: readonly HTMLElement[]): DOMRect | null {
