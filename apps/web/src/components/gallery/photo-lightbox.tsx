@@ -534,6 +534,7 @@ export function PhotoLightbox({
           )}
           <div
             aria-label="照片画布"
+            data-viewer-onboarding-target="lightbox-canvas"
             className={cn(
               "absolute inset-0 touch-none select-none",
               zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
@@ -745,6 +746,7 @@ export function PhotoLightbox({
                   controlsVisible ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
+                data-viewer-onboarding-target="lightbox-navigation"
                 inert={!controlsVisible}
                 onClick={() => animateOffset(1)}
                 size="icon"
@@ -766,6 +768,7 @@ export function PhotoLightbox({
                 : "pointer-events-none translate-y-3 opacity-0",
             )}
             data-lightbox-controls
+            data-viewer-onboarding-target="lightbox-toolbar"
             inert={!controlsVisible}
           >
             <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
@@ -809,6 +812,7 @@ export function PhotoLightbox({
                     {canDownload ? (
                       <Button
                         className={cn(toolbarButtonClass, "min-w-0 flex-1 sm:flex-none")}
+                        data-viewer-onboarding-action="download"
                         onClick={() => setDownloadMenuOpen(true)}
                         type="button"
                         variant="outline"
