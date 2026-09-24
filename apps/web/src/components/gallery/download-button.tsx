@@ -12,6 +12,7 @@ import { publicMutation } from "@/lib/client-api";
 import { loadDerivedImage } from "@/lib/derived-image-cache";
 import { convertImageToJpeg } from "@/lib/image-jpeg";
 import { loadOriginalImage } from "@/lib/original-image-cache";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
 export interface WeChatDownloadSource {
   readonly url: string;
@@ -28,10 +29,7 @@ function formatBytes(bytes: number): string {
 }
 
 function downloadErrorMessage(caught: unknown): string {
-  if (caught instanceof TypeError) {
-    return "无法连接图片下载服务，请稍后重试。";
-  }
-  return caught instanceof Error ? caught.message : "下载失败，请稍后重试。";
+  return userFacingErrorMessage(caught, "下载失败，请稍后重试。");
 }
 
 function jpegFilename(filename: string): string {
