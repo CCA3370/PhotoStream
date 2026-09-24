@@ -170,7 +170,8 @@ export function GalleryBrowser({
         onSelect={(selection) => void selectFilter(selection)}
         pendingKey={pendingKey}
         reserveSearchSpace={inlineSearch}
-        selectedKey={state.filterKey} />
+        selectedKey={state.filterKey}
+      />
 
       {pendingKey !== null ? (
         <div
