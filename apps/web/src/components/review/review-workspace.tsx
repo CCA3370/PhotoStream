@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -2162,7 +2163,7 @@ export function ReviewWorkspace({
             variant="outline"
           >
             {selectingAll ? (
-              <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+              <Spinner className="animate-spin" data-icon="inline-start"  />
             ) : null}
             选择全部匹配
           </Button>
@@ -2426,7 +2427,7 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {pendingAction === "featured" ? (
-                        <LoaderCircleIcon className="size-4 animate-spin" />
+                        <Spinner className="size-4 animate-spin"  />
                       ) : (
                         <StarIcon className={cn("size-4", item.featured && "fill-current")} />
                       )}
@@ -2446,13 +2447,13 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {pendingAction === "state" ? (
-                        <LoaderCircleIcon className="size-4 animate-spin" />
+                        <Spinner className="size-4 animate-spin"  />
                       ) : published ? (
                         <EyeIcon className="size-4" />
                       ) : hidden ? (
                         <EyeOffIcon className="size-4" />
                       ) : (
-                        <LoaderCircleIcon className="size-4 opacity-50" />
+                        <Spinner className="size-4 opacity-50" />
                       )}
                     </Button>
                     <Button
@@ -2481,7 +2482,7 @@ export function ReviewWorkspace({
                       variant="ghost"
                     >
                       {bibBlocked ? (
-                        <LoaderCircleIcon className="size-4 animate-spin" />
+                        <LoaderCircleIcon className="size-4 animate-spin"  />
                       ) : bibConfirmed ? (
                         <BadgeCheckIcon className="size-4" />
                       ) : (
@@ -2511,7 +2512,7 @@ export function ReviewWorkspace({
                       variant="destructive"
                     >
                       {pendingAction === "delete" ? (
-                        <LoaderCircleIcon className="size-4 animate-spin" />
+                        <Spinner className="size-4 animate-spin"  />
                       ) : (
                         <Trash2Icon className="size-4" />
                       )}
@@ -2526,7 +2527,7 @@ export function ReviewWorkspace({
 
       <div className="flex h-8 items-center justify-center" ref={sentinelRef}>
         {loadingMore || selectingAll ? (
-          <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
+          <Spinner className="size-4 animate-spin text-muted-foreground"  />
         ) : null}
       </div>
 
