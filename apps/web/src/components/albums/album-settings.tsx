@@ -384,7 +384,9 @@ export function AlbumSettings({
                       size="sm"
                       type="submit"
                     >
-                      {isPending("basic") ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
+                      {isPending("basic") ? (
+                        <Spinner className="animate-spin" data-icon="inline-start" />
+                      ) : null}
                       {isPending("basic") ? "保存中" : "保存"}
                     </Button>
                   </div>
