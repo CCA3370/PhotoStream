@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
+import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { clientGet } from "@/lib/client-api";
 import {
   isWarmDerivedImageDecoded,
@@ -93,6 +94,7 @@ export function PhotoLightbox({
   onLikeChange: (state: PhotoLikeState) => void;
   onSelect: (mediaId: string) => void;
 }>) {
+  const weChat = useWeChatBrowser();
   const selectedIndex =
     selectedId === null ? -1 : items.findIndex((item) => item.id === selectedId);
   const selected = selectedIndex < 0 ? null : (items[selectedIndex] ?? null);
@@ -812,7 +814,7 @@ export function PhotoLightbox({
                         variant="outline"
                       >
                         <DownloadIcon data-icon="inline-start" />
-                        下载
+                        {weChat ? "保存至相册" : "下载"}
                       </Button>
                     ) : null}
                   </div>
