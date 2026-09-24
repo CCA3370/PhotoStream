@@ -2677,7 +2677,12 @@ export function ReviewWorkspace({
         </AlertDialogContent>
       </AlertDialog>
 
-      <ErrorDialog message={error} onClose={() => setError(null)} title="操作失败" />
+      <ErrorDialog
+        message={error}
+        nested={activeKey !== null}
+        onClose={() => setError(null)}
+        title="操作失败"
+      />
     </div>
   );
 }
