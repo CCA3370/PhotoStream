@@ -48,6 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { clientMutation } from "@/lib/client-api";
+
 const roleLabels: Record<UserRole, string> = {
   admin: "管理员",
   operator: "协作员",
@@ -324,7 +325,8 @@ export function UserManagement({
                           aria-label={`${user.displayName}账号启用状态`}
                           checked={user.isActive}
                           disabled={userPending}
-                          onCheckedChange={(checked) => requestUpdate(user, { isActive: checked })} />
+                          onCheckedChange={(checked) => requestUpdate(user, { isActive: checked })}
+                        />
                         <Badge variant={user.isActive ? "secondary" : "outline"}>
                           {userPending ? "更新中" : user.isActive ? "已启用" : "已停用"}
                         </Badge>
@@ -403,7 +405,8 @@ export function UserManagement({
         }}
         open={resetTarget !== null}
         title="重置成员密码"
-        variant="destructive" />
+        variant="destructive"
+      />
 
       <Dialog
         open={temporaryCredential !== null}
