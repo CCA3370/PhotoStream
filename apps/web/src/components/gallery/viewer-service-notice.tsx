@@ -204,7 +204,7 @@ export function ViewerServiceNotice() {
         </div>
 
         <DialogFooter className="gap-3 sm:flex-col sm:items-stretch">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label
               className="flex cursor-pointer items-start gap-2.5 text-sm leading-5 text-foreground"
               htmlFor="viewer-service-notice-acknowledgement"
