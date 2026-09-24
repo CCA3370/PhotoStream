@@ -50,6 +50,33 @@ describe("UI governance", () => {
     expect(share).toContain("<Dialog open={copyNoticeOpen}");
   });
 
+  it("keeps viewer child portals above viewer surfaces", () => {
+    const errorDialog = source("components/ui/error-dialog.tsx");
+    const share = source("components/gallery/photo-share-button.tsx");
+    const report = source("components/gallery/photo-report-button.tsx");
+    const download = source("components/gallery/download-button.tsx");
+    const like = source("components/gallery/photo-like-button.tsx");
+    const faceSearch = source("components/gallery/face-search-panel.tsx");
+    const bibSearch = source("components/gallery/bib-search-panel.tsx");
+    const reviewLightbox = source("components/review/review-lightbox.tsx");
+    const reviewInspector = source("components/review/review-inspector.tsx");
+
+    expect(errorDialog).toContain("nested?: boolean");
+    expect(errorDialog).toContain("layer-nested-dialog");
+    expect(errorDialog).toContain("layer-nested-dialog-overlay");
+    expect(share).toContain("layer-nested-dialog");
+    expect(report).toContain("layer-nested-dialog");
+    expect(download).toContain('nested={variant === "lightbox"}');
+    expect(like).toContain('nested={mode === "toolbar"}');
+    expect(faceSearch).toContain("<ErrorDialog message={error} nested");
+    expect(bibSearch).toContain("<ErrorDialog message={error} nested");
+    expect(reviewLightbox).toContain("<BibReviewDialog");
+    expect(reviewLightbox).toContain("          nested");
+    expect(reviewInspector).toContain(
+      'positionerClassName={docked ? "layer-nested-popover" : undefined}',
+    );
+  });
+
   it("does not use user-facing labels or icon implementation classes as component APIs", () => {
     const onboarding = source("components/gallery/viewer-onboarding.tsx");
     const filters = source("components/gallery/gallery-filter-nav.tsx");
