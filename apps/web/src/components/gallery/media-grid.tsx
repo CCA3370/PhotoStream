@@ -12,6 +12,7 @@ import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { clientGet } from "@/lib/client-api";
 import { gridMicroPreviewOverscanRows } from "@/lib/grid-thumbnail-policy";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 
 interface LikeListResponse {
@@ -525,7 +526,7 @@ export function MediaGrid({
     let disposed = false;
     void loadLikeStates(mediaIds).catch((caught: unknown) => {
       if (!disposed) {
-        setLikeError(caught instanceof Error ? caught.message : "无法加载点赞信息");
+        setLikeError(userFacingErrorMessage(caught, "无法加载点赞信息，请稍后重试。"));
       }
     });
     return () => {
@@ -539,7 +540,7 @@ export function MediaGrid({
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string" || !mediaIds.includes(detail.mediaId)) return;
       void loadLikeStates([detail.mediaId]).catch((caught: unknown) => {
-        setLikeError(caught instanceof Error ? caught.message : "无法更新点赞信息");
+        setLikeError(userFacingErrorMessage(caught, "无法更新点赞信息，请稍后重试。"));
       });
     };
     window.addEventListener("photostream:likes-updated", refresh);
