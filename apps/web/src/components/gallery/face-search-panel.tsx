@@ -140,7 +140,7 @@ export function FaceSearchPanel({
         }
       } catch (caught) {
         if (cancelled || abortRef.current?.signal.aborted) return;
-        setError(caught instanceof Error ? caught.message : "查询人脸候选失败");
+        setError(userFacingErrorMessage(caught, "查询人脸候选失败，请稍后重试。"));
       }
     };
     timer = setTimeout(() => void poll(), delay);
@@ -206,7 +206,7 @@ export function FaceSearchPanel({
       await refresh(created.id);
     } catch (caught) {
       if (controller.signal.aborted) return;
-      setError(caught instanceof Error ? caught.message : "参考照处理失败");
+      setError(userFacingErrorMessage(caught, "参考照处理失败，请换一张照片或稍后重试。"));
       setStage(created === null ? "choose" : "results");
     } finally {
       setPending(false);
@@ -257,7 +257,7 @@ export function FaceSearchPanel({
     try {
       await refresh(searchId, view.nextCursor);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "加载更多候选失败");
+      setError(userFacingErrorMessage(caught, "加载更多候选失败，请稍后重试。"));
     } finally {
       setPending(false);
     }
