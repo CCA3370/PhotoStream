@@ -728,6 +728,11 @@ export function ViewerOnboarding({
                     : "这里可以对当前照片进行点赞、分享或下载等操作。"
                   : "手机上左右滑动即可切换照片；电脑上也可以使用左右方向键或两侧按钮快速切换。"))}
           </p>
+          {lightboxToolbar ? (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              网页中的图片清晰度受到限制，如需查看原图，请下载所需图片。
+            </p>
+          ) : null}
 
           <div className="mt-4 flex items-center justify-between gap-3">
             <Button
