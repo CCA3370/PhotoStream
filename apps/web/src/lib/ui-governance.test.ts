@@ -94,6 +94,16 @@ describe("UI governance", () => {
     expect(violations(/\bz-\[\d+\]/gu)).toEqual([]);
   });
 
+  it("does not expose raw technical errors in public gallery UI", () => {
+    const galleryRoot = resolve(srcRoot, "components/gallery");
+    expect(
+      violations(
+        /\b(?:caught|error|cause)\s+instanceof\s+Error\s+\?\s+(?:caught|error|cause)\.message/gu,
+        sourceFiles(galleryRoot),
+      ),
+    ).toEqual([]);
+  });
+
   it("uses gap layouts instead of space utilities", () => {
     expect(violations(/\bspace-[xy]-[^\s"'\x60]+/gu)).toEqual([]);
   });
