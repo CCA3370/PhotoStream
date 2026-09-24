@@ -161,7 +161,7 @@ export function ViewerServiceNotice() {
         <div className="min-h-0">
           <section
             aria-label="照片使用与版权说明全文"
-            className="max-h-[52dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground outline-none focus:outline-none focus-visible:outline-none"
+            className="flex max-h-[52dvh] flex-col gap-3 overflow-y-auto overscroll-contain pr-1 text-sm leading-6 text-muted-foreground outline-none focus:outline-none focus-visible:outline-none"
             onKeyDown={markScrollInteraction}
             onPointerDown={markScrollInteraction}
             onScroll={handleNoticeScroll}
