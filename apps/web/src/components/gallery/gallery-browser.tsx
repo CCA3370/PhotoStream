@@ -12,6 +12,7 @@ import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { clientGet } from "@/lib/client-api";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { cn } from "@/lib/utils";
 
 interface MediaPage {
@@ -140,7 +141,7 @@ export function GalleryBrowser({
         }));
       } catch (caught) {
         if (controller.signal.aborted) return;
-        setError(caught instanceof Error ? caught.message : "切换照片筛选失败");
+        setError(userFacingErrorMessage(caught, "切换照片筛选失败，请稍后重试。"));
       } finally {
         if (requestRef.current === controller) requestRef.current = null;
         if (!controller.signal.aborted) setPendingKey(null);
