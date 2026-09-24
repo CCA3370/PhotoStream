@@ -7,7 +7,6 @@ import {
   CircleXIcon,
   FolderOpenIcon,
   ImagePlusIcon,
-  LoaderCircleIcon,
   Trash2Icon,
 } from "lucide-react";
 import Image from "next/image";
@@ -16,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { UploadShell } from "@/components/shells/upload-shell";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Select,
@@ -602,7 +602,7 @@ export function UploadQueue({
                 >
                   <div className="mt-0.5 text-muted-foreground">
                     {task.status === "processing" ? (
-                      <LoaderCircleIcon className="size-4 animate-spin" />
+                      <Spinner className="size-4 animate-spin"  />
                     ) : task.status === "failed" ? (
                       <CircleAlertIcon className="size-4 text-destructive" />
                     ) : task.status === "cancelled" ? (
