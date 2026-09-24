@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { viewerOnboardingReplayEvent } from "@/lib/viewer-onboarding";
 
 const feedbackKinds = [
@@ -84,7 +85,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
     } catch (error) {
       toast.add({
         title: "暂时发送失败",
-        description: error instanceof Error ? error.message : "请稍后再试。",
+        description: userFacingErrorMessage(error, "反馈暂时无法发送，请稍后再试。"),
         type: "error",
         timeout: 5_000,
       });
