@@ -70,7 +70,7 @@ export function UnlockAlbumForm({ slug }: Readonly<{ slug: string }>) {
           </p>
         </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 flex flex-col gap-4">
           <Field data-invalid={error === null ? undefined : true}>
             <FieldLabel className="text-xs font-medium text-foreground/85" htmlFor="album-password">
               访问口令
