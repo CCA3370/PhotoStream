@@ -5,7 +5,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
-  LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   XIcon,
@@ -27,6 +26,7 @@ import { PhotoLikeButton, type PhotoLikeState } from "@/components/gallery/photo
 import { PhotoReportButton } from "@/components/gallery/photo-report-button";
 import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
@@ -551,10 +551,10 @@ export function PhotoLightbox({
             {!loaded && activePreparedImage === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
-                  <LoaderCircleIcon
+                  <Spinner
                     aria-hidden="true"
                     className="size-4 animate-spin motion-reduce:animate-none"
-                  />
+                   />
                   正在加载高清图片…
                 </div>
               </div>
