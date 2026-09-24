@@ -320,7 +320,7 @@ export function PaginatedMediaGrid({
             if (!errorReported && attempt >= 3 && !disposed) {
               errorReported = true;
               setLiveError(
-                caught instanceof Error ? caught.message : "新照片缩略图加载失败，正在重试",
+                userFacingErrorMessage(caught, "新照片缩略图加载失败，正在重试。"),
               );
             }
           }
@@ -358,7 +358,7 @@ export function PaginatedMediaGrid({
       setPages((current) => appendMediaPage(current, page.items));
       setCursor(page.nextCursor);
     } catch (caught) {
-      setLoadMoreError(caught instanceof Error ? caught.message : "加载更多照片失败");
+      setLoadMoreError(userFacingErrorMessage(caught, "加载更多照片失败，请稍后重试。"));
     } finally {
       requestInFlight.current = false;
       setLoading(false);
