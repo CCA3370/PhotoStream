@@ -141,6 +141,7 @@ export function PhotoLikeButton({
           "active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] transition-[transform,background-color,border-color] duration-150 motion-reduce:transform-none motion-reduce:transition-none",
           className,
         )}
+        data-viewer-onboarding-action={mode === "toolbar" ? "like" : undefined}
         disabled={pending || state === null}
         onClick={() => void toggle()}
         title={liked ? "取消点赞" : "点赞"}
