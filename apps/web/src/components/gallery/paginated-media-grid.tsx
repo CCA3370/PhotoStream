@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MediaGrid } from "@/components/gallery/media-grid";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { ErrorDialog } from "@/components/ui/error-dialog";
 import { ClientApiError, clientGet } from "@/lib/client-api";
 import {
@@ -412,7 +413,7 @@ export function PaginatedMediaGrid({
       />
       {featuredOnly && cursor !== null ? (
         <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
-          <LoaderCircleIcon className="size-4 animate-spin" />
+          <Spinner className="size-4 animate-spin"  />
           正在整理精选照片…
         </div>
       ) : cursor === null ? null : (
@@ -427,7 +428,7 @@ export function PaginatedMediaGrid({
         >
           {loading ? (
             <>
-              <LoaderCircleIcon className="size-3.5 animate-spin" />
+              <Spinner className="size-3.5 animate-spin"  />
               正在加载…
             </>
           ) : (
