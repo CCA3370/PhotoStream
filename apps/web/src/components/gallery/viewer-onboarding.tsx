@@ -699,7 +699,7 @@ export function ViewerOnboarding({
 
             <Button
               aria-label="跳过使用引导"
-              className="-mt-1 -mr-1 shrink-0"
+              className="-mt-1 -mr-1 size-11 shrink-0 sm:size-7"
               onClick={flow.kind === "main" ? finishMain : finishLightbox}
               size="icon-sm"
               type="button"
@@ -731,7 +731,7 @@ export function ViewerOnboarding({
 
           <div className="mt-4 flex items-center justify-between gap-3">
             <Button
-              className={welcome ? "invisible" : undefined}
+              className={welcome ? "min-h-11 invisible sm:min-h-0" : "min-h-11 sm:min-h-0"}
               disabled={welcome}
               onClick={previous}
               size="sm"
@@ -744,6 +744,7 @@ export function ViewerOnboarding({
 
             <div className="flex items-center gap-2">
               <Button
+                className="min-h-11 sm:min-h-0"
                 onClick={flow.kind === "main" ? finishMain : finishLightbox}
                 size="sm"
                 type="button"
@@ -751,7 +752,7 @@ export function ViewerOnboarding({
               >
                 跳过
               </Button>
-              <Button onClick={next} size="sm" type="button">
+              <Button className="min-h-11 sm:min-h-0" onClick={next} size="sm" type="button">
                 {welcome
                   ? "开始了解"
                   : flow.kind === "main" && flow.step >= mainSteps.length - 1
