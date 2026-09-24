@@ -130,7 +130,7 @@ export function PhotoReportButton({
               }}
               value={reason}
             >
-              <SelectTrigger className="w-full" id="photo-report-reason">
+              <SelectTrigger className="h-11 w-full sm:h-8" id="photo-report-reason">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent
