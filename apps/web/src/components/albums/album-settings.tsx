@@ -358,7 +358,8 @@ export function AlbumSettings({
                           setTitle(value);
                         }}
                         required
-                        value={title} />
+                        value={title}
+                      />
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="settings-description">活动说明</FieldLabel>
@@ -370,7 +371,8 @@ export function AlbumSettings({
                           const { value } = event.currentTarget;
                           setDescription(value);
                         }}
-                        value={description} />
+                        value={description}
+                      />
                     </Field>
                   </FieldGroup>
                   <div className="flex min-h-7 items-center justify-between gap-3">
@@ -417,7 +419,8 @@ export function AlbumSettings({
                         setPrivacyNotice(value);
                       }}
                       placeholder="可选。这里的内容会作为本活动的隐私补充说明显示。"
-                      value={privacyNotice} />
+                      value={privacyNotice}
+                    />
                   </Field>
                   <div className="flex min-h-7 items-center justify-between gap-3">
                     <span className="text-xs text-muted-foreground">
@@ -428,7 +431,9 @@ export function AlbumSettings({
                       size="sm"
                       type="submit"
                     >
-                      {isPending("privacy") ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
+                      {isPending("privacy") ? (
+                        <Spinner className="animate-spin" data-icon="inline-start" />
+                      ) : null}
                       {isPending("privacy") ? "保存中" : "保存"}
                     </Button>
                   </div>
@@ -527,7 +532,8 @@ export function AlbumSettings({
                           "普通图下载设置已更新",
                           "previewDownload",
                         )
-                      } />
+                      }
+                    />
                   )}
                 </SettingRow>
                 <SettingRow
@@ -546,7 +552,8 @@ export function AlbumSettings({
                           "原图下载设置已更新",
                           "originalDownload",
                         )
-                      } />
+                      }
+                    />
                   )}
                 </SettingRow>
               </CardContent>
