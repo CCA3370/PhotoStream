@@ -158,7 +158,7 @@ export function ReviewCollaborationControl({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="max-h-80 space-y-2 overflow-y-auto py-1">
+              <div className="flex max-h-80 flex-col gap-2 overflow-y-auto py-1">
                 {value.availableParticipants.length === 0 ? (
                   <p className="text-sm text-muted-foreground">暂无可参与审核的账号。</p>
                 ) : (
