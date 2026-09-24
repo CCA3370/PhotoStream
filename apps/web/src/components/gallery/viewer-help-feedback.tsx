@@ -153,7 +153,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
         <Button
           aria-expanded={menuOpen}
           aria-label="帮助与反馈"
-          className="size-8 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground"
+          className="size-11 rounded-full bg-background/82 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground sm:size-8"
           data-viewer-help-trigger
           data-viewer-onboarding-target="help"
           onClick={() => setMenuOpen((open) => !open)}
@@ -180,6 +180,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
               {feedbackKinds.map((item) => (
                 <Button
                   aria-pressed={kind === item.value}
+                  className="min-h-11 sm:min-h-0"
                   key={item.value}
                   onClick={() => setKind(item.value)}
                   size="sm"
