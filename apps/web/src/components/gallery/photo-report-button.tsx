@@ -26,6 +26,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import type { ViewerReportReason } from "@/lib/viewer-feedback";
 
 const reportReasons: ReadonlyArray<{ readonly value: ViewerReportReason; readonly label: string }> =
@@ -82,7 +83,7 @@ export function PhotoReportButton({
     } catch (error) {
       toast.add({
         title: "提交失败",
-        description: error instanceof Error ? error.message : "请稍后重试。",
+        description: userFacingErrorMessage(error, "投诉暂时无法提交，请稍后重试。"),
         type: "error",
       });
     } finally {
