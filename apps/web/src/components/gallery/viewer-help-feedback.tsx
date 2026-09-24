@@ -3,12 +3,12 @@
 import {
   BookOpenCheckIcon,
   CircleHelpIcon,
-  LoaderCircleIcon,
   MessageSquareTextIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -222,7 +222,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
               onClick={() => void submitFeedback()}
               type="button"
             >
-              {submitting ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
+              {submitting ? <Spinner className="size-4 animate-spin"  /> : null}
               {submitting ? "正在发送" : "发送反馈"}
             </Button>
           </DialogFooter>
