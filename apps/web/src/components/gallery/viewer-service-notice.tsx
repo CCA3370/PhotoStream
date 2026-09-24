@@ -145,8 +145,8 @@ export function ViewerServiceNotice() {
       }}
     >
       <DialogContent
-        className="public-theme z-[100] max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-md"
-        overlayClassName="z-[90]"
+        className="public-theme layer-service-notice max-h-[calc(100dvh-2rem)] overflow-hidden sm:max-w-md"
+        overlayClassName="layer-service-notice-overlay"
         showCloseButton={false}
       >
         <DialogHeader>
