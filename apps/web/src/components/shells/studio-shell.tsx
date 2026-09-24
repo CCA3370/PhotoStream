@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { clientMutation } from "@/lib/client-api";
+
 const navigation = [
   {
     href: "/studio",
