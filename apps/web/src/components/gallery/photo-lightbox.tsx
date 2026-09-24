@@ -551,7 +551,10 @@ export function PhotoLightbox({
             {!loaded && activePreparedImage === null ? (
               <div className="absolute inset-0 grid place-items-center text-sm text-white/55">
                 <div className="flex items-center gap-2 animate-pulse motion-reduce:animate-none">
-                  <Spinner aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                  <Spinner
+                    aria-hidden="true"
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                  />
                   正在加载高清图片…
                 </div>
               </div>
