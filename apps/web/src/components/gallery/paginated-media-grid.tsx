@@ -1,7 +1,6 @@
 "use client";
 
 import type { PublicMediaView } from "@photostream/contracts";
-import { LoaderCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MediaGrid } from "@/components/gallery/media-grid";
@@ -16,6 +15,7 @@ import {
   markDerivedImageDecoded,
 } from "@/lib/derived-image-cache";
 import { orderFeaturedMedia } from "@/lib/featured-order";
+
 interface MediaPage {
   readonly items: readonly PublicMediaView[];
   readonly nextCursor: string | null;
@@ -408,7 +408,8 @@ export function PaginatedMediaGrid({
       <MediaGrid
         {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
         items={visibleItems}
-        slug={slug} />
+        slug={slug}
+      />
       {featuredOnly && cursor !== null ? (
         <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
           <Spinner className="size-4 animate-spin" />
@@ -440,11 +441,13 @@ export function PaginatedMediaGrid({
       <ErrorDialog
         message={loadMoreError}
         onClose={() => setLoadMoreError(null)}
-        title="无法继续加载" />
+        title="无法继续加载"
+      />
       <ErrorDialog
         message={liveError}
         onClose={() => setLiveError(null)}
-        title="无法实时更新照片" />
+        title="无法实时更新照片"
+      />
     </div>
   );
 }
