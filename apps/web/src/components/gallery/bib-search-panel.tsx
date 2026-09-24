@@ -516,12 +516,18 @@ export function BibSearchPanel({
           onClick={openSearchDialog}
           type="button"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
+          <span
+            className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
+            data-gallery-search-icon
+          >
             <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{resultLabel}</span>
-            <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+            <span
+              className="block truncate text-[11px] leading-4 text-muted-foreground"
+              data-gallery-search-summary
+            >
               {resultSummary}
             </span>
           </span>
@@ -530,6 +536,7 @@ export function BibSearchPanel({
           <Button
             aria-label="清除找照片条件"
             className="shrink-0 rounded-lg animate-in fade-in-0 zoom-in-90 duration-200 motion-reduce:animate-none"
+            data-gallery-search-clear
             onClick={clearResult}
             size="icon-sm"
             type="button"
