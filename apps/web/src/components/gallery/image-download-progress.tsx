@@ -31,7 +31,7 @@ export function ImageDownloadProgress({
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-0 z-[100] grid place-items-center"
+      className="layer-transient-status pointer-events-none fixed inset-0 grid place-items-center"
     >
       <div className="flex min-w-60 max-w-[calc(100vw-2rem)] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/70 px-5 py-4 text-white shadow-2xl shadow-black/40 backdrop-blur-xl">
         <div
