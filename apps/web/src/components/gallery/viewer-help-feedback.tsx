@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { publicMutation } from "@/lib/client-api";
+import { viewerOnboardingReplayEvent } from "@/lib/viewer-onboarding";
 
 const feedbackKinds = [
   { value: "problem", label: "遇到问题" },
@@ -59,7 +60,7 @@ export function ViewerHelpFeedback({ slug }: Readonly<{ slug: string }>) {
 
   function replayGuide(): void {
     setMenuOpen(false);
-    document.querySelector<HTMLButtonElement>('button[aria-label="重新查看使用引导"]')?.click();
+    window.dispatchEvent(new Event(viewerOnboardingReplayEvent));
   }
 
   async function submitFeedback(): Promise<void> {
