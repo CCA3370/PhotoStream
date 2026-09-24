@@ -101,9 +101,9 @@ export function PhotoReportButton({
         <span>投诉</span>
       </DialogTrigger>
       <DialogContent
-        className="public-theme dark z-[70] max-w-md bg-background text-foreground"
+        className="public-theme dark layer-nested-dialog max-w-md bg-background text-foreground"
         forceOverlay
-        overlayClassName="z-[60] bg-black/55"
+        overlayClassName="layer-nested-dialog-overlay bg-black/55"
       >
         <DialogHeader>
           <DialogTitle>投诉这张图片</DialogTitle>
@@ -137,7 +137,7 @@ export function PhotoReportButton({
               <SelectContent
                 align="start"
                 className="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)]"
-                positionerClassName="z-[80]"
+                positionerClassName="layer-nested-popover"
               >
                 <SelectGroup>
                   {reportReasons.map((item) => (
