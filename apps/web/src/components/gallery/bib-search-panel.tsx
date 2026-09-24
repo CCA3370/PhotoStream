@@ -511,7 +511,7 @@ export function BibSearchPanel({
         data-gallery-search-toolbar
       >
         <button
-          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
+          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg lg:flex-none px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
           data-viewer-onboarding-target="search"
           onClick={openSearchDialog}
           type="button"
