@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, CircleHelpIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   viewerLightboxOnboardingStorageKey,
+  viewerOnboardingReplayEvent,
   viewerOnboardingStorageKey,
   viewerServiceNoticeDismissedEvent,
   viewerServiceNoticeStorageKey,
@@ -76,57 +77,30 @@ function elementVisible(element: HTMLElement): boolean {
 }
 
 function lightboxOpen(): boolean {
-  return document.querySelector<HTMLElement>('[aria-label="照片画布"]') !== null;
+  return document.querySelector<HTMLElement>(
+    '[data-viewer-onboarding-target="lightbox-canvas"]',
+  ) !== null;
 }
 
 function lightboxActionButtons(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>("button")).filter((button) => {
-    if (!elementVisible(button)) return false;
-    const label = button.getAttribute("aria-label") ?? "";
-    const text = button.textContent ?? "";
-    return (
-      label === "点赞" ||
-      label === "取消点赞" ||
-      label.includes("分享") ||
-      label.includes("下载") ||
-      text.includes("分享") ||
-      text.includes("下载")
-    );
-  });
+  return Array.from(
+    container.querySelectorAll<HTMLElement>("[data-viewer-onboarding-action]"),
+  ).filter(elementVisible);
 }
 
 function resolveTarget(kind: TargetKind): HTMLElement | null {
-  if (kind === "filters") {
-    return document.querySelector<HTMLElement>('nav[aria-label="相册筛选"]');
-  }
-
-  if (kind === "search") {
-    const buttons = Array.from(
-      document.querySelectorAll<HTMLButtonElement>("#gallery-main button"),
-    );
-    return (
-      buttons.find((button) => (button.textContent ?? "").includes("找照片")) ??
-      buttons.find((button) => button.querySelector("svg.lucide-search") !== null) ??
-      null
-    );
-  }
-
-  if (kind === "help") {
-    return document.querySelector<HTMLElement>("[data-viewer-help-trigger]");
-  }
-
   if (kind === "lightbox-navigation") {
-    const next = document.querySelector<HTMLElement>('button[aria-label="下一张照片"]');
+    const next = document.querySelector<HTMLElement>(
+      '[data-viewer-onboarding-target="lightbox-navigation"]',
+    );
     if (next !== null && elementVisible(next)) return next;
-    return document.querySelector<HTMLElement>('[aria-label="照片画布"]');
+    return document.querySelector<HTMLElement>(
+      '[data-viewer-onboarding-target="lightbox-canvas"]',
+    );
   }
 
-  const controls = Array.from(document.querySelectorAll<HTMLElement>("[data-lightbox-controls]"));
-  const visibleControls = controls.filter(elementVisible);
-  return (
-    visibleControls.find((control) => lightboxActionButtons(control).length > 0) ??
-    visibleControls.at(-1) ??
-    null
+  return document.querySelector<HTMLElement>(
+    `[data-viewer-onboarding-target="${kind}"]`,
   );
 }
 
@@ -146,7 +120,10 @@ function targetBounds(kind: TargetKind, target: HTMLElement): DOMRect {
     if (actionBounds !== null) return actionBounds;
   }
 
-  if (kind === "lightbox-navigation" && target.matches('[aria-label="照片画布"]')) {
+  if (
+    kind === "lightbox-navigation" &&
+    target.matches('[data-viewer-onboarding-target="lightbox-canvas"]')
+  ) {
     const bounds = target.getBoundingClientRect();
     const width = Math.min(bounds.width * 0.7, 420);
     const height = Math.min(bounds.height * 0.36, 280);
@@ -164,19 +141,13 @@ function targetBounds(kind: TargetKind, target: HTMLElement): DOMRect {
 function readLightboxActions(): string[] {
   const toolbar = resolveTarget("lightbox-toolbar");
   if (toolbar === null) return [];
+  const actionKinds = new Set(
+    lightboxActionButtons(toolbar).map((button) => button.dataset.viewerOnboardingAction),
+  );
   const actions: string[] = [];
-  const buttons = lightboxActionButtons(toolbar);
-  if (
-    buttons.some((button) => {
-      const label = button.getAttribute("aria-label");
-      return label === "点赞" || label === "取消点赞";
-    })
-  ) {
-    actions.push("点赞");
-  }
-  const text = buttons.map((button) => button.textContent ?? "").join(" ");
-  if (text.includes("分享")) actions.push("分享");
-  if (text.includes("下载")) actions.push("下载");
+  if (actionKinds.has("like")) actions.push("点赞");
+  if (actionKinds.has("share")) actions.push("分享");
+  if (actionKinds.has("download")) actions.push("下载");
   return actions;
 }
 
@@ -606,6 +577,11 @@ export function ViewerOnboarding({
     setFlow({ kind: "main", step: -1 });
   }, []);
 
+  useEffect(() => {
+    window.addEventListener(viewerOnboardingReplayEvent, replayMain);
+    return () => window.removeEventListener(viewerOnboardingReplayEvent, replayMain);
+  }, [replayMain]);
+
   const currentMainStep =
     flow?.kind === "main" && flow.step >= 0 ? (mainSteps[flow.step] ?? null) : null;
   const welcome = flow?.kind === "main" && flow.step < 0;
@@ -793,22 +769,5 @@ export function ViewerOnboarding({
       </div>
     );
 
-  return (
-    <>
-      {mounted && flow === null && hasSeenMain ? (
-        <Button
-          aria-label="重新查看使用引导"
-          className="fixed right-2.5 bottom-[calc(2.5rem+env(safe-area-inset-bottom))] z-30 h-8 rounded-full bg-background/82 px-2.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur-md hover:text-foreground sm:right-4 sm:px-3"
-          onClick={replayMain}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <CircleHelpIcon className="size-3.5" />
-          <span className="hidden sm:inline">使用帮助</span>
-        </Button>
-      ) : null}
-      {overlay === null ? null : createPortal(overlay, document.body)}
-    </>
-  );
+  return overlay === null ? null : createPortal(overlay, document.body);
 }
