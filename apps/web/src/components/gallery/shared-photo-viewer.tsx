@@ -15,6 +15,7 @@ import { PhotoShareButton } from "@/components/gallery/photo-share-button";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { usePhotoLightboxGestures } from "@/hooks/use-photo-lightbox-gestures";
+import { useWeChatBrowser } from "@/hooks/use-wechat-browser";
 import { clientGet } from "@/lib/client-api";
 import { readCachedDerivedImage } from "@/lib/derived-image-cache";
 import { fetchImageWithProgress } from "@/lib/image-download-progress";
@@ -73,6 +74,7 @@ export function SharedPhotoViewer({
   shareId: string;
   slug: string;
 }>) {
+  const weChat = useWeChatBrowser();
   const preview = useMemo(() => bestPreview(media), [media]);
   const [likeState, setLikeState] = useState<PhotoLikeState | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
@@ -360,7 +362,7 @@ export function SharedPhotoViewer({
                   variant="outline"
                 >
                   <DownloadIcon data-icon="inline-start" />
-                  下载
+                  {weChat ? "保存至相册" : "下载"}
                 </Button>
               ) : null}
             </div>
