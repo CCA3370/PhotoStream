@@ -48,8 +48,7 @@ import { cn } from "@/lib/utils";
 
 const minZoom = 1;
 const maxZoom = 5;
-const toolbarButtonClass =
-  "rounded-lg border-white/10 bg-white/[0.06] text-white shadow-none backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12] hover:text-white active:not-aria-[haspopup]:translate-y-0 disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35";
+const toolbarButtonClass = "rounded-lg";
 
 type Point = { x: number; y: number };
 type Gesture =
@@ -653,7 +652,7 @@ export function ReviewLightbox({
                       size="sm"
                       title={viewingOriginal ? "返回 1920 预览" : "查看上传原图"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {originalLoading ? (
                         <LoaderCircleIcon className="animate-spin" />
@@ -785,7 +784,7 @@ export function ReviewLightbox({
                       size="icon-sm"
                       title={selected.featured ? "取消精选 (Enter)" : "精选 (Enter)"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {selected.pendingAction === "featured" ? (
                         <LoaderCircleIcon className="animate-spin" />
@@ -819,7 +818,7 @@ export function ReviewLightbox({
                       }
                       title={published ? "隐藏 (Space)" : hidden ? "显示 (Space)" : "等待上传完成"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {selected.pendingAction === "state" ? (
                         <LoaderCircleIcon className="animate-spin" />
@@ -846,7 +845,7 @@ export function ReviewLightbox({
                       size="icon-sm"
                       title={inspectorOpen ? "关闭照片属性" : "打开照片属性"}
                       type="button"
-                      variant="outline"
+                      variant="review-lightbox"
                     >
                       {inspectorOpen ? <PanelRightCloseIcon /> : <PanelRightOpenIcon />}
                     </Button>
