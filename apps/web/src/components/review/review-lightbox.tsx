@@ -539,6 +539,7 @@ export function ReviewLightbox({
       <Dialog open onOpenChange={(open) => !open && onClose()}>
         <DialogContent
           className="inset-0 left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
+          padding="none"
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
