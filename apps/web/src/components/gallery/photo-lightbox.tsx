@@ -726,7 +726,7 @@ export function PhotoLightbox({
               <Button
                 aria-label="上一张照片"
                 className={cn(
-                  "absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none",
+                  "absolute top-1/2 left-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:-translate-y-1/2 active:scale-[0.94] md:flex lg:size-14 motion-reduce:transition-none",
                   controlsVisible ? "opacity-100" : "pointer-events-none -translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
@@ -738,12 +738,12 @@ export function PhotoLightbox({
                 type="button"
                 variant="outline"
               >
-                <ChevronLeftIcon className="size-5" />
+                <ChevronLeftIcon className="size-5 lg:size-6" />
               </Button>
               <Button
                 aria-label="下一张照片"
                 className={cn(
-                  "absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:scale-[0.94] md:flex motion-reduce:transition-none",
+                  "absolute top-1/2 right-3 z-20 hidden size-11 -translate-y-1/2 rounded-full border-white/10 bg-black/25 text-white backdrop-blur-md transition-[transform,background-color,opacity] duration-200 hover:bg-white/15 hover:text-white active:not-aria-[haspopup]:-translate-y-1/2 active:scale-[0.94] md:flex lg:size-14 motion-reduce:transition-none",
                   controlsVisible ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0",
                 )}
                 data-lightbox-controls
@@ -756,7 +756,7 @@ export function PhotoLightbox({
                 type="button"
                 variant="outline"
               >
-                <ChevronRightIcon className="size-5" />
+                <ChevronRightIcon className="size-5 lg:size-6" />
               </Button>
             </>
           ) : null}
