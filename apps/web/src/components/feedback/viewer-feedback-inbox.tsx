@@ -460,7 +460,8 @@ export function ViewerFeedbackInbox({
         onToggleFeatured={() => undefined}
         onToggleVisibility={() => undefined}
         readOnly
-        selectedKey={previewItem?.key ?? null} />
+        selectedKey={previewItem?.key ?? null}
+      />
 
       <AlertDialog
         onOpenChange={(open) => {
