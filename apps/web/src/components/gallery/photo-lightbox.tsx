@@ -656,7 +656,8 @@ export function PhotoLightbox({
               settling={swipeSettling}
               slug={slug}
               viewportHeight={stageHeight}
-              viewportWidth={stageWidth} />
+              viewportWidth={stageWidth}
+            />
           </div>
 
           <div
