@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { clientGet, publicMutation } from "@/lib/client-api";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { preprocessFaceReference } from "@/lib/face-reference";
 
 interface SearchPage {
