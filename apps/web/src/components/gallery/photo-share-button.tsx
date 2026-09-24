@@ -1,9 +1,10 @@
 "use client";
 
-import { LinkIcon, LoaderCircleIcon, Share2Icon } from "lucide-react";
+import { LinkIcon, Share2Icon } from "lucide-react";
 import { type ComponentProps, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -142,11 +143,11 @@ export function PhotoShareButton({
         variant={variant}
       >
         {pending ? (
-          <LoaderCircleIcon
+          <Spinner
             aria-hidden="true"
             className="animate-spin motion-reduce:animate-none"
             data-icon="inline-start"
-          />
+           />
         ) : weChat ? (
           <LinkIcon data-icon="inline-start" />
         ) : (
