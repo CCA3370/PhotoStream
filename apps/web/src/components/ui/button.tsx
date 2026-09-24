@@ -19,7 +19,7 @@ const buttonVariants = cva(
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
         lightbox:
-          "border-white/10 bg-white/[0.07] text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] motion-reduce:transform-none motion-reduce:transition-none",
+          "border-white/10 bg-white/[0.07] text-white shadow-none backdrop-blur-md transition-[transform,background-color,border-color] duration-150 hover:border-white/20 hover:bg-white/[0.13] hover:text-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.97] dark:bg-input/30 dark:hover:bg-input/50 motion-reduce:transform-none motion-reduce:transition-none",
         "review-lightbox":
           "border-white/10 bg-white/[0.06] text-white shadow-none backdrop-blur-md transition-colors hover:border-white/20 hover:bg-white/[0.12] hover:text-white active:not-aria-[haspopup]:translate-y-0 disabled:border-white/5 disabled:bg-white/[0.03] disabled:text-white/35",
       },
