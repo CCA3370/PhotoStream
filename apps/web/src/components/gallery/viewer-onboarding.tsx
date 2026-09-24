@@ -590,7 +590,7 @@ export function ViewerOnboarding({
 
   const overlay =
     !mounted || flow === null ? null : (
-      <div className="fixed inset-0 z-[80] overflow-hidden">
+      <div className="layer-onboarding fixed inset-0 overflow-hidden">
         {spotlightRect === null ? (
           <div className="pointer-events-none absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
         ) : (
@@ -623,7 +623,7 @@ export function ViewerOnboarding({
         {pointerPath === null ? null : (
           <svg
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[81] size-full"
+            className="layer-onboarding-arrow pointer-events-none absolute inset-0 size-full"
             preserveAspectRatio="none"
           >
             <defs>
@@ -669,7 +669,7 @@ export function ViewerOnboarding({
           aria-describedby="viewer-onboarding-description"
           aria-labelledby="viewer-onboarding-title"
           aria-modal="true"
-          className="public-theme fixed z-[82] rounded-2xl border border-border/80 bg-background/98 p-4 text-foreground shadow-2xl shadow-black/35 backdrop-blur-xl outline-none sm:p-5"
+          className="public-theme layer-onboarding-card fixed rounded-2xl border border-border/80 bg-background/98 p-4 text-foreground shadow-2xl shadow-black/35 backdrop-blur-xl outline-none sm:p-5"
           ref={cardRef}
           role="dialog"
           style={cardPosition}
