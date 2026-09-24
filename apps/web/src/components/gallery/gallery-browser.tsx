@@ -11,6 +11,7 @@ import {
 } from "@/components/gallery/gallery-filter-nav";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { ErrorDialog } from "@/components/ui/error-dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { clientGet } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
@@ -180,10 +181,10 @@ export function GalleryBrowser({
           role="status"
         >
           <div className="flex size-11 items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur">
-            <LoaderCircleIcon
+            <Spinner
               aria-hidden="true"
               className="size-5 animate-spin text-foreground/80"
-            />
+             />
             <span className="sr-only">正在加载照片</span>
           </div>
         </div>
