@@ -40,11 +40,7 @@ export function PublicGalleryShell({
           }
         }
 
-        button[aria-label="重新查看使用引导"] {
-          display: none;
-        }
-
-        body:has([aria-label="照片画布"])
+        body:has([data-viewer-onboarding-target="lightbox-canvas"])
           #viewer-onboarding-description:has(+ div svg[data-icon="inline-end"])::after {
           display: block;
           margin-top: 0.5rem;
@@ -56,7 +52,7 @@ export function PublicGalleryShell({
             min-height: 3rem;
           }
 
-          [data-lightbox-controls] button[aria-label] {
+          [data-lightbox-controls] button[data-size^="icon"] {
             min-width: 3rem;
           }
 
@@ -65,22 +61,19 @@ export function PublicGalleryShell({
             height: 1.125rem;
           }
 
-          button[aria-label="上一张照片"],
-          button[aria-label="下一张照片"] {
+          [data-lightbox-navigation] {
             width: 3.5rem !important;
             height: 3.5rem !important;
             min-width: 3.5rem !important;
             min-height: 3.5rem !important;
           }
 
-          button[aria-label="上一张照片"] svg,
-          button[aria-label="下一张照片"] svg {
+          [data-lightbox-navigation] svg {
             width: 1.5rem;
             height: 1.5rem;
           }
 
-          button[aria-label="上一张照片"]:active,
-          button[aria-label="下一张照片"]:active {
+          [data-lightbox-navigation]:active {
             translate: 0 -50% !important;
             --tw-translate-y: -50% !important;
           }
