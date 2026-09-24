@@ -84,7 +84,7 @@ export function PublicGalleryShell({
         className={`public-theme min-h-dvh bg-background pb-[calc(2rem+env(safe-area-inset-bottom))] text-foreground ${headerHeightClass}`}
       >
         <a
-          className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70]"
+          className="sr-only rounded-lg bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:layer-skip-link"
           href="#gallery-main"
         >
           跳到主要内容
