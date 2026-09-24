@@ -46,6 +46,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import { resolveMediaEditSource } from "@/lib/photo-edit/source-resolver";
 import { cn } from "@/lib/utils";
+
 const minZoom = 1;
 const maxZoom = 5;
 const toolbarButtonClass = "rounded-lg";
@@ -572,7 +573,8 @@ export function ReviewLightbox({
                       <PhotoBeforeAfterSlider
                         afterUrl={editPreview.afterUrl}
                         beforeUrl={editPreview.beforeUrl}
-                        disabled={editPreview.loading} />
+                        disabled={editPreview.loading}
+                      />
                       {editPreview.loading ? (
                         <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black/35 text-sm text-white">
                           正在准备修图源…
@@ -626,7 +628,8 @@ export function ReviewLightbox({
                         variantKind={
                           selected.variants?.find((variant) => variant.url === displaySrc)?.kind
                         }
-                        unoptimized />
+                        unoptimized
+                      />
                     </div>
                   </>
                 )}
@@ -652,11 +655,7 @@ export function ReviewLightbox({
                       type="button"
                       variant="review-lightbox"
                     >
-                      {originalLoading ? (
-                        <Spinner className="animate-spin" />
-                      ) : (
-                        <ImageIcon />
-                      )}
+                      {originalLoading ? <Spinner className="animate-spin" /> : <ImageIcon />}
                       <span>{viewingOriginal ? "返回 1920" : "查看原图"}</span>
                     </Button>
                   ) : null}
@@ -699,7 +698,8 @@ export function ReviewLightbox({
                       }}
                       onError={onBibError}
                       state={selected.bib}
-                      tone="dark" />
+                      tone="dark"
+                    />
                   </div>
                 </div>
               ) : null}
@@ -886,7 +886,8 @@ export function ReviewLightbox({
                       setEditMode(false);
                       setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
                     }}
-                    onPreviewChange={handleEditPreviewChange} />
+                    onPreviewChange={handleEditPreviewChange}
+                  />
                 ) : (
                   <ReviewInspector
                     busy={busy}
@@ -912,7 +913,8 @@ export function ReviewLightbox({
                     onToggleFeatured={() => {
                       onToggleFeatured(selected.key);
                       focusViewer();
-                    }} />
+                    }}
+                  />
                 )}
               </div>
             ) : null}
@@ -930,7 +932,8 @@ export function ReviewLightbox({
           onError={onBibError}
           onOpenChange={setBibDialogOpen}
           open={bibDialogOpen && bibConfirmed}
-          state={selected.bib} />
+          state={selected.bib}
+        />
       ) : null}
     </>
   );
