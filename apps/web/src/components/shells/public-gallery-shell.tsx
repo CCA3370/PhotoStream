@@ -25,61 +25,6 @@ export function PublicGalleryShell({
 
   return (
     <Toaster>
-      <style>{`
-        html,
-        body {
-          background-color: oklch(1 0 0);
-          color-scheme: light;
-        }
-
-        @media (prefers-color-scheme: dark) {
-          html,
-          body {
-            background-color: oklch(0.208 0.042 265.755);
-            color-scheme: dark;
-          }
-        }
-
-        body:has([data-viewer-onboarding-target="lightbox-canvas"])
-          #viewer-onboarding-description:has(+ div svg[data-icon="inline-end"])::after {
-          display: block;
-          margin-top: 0.5rem;
-          content: "网页中的图片清晰度受到限制，如需查看原图，请下载所需图片。";
-        }
-
-        @media (min-width: 1024px) {
-          [data-lightbox-controls] button {
-            min-height: 3rem;
-          }
-
-          [data-lightbox-controls] button[data-size^="icon"] {
-            min-width: 3rem;
-          }
-
-          [data-lightbox-controls] button svg {
-            width: 1.125rem;
-            height: 1.125rem;
-          }
-
-          [data-lightbox-navigation] {
-            width: 3.5rem !important;
-            height: 3.5rem !important;
-            min-width: 3.5rem !important;
-            min-height: 3.5rem !important;
-          }
-
-          [data-lightbox-navigation] svg {
-            width: 1.5rem;
-            height: 1.5rem;
-          }
-
-          [data-lightbox-navigation]:active {
-            translate: 0 -50% !important;
-            --tw-translate-y: -50% !important;
-          }
-        }
-      `}</style>
-
       <div
         className={`public-theme min-h-dvh bg-background pb-[calc(2rem+env(safe-area-inset-bottom))] text-foreground ${headerHeightClass}`}
       >
