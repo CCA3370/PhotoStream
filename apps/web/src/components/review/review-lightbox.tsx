@@ -800,6 +800,7 @@ export function ReviewLightbox({
                         published &&
                           "border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 hover:text-white",
                       )}
+                      data-review-publication-toggle
                       disabled={busy || !canToggleVisibility}
                       onClick={(event) => {
                         event.currentTarget.blur();
