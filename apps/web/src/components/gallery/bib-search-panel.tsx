@@ -575,7 +575,11 @@ export function BibSearchPanel({
       )}
 
       <Dialog open={open} onOpenChange={requestDialogChange}>
-        <DialogContent className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none max-sm:data-open:slide-in-from-bottom-full max-sm:data-open:zoom-in-100 max-sm:data-closed:slide-out-to-bottom-full max-sm:data-closed:zoom-out-100 max-sm:duration-300 sm:max-w-md sm:rounded-3xl motion-reduce:duration-0">
+        <DialogContent
+          className="public-theme flex max-h-[88dvh] flex-col gap-0 overflow-hidden border bg-background/98 p-0 shadow-2xl max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-[1.75rem] max-sm:rounded-b-none max-sm:data-open:slide-in-from-bottom-full max-sm:data-open:zoom-in-100 max-sm:data-closed:slide-out-to-bottom-full max-sm:data-closed:zoom-out-100 max-sm:duration-300 sm:max-w-md sm:rounded-3xl motion-reduce:duration-0"
+          padding="none"
+          presentation="mobile-bottom-sheet"
+        >
           <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20 sm:hidden" />
           <DialogHeader className="shrink-0 px-5 pt-3 pb-2.5 pr-12 sm:pt-5 sm:pb-3">
             <DialogTitle className="text-base">
