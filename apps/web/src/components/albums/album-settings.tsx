@@ -464,7 +464,8 @@ export function AlbumSettings({
                           "访问方式已更新",
                           "access",
                         )
-                      } />
+                      }
+                    />
                   )}
                 </SettingRow>
 
@@ -480,8 +481,7 @@ export function AlbumSettings({
                   <AlertDialog>
                     <AlertDialogTrigger
                       disabled={isPending("password")}
-                      render={<Button size="sm" type="button" variant="outline"
-                    />
+                      render={<Button size="sm" type="button" variant="outline" />}
                     >
                       {isPending("password") ? (
                         <Spinner className="animate-spin" data-icon="inline-start" />
