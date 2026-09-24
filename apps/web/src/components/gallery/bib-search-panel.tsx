@@ -236,7 +236,7 @@ export function BibSearchPanel({
       setResultMode(mode);
       if (cursor === undefined) setOpen(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "查找失败");
+      setError(userFacingErrorMessage(caught, "找照片失败，请稍后重试。"));
     } finally {
       setPending(false);
     }
@@ -313,7 +313,7 @@ export function BibSearchPanel({
         }
       } catch (caught) {
         if (cancelled || abortRef.current?.signal.aborted) return;
-        setError(caught instanceof Error ? caught.message : "查询人脸候选失败");
+        setError(userFacingErrorMessage(caught, "查询人脸候选失败，请稍后重试。"));
         timer = setTimeout(() => void poll(), Math.min(4_000, Math.round(delay * 1.45)));
       }
     };
@@ -382,7 +382,7 @@ export function BibSearchPanel({
       }
     } catch (caught) {
       if (controller.signal.aborted) return;
-      setError(caught instanceof Error ? caught.message : "参考照片处理失败");
+      setError(userFacingErrorMessage(caught, "参考照片处理失败，请换一张照片或稍后重试。"));
       setFaceStage(created === null ? "choose" : "failed");
     } finally {
       setFacePending(false);
@@ -422,7 +422,7 @@ export function BibSearchPanel({
     try {
       await refreshFace(faceSearchId, faceView.nextCursor);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "加载更多候选失败");
+      setError(userFacingErrorMessage(caught, "加载更多候选失败，请稍后重试。"));
     } finally {
       setFacePending(false);
     }
