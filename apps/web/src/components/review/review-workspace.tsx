@@ -88,6 +88,7 @@ import {
 } from "@/lib/local-review-queue";
 import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
 import { cn } from "@/lib/utils";
+
 async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
   await Promise.all([
     deleteLocalReviewPhoto(localPhotoId),
@@ -1915,7 +1916,8 @@ export function ReviewWorkspace({
             );
           }}
           userRole={userRole}
-          value={reviewCollaboration} />
+          value={reviewCollaboration}
+        />
 
         <Select
           items={[
@@ -2159,9 +2161,7 @@ export function ReviewWorkspace({
             type="button"
             variant="outline"
           >
-            {selectingAll ? (
-              <Spinner className="animate-spin" data-icon="inline-start" />
-            ) : null}
+            {selectingAll ? <Spinner className="animate-spin" data-icon="inline-start" /> : null}
             选择全部匹配
           </Button>
           {selectedCount === 0 ? (
@@ -2266,7 +2266,8 @@ export function ReviewWorkspace({
                       setBatchBibNumber(value);
                     }}
                     placeholder="统一号码"
-                    value={batchBibNumber} />
+                    value={batchBibNumber}
+                  />
                   <Button
                     disabled={batchBusy || batchBibNumber.trim().length === 0}
                     onClick={() => void batchAddBibNumber()}
@@ -2377,7 +2378,8 @@ export function ReviewWorkspace({
                                 (variant) => variant.url === item.previewUrl,
                               )?.kind
                             : undefined
-                        } />
+                        }
+                      />
                     )}
                   </button>
                   {selectionMode ? (
@@ -2549,7 +2551,8 @@ export function ReviewWorkspace({
             onHide={() => void batchHide()}
             onRestore={() => void batchRestore()}
             onUnfeature={() => void batchSetFeatured(false)}
-            stats={selectionStats} />
+            stats={selectionStats}
+          />
         </div>
       ) : null}
 
@@ -2564,7 +2567,8 @@ export function ReviewWorkspace({
             onDelete={() => setInspectorDeleteOpen(true)}
             onOpenBib={() => setBibDialogKey(inspectorSourceItem.key)}
             onStateAction={() => void stateAction(inspectorSourceItem)}
-            onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)} />
+            onToggleFeatured={() => void toggleFeatured(inspectorSourceItem)}
+          />
         </div>
       ) : null}
 
@@ -2601,7 +2605,8 @@ export function ReviewWorkspace({
           const item = itemByKey(key);
           if (item !== null) void toggleVisibility(item);
         }}
-        selectedKey={activeKey} />
+        selectedKey={activeKey}
+      />
 
       <BibReviewDialog
         localActions={bibDialogLocalActions}
@@ -2617,7 +2622,8 @@ export function ReviewWorkspace({
           if (!open) setBibDialogKey(null);
         }}
         open={bibDialogItem !== null}
-        state={bibDialogItem?.bib ?? null} />
+        state={bibDialogItem?.bib ?? null}
+      />
 
       <AlertDialog open={inspectorDeleteOpen} onOpenChange={setInspectorDeleteOpen}>
         <AlertDialogContent>
