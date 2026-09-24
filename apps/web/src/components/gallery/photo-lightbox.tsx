@@ -510,7 +510,8 @@ export function PhotoLightbox({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="dark public-theme inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-200 data-open:zoom-in-100 data-closed:zoom-out-100 data-closed:duration-150 sm:max-w-none motion-reduce:duration-0"
+        className="dark public-theme layer-gallery-lightbox inset-0 top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 duration-200 data-open:zoom-in-100 data-closed:zoom-out-100 data-closed:duration-150 sm:max-w-none motion-reduce:duration-0"
+        overlayClassName="layer-gallery-lightbox"
         padding="none"
         showCloseButton={false}
       >
