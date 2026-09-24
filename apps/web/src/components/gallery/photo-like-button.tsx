@@ -189,7 +189,12 @@ export function PhotoLikeButton({
           )}
         </span>
       </Button>
-      <ErrorDialog message={error} onClose={() => setError(null)} title="点赞失败" />
+      <ErrorDialog
+        message={error}
+        nested={mode === "toolbar"}
+        onClose={() => setError(null)}
+        title="点赞失败"
+      />
     </>
   );
 }
