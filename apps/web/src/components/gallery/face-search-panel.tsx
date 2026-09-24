@@ -415,7 +415,7 @@ export function FaceSearchPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <ErrorDialog message={error} onClose={() => setError(null)} title="人脸找图失败" />
+      <ErrorDialog message={error} nested onClose={() => setError(null)} title="人脸找图失败" />
     </>
   );
 }
