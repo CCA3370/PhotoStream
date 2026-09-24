@@ -72,6 +72,12 @@ describe("UI governance", () => {
   });
 
   it("uses the shared Spinner for animated loading icons", () => {
-    expect(violations(/<LoaderCircleIcon\b[^>]*animate-spin[^>]*\/>/gu)).toEqual([]);
+    const spinnerPath = resolve(srcRoot, "components/ui/spinner.tsx");
+    expect(
+      violations(
+        /<LoaderCircleIcon\b[^>]*animate-spin[^>]*\/>/gu,
+        sourceFiles(srcRoot).filter((path) => path !== spinnerPath),
+      ),
+    ).toEqual([]);
   });
 });
