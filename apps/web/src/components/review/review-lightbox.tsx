@@ -41,6 +41,7 @@ import {
   type ReviewInspectorItem,
 } from "@/components/review/review-inspector";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import { resolveMediaEditSource } from "@/lib/photo-edit/source-resolver";
@@ -655,7 +656,7 @@ export function ReviewLightbox({
                       variant="review-lightbox"
                     >
                       {originalLoading ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <Spinner className="animate-spin"  />
                       ) : (
                         <ImageIcon />
                       )}
@@ -787,7 +788,7 @@ export function ReviewLightbox({
                       variant="review-lightbox"
                     >
                       {selected.pendingAction === "featured" ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <Spinner className="animate-spin"  />
                       ) : (
                         <StarIcon className={cn(selected.featured && "fill-current")} />
                       )}
@@ -822,13 +823,13 @@ export function ReviewLightbox({
                       variant="review-lightbox"
                     >
                       {selected.pendingAction === "state" ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <Spinner className="animate-spin"  />
                       ) : published ? (
                         <EyeIcon />
                       ) : hidden ? (
                         <EyeOffIcon />
                       ) : (
-                        <LoaderCircleIcon className="opacity-60" />
+                        <Spinner className="opacity-60" />
                       )}
                     </Button>
                     <Button
@@ -867,7 +868,7 @@ export function ReviewLightbox({
                       variant="outline"
                     >
                       {selected.pendingAction === "delete" ? (
-                        <LoaderCircleIcon className="animate-spin" />
+                        <LoaderCircleIcon className="animate-spin"  />
                       ) : (
                         <Trash2Icon />
                       )}
