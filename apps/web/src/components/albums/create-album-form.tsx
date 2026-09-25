@@ -26,6 +26,13 @@ interface CreatedAlbumResponse {
   readonly generatedPassword: string;
 }
 
+function beijingLocalDateTimeToIso(value: string): string | null {
+  if (value.trim().length === 0) return null;
+  const normalized = value.length === 16 ? `${value}:00` : value;
+  const date = new Date(`${normalized}+08:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function CreateAlbumForm() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -46,6 +53,12 @@ export function CreateAlbumForm() {
         body: {
           title: String(formData.get("title") ?? "").trim(),
           description: String(formData.get("description") ?? "").trim(),
+          scheduledStartAt: beijingLocalDateTimeToIso(
+            String(formData.get("scheduledStartAt") ?? ""),
+          ),
+          ...(String(formData.get("password") ?? "").trim().length === 0
+            ? {}
+            : { password: String(formData.get("password") ?? "") }),
         },
       });
       setResult(created);
@@ -104,6 +117,32 @@ export function CreateAlbumForm() {
                   <FieldLabel htmlFor="album-description">说明</FieldLabel>
                   <Textarea id="album-description" maxLength={1000} name="description" rows={3} />
                 </Field>
+                <Field>
+                  <FieldLabel htmlFor="album-scheduled-start">开始时间（北京时间）</FieldLabel>
+                  <Input
+                    id="album-scheduled-start"
+                    name="scheduledStartAt"
+                    type="datetime-local"
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    可选。设置后活动会在该时间自动开始；未开始前观众仍可看到活动名称和开始时间。
+                  </p>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="album-password">活动口令</FieldLabel>
+                  <Input
+                    autoComplete="new-password"
+                    id="album-password"
+                    maxLength={128}
+                    minLength={4}
+                    name="password"
+                    placeholder="留空则自动生成"
+                    type="password"
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    可自定义 4–128 个字符；留空时系统自动生成。
+                  </p>
+                </Field>
               </FieldGroup>
               <DialogFooter>
                 <Button disabled={pending} type="submit">
@@ -139,7 +178,9 @@ export function CreateAlbumForm() {
                     {copied ? "已复制" : "复制"}
                   </Button>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">关闭后不再显示此口令。</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  这是当前活动口令。关闭后系统不会再次显示明文。
+                </p>
               </div>
               <DialogFooter>
                 <Button
