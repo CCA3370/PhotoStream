@@ -321,9 +321,11 @@ maybeDescribe("stage 3 operations", () => {
       purgeFaceData: async () => {},
     });
 
-    expect(
-      await database.select().from(schema.albums).where(eq(schema.albums.id, albumId)),
-    ).toHaveLength(0);
+    const [deletingAlbum] = await database
+      .select({ state: schema.albums.state })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId));
+    expect(deletingAlbum?.state).toBe("deleting");
     expect(
       await database.select().from(schema.albums).where(eq(schema.albums.id, otherAlbumId)),
     ).toHaveLength(1);
@@ -338,6 +340,17 @@ maybeDescribe("stage 3 operations", () => {
     expect(swept).toBe(1);
     expect(storage.objects.has(lateKey)).toBe(false);
     expect(await database.select().from(schema.albumObjectDeletionSweeps)).toHaveLength(0);
+
+    expect(
+      await service.processPendingAlbumDeletions(
+        async () => {},
+        10,
+        new Date(Date.now() + 21 * 60 * 1_000),
+      ),
+    ).toBe(1);
+    expect(
+      await database.select().from(schema.albums).where(eq(schema.albums.id, albumId)),
+    ).toHaveLength(0);
   });
 
   it("purges non-FK traces committed concurrently with album deletion", async () => {
@@ -409,6 +422,17 @@ maybeDescribe("stage 3 operations", () => {
 
     await writer;
     await deletion;
+    await service.processPendingAlbumObjectDeletionSweeps(
+      10,
+      new Date(Date.now() + 21 * 60 * 1_000),
+    );
+    expect(
+      await service.processPendingAlbumDeletions(
+        async () => {},
+        10,
+        new Date(Date.now() + 21 * 60 * 1_000),
+      ),
+    ).toBe(1);
 
     expect(
       await database
@@ -561,6 +585,11 @@ maybeDescribe("stage 3 operations", () => {
       [false, "STATE_CONFLICT"],
       [false, "MEDIA_NOT_FOUND"],
     ]);
+    const [persistedBatch] = await database
+      .select({ result: schema.mediaBatchRequests.result })
+      .from(schema.mediaBatchRequests)
+      .where(eq(schema.mediaBatchRequests.idempotencyKey, "batch-publish-idempotency"));
+    expect(JSON.stringify(persistedBatch?.result ?? {})).not.toContain(missingId);
     const auditBeforeRetry = await database.select().from(schema.auditLogs);
     const retried = await service.applyBatch({
       actor: { id: reviewerId, role: "reviewer" },

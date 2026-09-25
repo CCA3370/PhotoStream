@@ -1,4 +1,5 @@
 import { isAlbumDataSaverActive } from "./album-data-saver";
+import { subscribeAlbumPurge } from "./album-purge-broadcast";
 import { loadMediaBlob, readMediaBlob } from "./media-blob-cache";
 
 const derivedImageCacheName = "photostream-derived-images-v1";
@@ -55,6 +56,10 @@ export function purgeWarmDerivedImages(scope: string): void {
     if (image.objectUrl !== null) URL.revokeObjectURL(image.objectUrl);
   }
 }
+
+subscribeAlbumPurge(({ slug }) => {
+  purgeWarmDerivedImages(slug);
+});
 
 function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
   return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}`;

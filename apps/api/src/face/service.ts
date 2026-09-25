@@ -486,7 +486,10 @@ export class FaceService {
   ): Promise<void> {
     requirePermission(actor, "album:configure");
     requireRecentAuthentication(actor.authenticatedAt);
+    await this.purgeAlbumForDeletionInternal(albumId);
+  }
 
+  async purgeAlbumForDeletionInternal(albumId: string): Promise<void> {
     const [album] = await this.#database
       .select({ id: schema.albums.id })
       .from(schema.albums)
@@ -1102,15 +1105,7 @@ export class FaceService {
             updatedAt: now,
           })),
         )
-        .onConflictDoUpdate({
-          target: schema.faceReferenceDeletionSweeps.objectKey,
-          set: {
-            executeAfter,
-            attempts: 0,
-            lastErrorCode: null,
-            updatedAt: now,
-          },
-        });
+        .onConflictDoNothing();
     }
   }
 
@@ -1980,14 +1975,18 @@ export class FaceService {
       .delete(schema.faceSearchCandidates)
       .where(lte(schema.faceSearchCandidates.expiresAt, now));
     const historyCutoff = new Date(now.getTime() - 26 * 60 * 60_000);
-    await this.#database
-      .delete(schema.faceSearchIntents)
-      .where(
-        and(
-          lt(schema.faceSearchIntents.createdAt, historyCutoff),
-          sql`${schema.faceSearchIntents.referenceDeletedAt} is not null`,
-        ),
-      );
+    await this.#database.delete(schema.faceSearchIntents).where(
+      and(
+        lt(schema.faceSearchIntents.createdAt, historyCutoff),
+        sql`${schema.faceSearchIntents.referenceDeletedAt} is not null`,
+        sql`not exists (
+          select 1
+          from albums
+          where albums.id = ${schema.faceSearchIntents.albumId}
+            and albums.state = 'deleting'
+        )`,
+      ),
+    );
     await this.#database
       .delete(schema.faceIntegrationEvents)
       .where(lt(schema.faceIntegrationEvents.processedAt, historyCutoff));

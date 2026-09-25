@@ -28,7 +28,12 @@ beforeEach(() => {
   vi.resetModules();
   cache = new MemoryCache();
   const storage = { open: async () => cache };
-  vi.stubGlobal("window", { caches: storage, location: { origin: "https://app.test" } });
+  vi.stubGlobal("window", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    caches: storage,
+    location: { origin: "https://app.test" },
+  });
   vi.stubGlobal("caches", storage);
   vi.stubGlobal("navigator", { storage: { estimate: async () => ({ quota: 1024 * 1024 }) } });
   network = vi.fn(async () => new Response(new Blob(["photo"], { type: "image/webp" })));

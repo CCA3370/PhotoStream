@@ -90,10 +90,10 @@ export async function registerOperationsRoutes(
         tags: ["albums"],
         params: idParamsSchema,
         body: deleteMediaRequestSchema,
-        response: { 200: okResponseSchema, ...errors },
+        response: { 202: okResponseSchema, ...errors },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const session = await requireInternalCsrf(request, options.authService, options.config);
       await verifyPasswordConfirmation(request, options.authService, session);
       const actor = { ...actorFrom(session), authenticatedAt: new Date() };
@@ -109,7 +109,7 @@ export async function registerOperationsRoutes(
                 Promise.resolve(),
             }),
       });
-      return { ok: true as const };
+      return reply.status(202).send({ ok: true as const });
     },
   );
 

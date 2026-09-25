@@ -177,7 +177,7 @@ export function ReviewInspector({
                 <SelectTrigger aria-label="修改照片分类" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent positionerClassName={docked ? "layer-nested-popover" : undefined}>
+                <SelectContent {...(docked ? { positionerClassName: "layer-nested-popover" } : {})}>
                   <SelectGroup>
                     <SelectItem value="uncategorized">未分类</SelectItem>
                     {categories.map((category) => (
