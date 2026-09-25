@@ -780,7 +780,8 @@ export type UpdateAlbumRequest = z.infer<typeof updateAlbumRequestSchema>;
 
 export const rotateAlbumPasswordRequestSchema = z
   .object({ password: albumPasswordSchema.optional() })
-  .strict();
+  .strict()
+  .default({});
 export const rotateAlbumPasswordResponseSchema = z
   .object({ generatedPassword: albumPasswordSchema, album: albumViewSchema })
   .strict();
