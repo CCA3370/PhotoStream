@@ -429,6 +429,10 @@ class LocalProcessingRuntime {
   async purgeLocalData(): Promise<void> {
     this.#purged = true;
     this.#paused = true;
+    if (this.#adaptiveTimer !== null) {
+      window.clearInterval(this.#adaptiveTimer);
+      this.#adaptiveTimer = null;
+    }
     for (const controller of this.#abortControllers.values()) controller.abort();
 
     const [persisted, localPhotos] = await Promise.all([
