@@ -213,6 +213,8 @@ export const idempotencyKeySchema = z
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/u);
 
+export const albumPasswordSchema = z.string().min(4).max(128);
+
 export const albumViewSchema = z
   .object({
     id: z.string().uuid(),
@@ -220,8 +222,10 @@ export const albumViewSchema = z
     title: z.string().min(1).max(120),
     description: z.string().max(1_000),
     state: albumStateSchema,
+    scheduledStartAt: z.string().datetime().nullable(),
     access: albumAccessSchema,
     publishMode: publishModeSchema,
+    scheduledStartAt: z.string().datetime().nullable(),
     previewDownloadEnabled: z.boolean(),
     originalDownloadEnabled: z.boolean(),
     privacyNotice: z.string().max(2_000),
@@ -236,6 +240,8 @@ export const createAlbumRequestSchema = z
     title: z.string().trim().min(1).max(120),
     description: z.string().trim().max(1_000).default(""),
     publishMode: publishModeSchema.default("review"),
+    scheduledStartAt: z.string().datetime().nullable().default(null),
+    password: albumPasswordSchema.optional(),
   })
   .strict();
 export type CreateAlbumRequest = z.infer<typeof createAlbumRequestSchema>;
@@ -243,7 +249,7 @@ export type CreateAlbumRequest = z.infer<typeof createAlbumRequestSchema>;
 export const createAlbumResponseSchema = z
   .object({
     album: albumViewSchema,
-    generatedPassword: z.string().min(8),
+    generatedPassword: albumPasswordSchema,
   })
   .strict();
 
@@ -763,6 +769,7 @@ export const updateAlbumRequestSchema = z
     description: z.string().trim().max(1_000).optional(),
     access: albumAccessSchema.optional(),
     publishMode: publishModeSchema.optional(),
+    scheduledStartAt: z.string().datetime().nullable().optional(),
     previewDownloadEnabled: z.boolean().optional(),
     originalDownloadEnabled: z.boolean().optional(),
     privacyNotice: z.string().trim().max(2_000).optional(),
@@ -771,8 +778,11 @@ export const updateAlbumRequestSchema = z
   .refine((value) => Object.keys(value).length > 0, { message: "至少提供一个修改字段" });
 export type UpdateAlbumRequest = z.infer<typeof updateAlbumRequestSchema>;
 
+export const rotateAlbumPasswordRequestSchema = z
+  .object({ password: albumPasswordSchema.optional() })
+  .strict();
 export const rotateAlbumPasswordResponseSchema = z
-  .object({ generatedPassword: z.string().min(8), album: albumViewSchema })
+  .object({ generatedPassword: albumPasswordSchema, album: albumViewSchema })
   .strict();
 
 export const albumDeletionProgressSchema = z
