@@ -73,7 +73,7 @@ describe("UI governance", () => {
     expect(reviewLightbox).toContain("<BibReviewDialog");
     expect(reviewLightbox).toContain("          nested");
     expect(reviewInspector).toContain(
-      'positionerClassName={docked ? "layer-nested-popover" : undefined}',
+      '<SelectContent {...(docked ? { positionerClassName: "layer-nested-popover" } : {})}>',
     );
   });
 
