@@ -443,8 +443,7 @@ export class AliyunObjectStorage implements ObjectStorage {
         .map((upload) => `${upload.name}\u0000${upload.uploadId}`)
         .sort()
         .join("\n");
-      repeatedUploadBatchCount =
-        batch === previousUploadBatch ? repeatedUploadBatchCount + 1 : 0;
+      repeatedUploadBatchCount = batch === previousUploadBatch ? repeatedUploadBatchCount + 1 : 0;
       if (repeatedUploadBatchCount >= 2) {
         throw new Error("Multipart prefix deletion was not confirmed");
       }
