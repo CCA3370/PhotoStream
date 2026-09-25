@@ -801,7 +801,7 @@ export const albumDeletionProgressSchema = z
       .strict(),
     latestError: z
       .object({
-        source: z.enum(["object_storage", "face_provider", "face_reference"]),
+        source: z.enum(["object_storage", "cdn", "face_provider", "face_reference"]),
         code: z.string().max(200).nullable(),
         message: z.string().min(1).max(4_000),
         occurredAt: z.string().datetime(),
@@ -812,6 +812,36 @@ export const albumDeletionProgressSchema = z
   })
   .strict();
 export type AlbumDeletionProgress = z.infer<typeof albumDeletionProgressSchema>;
+
+export const albumDeletionErrorSourceSchema = z.enum([
+  "object_storage",
+  "cdn",
+  "face_provider",
+  "face_reference",
+]);
+export type AlbumDeletionErrorSource = z.infer<typeof albumDeletionErrorSourceSchema>;
+
+export const albumDeletionErrorViewSchema = z
+  .object({
+    id: z.string().uuid(),
+    source: albumDeletionErrorSourceSchema,
+    stage: z.enum(["object_cleanup", "face_cleanup"]),
+    operation: z.string().min(1).max(120),
+    code: z.string().max(200).nullable(),
+    message: z.string().min(1),
+    providerRequestId: z.string().max(256).nullable(),
+    httpStatus: z.number().int().nullable(),
+    attempt: z.number().int().min(1),
+    details: z.record(z.string(), z.unknown()),
+    occurredAt: z.string().datetime(),
+  })
+  .strict();
+export type AlbumDeletionErrorView = z.infer<typeof albumDeletionErrorViewSchema>;
+
+export const albumDeletionErrorListSchema = z
+  .object({ items: z.array(albumDeletionErrorViewSchema) })
+  .strict();
+export type AlbumDeletionErrorList = z.infer<typeof albumDeletionErrorListSchema>;
 
 export const albumSummaryViewSchema = albumViewSchema
   .extend({
