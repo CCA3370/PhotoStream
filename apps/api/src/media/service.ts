@@ -1044,12 +1044,20 @@ export class PhotoService {
           statusCode: 400,
         });
       }
-      const plainInput = { ...options.input };
-      delete plainInput.scheduledStartAt;
       const [updated] = await transaction
         .update(schema.albums)
         .set({
-          ...plainInput,
+          ...(options.input.title === undefined ? {} : { title: options.input.title }),
+          ...(options.input.description === undefined
+            ? {}
+            : { description: options.input.description }),
+          ...(options.input.access === undefined ? {} : { access: options.input.access }),
+          ...(options.input.publishMode === undefined
+            ? {}
+            : { publishMode: options.input.publishMode }),
+          ...(options.input.privacyNotice === undefined
+            ? {}
+            : { privacyNotice: options.input.privacyNotice }),
           ...(scheduledStartAt === undefined ? {} : { scheduledStartAt }),
           previewDownloadEnabled: true,
           originalDownloadEnabled: true,
