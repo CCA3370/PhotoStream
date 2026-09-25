@@ -302,10 +302,9 @@ export function AlbumSettings({
     setDeletingCategoryIds((current) => new Set(current).add(category.id));
     setError(null);
     try {
-      await clientMutation<{ ok: true }>(
-        `/api/v1/albums/${album.id}/categories/${category.id}`,
-        { method: "DELETE" },
-      );
+      await clientMutation<{ ok: true }>(`/api/v1/albums/${album.id}/categories/${category.id}`, {
+        method: "DELETE",
+      });
       setRemovedCategoryIds((current) => new Set(current).add(category.id));
       setCategoryDeleteTarget(null);
       showNotice("分类已删除");
@@ -802,11 +801,7 @@ export function AlbumSettings({
                             type="button"
                             variant="ghost"
                           >
-                            {deleting ? (
-                              <Spinner className="animate-spin" />
-                            ) : (
-                              <Trash2Icon />
-                            )}
+                            {deleting ? <Spinner className="animate-spin" /> : <Trash2Icon />}
                           </Button>
                         </div>
                       </div>
@@ -882,8 +877,7 @@ export function AlbumSettings({
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               disabled={
-                categoryDeleteTarget === null ||
-                deletingCategoryIds.has(categoryDeleteTarget.id)
+                categoryDeleteTarget === null || deletingCategoryIds.has(categoryDeleteTarget.id)
               }
               onClick={() => {
                 if (categoryDeleteTarget !== null) void deleteCategory(categoryDeleteTarget);
