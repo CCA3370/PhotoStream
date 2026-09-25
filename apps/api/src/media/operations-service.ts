@@ -112,6 +112,7 @@ export class OperationsService {
     readonly actor: InternalActor & { authenticatedAt: Date };
     readonly albumId: string;
     readonly confirmation: string;
+    readonly purgeFaceData?: () => Promise<void>;
   }): Promise<void> {
     requirePermission(options.actor.role, "album:configure");
     assertRecentAuthentication(options.actor.authenticatedAt, new Date());
@@ -132,11 +133,7 @@ export class OperationsService {
       });
     }
 
-    const mediaRows = await this.#database
-      .select({ id: schema.media.id })
-      .from(schema.media)
-      .where(eq(schema.media.albumId, options.albumId));
-    const mediaIds = mediaRows.map((row) => row.id);
+    await options.purgeFaceData?.();
 
     const [variants, editVariants, microPreviews] = await Promise.all([
       this.#database
@@ -172,14 +169,56 @@ export class OperationsService {
         .delete(schema.mediaMicroPreviews)
         .where(eq(schema.mediaMicroPreviews.albumId, options.albumId));
 
-      const auditTargets =
-        mediaIds.length === 0
-          ? eq(schema.auditLogs.targetId, options.albumId)
-          : or(
-              eq(schema.auditLogs.targetId, options.albumId),
-              inArray(schema.auditLogs.targetId, mediaIds),
-            );
-      await transaction.delete(schema.auditLogs).where(auditTargets);
+      // These operational tables intentionally have no album FK. Purge rows that
+      // still reference this album, one of its media records, or one of its bib tags.
+      await transaction.execute(sql`
+        delete from operation_requests as operation_request
+        where operation_request.operation like ${`%${options.albumId}%`}
+           or operation_request.result::text like ${`%${options.albumId}%`}
+           or exists (
+             select 1
+             from media
+             where media.album_id = ${options.albumId}
+               and (
+                 operation_request.operation like '%' || media.id::text || '%'
+                 or operation_request.result::text like '%' || media.id::text || '%'
+               )
+           )
+           or exists (
+             select 1
+             from media_bib_tags
+             where media_bib_tags.album_id = ${options.albumId}
+               and (
+                 operation_request.operation like '%' || media_bib_tags.id::text || '%'
+                 or operation_request.result::text like '%' || media_bib_tags.id::text || '%'
+               )
+           )
+      `);
+      await transaction.execute(sql`
+        delete from media_batch_requests as batch_request
+        where exists (
+          select 1
+          from media
+          where media.album_id = ${options.albumId}
+            and batch_request.result::text like '%' || media.id::text || '%'
+        )
+      `);
+      await transaction.execute(sql`
+        delete from audit_logs as audit_log
+        where audit_log.target_id = ${options.albumId}::uuid
+           or exists (
+             select 1
+             from media
+             where media.album_id = ${options.albumId}
+               and audit_log.target_id = media.id
+           )
+           or exists (
+             select 1
+             from media_bib_tags
+             where media_bib_tags.album_id = ${options.albumId}
+               and audit_log.target_id = media_bib_tags.id
+           )
+      `);
 
       const deleted = await transaction
         .delete(schema.albums)
