@@ -130,7 +130,7 @@ export class ProgressiveUploadService {
       if (existing !== undefined) return existing.id;
 
       await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.input.albumId}`}, 0))`,
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.input.albumId}`}, 0))`,
       );
       const [album] = await transaction
         .select()
@@ -362,7 +362,7 @@ export class ProgressiveUploadService {
       }
 
       await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${row.media.albumId}`}, 0))`,
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${row.media.albumId}`}, 0))`,
       );
       const [[albumState], [currentIntent]] = await Promise.all([
         transaction
