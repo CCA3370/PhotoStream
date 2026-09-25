@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
-import { clientGet, clientMutation } from "@/lib/client-api";
+import { ClientApiError, clientGet, clientMutation } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
 const sourceLabels: Record<AlbumDeletionErrorView["source"], string> = {
@@ -85,6 +85,10 @@ export function AlbumDeletionControls({
           : (result.items[0]?.id ?? null),
       );
     } catch (error) {
+      if (error instanceof ClientApiError && error.response?.code === "NOT_FOUND") {
+        setHistoryOpen(false);
+        return;
+      }
       toast.add({
         title: "无法读取删除错误记录",
         description: error instanceof Error ? error.message : "请稍后重试。",
