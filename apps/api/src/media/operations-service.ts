@@ -45,6 +45,7 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const recentAuthenticationMs = 15 * 60 * 1_000;
 const analyticsRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 const operationRetentionMs = 30 * 24 * 60 * 60 * 1_000;
+const presignedUploadDeletionGraceMs = 20 * 60 * 1_000;
 
 function requirePermission(role: UserRole, permission: Parameters<typeof hasPermission>[1]): void {
   if (!hasPermission(role, permission)) {
@@ -366,6 +367,30 @@ export class OperationsService {
            )
       `);
 
+      if (this.#storage.deletePrefix !== undefined) {
+        const now = new Date();
+        await transaction
+          .insert(schema.albumObjectDeletionSweeps)
+          .values({
+            albumId: options.albumId,
+            objectPrefix: albumPrefix,
+            executeAfter: new Date(now.getTime() + presignedUploadDeletionGraceMs),
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: schema.albumObjectDeletionSweeps.albumId,
+            set: {
+              objectPrefix: albumPrefix,
+              executeAfter: new Date(now.getTime() + presignedUploadDeletionGraceMs),
+              attempts: 0,
+              lastErrorCode: null,
+              updatedAt: now,
+            },
+          });
+      }
+
       const deleted = await transaction
         .delete(schema.albums)
         .where(and(eq(schema.albums.id, options.albumId), eq(schema.albums.state, "deleting")))
@@ -673,6 +698,43 @@ export class OperationsService {
       );
     await this.processDeletionTask(options.taskId, now);
     return this.getDeletionTask(options.actor, options.taskId);
+  }
+
+  async processPendingAlbumObjectDeletionSweeps(
+    limit = 10,
+    now = new Date(),
+  ): Promise<number> {
+    const deletePrefix = this.#storage.deletePrefix?.bind(this.#storage);
+    if (deletePrefix === undefined) return 0;
+
+    const sweeps = await this.#database
+      .select()
+      .from(schema.albumObjectDeletionSweeps)
+      .where(lte(schema.albumObjectDeletionSweeps.executeAfter, now))
+      .orderBy(asc(schema.albumObjectDeletionSweeps.executeAfter))
+      .limit(limit);
+    for (const sweep of sweeps) {
+      try {
+        await deletePrefix(sweep.objectPrefix);
+        await this.#cdn.invalidateDirectory?.(`/${sweep.objectPrefix}`);
+        await this.#database
+          .delete(schema.albumObjectDeletionSweeps)
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, sweep.albumId));
+      } catch (error) {
+        const attempts = sweep.attempts + 1;
+        const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
+        await this.#database
+          .update(schema.albumObjectDeletionSweeps)
+          .set({
+            attempts,
+            lastErrorCode: error instanceof Error ? error.name.slice(0, 100) : "UNKNOWN",
+            executeAfter: new Date(now.getTime() + retryDelay),
+            updatedAt: now,
+          })
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, sweep.albumId));
+      }
+    }
+    return sweeps.length;
   }
 
   async processPendingDeletionTasks(limit = 10, now = new Date()): Promise<number> {
