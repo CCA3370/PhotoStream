@@ -375,10 +375,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   const [testNumber, setTestNumber] = useState("");
   const [testResult, setTestResult] = useState<BibTestResponse | null>(null);
   const effectivePatterns = useMemo(
-    () =>
-      !ruleDraft.compatible && !ruleDraft.dirty
-        ? config.patterns
-        : compileSimpleRuleDraft(ruleDraft),
+    () => (ruleDraft.dirty ? compileSimpleRuleDraft(ruleDraft) : config.patterns),
     [config.patterns, ruleDraft],
   );
   const validation = useMemo(() => {
@@ -714,6 +711,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       );
       setSaved(updated);
       setConfig(requestFrom(updated));
+      setRuleDraft(simpleRuleDraftFromPatterns(updated.patterns));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "号码配置保存失败");
     } finally {
@@ -930,7 +928,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
               <div>
                 <h3 className="text-sm font-semibold">条件限制</h3>
                 <p className="text-xs text-muted-foreground">
-                  例如：当第 1 位为 1–2 时，第 2–3 位必须为 01–10。
+                  例如：当第 1 位为 1–2 时，第 2–3 位必须为 01–10。添加条件限制后，号码必须至少满足其中一条。
                 </p>
               </div>
               <Button
