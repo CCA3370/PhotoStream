@@ -443,7 +443,7 @@ class LocalProcessingRuntime {
 
     await Promise.all([
       ...persisted.map((task) => deletePersistedTask(task.id)),
-      ...localPhotoIds.values().flatMap((localPhotoId) => [
+      ...[...localPhotoIds].flatMap((localPhotoId) => [
         deleteLocalReviewPhoto(localPhotoId),
         deleteLocalPhotoEditDraft(localPhotoId),
       ]),
@@ -781,7 +781,7 @@ export async function purgeLocalProcessingAlbum(albumId: string): Promise<void> 
   ]);
   await Promise.all([
     ...persisted.map((task) => deletePersistedTask(task.id)),
-    ...localPhotoIds.values().flatMap((localPhotoId) => [
+    ...[...localPhotoIds].flatMap((localPhotoId) => [
       deleteLocalReviewPhoto(localPhotoId),
       deleteLocalPhotoEditDraft(localPhotoId),
     ]),
