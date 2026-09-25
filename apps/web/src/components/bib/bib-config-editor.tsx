@@ -328,7 +328,10 @@ function isSchoolFiveDigitPreset(draft: SimpleBibRuleDraft): boolean {
     "1:1:4:4>2:2:01:08",
     "1:1:5:6>2:2:01:06",
   ].toSorted();
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+  return (
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index])
+  );
 }
 
 function requestFrom(config: BibConfigView): BibConfigUpdate {
@@ -458,10 +461,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   const [ruleDraft, setRuleDraft] = useState<SimpleBibRuleDraft>(() =>
     simpleRuleDraftFromPatterns(initial.patterns),
   );
-  const [rulePreset, setRulePreset] = useState<"custom" | "school-five-digit">(() =>
+  const [rulePreset, setRulePreset] = useState<"school-five-digit" | null>(() =>
     isSchoolFiveDigitPreset(simpleRuleDraftFromPatterns(initial.patterns))
       ? "school-five-digit"
-      : "custom",
+      : null,
   );
   const [saved, setSaved] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -570,13 +573,13 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   const testNumberInvalid = testNumber.length > 0 && localTestResult === null;
 
   function editRuleDraft(update: (current: SimpleBibRuleDraft) => SimpleBibRuleDraft): void {
-    setRulePreset("custom");
+    setRulePreset(null);
     setRuleDraft((current) => ({ ...update(current), compatible: true, dirty: true }));
   }
 
   function applyRulePreset(value: string | null): void {
     if (value !== "school-five-digit") {
-      setRulePreset("custom");
+      setRulePreset(null);
       return;
     }
     setRulePreset("school-five-digit");
@@ -819,7 +822,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       setSaved(updated);
       setConfig(requestFrom(updated));
       setRuleDraft(updatedRuleDraft);
-      setRulePreset(isSchoolFiveDigitPreset(updatedRuleDraft) ? "school-five-digit" : "custom");
+      setRulePreset(isSchoolFiveDigitPreset(updatedRuleDraft) ? "school-five-digit" : null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "号码配置保存失败");
     } finally {
@@ -912,7 +915,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             </FieldDescription>
             <Select
               items={[
-                { label: "自定义", value: "custom" },
+                { label: "选择内置预设", value: null },
                 { label: "5位年级班级号码（1–6）", value: "school-five-digit" },
               ]}
               onValueChange={applyRulePreset}
@@ -923,7 +926,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="custom">自定义</SelectItem>
                   <SelectItem value="school-five-digit">5位年级班级号码（1–6）</SelectItem>
                 </SelectGroup>
               </SelectContent>
