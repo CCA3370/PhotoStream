@@ -3,6 +3,7 @@ import {
   apiErrorSchema,
   createUserRequestSchema,
   createUserResponseSchema,
+  okResponseSchema,
   resetUserPasswordResponseSchema,
   updateUserRequestSchema,
 } from "@photostream/contracts";
@@ -100,6 +101,28 @@ export async function registerUserRoutes(
         input: request.body,
         requestId: request.id,
       });
+    },
+  );
+
+  typed.delete(
+    "/api/v1/users/:id",
+    {
+      schema: {
+        operationId: "deleteUser",
+        tags: ["users"],
+        params: userParamsSchema,
+        response: { 200: okResponseSchema, ...errors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await verifyPasswordConfirmation(request, options.authService, session);
+      await options.userAdminService.deleteUser({
+        actor: { id: session.record.user.id, role: session.record.user.role },
+        userId: request.params.id,
+        requestId: request.id,
+      });
+      return { ok: true as const };
     },
   );
 
