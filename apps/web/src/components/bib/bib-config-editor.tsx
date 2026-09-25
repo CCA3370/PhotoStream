@@ -267,6 +267,28 @@ function simpleRuleSummary(draft: SimpleBibRuleDraft): string {
   return parts.join("；");
 }
 
+function requestFrom(config: BibConfigView): BibConfigUpdate {
+  const attributeOptions = config.attributeOptions.filter(
+    (option) => option.dimension === "grade" || option.parentGradeOptionId != null,
+  );
+  const optionIds = new Set(attributeOptions.map((option) => option.id));
+  return {
+    recognitionEnabled: config.recognitionEnabled,
+    searchEnabled: config.searchEnabled,
+    modelVersion: config.modelVersion,
+    patterns: config.patterns.map((pattern, patternIndex) => ({
+      ...pattern,
+      sortOrder: patternIndex,
+      constraints: pattern.constraints.map((constraint, constraintIndex) => ({
+        ...constraint,
+        sortOrder: constraintIndex,
+      })),
+    })),
+    attributeOptions,
+    mappings: config.mappings.filter((mapping) => optionIds.has(mapping.outputOptionId)),
+  };
+}
+
 function optionLabel(option: BibAttributeOptionInput): string {
   const displayName = option.displayName.trim();
   if (displayName.length > 0) return displayName;
