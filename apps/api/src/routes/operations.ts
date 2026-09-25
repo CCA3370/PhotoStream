@@ -262,6 +262,28 @@ export async function registerOperationsRoutes(
     },
   );
 
+  typed.delete(
+    "/api/v1/albums/:id/categories/:categoryId",
+    {
+      schema: {
+        operationId: "deleteCategory",
+        tags: ["albums"],
+        params: albumCategoryParamsSchema,
+        response: { 200: okResponseSchema, ...errors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await options.photoService.deleteCategory({
+        actor: actorFrom(session),
+        albumId: request.params.id,
+        categoryId: request.params.categoryId,
+        requestId: request.id,
+      });
+      return { ok: true as const };
+    },
+  );
+
   for (const action of ["hide", "restore"] as const) {
     typed.post(
       `/api/v1/media/:id/${action}`,
