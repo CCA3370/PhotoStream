@@ -422,8 +422,40 @@ export class AliyunObjectStorage implements ObjectStorage {
   }
 
   async deletePrefix(prefix: string): Promise<void> {
-    let previousBatch = "";
-    let repeatedBatchCount = 0;
+    let previousUploadBatch = "";
+    let repeatedUploadBatchCount = 0;
+    for (;;) {
+      const result = await this.#client.listUploads({
+        prefix,
+        "max-uploads": 1_000,
+      });
+      const uploads = (result.uploads ?? []).flatMap((upload) =>
+        typeof upload.name === "string" &&
+        upload.name.length > 0 &&
+        typeof upload.uploadId === "string" &&
+        upload.uploadId.length > 0
+          ? [{ name: upload.name, uploadId: upload.uploadId }]
+          : [],
+      );
+      if (uploads.length === 0) break;
+
+      const batch = uploads
+        .map((upload) => `${upload.name}\u0000${upload.uploadId}`)
+        .sort()
+        .join("\n");
+      repeatedUploadBatchCount =
+        batch === previousUploadBatch ? repeatedUploadBatchCount + 1 : 0;
+      if (repeatedUploadBatchCount >= 2) {
+        throw new Error("Multipart prefix deletion was not confirmed");
+      }
+      previousUploadBatch = batch;
+      for (const upload of uploads) {
+        await this.abortMultipart(upload.uploadId, upload.name);
+      }
+    }
+
+    let previousObjectBatch = "";
+    let repeatedObjectBatchCount = 0;
     for (;;) {
       const result = await this.#client.listV2({
         prefix,
@@ -435,11 +467,11 @@ export class AliyunObjectStorage implements ObjectStorage {
       if (keys.length === 0) return;
 
       const batch = [...keys].sort().join("\n");
-      repeatedBatchCount = batch === previousBatch ? repeatedBatchCount + 1 : 0;
-      if (repeatedBatchCount >= 2) {
+      repeatedObjectBatchCount = batch === previousObjectBatch ? repeatedObjectBatchCount + 1 : 0;
+      if (repeatedObjectBatchCount >= 2) {
         throw new Error("Object prefix deletion was not confirmed");
       }
-      previousBatch = batch;
+      previousObjectBatch = batch;
       await this.deleteMany(keys);
     }
   }
