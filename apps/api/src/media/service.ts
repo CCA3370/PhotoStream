@@ -726,9 +726,19 @@ export class PhotoService {
   }): Promise<AlbumView> {
     requirePermission(options.actor.role, "album:configure");
     return this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
       await this.#advisoryLock(transaction, `album-settings:${options.albumId}`);
       const album = await this.#albumById(transaction, options.albumId);
       if (album === null) throw this.#albumNotFound();
+      if (album.state === "deleting") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动正在删除，只能重试删除操作",
+          statusCode: 409,
+        });
+      }
       const accessChanged =
         options.input.access !== undefined && options.input.access !== album.access;
       const now = new Date();
