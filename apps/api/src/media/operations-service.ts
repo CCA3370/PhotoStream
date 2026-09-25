@@ -108,6 +108,89 @@ export class OperationsService {
     this.#cdn = options.cdnInvalidator ?? new LocalCdnInvalidator();
   }
 
+  async deleteAlbum(options: {
+    readonly actor: InternalActor & { authenticatedAt: Date };
+    readonly albumId: string;
+    readonly confirmation: string;
+  }): Promise<void> {
+    requirePermission(options.actor.role, "album:configure");
+    assertRecentAuthentication(options.actor.authenticatedAt, new Date());
+
+    const [album] = await this.#database
+      .select({ id: schema.albums.id, title: schema.albums.title })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, options.albumId))
+      .limit(1);
+    if (album === undefined) {
+      throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+    }
+    if (!safeEqual(options.confirmation, album.title)) {
+      throw new AppError({
+        code: "CONFIRMATION_MISMATCH",
+        message: "请输入完整活动标题以确认删除",
+        statusCode: 400,
+      });
+    }
+
+    const mediaRows = await this.#database
+      .select({ id: schema.media.id })
+      .from(schema.media)
+      .where(eq(schema.media.albumId, options.albumId));
+    const mediaIds = mediaRows.map((row) => row.id);
+
+    const [variants, editVariants, microPreviews] = await Promise.all([
+      this.#database
+        .select({ objectKey: schema.mediaVariants.objectKey })
+        .from(schema.mediaVariants)
+        .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
+        .where(eq(schema.media.albumId, options.albumId)),
+      this.#database
+        .select({ objectKey: schema.mediaEditVariants.objectKey })
+        .from(schema.mediaEditVariants)
+        .innerJoin(
+          schema.mediaEditRevisions,
+          eq(schema.mediaEditVariants.editRevisionId, schema.mediaEditRevisions.id),
+        )
+        .innerJoin(schema.media, eq(schema.mediaEditRevisions.mediaId, schema.media.id))
+        .where(eq(schema.media.albumId, options.albumId)),
+      this.#database
+        .select({ objectKey: schema.mediaMicroPreviews.objectKey })
+        .from(schema.mediaMicroPreviews)
+        .where(eq(schema.mediaMicroPreviews.albumId, options.albumId)),
+    ]);
+
+    const objectKeys = [
+      ...new Set(
+        [...variants, ...editVariants, ...microPreviews].map((row) => row.objectKey),
+      ),
+    ];
+    for (const objectKey of objectKeys) await this.#storage.delete(objectKey);
+    await this.#cdn.invalidate(objectKeys.map((objectKey) => `/${objectKey}`));
+
+    await this.#database.transaction(async (transaction) => {
+      await transaction
+        .delete(schema.mediaMicroPreviews)
+        .where(eq(schema.mediaMicroPreviews.albumId, options.albumId));
+
+      const auditTargets =
+        mediaIds.length === 0
+          ? eq(schema.auditLogs.targetId, options.albumId)
+          : or(
+              eq(schema.auditLogs.targetId, options.albumId),
+              inArray(schema.auditLogs.targetId, mediaIds),
+            );
+      await transaction.delete(schema.auditLogs).where(auditTargets);
+
+      const deleted = await transaction
+        .delete(schema.albums)
+        .where(eq(schema.albums.id, options.albumId))
+        .returning({ id: schema.albums.id });
+      if (deleted.length !== 1) {
+        throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+      }
+    });
+  }
+
   async hideMedia(options: {
     readonly actor: InternalActor;
     readonly mediaId: string;
