@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { AlbumDeletionControls } from "@/components/albums/album-deletion-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +51,8 @@ const deletionPhaseLabels: Record<DeletionProgress["phase"], string> = {
 
 const deletionSourceLabels: Record<NonNullable<DeletionProgress["latestError"]>["source"], string> =
   {
-    object_storage: "对象存储 / CDN",
+    object_storage: "对象存储",
+    cdn: "CDN",
     face_provider: "人脸云端服务",
     face_reference: "人脸参考照",
   };
@@ -120,10 +122,13 @@ function DeletingAlbumRow({
             活动已停止访问。所有清理完成后，此记录会自动从列表消失。
           </p>
         </div>
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-          <RefreshCwIcon aria-hidden="true" />
-          刷新状态
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <AlbumDeletionControls albumId={album.id} onRetried={onRefresh} />
+          <Button onClick={onRefresh} size="sm" type="button" variant="outline">
+            <RefreshCwIcon aria-hidden="true" />
+            刷新状态
+          </Button>
+        </div>
       </div>
 
       {progress === null ? (
