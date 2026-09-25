@@ -881,10 +881,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
             {ruleDraft.baseRules.map((rule, ruleIndex) => (
               <div
-                className={
-                  "grid gap-3 rounded-xl border p-3 " +
-                  "md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
-                }
+                className="grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
                 key={rule.id}
               >
                 <Field>
