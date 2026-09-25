@@ -248,6 +248,22 @@ export class FaceService {
         : existing.indexState;
 
     await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
+      const [currentAlbum] = await transaction
+        .select({ state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, options.albumId))
+        .limit(1);
+      if (currentAlbum === undefined || currentAlbum.state === "deleting") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动正在删除，不能更改人脸配置",
+          statusCode: 409,
+        });
+      }
+
       if (options.input.enabled) {
         await transaction
           .update(schema.faceAlbumJobs)
