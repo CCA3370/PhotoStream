@@ -285,6 +285,7 @@ export class PhotoService {
             providerCode: schema.faceOperationDiagnostics.providerCode,
             providerMessage: schema.faceOperationDiagnostics.providerMessage,
             occurredAt: schema.faceOperationDiagnostics.occurredAt,
+            attempts: sql<number>`count(*) over()::int`,
           })
           .from(schema.faceOperationDiagnostics)
           .where(
@@ -301,16 +302,17 @@ export class PhotoService {
     const objectStatus =
       objectSweep === undefined
         ? ("complete" as const)
-        : objectSweep.attempts > 0
-          ? ("retrying" as const)
-          : objectSweep.executeAfter > now
-            ? ("waiting" as const)
+        : objectSweep.executeAfter > now
+          ? ("waiting" as const)
+          : objectSweep.attempts > 0
+            ? ("retrying" as const)
             : ("running" as const);
 
     const pendingReferences = faceReferenceStats?.pendingReferences ?? 0;
     const facePending = faceIndex?.datasetName != null || pendingReferences > 0;
     const faceAttempts = Math.max(
       faceReferenceStats?.attempts ?? 0,
+      faceDiagnostic?.attempts ?? 0,
       faceIndex?.lastErrorCode == null ? 0 : 1,
     );
     const faceLastErrorCode =
