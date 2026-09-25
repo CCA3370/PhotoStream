@@ -533,7 +533,7 @@ export function BibSearchPanel({
             </span>
           </span>
         </button>
-        {resultMode === null ? null : (
+        {resultMode === null || resultItems.length === 0 ? null : (
           <Button
             aria-label="清除找照片条件"
             className="shrink-0 rounded-lg animate-in fade-in-0 zoom-in-90 duration-200 motion-reduce:animate-none"
