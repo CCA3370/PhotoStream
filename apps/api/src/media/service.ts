@@ -926,6 +926,7 @@ export class PhotoService {
         .limit(1);
       if (existing !== undefined) return existing.id;
 
+      await this.#advisoryLock(transaction, `album-state:${options.input.albumId}`);
       const album = await this.#albumById(transaction, options.input.albumId);
       if (album === null) throw this.#albumNotFound();
       if (album.state !== "live") {
