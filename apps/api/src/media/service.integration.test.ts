@@ -275,6 +275,90 @@ maybeDescribe("photo vertical slice transactions", () => {
 
   afterAll(async () => pool.end());
 
+
+  it("exposes scheduled draft metadata, starts it when due, and accepts a custom password", async () => {
+    const scheduledStart = new Date("2099-06-01T01:30:00.000Z");
+    const created = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: {
+        title: "预约直播活动",
+        description: "活动尚未开始",
+        publishMode: "review",
+        scheduledStartAt: scheduledStart.toISOString(),
+        password: "school-2026",
+      },
+      idempotencyKey: "scheduled-album-create-0001",
+      requestId: "scheduled-album-create",
+    });
+
+    expect(created.generatedPassword).toBe("school-2026");
+    expect(created.album).toMatchObject({
+      title: "预约直播活动",
+      state: "draft",
+      scheduledStartAt: scheduledStart.toISOString(),
+    });
+
+    const publicBeforeStart = await service.getPublicAlbum(created.album.slug);
+    expect(publicBeforeStart.view).toMatchObject({
+      title: "预约直播活动",
+      description: "活动尚未开始",
+      state: "draft",
+      scheduledStartAt: scheduledStart.toISOString(),
+      accessRequired: false,
+      faceSearchAvailable: false,
+      bibSearchEnabled: false,
+      categories: [],
+    });
+    await expect(service.unlockAlbum(created.album.slug, "school-2026")).rejects.toMatchObject({
+      code: "ALBUM_NOT_FOUND",
+    });
+    await expect(
+      service.listPublicMedia({
+        slug: created.album.slug,
+        visitorToken: undefined,
+        cursor: undefined,
+        categoryId: undefined,
+        limit: 60,
+      }),
+    ).rejects.toMatchObject({ code: "ALBUM_NOT_FOUND" });
+
+    expect(
+      await service.processScheduledAlbumStarts(
+        50,
+        new Date(scheduledStart.getTime() - 1),
+      ),
+    ).toBe(0);
+    expect(
+      await service.processScheduledAlbumStarts(
+        50,
+        new Date(scheduledStart.getTime() + 1),
+      ),
+    ).toBe(1);
+
+    const started = await service.getAlbum({ id: adminId, role: "admin" }, created.album.id);
+    expect(started).toMatchObject({ state: "live", scheduledStartAt: null });
+
+    const publicAfterStart = await service.getPublicAlbum(created.album.slug);
+    expect(publicAfterStart.view).toMatchObject({
+      state: "live",
+      scheduledStartAt: null,
+      accessRequired: true,
+    });
+    const visitor = await service.unlockAlbum(created.album.slug, "school-2026");
+    expect(visitor.rawToken).toBeTruthy();
+
+    const [audit] = await database
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.action, "album.scheduled_started"))
+      .limit(1);
+    expect(audit).toMatchObject({
+      actorUserId: null,
+      targetId: created.album.id,
+      result: "success",
+    });
+  });
+
   it("lets operators upload and fully review media while denying album settings", async () => {
     const created = await service.createAlbum({
       actor: { id: adminId, role: "admin" },
