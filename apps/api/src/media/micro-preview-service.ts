@@ -5,12 +5,15 @@ import {
 } from "@photostream/contracts/micro-preview";
 import type { Database } from "@photostream/db";
 import { schema } from "@photostream/db";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
 import type { ObjectStorage } from "./object-storage.js";
 import { previewExpiresAt } from "./preview-expiry.js";
 import type { PhotoService } from "./service.js";
+
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type Executor = Database | Transaction;
 
 interface InternalActor {
   readonly id: string;
@@ -37,56 +40,49 @@ export class MicroPreviewService {
     readonly mediaId: string;
     readonly input: MicroPreviewUploadRequest;
   }): Promise<SignedUpload> {
-    const media = await this.#ownedMedia(options.actor, options.mediaId);
-    const expected = microPreviewDimensions(media.width, media.height);
-    if (options.input.width !== expected.width || options.input.height !== expected.height) {
-      throw new AppError({
-        code: "UPLOAD_INVALID",
-        message: "极小缩略图尺寸不符合 240px 长边规格",
-        statusCode: 400,
-      });
-    }
+    return this.#database.transaction(async (transaction) => {
+      let media = await this.#ownedMedia(options.actor, options.mediaId, transaction);
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${media.albumId}`}, 0))`,
+      );
+      media = await this.#ownedMedia(options.actor, options.mediaId, transaction);
 
-    const objectKey = `media/albums/${media.albumId}/photos/${media.id}/photo_240`;
-    const [existing] = await this.#database
-      .select()
-      .from(schema.mediaMicroPreviews)
-      .where(eq(schema.mediaMicroPreviews.mediaId, media.id))
-      .limit(1);
-    if (existing?.verified === true) {
-      const unchanged =
-        existing.objectKey === objectKey &&
-        existing.format === options.input.format &&
-        existing.contentType === options.input.contentType &&
-        existing.width === options.input.width &&
-        existing.height === options.input.height &&
-        existing.expectedBytes === options.input.bytes;
-      if (!unchanged) {
+      const expected = microPreviewDimensions(media.width, media.height);
+      if (options.input.width !== expected.width || options.input.height !== expected.height) {
         throw new AppError({
-          code: "STATE_CONFLICT",
-          message: "极小缩略图已经完成，不能更换规格",
-          statusCode: 409,
+          code: "UPLOAD_INVALID",
+          message: "极小缩略图尺寸不符合 240px 长边规格",
+          statusCode: 400,
         });
       }
-    } else {
-      const now = new Date();
-      await this.#database
-        .insert(schema.mediaMicroPreviews)
-        .values({
-          mediaId: media.id,
-          albumId: media.albumId,
-          objectKey,
-          format: options.input.format,
-          contentType: options.input.contentType,
-          width: options.input.width,
-          height: options.input.height,
-          expectedBytes: options.input.bytes,
-          verified: false,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: schema.mediaMicroPreviews.mediaId,
-          set: {
+
+      const objectKey = `media/albums/${media.albumId}/photos/${media.id}/photo_240`;
+      const [existing] = await transaction
+        .select()
+        .from(schema.mediaMicroPreviews)
+        .where(eq(schema.mediaMicroPreviews.mediaId, media.id))
+        .limit(1);
+      if (existing?.verified === true) {
+        const unchanged =
+          existing.objectKey === objectKey &&
+          existing.format === options.input.format &&
+          existing.contentType === options.input.contentType &&
+          existing.width === options.input.width &&
+          existing.height === options.input.height &&
+          existing.expectedBytes === options.input.bytes;
+        if (!unchanged) {
+          throw new AppError({
+            code: "STATE_CONFLICT",
+            message: "极小缩略图已经完成，不能更换规格",
+            statusCode: 409,
+          });
+        }
+      } else {
+        const now = new Date();
+        await transaction
+          .insert(schema.mediaMicroPreviews)
+          .values({
+            mediaId: media.id,
             albumId: media.albumId,
             objectKey,
             format: options.input.format,
@@ -94,26 +90,40 @@ export class MicroPreviewService {
             width: options.input.width,
             height: options.input.height,
             expectedBytes: options.input.bytes,
-            bytes: null,
-            etag: null,
             verified: false,
-            completedAt: null,
             updatedAt: now,
-          },
-        });
-    }
+          })
+          .onConflictDoUpdate({
+            target: schema.mediaMicroPreviews.mediaId,
+            set: {
+              albumId: media.albumId,
+              objectKey,
+              format: options.input.format,
+              contentType: options.input.contentType,
+              width: options.input.width,
+              height: options.input.height,
+              expectedBytes: options.input.bytes,
+              bytes: null,
+              etag: null,
+              verified: false,
+              completedAt: null,
+              updatedAt: now,
+            },
+          });
+      }
 
-    const signed = await this.#storage.signPut({
-      key: objectKey,
-      contentType: options.input.contentType,
-      bytes: options.input.bytes,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1_000),
+      const signed = await this.#storage.signPut({
+        key: objectKey,
+        contentType: options.input.contentType,
+        bytes: options.input.bytes,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1_000),
+      });
+      return {
+        url: signed.url,
+        headers: signed.headers,
+        expiresAt: signed.expiresAt.toISOString(),
+      };
     });
-    return {
-      url: signed.url,
-      headers: signed.headers,
-      expiresAt: signed.expiresAt.toISOString(),
-    };
   }
 
   async completeUpload(options: {
@@ -221,11 +231,15 @@ export class MicroPreviewService {
     return cleaned;
   }
 
-  async #ownedMedia(actor: InternalActor, mediaId: string) {
+  async #ownedMedia(
+    actor: InternalActor,
+    mediaId: string,
+    executor: Executor = this.#database,
+  ) {
     if (!hasPermission(actor.role, "media:upload")) {
       throw new AppError({ code: "FORBIDDEN", message: "没有上传权限", statusCode: 403 });
     }
-    const [row] = await this.#database
+    const [row] = await executor
       .select({
         media: {
           id: schema.media.id,
