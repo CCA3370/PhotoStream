@@ -69,6 +69,7 @@ const runtimeResponseSchema = z
     jobs: z
       .object({
         deletion: jobSchema,
+        scheduledAlbumStart: jobSchema,
         analyticsCleanup: jobSchema,
         bibMaintenance: jobSchema,
         faceMaintenance: jobSchema,
