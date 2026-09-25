@@ -153,6 +153,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== null) {
@@ -227,6 +229,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) {
@@ -303,50 +307,54 @@ export class MediaEditService {
     readonly revisionId: string;
     readonly kind: MediaEditVariantKind;
   }): Promise<SignedUpload> {
-    const media = await this.#media(this.#database, options.mediaId);
-    this.#assertEditAccess(options.actor, media);
-    const [row] = await this.#database
-      .select({ revision: schema.mediaEditRevisions, variant: schema.mediaEditVariants })
-      .from(schema.mediaEditRevisions)
-      .innerJoin(
-        schema.mediaEditVariants,
-        eq(schema.mediaEditVariants.editRevisionId, schema.mediaEditRevisions.id),
-      )
-      .where(
-        and(
-          eq(schema.mediaEditRevisions.id, options.revisionId),
-          eq(schema.mediaEditRevisions.mediaId, options.mediaId),
-          eq(schema.mediaEditVariants.kind, options.kind),
-        ),
-      )
-      .limit(1);
-    if (row === undefined) throw this.#notFound();
-    if (!inArrayValue(row.revision.status, ["rendering", "uploading"])) {
-      throw new AppError({
-        code: "STATE_CONFLICT",
-        message: "当前修图版本不能继续上传",
-        statusCode: 409,
+    return this.#database.transaction(async (transaction) => {
+      const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
+      this.#assertEditAccess(options.actor, media);
+      const [row] = await transaction
+        .select({ revision: schema.mediaEditRevisions, variant: schema.mediaEditVariants })
+        .from(schema.mediaEditRevisions)
+        .innerJoin(
+          schema.mediaEditVariants,
+          eq(schema.mediaEditVariants.editRevisionId, schema.mediaEditRevisions.id),
+        )
+        .where(
+          and(
+            eq(schema.mediaEditRevisions.id, options.revisionId),
+            eq(schema.mediaEditRevisions.mediaId, options.mediaId),
+            eq(schema.mediaEditVariants.kind, options.kind),
+          ),
+        )
+        .limit(1);
+      if (row === undefined) throw this.#notFound();
+      if (!inArrayValue(row.revision.status, ["rendering", "uploading"])) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "当前修图版本不能继续上传",
+          statusCode: 409,
+        });
+      }
+      if (row.variant.verified) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "该修图对象已经完成",
+          statusCode: 409,
+        });
+      }
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
+      const signed = await this.#storage.signPut({
+        key: row.variant.objectKey,
+        contentType: row.variant.contentType,
+        bytes: row.variant.expectedBytes,
+        expiresAt,
       });
-    }
-    if (row.variant.verified) {
-      throw new AppError({
-        code: "STATE_CONFLICT",
-        message: "该修图对象已经完成",
-        statusCode: 409,
-      });
-    }
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
-    const signed = await this.#storage.signPut({
-      key: row.variant.objectKey,
-      contentType: row.variant.contentType,
-      bytes: row.variant.expectedBytes,
-      expiresAt,
+      return {
+        url: signed.url,
+        headers: signed.headers,
+        expiresAt: signed.expiresAt.toISOString(),
+      };
     });
-    return {
-      url: signed.url,
-      headers: signed.headers,
-      expiresAt: signed.expiresAt.toISOString(),
-    };
   }
 
   async completeVariant(options: {
@@ -416,6 +424,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) {
@@ -485,6 +495,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       this.#assertExpectedState(state, options.input);
@@ -555,6 +567,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) throw this.#versionConflict();
@@ -608,6 +622,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       if (state.pendingRevisionId !== options.revisionId) throw this.#versionConflict();
@@ -650,6 +666,8 @@ export class MediaEditService {
     await this.#database.transaction(async (transaction) => {
       await this.#lock(transaction, options.mediaId);
       const media = await this.#media(transaction, options.mediaId);
+      await this.#lockAlbumShared(transaction, media.albumId);
+      await this.#assertAlbumWritable(transaction, media.albumId);
       this.#assertEditAccess(options.actor, media);
       const state = await this.#stateForUpdate(transaction, options.mediaId);
       this.#assertExpectedState(state, options.input);
@@ -898,6 +916,27 @@ export class MediaEditService {
       state.activeRevisionId !== input.expectedActiveRevisionId
     ) {
       throw this.#versionConflict();
+    }
+  }
+
+  async #lockAlbumShared(transaction: Transaction, albumId: string): Promise<void> {
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${albumId}`}, 0))`,
+    );
+  }
+
+  async #assertAlbumWritable(executor: Executor, albumId: string): Promise<void> {
+    const [album] = await executor
+      .select({ state: schema.albums.state })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId))
+      .limit(1);
+    if (album?.state === "deleting" || album === undefined) {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "活动正在删除，不能继续修改照片",
+        statusCode: 409,
+      });
     }
   }
 
