@@ -1,5 +1,14 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 import { albums } from "./schema.js";
 
@@ -21,7 +30,5 @@ export const albumDeletionErrors = pgTable(
     details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    index("album_deletion_errors_album_time_idx").on(table.albumId, table.occurredAt),
-  ],
+  (table) => [index("album_deletion_errors_album_time_idx").on(table.albumId, table.occurredAt)],
 );
