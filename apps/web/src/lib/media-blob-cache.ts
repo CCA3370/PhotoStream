@@ -96,7 +96,10 @@ function albumMediaCacheKeyMatches(
 ): boolean {
   let url: URL;
   try {
-    url = new URL(key, typeof window === "undefined" ? "https://invalid.local" : window.location.origin);
+    url = new URL(
+      key,
+      typeof window === "undefined" ? "https://invalid.local" : window.location.origin,
+    );
   } catch {
     return false;
   }
@@ -404,18 +407,12 @@ function waitForMediaRetry(delay: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-export async function purgeAlbumMediaBlobCache(
-  albumId: string,
-  slug: string,
-): Promise<void> {
+export async function purgeAlbumMediaBlobCache(albumId: string, slug: string): Promise<void> {
   if (typeof window === "undefined") return;
 
   for (const [key, entry] of inFlight) {
     const parsed = parsedIdentity(key);
-    if (
-      parsed !== null &&
-      albumMediaCacheKeyMatches(parsed.cacheName, parsed.key, albumId, slug)
-    ) {
+    if (parsed !== null && albumMediaCacheKeyMatches(parsed.cacheName, parsed.key, albumId, slug)) {
       entry.controller.abort();
       inFlight.delete(key);
     }
@@ -430,10 +427,7 @@ export async function purgeAlbumMediaBlobCache(
 
   for (const [key] of memory) {
     const parsed = parsedIdentity(key);
-    if (
-      parsed !== null &&
-      albumMediaCacheKeyMatches(parsed.cacheName, parsed.key, albumId, slug)
-    ) {
+    if (parsed !== null && albumMediaCacheKeyMatches(parsed.cacheName, parsed.key, albumId, slug)) {
       memory.delete(key);
     }
   }
@@ -445,9 +439,7 @@ export async function purgeAlbumMediaBlobCache(
         const requests = await cache.keys();
         await Promise.all(
           requests
-            .filter((request) =>
-              albumMediaCacheKeyMatches(cacheName, request.url, albumId, slug),
-            )
+            .filter((request) => albumMediaCacheKeyMatches(cacheName, request.url, albumId, slug))
             .map((request) => cache.delete(request)),
         );
       } catch {
