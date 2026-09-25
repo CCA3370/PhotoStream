@@ -251,6 +251,7 @@ export class OperationsService {
     }
 
     const albumPrefix = `media/albums/${options.albumId}/`;
+    await this.#storage.deletePrefix?.(albumPrefix);
     const prefixedKeys = objectKeys.filter((objectKey) => objectKey.startsWith(albumPrefix));
     const outlierKeys = objectKeys.filter((objectKey) => !objectKey.startsWith(albumPrefix));
     if (this.#cdn.invalidateDirectory !== undefined) {
