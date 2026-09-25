@@ -241,10 +241,7 @@ export class ObjectStorageProviderError extends Error {
   }
 }
 
-async function providerOperation<T>(
-  operation: string,
-  run: () => Promise<T>,
-): Promise<T> {
+async function providerOperation<T>(operation: string, run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (error) {
