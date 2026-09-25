@@ -2,7 +2,7 @@
 
 import type { AlbumDeletionErrorList, AlbumDeletionErrorView } from "@photostream/contracts";
 import { AlertTriangleIcon, HistoryIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -72,7 +72,7 @@ export function AlbumDeletionControls({
     [history, selectedId],
   );
 
-  async function loadHistory(): Promise<void> {
+  const loadHistory = useCallback(async (): Promise<void> => {
     setHistoryLoading(true);
     try {
       const result = await clientGet<AlbumDeletionErrorList>(
@@ -93,12 +93,12 @@ export function AlbumDeletionControls({
     } finally {
       setHistoryLoading(false);
     }
-  }
+  }, [albumId]);
 
   useEffect(() => {
     if (!historyOpen) return;
     void loadHistory();
-  }, [historyOpen]);
+  }, [historyOpen, loadHistory]);
 
   async function retryNow(): Promise<void> {
     if (retrying) return;
@@ -214,7 +214,11 @@ export function AlbumDeletionControls({
                     <DetailRow label="操作" mono value={selected.operation} />
                     <DetailRow label="错误代码" mono value={selected.code} />
                     <DetailRow label="HTTP 状态" value={selected.httpStatus} />
-                    <DetailRow label="Provider Request ID" mono value={selected.providerRequestId} />
+                    <DetailRow
+                      label="Provider Request ID"
+                      mono
+                      value={selected.providerRequestId}
+                    />
                     <DetailRow label="尝试次数" value={selected.attempt} />
                     <DetailRow label="记录 ID" mono value={selected.id} />
                   </dl>
