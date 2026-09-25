@@ -1469,7 +1469,7 @@ export class OperationsService {
       errorName:
         providerError instanceof Error
           ? providerError.name
-          : stringField(fields.name, 200) ?? typeof providerError,
+          : (stringField(fields.name, 200) ?? typeof providerError),
     };
     const hostId = stringField(fields.hostId, 512);
     if (hostId !== null) details.hostId = hostId;
