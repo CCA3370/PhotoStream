@@ -1087,10 +1087,7 @@ export class PhotoService {
     const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
     const generatedPassword =
       options.password ??
-      this.#deriveAlbumPassword(
-        options.actor.id,
-        `rotate:${options.albumId}:${idempotencyKey}`,
-      );
+      this.#deriveAlbumPassword(options.actor.id, `rotate:${options.albumId}:${idempotencyKey}`);
     const passwordHash = await this.#hasher.hash(generatedPassword);
     return this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
@@ -2767,8 +2764,7 @@ export class PhotoService {
           title: album.title,
           description: album.description,
           state: album.state,
-          scheduledStartAt:
-            album.scheduledStartAt === null ? null : iso(album.scheduledStartAt),
+          scheduledStartAt: album.scheduledStartAt === null ? null : iso(album.scheduledStartAt),
           access: album.access,
           accessRequired: false,
           previewDownloadEnabled: true,
@@ -2877,8 +2873,7 @@ export class PhotoService {
         title: album.title,
         description: album.description,
         state: album.state,
-        scheduledStartAt:
-          album.scheduledStartAt === null ? null : iso(album.scheduledStartAt),
+        scheduledStartAt: album.scheduledStartAt === null ? null : iso(album.scheduledStartAt),
         access: album.access,
         accessRequired: album.access === "password" && !unlocked,
         previewDownloadEnabled: true,
