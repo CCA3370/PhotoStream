@@ -1,4 +1,5 @@
 import {
+  albumDeletionErrorListSchema,
   albumStatisticsSchema,
   albumViewSchema,
   apiErrorSchema,
@@ -107,6 +108,56 @@ export async function registerOperationsRoutes(
               purgeFaceData: () =>
                 options.faceService?.purgeAlbumForDeletion(actor, request.params.id) ??
                 Promise.resolve(),
+            }),
+      });
+      return reply.status(202).send({ ok: true as const });
+    },
+  );
+
+  typed.get(
+    "/api/v1/albums/:id/deletion/errors",
+    {
+      schema: {
+        operationId: "listAlbumDeletionErrors",
+        tags: ["albums"],
+        params: idParamsSchema,
+        response: { 200: albumDeletionErrorListSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return options.operationsService.listAlbumDeletionErrors(
+        actorFrom(session),
+        request.params.id,
+      );
+    },
+  );
+
+  typed.post(
+    "/api/v1/albums/:id/deletion/retry",
+    {
+      schema: {
+        operationId: "retryAlbumDeletion",
+        tags: ["albums"],
+        params: idParamsSchema,
+        response: { 202: okResponseSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await options.operationsService.retryAlbumDeletion({
+        actor: actorFrom(session),
+        albumId: request.params.id,
+        ...(options.faceService === undefined
+          ? {}
+          : {
+              retryFaceData: (deletingSince, now) =>
+                options.faceService?.retryAlbumDeletionCleanup(
+                  request.params.id,
+                  deletingSince,
+                  now,
+                ) ?? Promise.resolve(),
             }),
       });
       return reply.status(202).send({ ok: true as const });
