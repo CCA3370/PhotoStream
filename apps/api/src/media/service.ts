@@ -401,11 +401,7 @@ export class PhotoService {
     const nextAttemptAt =
       nextAttemptDates.length === 0
         ? null
-        : iso(
-            nextAttemptDates.reduce((earliest, value) =>
-              value < earliest ? value : earliest,
-            ),
-          );
+        : iso(nextAttemptDates.reduce((earliest, value) => (value < earliest ? value : earliest)));
 
     const updatedDates = [
       startedAt,
