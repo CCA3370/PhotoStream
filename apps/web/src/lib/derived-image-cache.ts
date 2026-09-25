@@ -56,7 +56,6 @@ export function purgeWarmDerivedImages(scope: string): void {
   }
 }
 
-
 function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
   return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}`;
 }
