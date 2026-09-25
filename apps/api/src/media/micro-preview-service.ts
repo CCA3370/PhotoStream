@@ -231,11 +231,7 @@ export class MicroPreviewService {
     return cleaned;
   }
 
-  async #ownedMedia(
-    actor: InternalActor,
-    mediaId: string,
-    executor: Executor = this.#database,
-  ) {
+  async #ownedMedia(actor: InternalActor, mediaId: string, executor: Executor = this.#database) {
     if (!hasPermission(actor.role, "media:upload")) {
       throw new AppError({ code: "FORBIDDEN", message: "没有上传权限", statusCode: 403 });
     }
