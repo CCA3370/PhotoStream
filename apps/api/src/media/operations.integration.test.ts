@@ -341,7 +341,7 @@ maybeDescribe("stage 3 operations", () => {
     expect(storage.objects.has(lateKey)).toBe(false);
     expect(await database.select().from(schema.albumObjectDeletionSweeps)).toHaveLength(0);
 
-    expect(await service.processPendingAlbumDeletions(async () => {})).toBe(1);
+    expect(await service.processPendingAlbumDeletions(async () => {}, 10, new Date(Date.now() + 21 * 60 * 1_000))).toBe(1);
     expect(
       await database.select().from(schema.albums).where(eq(schema.albums.id, albumId)),
     ).toHaveLength(0);
@@ -420,7 +420,7 @@ maybeDescribe("stage 3 operations", () => {
       10,
       new Date(Date.now() + 21 * 60 * 1_000),
     );
-    expect(await service.processPendingAlbumDeletions(async () => {})).toBe(1);
+    expect(await service.processPendingAlbumDeletions(async () => {}, 10, new Date(Date.now() + 21 * 60 * 1_000))).toBe(1);
 
     expect(
       await database
