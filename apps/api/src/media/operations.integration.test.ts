@@ -491,6 +491,29 @@ maybeDescribe("stage 3 operations", () => {
       .from(schema.albums)
       .where(eq(schema.albums.id, albumId));
     expect(album?.state).toBe("deleting");
+
+    const photos = new PhotoService({
+      database,
+      storage,
+      passwordHasher: fakeHasher,
+      config,
+      cdnInvalidator: cdn,
+    });
+    const summary = (await photos.listAlbumSummaries({ id: adminId, role: "admin" })).find(
+      (item) => item.id === albumId,
+    );
+    expect(summary?.deletionProgress).toMatchObject({
+      phase: "waiting_upload_expiry",
+      objectCleanup: {
+        status: "waiting",
+        attempts: 1,
+        lastErrorCode: "OBJECT_DELETE_FAILED",
+      },
+      latestError: {
+        source: "object_storage",
+        code: "OBJECT_DELETE_FAILED",
+      },
+    });
   });
 
   it("accepts deletion when face cleanup is temporarily unavailable", async () => {
