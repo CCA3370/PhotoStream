@@ -225,21 +225,33 @@ export class MicroPreviewService {
     if (!hasPermission(actor.role, "media:upload")) {
       throw new AppError({ code: "FORBIDDEN", message: "没有上传权限", statusCode: 403 });
     }
-    const [media] = await this.#database
+    const [row] = await this.#database
       .select({
-        id: schema.media.id,
-        albumId: schema.media.albumId,
-        uploaderId: schema.media.uploaderId,
-        width: schema.media.width,
-        height: schema.media.height,
-        publicationStatus: schema.media.publicationStatus,
+        media: {
+          id: schema.media.id,
+          albumId: schema.media.albumId,
+          uploaderId: schema.media.uploaderId,
+          width: schema.media.width,
+          height: schema.media.height,
+          publicationStatus: schema.media.publicationStatus,
+        },
+        albumState: schema.albums.state,
       })
       .from(schema.media)
+      .innerJoin(schema.albums, eq(schema.albums.id, schema.media.albumId))
       .where(eq(schema.media.id, mediaId))
       .limit(1);
-    if (media === undefined) {
+    if (row === undefined) {
       throw new AppError({ code: "MEDIA_NOT_FOUND", message: "媒体不存在", statusCode: 404 });
     }
+    if (row.albumState === "deleting") {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "活动正在删除，不能继续写入缩略图",
+        statusCode: 409,
+      });
+    }
+    const { media } = row;
     if (media.publicationStatus === "deleted") {
       throw new AppError({ code: "STATE_CONFLICT", message: "媒体已删除", statusCode: 409 });
     }
