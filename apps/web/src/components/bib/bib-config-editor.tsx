@@ -26,7 +26,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
@@ -49,92 +48,220 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { clientMutation } from "@/lib/client-api";
 
-function newConstraint(): BibConstraintInput {
+interface SimpleConstraintDraft {
+  readonly id: string;
+  readonly startPosition: number;
+  readonly width: number;
+  readonly start: string;
+  readonly end: string;
+}
+
+interface SimpleConditionalRuleDraft {
+  readonly id: string;
+  readonly when: SimpleConstraintDraft;
+  readonly then: SimpleConstraintDraft;
+}
+
+interface SimpleBibRuleDraft {
+  readonly totalLength: number;
+  readonly baseRules: readonly SimpleConstraintDraft[];
+  readonly conditionalRules: readonly SimpleConditionalRuleDraft[];
+  readonly compatible: boolean;
+  readonly dirty: boolean;
+}
+
+function newSimpleConstraint(startPosition = 1, width = 1): SimpleConstraintDraft {
   return {
     id: crypto.randomUUID(),
-    startPosition: 1,
-    width: 1,
-    ranges: [{ id: crypto.randomUUID(), start: "0", end: "9" }],
-    sortOrder: 0,
+    startPosition,
+    width,
+    start: "0".repeat(width),
+    end: "9".repeat(width),
   };
 }
 
-function newPattern(totalLength = 6): BibPatternInput {
-  return {
-    id: crypto.randomUUID(),
-    totalLength,
-    sortOrder: 0,
-    enabled: true,
-    constraints: [newConstraint()],
-  };
-}
-
-function cloneConstraint(constraint: BibConstraintInput): BibConstraintInput {
+function resizeSimpleConstraint(
+  constraint: SimpleConstraintDraft,
+  width: number,
+): SimpleConstraintDraft {
   return {
     ...constraint,
-    id: crypto.randomUUID(),
-    ranges: constraint.ranges.map((range) => ({ ...range, id: crypto.randomUUID() })),
+    width,
+    start: "0".repeat(width),
+    end: "9".repeat(width),
   };
 }
 
-function clonePattern(pattern: BibPatternInput): BibPatternInput {
+function simpleConstraintFromBib(constraint: BibConstraintInput): SimpleConstraintDraft | null {
+  const range = constraint.ranges.length === 1 ? constraint.ranges[0] : undefined;
+  if (range === undefined) return null;
   return {
-    ...pattern,
     id: crypto.randomUUID(),
-    constraints: pattern.constraints.map(cloneConstraint),
+    startPosition: constraint.startPosition,
+    width: constraint.width,
+    start: range.start,
+    end: range.end,
   };
 }
 
-function constraintSummary(constraint: BibConstraintInput): string {
-  const endPosition = constraint.startPosition + constraint.width - 1;
+function constraintSignature(constraint: BibConstraintInput): string | null {
+  const range = constraint.ranges.length === 1 ? constraint.ranges[0] : undefined;
+  return range === undefined
+    ? null
+    : `${constraint.startPosition}:${constraint.width}:${range.start}:${range.end}`;
+}
+
+function simpleRuleDraftFromPatterns(patterns: readonly BibPatternInput[]): SimpleBibRuleDraft {
+  const enabled = patterns.filter((pattern) => pattern.enabled);
+  const totalLength = enabled[0]?.totalLength ?? patterns[0]?.totalLength ?? 5;
+  if (enabled.length === 0) {
+    return {
+      totalLength,
+      baseRules: [],
+      conditionalRules: [],
+      compatible: patterns.length === 0,
+      dirty: false,
+    };
+  }
+
+  const structurallySimple =
+    enabled.length === patterns.length &&
+    enabled.every(
+      (pattern) =>
+        pattern.totalLength === totalLength &&
+        pattern.constraints.every((constraint) => simpleConstraintFromBib(constraint) !== null),
+    );
+  if (!structurallySimple) {
+    return {
+      totalLength,
+      baseRules: enabled[0]?.constraints
+        .map(simpleConstraintFromBib)
+        .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null) ?? [],
+      conditionalRules: [],
+      compatible: false,
+      dirty: false,
+    };
+  }
+
+  if (enabled.length === 1) {
+    return {
+      totalLength,
+      baseRules: enabled[0]?.constraints
+        .map(simpleConstraintFromBib)
+        .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null) ?? [],
+      conditionalRules: [],
+      compatible: true,
+      dirty: false,
+    };
+  }
+
+  const first = enabled[0];
+  if (first === undefined) {
+    return { totalLength, baseRules: [], conditionalRules: [], compatible: true, dirty: false };
+  }
+  const commonSignatures = new Set(
+    first.constraints
+      .map(constraintSignature)
+      .filter(
+        (signature): signature is string =>
+          signature !== null &&
+          enabled.every((pattern) =>
+            pattern.constraints.some((constraint) => constraintSignature(constraint) === signature),
+          ),
+      ),
+  );
+  const baseRules = first.constraints
+    .filter((constraint) => {
+      const signature = constraintSignature(constraint);
+      return signature !== null && commonSignatures.has(signature);
+    })
+    .map(simpleConstraintFromBib)
+    .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null);
+
+  const conditionalRules: SimpleConditionalRuleDraft[] = [];
+  for (const pattern of enabled) {
+    const remaining = pattern.constraints.filter((constraint) => {
+      const signature = constraintSignature(constraint);
+      return signature === null || !commonSignatures.has(signature);
+    });
+    if (remaining.length !== 2) {
+      return { totalLength, baseRules, conditionalRules: [], compatible: false, dirty: false };
+    }
+    const when = simpleConstraintFromBib(remaining[0] as BibConstraintInput);
+    const then = simpleConstraintFromBib(remaining[1] as BibConstraintInput);
+    if (when === null || then === null) {
+      return { totalLength, baseRules, conditionalRules: [], compatible: false, dirty: false };
+    }
+    conditionalRules.push({ id: crypto.randomUUID(), when, then });
+  }
+
+  return { totalLength, baseRules, conditionalRules, compatible: true, dirty: false };
+}
+
+function compiledConstraint(
+  constraint: SimpleConstraintDraft,
+  sortOrder: number,
+): BibConstraintInput {
+  return {
+    id: crypto.randomUUID(),
+    startPosition: constraint.startPosition,
+    width: constraint.width,
+    ranges: [{ id: crypto.randomUUID(), start: constraint.start, end: constraint.end }],
+    sortOrder,
+  };
+}
+
+function compileSimpleRuleDraft(draft: SimpleBibRuleDraft): BibPatternInput[] {
+  const makeBaseConstraints = () =>
+    draft.baseRules.map((constraint, index) => compiledConstraint(constraint, index));
+  if (draft.conditionalRules.length === 0) {
+    if (draft.baseRules.length === 0) return [];
+    return [
+      {
+        id: crypto.randomUUID(),
+        totalLength: draft.totalLength,
+        sortOrder: 0,
+        enabled: true,
+        constraints: makeBaseConstraints(),
+      },
+    ];
+  }
+  return draft.conditionalRules.map((rule, index) => {
+    const base = makeBaseConstraints();
+    return {
+      id: crypto.randomUUID(),
+      totalLength: draft.totalLength,
+      sortOrder: index,
+      enabled: true,
+      constraints: [
+        ...base,
+        compiledConstraint(rule.when, base.length),
+        compiledConstraint(rule.then, base.length + 1),
+      ],
+    };
+  });
+}
+
+function simpleConstraintSummary(constraint: SimpleConstraintDraft): string {
+  const last = constraint.startPosition + constraint.width - 1;
   const position =
     constraint.width === 1
       ? `第 ${constraint.startPosition} 位`
-      : `第 ${constraint.startPosition}–${endPosition} 位`;
-  const ranges = constraint.ranges
-    .map((range) => (range.start === range.end ? range.start : `${range.start}–${range.end}`))
-    .join("、");
-  return `${position}为 ${ranges || "未设置范围"}`;
+      : `第 ${constraint.startPosition}–${last} 位`;
+  const range = constraint.start === constraint.end ? constraint.start : `${constraint.start}–${constraint.end}`;
+  return `${position}为 ${range}`;
 }
 
-function branchSummary(pattern: BibPatternInput): string {
-  if (pattern.constraints.length === 0) return "尚未设置条件";
-  return pattern.constraints.map(constraintSummary).join(" 且 ");
-}
-
-function requestFrom(config: BibConfigView): BibConfigUpdate {
-  const attributeOptions = config.attributeOptions.filter(
-    (option) => option.dimension === "grade" || option.parentGradeOptionId != null,
-  );
-  const optionIds = new Set(attributeOptions.map((option) => option.id));
-  return {
-    recognitionEnabled: config.recognitionEnabled,
-    searchEnabled: config.searchEnabled,
-    modelVersion: config.modelVersion,
-    patterns: config.patterns.map((pattern, patternIndex) => ({
-      ...pattern,
-      sortOrder: patternIndex,
-      constraints: pattern.constraints.map((constraint, constraintIndex) => ({
-        ...constraint,
-        sortOrder: constraintIndex,
-      })),
-    })),
-    attributeOptions,
-    mappings: config.mappings.filter((mapping) => optionIds.has(mapping.outputOptionId)),
-  };
-}
-
-function digitCoverage(
-  pattern: BibPatternInput,
-): readonly { readonly position: number; readonly constrained: boolean }[] {
-  return Array.from({ length: pattern.totalLength }, (_, index) => ({
-    position: index + 1,
-    constrained: pattern.constraints.some(
-      (constraint) =>
-        index + 1 >= constraint.startPosition &&
-        index + 1 < constraint.startPosition + constraint.width,
+function simpleRuleSummary(draft: SimpleBibRuleDraft): string {
+  const parts = [`号码固定为 ${draft.totalLength} 位`];
+  parts.push(...draft.baseRules.map((rule) => simpleConstraintSummary(rule)));
+  parts.push(
+    ...draft.conditionalRules.map(
+      (rule) =>
+        `当${simpleConstraintSummary(rule.when)}时，${simpleConstraintSummary(rule.then)}`,
     ),
-  }));
+  );
+  return parts.join("；");
 }
 
 function optionLabel(option: BibAttributeOptionInput): string {
@@ -239,14 +366,28 @@ function DraftNumberInput({
 
 export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }>) {
   const [config, setConfig] = useState<BibConfigUpdate>(() => requestFrom(initial));
+  const [ruleDraft, setRuleDraft] = useState<SimpleBibRuleDraft>(() =>
+    simpleRuleDraftFromPatterns(initial.patterns),
+  );
   const [saved, setSaved] = useState(initial);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testNumber, setTestNumber] = useState("");
   const [testResult, setTestResult] = useState<BibTestResponse | null>(null);
+  const effectivePatterns = useMemo(
+    () =>
+      !ruleDraft.compatible && !ruleDraft.dirty
+        ? config.patterns
+        : compileSimpleRuleDraft(ruleDraft),
+    [config.patterns, ruleDraft],
+  );
   const validation = useMemo(() => {
-    const rule = validateBibRuleSet(config.patterns);
-    const mapping = validateBibMappings(config.patterns, config.attributeOptions, config.mappings);
+    const rule = validateBibRuleSet(effectivePatterns);
+    const mapping = validateBibMappings(
+      effectivePatterns,
+      config.attributeOptions,
+      config.mappings,
+    );
     const optionIssues = config.attributeOptions.flatMap((option, index) => {
       const displayName = option.displayName.trim();
       if (displayName.length === 0) {
@@ -314,11 +455,11 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           ];
     });
     return { rule, mapping, issues: [...rule.issues, ...mapping.issues, ...optionIssues] };
-  }, [config]);
+  }, [config, effectivePatterns]);
   const localTestResult = useMemo(() => {
     const normalizedNumber = normalizeBibNumber(testNumber);
     if (normalizedNumber === null) return null;
-    const evaluation = evaluateBibNumber(normalizedNumber, config.patterns);
+    const evaluation = evaluateBibNumber(normalizedNumber, effectivePatterns);
     const derived = evaluation.valid
       ? deriveBibAttributes(normalizedNumber, config.mappings, config.attributeOptions)
       : { gradeOptionId: null, classOptionId: null, matchedMappingIds: [] };
@@ -334,30 +475,32 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         ? { ...derived, classOptionId: null }
         : derived;
     return { normalizedNumber, ...evaluation, ...attributes };
-  }, [config, testNumber]);
+  }, [config, effectivePatterns, testNumber]);
   const testNumberInvalid = testNumber.length > 0 && localTestResult === null;
 
-  function updatePattern(
-    patternIndex: number,
-    update: (pattern: BibPatternInput) => BibPatternInput,
-  ) {
-    setConfig((current) => ({
+  function editRuleDraft(update: (current: SimpleBibRuleDraft) => SimpleBibRuleDraft): void {
+    setRuleDraft((current) => ({ ...update(current), compatible: true, dirty: true }));
+  }
+
+  function updateBaseRule(
+    ruleIndex: number,
+    update: (rule: SimpleConstraintDraft) => SimpleConstraintDraft,
+  ): void {
+    editRuleDraft((current) => ({
       ...current,
-      patterns: current.patterns.map((pattern, index) =>
-        index === patternIndex ? update(pattern) : pattern,
-      ),
+      baseRules: current.baseRules.map((rule, index) => (index === ruleIndex ? update(rule) : rule)),
     }));
   }
 
-  function updateConstraint(
-    patternIndex: number,
-    constraintIndex: number,
-    update: (constraint: BibConstraintInput) => BibConstraintInput,
-  ) {
-    updatePattern(patternIndex, (pattern) => ({
-      ...pattern,
-      constraints: pattern.constraints.map((constraint, index) =>
-        index === constraintIndex ? update(constraint) : constraint,
+  function updateConditionalRule(
+    ruleIndex: number,
+    side: "when" | "then",
+    update: (rule: SimpleConstraintDraft) => SimpleConstraintDraft,
+  ): void {
+    editRuleDraft((current) => ({
+      ...current,
+      conditionalRules: current.conditionalRules.map((rule, index) =>
+        index === ruleIndex ? { ...rule, [side]: update(rule[side]) } : rule,
       ),
     }));
   }
@@ -567,7 +710,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     try {
       const updated = await clientMutation<BibConfigView>(
         `/api/v1/albums/${saved.albumId}/bib-config`,
-        { method: "PUT", body: config },
+        { method: "PUT", body: { ...config, patterns: effectivePatterns } },
       );
       setSaved(updated);
       setConfig(requestFrom(updated));
@@ -643,309 +786,292 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <CardHeader>
           <CardTitle>号码规则</CardTitle>
           <CardDescription>
-            满足任意一个有效分支即可。分支之间为 OR；同一分支中的条件全部满足才通过（AND）。
-            例如可设置“第 1 位为 1 时，第 3 位为 0–5”和“第 1 位为 2 时，第 3 位为 6–9”两个分支。
+            先设置号码总位数和始终生效的基础限制，再按“当…时…”添加条件限制。系统会自动转换为底层匹配规则，无需手动拆分 OR/AND 分支。
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {config.patterns.length === 0 ? (
-            <div className="rounded-xl border border-dashed px-4 py-6 text-center">
-              <p className="text-sm font-medium">尚未设置有效分支</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                添加一个分支后，再设置“当哪几位是什么范围时，这个号码有效”。
-              </p>
-            </div>
+        <CardContent className="flex flex-col gap-5">
+          {!ruleDraft.compatible && !ruleDraft.dirty ? (
+            <Alert>
+              <AlertTitle>现有规则包含较复杂结构</AlertTitle>
+              <AlertDescription>
+                当前号码功能仍按原规则运行。第一次修改下方简化规则后，会用新的简化规则整体替换原规则。
+              </AlertDescription>
+            </Alert>
           ) : null}
-          {config.patterns.map((pattern, patternIndex) => {
-            const coverage = digitCoverage(pattern);
-            return (
-              <Card key={pattern.id ?? `${pattern.totalLength}-${pattern.sortOrder}`} size="sm">
+
+          <Field>
+            <FieldLabel htmlFor="bib-total-length">号码总位数</FieldLabel>
+            <FieldDescription>所有合法号码都必须是这个长度，例如 5 位。</FieldDescription>
+            <DraftNumberInput
+              id="bib-total-length"
+              max={12}
+              min={1}
+              onValueChange={(value) =>
+                editRuleDraft((current) => ({ ...current, totalLength: value }))
+              }
+              value={ruleDraft.totalLength}
+            />
+          </Field>
+
+          <div className="rounded-xl border bg-muted/20 p-4">
+            <p className="text-sm font-medium">当前规则</p>
+            <p className="mt-1 text-sm text-muted-foreground">{simpleRuleSummary(ruleDraft)}</p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">基础限制</h3>
+                <p className="text-xs text-muted-foreground">这些限制对所有号码始终生效。</p>
+              </div>
+              <Button
+                disabled={ruleDraft.baseRules.length >= 12}
+                onClick={() =>
+                  editRuleDraft((current) => ({
+                    ...current,
+                    baseRules: [...current.baseRules, newSimpleConstraint()],
+                  }))
+                }
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <PlusIcon data-icon="inline-start" />
+                添加基础限制
+              </Button>
+            </div>
+
+            {ruleDraft.baseRules.length === 0 ? (
+              <div className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
+                暂无基础限制。若第一位只能是 1–6，可在这里添加“第 1 位，1–6”。
+              </div>
+            ) : null}
+
+            {ruleDraft.baseRules.map((rule, ruleIndex) => (
+              <div
+                className="grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+                key={rule.id}
+              >
+                <Field>
+                  <FieldLabel htmlFor={`base-start-${ruleIndex}`}>从第几位开始</FieldLabel>
+                  <DraftNumberInput
+                    id={`base-start-${ruleIndex}`}
+                    max={12}
+                    min={1}
+                    onValueChange={(value) =>
+                      updateBaseRule(ruleIndex, (current) => ({
+                        ...current,
+                        startPosition: value,
+                      }))
+                    }
+                    value={rule.startPosition}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`base-width-${ruleIndex}`}>连续读取几位</FieldLabel>
+                  <DraftNumberInput
+                    id={`base-width-${ruleIndex}`}
+                    max={12}
+                    min={1}
+                    onValueChange={(value) =>
+                      updateBaseRule(ruleIndex, (current) => resizeSimpleConstraint(current, value))
+                    }
+                    value={rule.width}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`base-range-start-${ruleIndex}`}>区间起点</FieldLabel>
+                  <Input
+                    id={`base-range-start-${ruleIndex}`}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      updateBaseRule(ruleIndex, (current) => ({
+                        ...current,
+                        start: event.currentTarget.value,
+                      }))
+                    }
+                    value={rule.start}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`base-range-end-${ruleIndex}`}>区间终点</FieldLabel>
+                  <Input
+                    id={`base-range-end-${ruleIndex}`}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      updateBaseRule(ruleIndex, (current) => ({
+                        ...current,
+                        end: event.currentTarget.value,
+                      }))
+                    }
+                    value={rule.end}
+                  />
+                </Field>
+                <Button
+                  aria-label={`删除基础限制 ${ruleIndex + 1}`}
+                  onClick={() =>
+                    editRuleDraft((current) => ({
+                      ...current,
+                      baseRules: current.baseRules.filter((_, index) => index !== ruleIndex),
+                    }))
+                  }
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Trash2Icon />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">条件限制</h3>
+                <p className="text-xs text-muted-foreground">
+                  例如：当第 1 位为 1–2 时，第 2–3 位必须为 01–10。
+                </p>
+              </div>
+              <Button
+                disabled={ruleDraft.conditionalRules.length >= 20}
+                onClick={() =>
+                  editRuleDraft((current) => ({
+                    ...current,
+                    conditionalRules: [
+                      ...current.conditionalRules,
+                      {
+                        id: crypto.randomUUID(),
+                        when: newSimpleConstraint(),
+                        then: newSimpleConstraint(2, 2),
+                      },
+                    ],
+                  }))
+                }
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <PlusIcon data-icon="inline-start" />
+                添加条件限制
+              </Button>
+            </div>
+
+            {ruleDraft.conditionalRules.length === 0 ? (
+              <div className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
+                暂无条件限制。只有基础限制时，满足基础限制的号码即可通过。
+              </div>
+            ) : null}
+
+            {ruleDraft.conditionalRules.map((rule, ruleIndex) => (
+              <Card key={rule.id} size="sm">
                 <CardHeader>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <CardTitle>有效分支 {patternIndex + 1}</CardTitle>
-                      <CardDescription className="mt-1">
-                        {pattern.enabled ? branchSummary(pattern) : "此分支已停用"}
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <CardTitle>条件 {ruleIndex + 1}</CardTitle>
+                      <CardDescription>
+                        当{simpleConstraintSummary(rule.when)}时，{simpleConstraintSummary(rule.then)}
                       </CardDescription>
                     </div>
-                    <Badge variant={pattern.enabled ? "secondary" : "outline"}>
-                      {pattern.enabled ? "参与匹配" : "已停用"}
-                    </Badge>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    <span className="sr-only">号码位预览</span>
-                    {coverage.map(({ constrained, position }) => (
-                      <Badge
-                        key={`${pattern.id ?? pattern.totalLength}-digit-${position}`}
-                        variant={constrained ? "secondary" : "outline"}
-                      >
-                        {position}：{constrained ? "受条件限制" : "任意"}
-                      </Badge>
-                    ))}
+                    <Button
+                      aria-label={`删除条件限制 ${ruleIndex + 1}`}
+                      onClick={() =>
+                        editRuleDraft((current) => ({
+                          ...current,
+                          conditionalRules: current.conditionalRules.filter(
+                            (_, index) => index !== ruleIndex,
+                          ),
+                        }))
+                      }
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2Icon />
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  <FieldGroup className="md:grid md:grid-cols-[1fr_auto_auto_auto] md:items-end">
-                    <Field>
-                      <FieldLabel htmlFor={`pattern-length-${patternIndex}`}>号码总位数</FieldLabel>
-                      <DraftNumberInput
-                        id={`pattern-length-${patternIndex}`}
-                        max={12}
-                        min={1}
-                        onValueChange={(value) =>
-                          updatePattern(patternIndex, (current) => ({
-                            ...current,
-                            totalLength: value,
-                          }))
-                        }
-                        value={pattern.totalLength}
-                      />
-                    </Field>
-                    <Field orientation="horizontal">
-                      <FieldLabel htmlFor={`pattern-enabled-${patternIndex}`}>启用分支</FieldLabel>
-                      <Switch
-                        checked={pattern.enabled}
-                        id={`pattern-enabled-${patternIndex}`}
-                        onCheckedChange={(checked) =>
-                          updatePattern(patternIndex, (current) => ({
-                            ...current,
-                            enabled: checked,
-                          }))
-                        }
-                      />
-                    </Field>
-                    <Button
-                      disabled={config.patterns.length >= 20}
-                      onClick={() =>
-                        setConfig((current) => ({
-                          ...current,
-                          patterns: [
-                            ...current.patterns.slice(0, patternIndex + 1),
-                            clonePattern(pattern),
-                            ...current.patterns.slice(patternIndex + 1),
-                          ],
-                        }))
-                      }
-                      type="button"
-                      variant="outline"
-                    >
-                      复制分支
-                    </Button>
-                    <Button
-                      onClick={() =>
-                        setConfig((current) => ({
-                          ...current,
-                          patterns: current.patterns.filter((_, index) => index !== patternIndex),
-                        }))
-                      }
-                      type="button"
-                      variant="destructive"
-                    >
-                      <Trash2Icon data-icon="inline-start" />
-                      删除分支
-                    </Button>
-                  </FieldGroup>
-
-                  {pattern.constraints.map((constraint, constraintIndex) => (
-                    <Card
-                      key={constraint.id ?? `${constraint.startPosition}-${constraint.width}`}
-                      size="sm"
-                    >
-                      <CardHeader>
-                        <CardTitle>
-                          {constraintIndex === 0 ? "当" : "并且"} · 条件 {constraintIndex + 1}
-                        </CardTitle>
-                        <CardDescription>
-                          {constraintSummary(constraint)}
-                          {constraintIndex === 0
-                            ? "。该条件与本分支后续条件共同决定是否通过。"
-                            : "。必须与本分支前面的条件同时满足。"}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-3">
-                        <FieldGroup className="md:grid md:grid-cols-3">
+                  {(["when", "then"] as const).map((side) => {
+                    const segment = rule[side];
+                    const prefix = side === "when" ? "当" : "则必须";
+                    return (
+                      <div className="flex flex-col gap-2" key={side}>
+                        <p className="text-sm font-medium">{prefix}</p>
+                        <FieldGroup className="md:grid md:grid-cols-4">
                           <Field>
-                            <FieldLabel
-                              htmlFor={`constraint-start-${patternIndex}-${constraintIndex}`}
-                            >
+                            <FieldLabel htmlFor={`conditional-${ruleIndex}-${side}-start`}>
                               从第几位开始
                             </FieldLabel>
                             <DraftNumberInput
-                              id={`constraint-start-${patternIndex}-${constraintIndex}`}
+                              id={`conditional-${ruleIndex}-${side}-start`}
                               max={12}
                               min={1}
                               onValueChange={(value) =>
-                                updateConstraint(patternIndex, constraintIndex, (current) => ({
+                                updateConditionalRule(ruleIndex, side, (current) => ({
                                   ...current,
                                   startPosition: value,
                                 }))
                               }
-                              value={constraint.startPosition}
+                              value={segment.startPosition}
                             />
                           </Field>
                           <Field>
-                            <FieldLabel
-                              htmlFor={`constraint-width-${patternIndex}-${constraintIndex}`}
-                            >
+                            <FieldLabel htmlFor={`conditional-${ruleIndex}-${side}-width`}>
                               连续读取几位
                             </FieldLabel>
                             <DraftNumberInput
-                              id={`constraint-width-${patternIndex}-${constraintIndex}`}
+                              id={`conditional-${ruleIndex}-${side}-width`}
                               max={12}
                               min={1}
                               onValueChange={(value) =>
-                                updateConstraint(patternIndex, constraintIndex, (current) => ({
-                                  ...current,
-                                  width: value,
-                                }))
+                                updateConditionalRule(ruleIndex, side, (current) =>
+                                  resizeSimpleConstraint(current, value),
+                                )
                               }
-                              value={constraint.width}
+                              value={segment.width}
                             />
                           </Field>
-                          <Button
-                            disabled={pattern.constraints.length === 1}
-                            onClick={() =>
-                              updatePattern(patternIndex, (current) => ({
-                                ...current,
-                                constraints: current.constraints.filter(
-                                  (_, index) => index !== constraintIndex,
-                                ),
-                              }))
-                            }
-                            type="button"
-                            variant="outline"
-                          >
-                            删除条件
-                          </Button>
-                        </FieldGroup>
-                        {constraint.ranges.map((range, rangeIndex) => (
-                          <FieldGroup
-                            className="grid grid-cols-[1fr_1fr_auto] items-end gap-2"
-                            key={range.id ?? `${range.start}-${range.end}`}
-                          >
-                            <Field>
-                              <FieldLabel
-                                htmlFor={`range-start-${patternIndex}-${constraintIndex}-${rangeIndex}`}
-                              >
-                                允许范围起点
-                              </FieldLabel>
-                              <Input
-                                id={`range-start-${patternIndex}-${constraintIndex}-${rangeIndex}`}
-                                inputMode="numeric"
-                                onChange={(event) => {
-                                  const { value } = event.currentTarget;
-                                  updateConstraint(patternIndex, constraintIndex, (current) => ({
-                                    ...current,
-                                    ranges: current.ranges.map((currentRange, index) =>
-                                      index === rangeIndex
-                                        ? { ...currentRange, start: value }
-                                        : currentRange,
-                                    ),
-                                  }));
-                                }}
-                                value={range.start}
-                              />
-                            </Field>
-                            <Field>
-                              <FieldLabel
-                                htmlFor={`range-end-${patternIndex}-${constraintIndex}-${rangeIndex}`}
-                              >
-                                允许范围终点
-                              </FieldLabel>
-                              <Input
-                                id={`range-end-${patternIndex}-${constraintIndex}-${rangeIndex}`}
-                                inputMode="numeric"
-                                onChange={(event) => {
-                                  const { value } = event.currentTarget;
-                                  updateConstraint(patternIndex, constraintIndex, (current) => ({
-                                    ...current,
-                                    ranges: current.ranges.map((currentRange, index) =>
-                                      index === rangeIndex
-                                        ? { ...currentRange, end: value }
-                                        : currentRange,
-                                    ),
-                                  }));
-                                }}
-                                value={range.end}
-                              />
-                            </Field>
-                            <Button
-                              aria-label={`删除分支 ${patternIndex + 1} 条件 ${constraintIndex + 1} 范围 ${rangeIndex + 1}`}
-                              disabled={constraint.ranges.length === 1}
-                              onClick={() =>
-                                updateConstraint(patternIndex, constraintIndex, (current) => ({
+                          <Field>
+                            <FieldLabel htmlFor={`conditional-${ruleIndex}-${side}-range-start`}>
+                              区间起点
+                            </FieldLabel>
+                            <Input
+                              id={`conditional-${ruleIndex}-${side}-range-start`}
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                updateConditionalRule(ruleIndex, side, (current) => ({
                                   ...current,
-                                  ranges: current.ranges.filter((_, index) => index !== rangeIndex),
+                                  start: event.currentTarget.value,
                                 }))
                               }
-                              size="icon"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <Trash2Icon />
-                            </Button>
-                          </FieldGroup>
-                        ))}
-                        <Button
-                          disabled={constraint.ranges.length >= 50}
-                          onClick={() =>
-                            updateConstraint(patternIndex, constraintIndex, (current) => ({
-                              ...current,
-                              ranges: [
-                                ...current.ranges,
-                                {
-                                  id: crypto.randomUUID(),
-                                  start: "0".repeat(Math.max(1, current.width)),
-                                  end: "9".repeat(Math.max(1, current.width)),
-                                },
-                              ],
-                            }))
-                          }
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <PlusIcon data-icon="inline-start" />
-                          添加另一个允许范围（OR）
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  <Button
-                    disabled={pattern.constraints.length >= 30}
-                    onClick={() =>
-                      updatePattern(patternIndex, (current) => ({
-                        ...current,
-                        constraints: [...current.constraints, newConstraint()],
-                      }))
-                    }
-                    type="button"
-                    variant="outline"
-                  >
-                    <PlusIcon data-icon="inline-start" />
-                    添加并且条件（AND）
-                  </Button>
+                              value={segment.start}
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabel htmlFor={`conditional-${ruleIndex}-${side}-range-end`}>
+                              区间终点
+                            </FieldLabel>
+                            <Input
+                              id={`conditional-${ruleIndex}-${side}-range-end`}
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                updateConditionalRule(ruleIndex, side, (current) => ({
+                                  ...current,
+                                  end: event.currentTarget.value,
+                                }))
+                              }
+                              value={segment.end}
+                            />
+                          </Field>
+                        </FieldGroup>
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </Card>
-            );
-          })}
-          <Button
-            disabled={config.patterns.length >= 20}
-            onClick={() =>
-              setConfig((current) => ({
-                ...current,
-                patterns: [
-                  ...current.patterns,
-                  newPattern(current.patterns.at(-1)?.totalLength ?? 6),
-                ],
-              }))
-            }
-            type="button"
-            variant="outline"
-          >
-            <PlusIcon data-icon="inline-start" />
-            添加另一个有效分支（OR）
-          </Button>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
