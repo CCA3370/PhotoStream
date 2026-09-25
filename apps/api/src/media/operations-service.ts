@@ -127,7 +127,7 @@ export class OperationsService {
     }
     if (!safeEqual(options.confirmation, album.title)) {
       throw new AppError({
-        code: "CONFIRMATION_MISMATCH",
+        code: "BAD_REQUEST",
         message: "请输入完整活动标题以确认删除",
         statusCode: 400,
       });
@@ -157,9 +157,7 @@ export class OperationsService {
     ]);
 
     const objectKeys = [
-      ...new Set(
-        [...variants, ...editVariants, ...microPreviews].map((row) => row.objectKey),
-      ),
+      ...new Set([...variants, ...editVariants, ...microPreviews].map((row) => row.objectKey)),
     ];
     for (const objectKey of objectKeys) await this.#storage.delete(objectKey);
     await this.#cdn.invalidate(objectKeys.map((objectKey) => `/${objectKey}`));
