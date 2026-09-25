@@ -241,6 +241,17 @@ export class ObjectStorageProviderError extends Error {
   }
 }
 
+async function providerOperation<T>(
+  operation: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    throw new ObjectStorageProviderError(operation, error);
+  }
+}
+
 function isMissingObject(error: unknown): boolean {
   const candidate = aliyunError(error);
   return (
@@ -429,11 +440,9 @@ export class AliyunObjectStorage implements ObjectStorage {
     for (let offset = 0; offset < keys.length; offset += 1_000) {
       const batch = [...keys.slice(offset, offset + 1_000)];
       if (batch.length === 0) continue;
-      try {
-        await this.#client.deleteMulti(batch, { quiet: true });
-      } catch (error) {
-        throw new ObjectStorageProviderError("DeleteMultipleObjects", error);
-      }
+      await providerOperation("DeleteMultipleObjects", () =>
+        this.#client.deleteMulti(batch, { quiet: true }),
+      );
     }
   }
 
@@ -441,15 +450,12 @@ export class AliyunObjectStorage implements ObjectStorage {
     let previousUploadBatch = "";
     let repeatedUploadBatchCount = 0;
     for (;;) {
-      let result: Awaited<ReturnType<OSS["listUploads"]>>;
-      try {
-        result = await this.#client.listUploads({
+      const result = await providerOperation("ListMultipartUploads", () =>
+        this.#client.listUploads({
           prefix,
           "max-uploads": 1_000,
-        });
-      } catch (error) {
-        throw new ObjectStorageProviderError("ListMultipartUploads", error);
-      }
+        }),
+      );
       const uploads = (result.uploads ?? []).flatMap((upload) =>
         typeof upload.name === "string" &&
         upload.name.length > 0 &&
@@ -477,15 +483,12 @@ export class AliyunObjectStorage implements ObjectStorage {
     let previousObjectBatch = "";
     let repeatedObjectBatchCount = 0;
     for (;;) {
-      let result: Awaited<ReturnType<OSS["listV2"]>>;
-      try {
-        result = await this.#client.listV2({
+      const result = await providerOperation("ListObjectsV2", () =>
+        this.#client.listV2({
           prefix,
           "max-keys": 1_000,
-        });
-      } catch (error) {
-        throw new ObjectStorageProviderError("ListObjectsV2", error);
-      }
+        }),
+      );
       const keys = (result.objects ?? [])
         .map((object) => object.name)
         .filter((key): key is string => typeof key === "string" && key.length > 0);
