@@ -60,9 +60,13 @@ export class UserAdminService {
 
   async listUsers(actor: { readonly role: UserRole }): Promise<AdminUserView[]> {
     requireAdmin(actor.role);
-    return (await this.#database.select().from(schema.users).orderBy(schema.users.createdAt)).map(
-      view,
-    );
+    return (
+      await this.#database
+        .select()
+        .from(schema.users)
+        .where(isNull(schema.users.deletedAt))
+        .orderBy(schema.users.createdAt)
+    ).map(view);
   }
 
   async createUser(options: {
@@ -165,7 +169,7 @@ export class UserAdminService {
       const [current] = await transaction
         .select()
         .from(schema.users)
-        .where(eq(schema.users.id, options.userId))
+        .where(and(eq(schema.users.id, options.userId), isNull(schema.users.deletedAt)))
         .limit(1);
       if (current === undefined) throw this.#userNotFound();
       const displayName = options.input.displayName?.trim();
@@ -231,6 +235,98 @@ export class UserAdminService {
     });
   }
 
+  async deleteUser(options: {
+    readonly actor: { readonly id: string; readonly role: UserRole };
+    readonly userId: string;
+    readonly requestId: string;
+  }): Promise<void> {
+    requireAdmin(options.actor.role);
+    if (options.userId === options.actor.id) {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "不能删除当前登录的管理员账号",
+        statusCode: 409,
+      });
+    }
+    await this.#database.transaction(async (transaction) => {
+      await transaction.execute(sql`select pg_advisory_xact_lock(130071002)`);
+      const [current] = await transaction
+        .select()
+        .from(schema.users)
+        .where(and(eq(schema.users.id, options.userId), isNull(schema.users.deletedAt)))
+        .limit(1);
+      if (current === undefined) throw this.#userNotFound();
+
+      if (current.isActive && current.role === "admin") {
+        const [count] = await transaction
+          .select({ value: sql<number>`count(*)::int` })
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.role, "admin"),
+              eq(schema.users.isActive, true),
+              isNull(schema.users.deletedAt),
+            ),
+          );
+        if ((count?.value ?? 0) <= 1) {
+          throw new AppError({
+            code: "STATE_CONFLICT",
+            message: "必须至少保留一名启用的管理员",
+            statusCode: 409,
+          });
+        }
+      }
+
+      const now = new Date();
+      await transaction
+        .update(schema.sessions)
+        .set({ revokedAt: now })
+        .where(and(eq(schema.sessions.userId, options.userId), isNull(schema.sessions.revokedAt)));
+      await transaction
+        .delete(schema.albumReviewCollaborators)
+        .where(eq(schema.albumReviewCollaborators.userId, options.userId));
+      await transaction
+        .update(schema.media)
+        .set({ reviewAssigneeId: null })
+        .where(eq(schema.media.reviewAssigneeId, options.userId));
+
+      const tombstoneUsername = `deleted-${options.userId}`;
+      const [deleted] = await transaction
+        .update(schema.users)
+        .set({
+          username: tombstoneUsername,
+          normalizedUsername: tombstoneUsername,
+          displayName: "已删除成员",
+          isActive: false,
+          mustChangePassword: true,
+          passwordChangedAt: now,
+          deletedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(schema.users.id, options.userId), isNull(schema.users.deletedAt)))
+        .returning({ id: schema.users.id });
+      if (deleted === undefined) throw this.#userNotFound();
+
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "user.deleted",
+        targetType: "user",
+        targetId: options.userId,
+        result: "success",
+        changedFields: [
+          "username",
+          "displayName",
+          "isActive",
+          "mustChangePassword",
+          "sessions",
+          "reviewAssignments",
+          "deletedAt",
+        ],
+        requestId: options.requestId,
+      });
+    });
+  }
+
   async resetPassword(options: {
     readonly actor: {
       readonly id: string;
@@ -271,7 +367,7 @@ export class UserAdminService {
       const [updated] = await transaction
         .update(schema.users)
         .set({ passwordHash, mustChangePassword: true, passwordChangedAt: now, updatedAt: now })
-        .where(eq(schema.users.id, options.userId))
+        .where(and(eq(schema.users.id, options.userId), isNull(schema.users.deletedAt)))
         .returning({ id: schema.users.id });
       if (updated === undefined) throw this.#userNotFound();
       await transaction
