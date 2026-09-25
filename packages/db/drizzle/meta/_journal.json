@@ -246,6 +246,13 @@
       "when": 1790181000000,
       "tag": "0034_remove_universal_classes",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790340000000,
+      "tag": "0035_album_deleting_state",
+      "breakpoints": true
     }
   ]
 }
