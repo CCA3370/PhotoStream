@@ -72,7 +72,7 @@ function MediaTile({
   return (
     <div
       className={cn(
-        "group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-200 ease-out active:scale-[0.975] sm:rounded-xl sm:hover:-translate-y-0.5 sm:hover:scale-[1.012] sm:hover:shadow-md sm:hover:ring-border motion-reduce:transform-none motion-reduce:transition-none",
+        "group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.975] sm:rounded-xl sm:hover:-translate-y-0.5 sm:hover:shadow-md sm:hover:ring-border motion-reduce:transform-none motion-reduce:transition-none",
         animateIn &&
           "animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
       )}
@@ -87,7 +87,7 @@ function MediaTile({
       <CachedPhotoImage
         alt="活动照片"
         bytes={preview.bytes}
-        className="object-cover transition-transform duration-200 ease-out sm:group-hover:scale-[1.018] motion-reduce:transform-none motion-reduce:transition-none"
+        className="object-cover transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] sm:group-hover:scale-[1.025] motion-reduce:transform-none motion-reduce:transition-none"
         kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
         mediaId={media.id}
         scope={slug ?? "public-media"}
