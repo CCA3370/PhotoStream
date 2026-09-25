@@ -9,18 +9,23 @@
 
 .searchToolbar > section > div > div:first-child {
   position: fixed;
-  top: calc(var(--public-gallery-header-height) + 0.375rem);
-  right: 0.625rem;
+  top: var(--public-gallery-header-height);
+  right: 0;
   z-index: 35;
+  display: flex;
   width: max-content;
   max-width: calc(100vw - 1.25rem);
+  height: 2.75rem;
+  align-items: center;
+  gap: 0.125rem;
   margin: 0;
-  padding: 0;
+  padding: 0 0.625rem 0 0.5rem;
   border: 0;
-  border-radius: 0.625rem;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
+  border-left: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+  border-radius: 0;
+  background: color-mix(in oklab, var(--background) 96%, transparent);
+  box-shadow: -10px 0 16px -16px color-mix(in oklab, var(--foreground) 35%, transparent);
+  backdrop-filter: blur(14px);
 }
 
 .searchToolbar > section > div > div:first-child > button:first-child {
@@ -87,7 +92,8 @@
 
 @media (min-width: 640px) {
   .searchToolbar > section > div > div:first-child {
-    right: 1.25rem;
+    right: 0;
+    padding-right: 1.25rem;
   }
 }
 
