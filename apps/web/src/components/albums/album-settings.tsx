@@ -99,9 +99,7 @@ function mergeAlbumUpdate(
     ...(input.title === undefined ? {} : { title: updated.title }),
     ...(input.description === undefined ? {} : { description: updated.description }),
     ...(input.access === undefined ? {} : { access: updated.access }),
-    ...(input.scheduledStartAt === undefined
-      ? {}
-      : { scheduledStartAt: updated.scheduledStartAt }),
+    ...(input.scheduledStartAt === undefined ? {} : { scheduledStartAt: updated.scheduledStartAt }),
     ...(input.previewDownloadEnabled === undefined
       ? {}
       : { previewDownloadEnabled: updated.previewDownloadEnabled }),
@@ -555,9 +553,7 @@ export function AlbumSettings({
                     {scheduleDirty ? "有未保存修改" : "已保存"}
                   </span>
                   <Button
-                    disabled={
-                      album.state !== "draft" || !scheduleDirty || isPending("schedule")
-                    }
+                    disabled={album.state !== "draft" || !scheduleDirty || isPending("schedule")}
                     size="sm"
                     type="submit"
                   >
@@ -831,8 +827,7 @@ export function AlbumSettings({
           <DialogFooter>
             <Button
               disabled={
-                isPending("password") ||
-                (passwordInput.length > 0 && passwordInput.length < 4)
+                isPending("password") || (passwordInput.length > 0 && passwordInput.length < 4)
               }
               onClick={() => void rotatePassword()}
               type="button"
