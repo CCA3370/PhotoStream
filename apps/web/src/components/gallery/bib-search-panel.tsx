@@ -550,38 +550,54 @@ export function BibSearchPanel({
 
       {resultMode === null ? (
         children
-      ) : resultItems.length === 0 ? (
-        <div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
-          {resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}
-        </div>
       ) : (
         <section
           aria-label="照片查找结果"
           className="flex flex-col gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-250 motion-reduce:animate-none"
         >
-          <MediaGrid items={resultItems} slug={slug} />
-          {resultNextCursor == null ? null : resultMode === "face" ? (
+          <div className="flex justify-end">
             <Button
-              className="self-center rounded-full"
-              disabled={facePending}
-              onClick={() => void loadMoreFace()}
+              className="rounded-full"
+              onClick={clearResult}
               size="sm"
               type="button"
               variant="outline"
             >
-              加载更多
+              <XIcon data-icon="inline-start" />
+              关闭查找
             </Button>
+          </div>
+          {resultItems.length === 0 ? (
+            <div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground">
+              {resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}
+            </div>
           ) : (
-            <Button
-              className="self-center rounded-full"
-              disabled={pending}
-              onClick={() => void search(resultNextCursor ?? undefined)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              加载更多
-            </Button>
+            <>
+              <MediaGrid items={resultItems} slug={slug} />
+              {resultNextCursor == null ? null : resultMode === "face" ? (
+                <Button
+                  className="self-center rounded-full"
+                  disabled={facePending}
+                  onClick={() => void loadMoreFace()}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  加载更多
+                </Button>
+              ) : (
+                <Button
+                  className="self-center rounded-full"
+                  disabled={pending}
+                  onClick={() => void search(resultNextCursor ?? undefined)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  加载更多
+                </Button>
+              )}
+            </>
           )}
         </section>
       )}
