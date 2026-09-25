@@ -202,6 +202,7 @@ export const users = pgTable(
     creationActorId: uuid("creation_actor_id"),
     creationIdempotencyKey: varchar("creation_idempotency_key", { length: 128 }),
     passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     ...timestampColumns(),
   },
   (table) => [
