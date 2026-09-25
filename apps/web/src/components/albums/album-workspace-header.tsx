@@ -10,6 +10,7 @@ const stateLabels: Record<AlbumView["state"], string> = {
   live: "直播中",
   ended: "已结束",
   archived: "已归档",
+  deleting: "删除中",
 };
 
 function stateVariant(state: AlbumView["state"]): "default" | "outline" | "secondary" {
