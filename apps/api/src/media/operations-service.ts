@@ -553,7 +553,12 @@ export class OperationsService {
           .update(schema.albumObjectDeletionSweeps)
           .set({
             attempts,
-            lastErrorCode: error instanceof Error ? error.name.slice(0, 100) : "UNKNOWN",
+            lastErrorCode:
+              error instanceof AppError
+                ? error.code
+                : error instanceof Error
+                  ? error.name.slice(0, 100)
+                  : "UNKNOWN",
             executeAfter: new Date(now.getTime() + retryDelay),
             updatedAt: now,
           })
