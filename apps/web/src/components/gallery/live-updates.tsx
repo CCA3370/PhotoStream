@@ -343,7 +343,7 @@ export function LiveUpdates({
     >
       {pendingMediaCount > 0 ? (
         <Button
-          className="pointer-events-auto h-11 rounded-full border-blue-600 bg-blue-600 px-3.5 text-sm text-white shadow-lg shadow-black/10 backdrop-blur-md hover:border-blue-700 hover:bg-blue-700 hover:text-white focus-visible:border-blue-500 focus-visible:ring-blue-500/50 active:not-aria-[haspopup]:translate-y-0 motion-reduce:transition-none sm:h-9"
+          className="pointer-events-auto h-11 rounded-full border-blue-600 bg-blue-600 px-3.5 text-sm text-white shadow-lg shadow-black/10 backdrop-blur-md hover:border-blue-700 hover:bg-blue-700 hover:text-white focus-visible:border-blue-500 focus-visible:ring-blue-500/50 motion-reduce:transition-none sm:h-9"
           onClick={() => revealPendingMedia(true)}
           type="button"
           variant="outline"
