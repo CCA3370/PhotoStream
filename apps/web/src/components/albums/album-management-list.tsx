@@ -1,6 +1,6 @@
 "use client";
 
-import type { AlbumSummaryView, UserRole } from "@photostream/contracts";
+import { type AlbumSummaryView, hasPermission, type UserRole } from "@photostream/contracts";
 import {
   AlertTriangleIcon,
   ArrowUpRightIcon,
@@ -102,9 +102,11 @@ function cleanupStatusLabel(
 
 function DeletingAlbumRow({
   album,
+  canConfigure,
   onRefresh,
 }: Readonly<{
   album: AlbumSummaryView;
+  canConfigure: boolean;
   onRefresh: () => void;
 }>) {
   const progress = album.deletionProgress;
@@ -123,7 +125,7 @@ function DeletingAlbumRow({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <AlbumDeletionControls albumId={album.id} onRetried={onRefresh} />
+          {canConfigure ? <AlbumDeletionControls albumId={album.id} onRetried={onRefresh} /> : null}
           <Button onClick={onRefresh} size="sm" type="button" variant="outline">
             <RefreshCwIcon aria-hidden="true" />
             刷新状态
@@ -320,6 +322,7 @@ export function AlbumManagementList({
                 return (
                   <DeletingAlbumRow
                     album={album}
+                    canConfigure={hasPermission(role, "album:configure")}
                     key={album.id}
                     onRefresh={() => router.refresh()}
                   />
