@@ -1,3 +1,4 @@
+import { subscribeAlbumPurge } from "./album-purge-broadcast";
 import type { PhotoVariantKind } from "@photostream/contracts";
 
 export interface UploadRecoveryRecord {
@@ -95,3 +96,8 @@ export async function deleteUploadRecoveriesForAlbum(albumId: string): Promise<v
       .map((record) => deleteUploadRecovery(record.intentId)),
   );
 }
+
+
+subscribeAlbumPurge(({ albumId }) => {
+  void deleteUploadRecoveriesForAlbum(albumId).catch(() => undefined);
+});
