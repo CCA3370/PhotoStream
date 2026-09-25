@@ -1,4 +1,4 @@
-import { RadioIcon } from "lucide-react";
+import { Clock3Icon, RadioIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ export interface PublicGalleryShellProps {
   readonly albumDescription?: string;
   readonly children: ReactNode;
   readonly reserveSearchAction?: boolean;
-  readonly status?: "直播中" | "已结束";
+  readonly status?: "未开始" | "直播中" | "已结束";
 }
 
 export function PublicGalleryShell({
@@ -58,7 +58,11 @@ export function PublicGalleryShell({
                 }`}
                 variant={status === "直播中" ? "default" : "secondary"}
               >
-                <RadioIcon aria-hidden="true" className="size-2.5 lg:size-3.5" />
+                {status === "未开始" ? (
+                  <Clock3Icon aria-hidden="true" className="size-2.5 lg:size-3.5" />
+                ) : (
+                  <RadioIcon aria-hidden="true" className="size-2.5 lg:size-3.5" />
+                )}
                 {status}
               </Badge>
             </div>
