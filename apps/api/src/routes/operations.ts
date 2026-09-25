@@ -79,6 +79,7 @@ export async function registerOperationsRoutes(
     404: apiErrorSchema,
     409: apiErrorSchema,
     500: apiErrorSchema,
+    503: apiErrorSchema,
   };
 
   typed.delete(
@@ -96,13 +97,17 @@ export async function registerOperationsRoutes(
       const session = await requireInternalCsrf(request, options.authService, options.config);
       await verifyPasswordConfirmation(request, options.authService, session);
       const actor = { ...actorFrom(session), authenticatedAt: new Date() };
-      if (options.faceService !== undefined) {
-        await options.faceService.purgeAlbumForDeletion(actor, request.params.id);
-      }
       await options.operationsService.deleteAlbum({
         actor,
         albumId: request.params.id,
         confirmation: request.body.confirmation,
+        ...(options.faceService === undefined
+          ? {}
+          : {
+              purgeFaceData: () =>
+                options.faceService?.purgeAlbumForDeletion(actor, request.params.id) ??
+                Promise.resolve(),
+            }),
       });
       return { ok: true as const };
     },
