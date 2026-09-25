@@ -777,12 +777,7 @@ export const rotateAlbumPasswordResponseSchema = z
 
 export const albumDeletionProgressSchema = z
   .object({
-    phase: z.enum([
-      "waiting_upload_expiry",
-      "object_cleanup",
-      "face_cleanup",
-      "finalizing",
-    ]),
+    phase: z.enum(["waiting_upload_expiry", "object_cleanup", "face_cleanup", "finalizing"]),
     progressPercent: z.number().int().min(0).max(99),
     startedAt: z.string().datetime(),
     nextAttemptAt: z.string().datetime().nullable(),
