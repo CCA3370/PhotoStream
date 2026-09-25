@@ -230,75 +230,75 @@ export class PhotoService {
       [faceReferenceError],
       [faceDiagnostic],
     ] = await Promise.all([
-        this.#database
-          .select({
-            attempts: schema.albumObjectDeletionSweeps.attempts,
-            executeAfter: schema.albumObjectDeletionSweeps.executeAfter,
-            lastErrorCode: schema.albumObjectDeletionSweeps.lastErrorCode,
-            updatedAt: schema.albumObjectDeletionSweeps.updatedAt,
-          })
-          .from(schema.albumObjectDeletionSweeps)
-          .where(eq(schema.albumObjectDeletionSweeps.albumId, album.id))
-          .limit(1),
-        this.#database
-          .select({
-            datasetName: schema.albumFaceIndexes.datasetName,
-            indexState: schema.albumFaceIndexes.indexState,
-            lastErrorCode: schema.albumFaceIndexes.lastErrorCode,
-            updatedAt: schema.albumFaceIndexes.updatedAt,
-          })
-          .from(schema.albumFaceIndexes)
-          .where(eq(schema.albumFaceIndexes.albumId, album.id))
-          .limit(1),
-        this.#database
-          .select({
-            pendingReferences: sql<number>`count(*)::int`,
-            attempts: sql<number>`coalesce(max(${schema.faceReferenceDeletionSweeps.attempts}), 0)::int`,
-            nextAttemptAt: sql<Date | null>`min(${schema.faceReferenceDeletionSweeps.executeAfter})`,
-            updatedAt: sql<Date | null>`max(${schema.faceReferenceDeletionSweeps.updatedAt})`,
-          })
-          .from(schema.faceReferenceDeletionSweeps)
-          .innerJoin(
-            schema.faceSearchIntents,
-            eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
-          )
-          .where(eq(schema.faceSearchIntents.albumId, album.id)),
-        this.#database
-          .select({
-            lastErrorCode: schema.faceReferenceDeletionSweeps.lastErrorCode,
-            updatedAt: schema.faceReferenceDeletionSweeps.updatedAt,
-          })
-          .from(schema.faceReferenceDeletionSweeps)
-          .innerJoin(
-            schema.faceSearchIntents,
-            eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
-          )
-          .where(
-            and(
-              eq(schema.faceSearchIntents.albumId, album.id),
-              isNotNull(schema.faceReferenceDeletionSweeps.lastErrorCode),
-            ),
-          )
-          .orderBy(desc(schema.faceReferenceDeletionSweeps.updatedAt))
-          .limit(1),
-        this.#database
-          .select({
-            providerCode: schema.faceOperationDiagnostics.providerCode,
-            providerMessage: schema.faceOperationDiagnostics.providerMessage,
-            occurredAt: schema.faceOperationDiagnostics.occurredAt,
-            attempts: sql<number>`count(*) over()::int`,
-          })
-          .from(schema.faceOperationDiagnostics)
-          .where(
-            and(
-              eq(schema.faceOperationDiagnostics.albumId, album.id),
-              gt(schema.faceOperationDiagnostics.occurredAt, startedAt),
-              sql`${schema.faceOperationDiagnostics.context}->>'reason' = 'album_deletion'`,
-            ),
-          )
-          .orderBy(desc(schema.faceOperationDiagnostics.occurredAt))
-          .limit(1),
-      ]);
+      this.#database
+        .select({
+          attempts: schema.albumObjectDeletionSweeps.attempts,
+          executeAfter: schema.albumObjectDeletionSweeps.executeAfter,
+          lastErrorCode: schema.albumObjectDeletionSweeps.lastErrorCode,
+          updatedAt: schema.albumObjectDeletionSweeps.updatedAt,
+        })
+        .from(schema.albumObjectDeletionSweeps)
+        .where(eq(schema.albumObjectDeletionSweeps.albumId, album.id))
+        .limit(1),
+      this.#database
+        .select({
+          datasetName: schema.albumFaceIndexes.datasetName,
+          indexState: schema.albumFaceIndexes.indexState,
+          lastErrorCode: schema.albumFaceIndexes.lastErrorCode,
+          updatedAt: schema.albumFaceIndexes.updatedAt,
+        })
+        .from(schema.albumFaceIndexes)
+        .where(eq(schema.albumFaceIndexes.albumId, album.id))
+        .limit(1),
+      this.#database
+        .select({
+          pendingReferences: sql<number>`count(*)::int`,
+          attempts: sql<number>`coalesce(max(${schema.faceReferenceDeletionSweeps.attempts}), 0)::int`,
+          nextAttemptAt: sql<Date | null>`min(${schema.faceReferenceDeletionSweeps.executeAfter})`,
+          updatedAt: sql<Date | null>`max(${schema.faceReferenceDeletionSweeps.updatedAt})`,
+        })
+        .from(schema.faceReferenceDeletionSweeps)
+        .innerJoin(
+          schema.faceSearchIntents,
+          eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
+        )
+        .where(eq(schema.faceSearchIntents.albumId, album.id)),
+      this.#database
+        .select({
+          lastErrorCode: schema.faceReferenceDeletionSweeps.lastErrorCode,
+          updatedAt: schema.faceReferenceDeletionSweeps.updatedAt,
+        })
+        .from(schema.faceReferenceDeletionSweeps)
+        .innerJoin(
+          schema.faceSearchIntents,
+          eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
+        )
+        .where(
+          and(
+            eq(schema.faceSearchIntents.albumId, album.id),
+            isNotNull(schema.faceReferenceDeletionSweeps.lastErrorCode),
+          ),
+        )
+        .orderBy(desc(schema.faceReferenceDeletionSweeps.updatedAt))
+        .limit(1),
+      this.#database
+        .select({
+          providerCode: schema.faceOperationDiagnostics.providerCode,
+          providerMessage: schema.faceOperationDiagnostics.providerMessage,
+          occurredAt: schema.faceOperationDiagnostics.occurredAt,
+          attempts: sql<number>`count(*) over()::int`,
+        })
+        .from(schema.faceOperationDiagnostics)
+        .where(
+          and(
+            eq(schema.faceOperationDiagnostics.albumId, album.id),
+            gt(schema.faceOperationDiagnostics.occurredAt, startedAt),
+            sql`${schema.faceOperationDiagnostics.context}->>'reason' = 'album_deletion'`,
+          ),
+        )
+        .orderBy(desc(schema.faceOperationDiagnostics.occurredAt))
+        .limit(1),
+    ]);
 
     const uploadGraceEndsAt = new Date(startedAt.getTime() + albumDeletionUploadGraceMs);
     const objectStatus =
