@@ -1475,6 +1475,104 @@ maybeDescribe("photo vertical slice transactions", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("deletes a category without deleting its photos", async () => {
+    const created = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: { title: "分类删除测试", description: "", publishMode: "review" },
+      idempotencyKey: "category-delete-album-0001",
+      requestId: "category-delete-album",
+    });
+    const category = await service.createCategory({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      name: "待删除分类",
+      sortOrder: 0,
+      idempotencyKey: "category-delete-category-0001",
+    });
+    const [insertedMedia] = await database
+      .insert(schema.media)
+      .values({
+        albumId: created.album.id,
+        categoryId: category.id,
+        uploaderId,
+        width: 1_920,
+        height: 1_080,
+        mediaType: "image/jpeg",
+        totalBytes: 123_456,
+      })
+      .returning({ id: schema.media.id });
+    if (insertedMedia === undefined) throw new Error("media insert failed");
+
+    await service.deleteCategory({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      categoryId: category.id,
+      requestId: "category-delete",
+    });
+
+    expect(await service.listCategories({ id: adminId, role: "admin" }, created.album.id)).toEqual(
+      [],
+    );
+    const [storedMedia] = await database
+      .select({ categoryId: schema.media.categoryId })
+      .from(schema.media)
+      .where(eq(schema.media.id, insertedMedia.id))
+      .limit(1);
+    expect(storedMedia?.categoryId).toBeNull();
+  });
+
+  it("deletes a member account while preserving historical rows and allowing username reuse", async () => {
+    const created = await userAdminService.createUser({
+      actor: { id: adminId, role: "admin" },
+      input: {
+        username: "second-admin",
+        displayName: "第二管理员",
+        role: "admin",
+      },
+      idempotencyKey: "second-admin-create-0001",
+      requestId: "second-admin-create",
+    });
+
+    await userAdminService.deleteUser({
+      actor: { id: adminId, role: "admin" },
+      userId: created.user.id,
+      requestId: "second-admin-delete",
+    });
+
+    const listed = await userAdminService.listUsers({ role: "admin" });
+    expect(listed.some((user) => user.id === created.user.id)).toBe(false);
+    const [deletedRow] = await database
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, created.user.id))
+      .limit(1);
+    expect(deletedRow).toMatchObject({
+      displayName: "已删除成员",
+      isActive: false,
+    });
+    expect(deletedRow?.deletedAt).toBeInstanceOf(Date);
+
+    const recreated = await userAdminService.createUser({
+      actor: { id: adminId, role: "admin" },
+      input: {
+        username: "second-admin",
+        displayName: "重新创建",
+        role: "uploader",
+      },
+      idempotencyKey: "second-admin-recreate-0001",
+      requestId: "second-admin-recreate",
+    });
+    expect(recreated.user.username).toBe("second-admin");
+
+    await expect(
+      userAdminService.deleteUser({
+        actor: { id: adminId, role: "admin" },
+        userId: adminId,
+        requestId: "self-delete",
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
+  });
+
   it("exposes the runtime REST contract without accepting media bodies", async () => {
     const app = await buildApp({
       config,
