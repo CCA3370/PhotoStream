@@ -238,6 +238,12 @@ export function AlbumSettings({
         description: "服务器端删除会继续进行，但当前浏览器有部分本地缓存未能清理。",
         type: "warning",
       });
+    } else {
+      toast.add({
+        title: "活动已进入删除流程",
+        description: "可在活动列表查看删除阶段、重试状态和最近错误。",
+        type: "success",
+      });
     }
     router.replace("/studio/albums");
     router.refresh();
