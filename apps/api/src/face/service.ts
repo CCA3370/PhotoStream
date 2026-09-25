@@ -432,35 +432,7 @@ export class FaceService {
     requirePermission(actor, "album:configure");
     requireRecentAuthentication(actor.authenticatedAt);
     const index = await this.#index(albumId);
-    const referenceKeys = await this.#database
-      .select({ objectKey: schema.faceSearchIntents.objectKey })
-      .from(schema.faceSearchIntents)
-      .where(eq(schema.faceSearchIntents.albumId, albumId));
-    if (referenceKeys.length > 0) {
-      const executeAfter = new Date(Date.now() + presignedReferenceDeletionGraceMs);
-      for (let offset = 0; offset < referenceKeys.length; offset += 500) {
-        await this.#database
-          .insert(schema.faceReferenceDeletionSweeps)
-          .values(
-            referenceKeys.slice(offset, offset + 500).map((row) => ({
-              objectKey: row.objectKey,
-              executeAfter,
-              attempts: 0,
-              lastErrorCode: null,
-              updatedAt: new Date(),
-            })),
-          )
-          .onConflictDoUpdate({
-            target: schema.faceReferenceDeletionSweeps.objectKey,
-            set: {
-              executeAfter,
-              attempts: 0,
-              lastErrorCode: null,
-              updatedAt: new Date(),
-            },
-          });
-      }
-    }
+    await this.#scheduleReferenceDeletionSweeps(albumId);
 
     await this.#database.transaction(async (transaction) => {
       await transaction
@@ -507,6 +479,7 @@ export class FaceService {
     if (album === undefined) throw this.#notFound();
 
     const index = await this.#index(albumId);
+    await this.#scheduleReferenceDeletionSweeps(albumId);
     await this.#database.transaction(async (transaction) => {
       await transaction
         .update(schema.faceAlbumJobs)
@@ -1083,6 +1056,45 @@ export class FaceService {
       await this.#processReferenceDeletionSweeps();
     } finally {
       this.#maintenanceRunning = false;
+    }
+  }
+
+  async #scheduleReferenceDeletionSweeps(albumId: string): Promise<void> {
+    const cutoff = new Date(Date.now() - presignedReferenceDeletionGraceMs);
+    const referenceKeys = await this.#database
+      .select({ objectKey: schema.faceSearchIntents.objectKey })
+      .from(schema.faceSearchIntents)
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          gt(schema.faceSearchIntents.createdAt, cutoff),
+        ),
+      );
+    if (referenceKeys.length === 0) return;
+
+    const executeAfter = new Date(Date.now() + presignedReferenceDeletionGraceMs);
+    for (let offset = 0; offset < referenceKeys.length; offset += 500) {
+      const now = new Date();
+      await this.#database
+        .insert(schema.faceReferenceDeletionSweeps)
+        .values(
+          referenceKeys.slice(offset, offset + 500).map((row) => ({
+            objectKey: row.objectKey,
+            executeAfter,
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: schema.faceReferenceDeletionSweeps.objectKey,
+          set: {
+            executeAfter,
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          },
+        });
     }
   }
 
