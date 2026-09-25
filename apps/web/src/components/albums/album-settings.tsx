@@ -730,7 +730,7 @@ export function AlbumSettings({
 
       <PasswordConfirmDialog
         confirmLabel="确认永久删除"
-        description="将先清理 OSS/CDN 与人脸服务中的外部数据，全部清理成功后才会删除活动记录。"
+        description="会先清理当前可定位的 OSS/CDN 与人脸资源；临时上传签名失效后，系统还会自动复扫并删除可能晚到的残留对象。"
         onConfirm={deleteAlbum}
         onOpenChange={setDeleteDialogOpen}
         open={deleteDialogOpen}
