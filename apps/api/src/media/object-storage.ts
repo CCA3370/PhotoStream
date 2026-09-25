@@ -229,6 +229,18 @@ function aliyunError(error: unknown): AliyunErrorLike {
   return typeof error === "object" && error !== null ? (error as AliyunErrorLike) : {};
 }
 
+export class ObjectStorageProviderError extends Error {
+  readonly operation: string;
+  readonly providerError: unknown;
+
+  constructor(operation: string, providerError: unknown) {
+    super(providerError instanceof Error ? providerError.message : String(providerError));
+    this.name = "ObjectStorageProviderError";
+    this.operation = operation;
+    this.providerError = providerError;
+  }
+}
+
 function isMissingObject(error: unknown): boolean {
   const candidate = aliyunError(error);
   return (
@@ -401,7 +413,7 @@ export class AliyunObjectStorage implements ObjectStorage {
     try {
       await this.#client.abortMultipartUpload(key, uploadId);
     } catch (error) {
-      if (!isMissingObject(error)) throw error;
+      if (!isMissingObject(error)) throw new ObjectStorageProviderError("AbortMultipartUpload", error);
     }
   }
 
@@ -409,7 +421,7 @@ export class AliyunObjectStorage implements ObjectStorage {
     try {
       await this.#client.delete(key);
     } catch (error) {
-      if (!isMissingObject(error)) throw error;
+      if (!isMissingObject(error)) throw new ObjectStorageProviderError("DeleteObject", error);
     }
   }
 
@@ -417,7 +429,11 @@ export class AliyunObjectStorage implements ObjectStorage {
     for (let offset = 0; offset < keys.length; offset += 1_000) {
       const batch = [...keys.slice(offset, offset + 1_000)];
       if (batch.length === 0) continue;
-      await this.#client.deleteMulti(batch, { quiet: true });
+      try {
+        await this.#client.deleteMulti(batch, { quiet: true });
+      } catch (error) {
+        throw new ObjectStorageProviderError("DeleteMultipleObjects", error);
+      }
     }
   }
 
@@ -425,10 +441,15 @@ export class AliyunObjectStorage implements ObjectStorage {
     let previousUploadBatch = "";
     let repeatedUploadBatchCount = 0;
     for (;;) {
-      const result = await this.#client.listUploads({
-        prefix,
-        "max-uploads": 1_000,
-      });
+      let result: Awaited<ReturnType<OSS["listUploads"]>>;
+      try {
+        result = await this.#client.listUploads({
+          prefix,
+          "max-uploads": 1_000,
+        });
+      } catch (error) {
+        throw new ObjectStorageProviderError("ListMultipartUploads", error);
+      }
       const uploads = (result.uploads ?? []).flatMap((upload) =>
         typeof upload.name === "string" &&
         upload.name.length > 0 &&
@@ -456,10 +477,15 @@ export class AliyunObjectStorage implements ObjectStorage {
     let previousObjectBatch = "";
     let repeatedObjectBatchCount = 0;
     for (;;) {
-      const result = await this.#client.listV2({
-        prefix,
-        "max-keys": 1_000,
-      });
+      let result: Awaited<ReturnType<OSS["listV2"]>>;
+      try {
+        result = await this.#client.listV2({
+          prefix,
+          "max-keys": 1_000,
+        });
+      } catch (error) {
+        throw new ObjectStorageProviderError("ListObjectsV2", error);
+      }
       const keys = (result.objects ?? [])
         .map((object) => object.name)
         .filter((key): key is string => typeof key === "string" && key.length > 0);
