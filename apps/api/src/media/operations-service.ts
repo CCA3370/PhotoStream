@@ -495,10 +495,19 @@ export class OperationsService {
     for (const album of albums) {
       try {
         await this.#ensureAlbumDeletionRecoveryGate(album.id, album.deletingSince);
-        await this.#continueAlbumDeletion(
+        await this.#ensureAlbumFacePurged(
           album.id,
           purgeFaceData === undefined ? undefined : () => purgeFaceData(album.id),
         );
+        const [pendingSweep] = await this.#database
+          .select({ albumId: schema.albumObjectDeletionSweeps.albumId })
+          .from(schema.albumObjectDeletionSweeps)
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, album.id))
+          .limit(1);
+        if (pendingSweep === undefined) {
+          await this.#purgeAlbumObjects(album.id);
+          await this.#finalizeAlbumDeletionIfReady(album.id);
+        }
       } catch (error) {
         failures.push(error);
       }
