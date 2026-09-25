@@ -82,6 +82,48 @@ const writes = new Map<string, Promise<void>>();
 const memoryBudget = 64 * 1024 * 1024;
 const diskBudgets = new Map<string, number>();
 
+const albumMediaCacheNames = [
+  "photostream-derived-images-v1",
+  "photostream-original-images-v1",
+  "photostream-internal-images-v1",
+] as const;
+
+function albumMediaCacheKeyMatches(
+  cacheName: string,
+  key: string,
+  albumId: string,
+  slug: string,
+): boolean {
+  let url: URL;
+  try {
+    url = new URL(key, typeof window === "undefined" ? "https://invalid.local" : window.location.origin);
+  } catch {
+    return false;
+  }
+  const encodedSlug = encodeURIComponent(slug);
+  if (cacheName === "photostream-derived-images-v1") {
+    return url.pathname.startsWith(`/__photostream/cache/derived/${encodedSlug}/`);
+  }
+  if (cacheName === "photostream-original-images-v1") {
+    return url.pathname.startsWith(`/__photostream/cache/original/${encodedSlug}/`);
+  }
+  if (cacheName === "photostream-internal-images-v1") {
+    return url.pathname.startsWith(`/media/albums/${albumId}/`);
+  }
+  return false;
+}
+
+function parsedIdentity(value: string): { cacheName: string; key: string } | null {
+  const first = value.indexOf("\u0000");
+  if (first < 0) return null;
+  const second = value.indexOf("\u0000", first + 1);
+  if (second < 0) return null;
+  return {
+    cacheName: value.slice(0, first),
+    key: value.slice(first + 1, second),
+  };
+}
+
 function identity(request: MediaBlobIdentity): string {
   return `${request.cacheName}\u0000${request.key}\u0000${request.expectedBytes}`;
 }
@@ -360,6 +402,70 @@ function waitForMediaRetry(delay: number, signal: AbortSignal): Promise<void> {
     };
     signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+export async function purgeAlbumMediaBlobCache(
+  albumId: string,
+  slug: string,
+): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  for (const [key, entry] of inFlight) {
+    const parsed = parsedIdentity(key);
+    if (
+      parsed !== null &&
+      albumMediaCacheKeyMatches(parsed.cacheName, parsed.key, albumId, slug)
+    ) {
+      entry.controller.abort();
+      inFlight.delete(key);
+    }
+  }
+
+  await Promise.allSettled(
+    albumMediaCacheNames.flatMap((cacheName) => {
+      const pending = writes.get(cacheName);
+      return pending === undefined ? [] : [pending];
+    }),
+  );
+
+  for (const [key] of memory) {
+    const parsed = parsedIdentity(key);
+    if (
+      parsed !== null &&
+      albumMediaCacheKeyMatches(parsed.cacheName, parsed.key, albumId, slug)
+    ) {
+      memory.delete(key);
+    }
+  }
+
+  if (cacheSupported()) {
+    for (const cacheName of albumMediaCacheNames) {
+      try {
+        const cache = await caches.open(cacheName);
+        const requests = await cache.keys();
+        await Promise.all(
+          requests
+            .filter((request) =>
+              albumMediaCacheKeyMatches(cacheName, request.url, albumId, slug),
+            )
+            .map((request) => cache.delete(request)),
+        );
+      } catch {
+        // Cache cleanup is best-effort; server-side deletion remains authoritative.
+      }
+      diskIndexes.delete(cacheName);
+    }
+  }
+
+  for (const key of recentReads.keys()) {
+    if (
+      albumMediaCacheNames.some((cacheName) =>
+        albumMediaCacheKeyMatches(cacheName, key, albumId, slug),
+      )
+    ) {
+      recentReads.delete(key);
+    }
+  }
 }
 
 export function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
