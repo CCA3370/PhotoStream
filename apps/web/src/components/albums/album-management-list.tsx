@@ -1,6 +1,6 @@
 "use client";
 
-import type { AlbumSummaryView, UserRole } from "@photostream/contracts";
+import { type AlbumSummaryView, hasPermission, type UserRole } from "@photostream/contracts";
 import {
   AlertTriangleIcon,
   ArrowUpRightIcon,
@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { AlbumDeletionControls } from "@/components/albums/album-deletion-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +51,8 @@ const deletionPhaseLabels: Record<DeletionProgress["phase"], string> = {
 
 const deletionSourceLabels: Record<NonNullable<DeletionProgress["latestError"]>["source"], string> =
   {
-    object_storage: "对象存储 / CDN",
+    object_storage: "对象存储",
+    cdn: "CDN",
     face_provider: "人脸云端服务",
     face_reference: "人脸参考照",
   };
@@ -100,9 +102,11 @@ function cleanupStatusLabel(
 
 function DeletingAlbumRow({
   album,
+  canConfigure,
   onRefresh,
 }: Readonly<{
   album: AlbumSummaryView;
+  canConfigure: boolean;
   onRefresh: () => void;
 }>) {
   const progress = album.deletionProgress;
@@ -120,10 +124,13 @@ function DeletingAlbumRow({
             活动已停止访问。所有清理完成后，此记录会自动从列表消失。
           </p>
         </div>
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-          <RefreshCwIcon aria-hidden="true" />
-          刷新状态
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canConfigure ? <AlbumDeletionControls albumId={album.id} onRetried={onRefresh} /> : null}
+          <Button onClick={onRefresh} size="sm" type="button" variant="outline">
+            <RefreshCwIcon aria-hidden="true" />
+            刷新状态
+          </Button>
+        </div>
       </div>
 
       {progress === null ? (
@@ -315,6 +322,7 @@ export function AlbumManagementList({
                 return (
                   <DeletingAlbumRow
                     album={album}
+                    canConfigure={hasPermission(role, "album:configure")}
                     key={album.id}
                     onRefresh={() => router.refresh()}
                   />

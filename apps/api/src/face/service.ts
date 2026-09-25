@@ -592,6 +592,27 @@ export class FaceService {
     }
   }
 
+  async retryAlbumDeletionCleanup(
+    albumId: string,
+    deletingSince: Date,
+    now = new Date(),
+  ): Promise<void> {
+    const graceEndsAt = new Date(deletingSince.getTime() + presignedReferenceDeletionGraceMs);
+    if (now >= graceEndsAt) {
+      await this.#database.execute(sql`
+        update face_reference_deletion_sweeps
+        set execute_after = ${now}, updated_at = ${now}
+        where object_key in (
+          select object_key
+          from face_search_intents
+          where album_id = ${albumId}
+        )
+      `);
+      await this.#processAlbumReferenceDeletionSweeps(albumId, now);
+    }
+    await this.purgeAlbumForDeletionInternal(albumId);
+  }
+
   async createSearch(options: {
     slug: string;
     visitorToken: string | undefined;
@@ -1132,6 +1153,73 @@ export class FaceService {
     }
   }
 
+  async #processReferenceDeletionSweep(
+    sweep: typeof schema.faceReferenceDeletionSweeps.$inferSelect,
+    now: Date,
+  ): Promise<void> {
+    try {
+      await this.#references.delete(sweep.objectKey);
+      await this.#database
+        .delete(schema.faceReferenceDeletionSweeps)
+        .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
+    } catch (error) {
+      const attempts = sweep.attempts + 1;
+      const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
+      await this.#database
+        .update(schema.faceReferenceDeletionSweeps)
+        .set({
+          attempts,
+          lastErrorCode:
+            error instanceof AppError
+              ? error.code
+              : error instanceof Error
+                ? error.name.slice(0, 100)
+                : "UNKNOWN",
+          executeAfter: new Date(now.getTime() + retryDelay),
+          updatedAt: now,
+        })
+        .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
+
+      const [intent] = await this.#database
+        .select({ id: schema.faceSearchIntents.id, albumId: schema.faceSearchIntents.albumId })
+        .from(schema.faceSearchIntents)
+        .where(eq(schema.faceSearchIntents.objectKey, sweep.objectKey))
+        .limit(1);
+      if (intent !== undefined) {
+        await this.#recordDiagnostic(intent.albumId, error, {
+          source: "aliyun_oss",
+          operation: "DeleteObject",
+          context: {
+            reason: "album_deletion",
+            searchId: intent.id,
+            objectKey: sweep.objectKey,
+            attempt: attempts,
+          },
+        });
+      }
+    }
+  }
+
+  async #processAlbumReferenceDeletionSweeps(albumId: string, now: Date): Promise<number> {
+    const sweeps = await this.#database
+      .select({ sweep: schema.faceReferenceDeletionSweeps })
+      .from(schema.faceReferenceDeletionSweeps)
+      .innerJoin(
+        schema.faceSearchIntents,
+        eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
+      )
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          lte(schema.faceReferenceDeletionSweeps.executeAfter, now),
+        ),
+      )
+      .orderBy(asc(schema.faceReferenceDeletionSweeps.executeAfter))
+      .limit(1_000);
+    for (const row of sweeps) await this.#processReferenceDeletionSweep(row.sweep, now);
+    return sweeps.length;
+  }
+
   async #processReferenceDeletionSweeps(limit = 100, now = new Date()): Promise<number> {
     const sweeps = await this.#database
       .select()
@@ -1139,31 +1227,7 @@ export class FaceService {
       .where(lte(schema.faceReferenceDeletionSweeps.executeAfter, now))
       .orderBy(asc(schema.faceReferenceDeletionSweeps.executeAfter))
       .limit(limit);
-    for (const sweep of sweeps) {
-      try {
-        await this.#references.delete(sweep.objectKey);
-        await this.#database
-          .delete(schema.faceReferenceDeletionSweeps)
-          .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
-      } catch (error) {
-        const attempts = sweep.attempts + 1;
-        const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
-        await this.#database
-          .update(schema.faceReferenceDeletionSweeps)
-          .set({
-            attempts,
-            lastErrorCode:
-              error instanceof AppError
-                ? error.code
-                : error instanceof Error
-                  ? error.name.slice(0, 100)
-                  : "UNKNOWN",
-            executeAfter: new Date(now.getTime() + retryDelay),
-            updatedAt: now,
-          })
-          .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
-      }
-    }
+    for (const sweep of sweeps) await this.#processReferenceDeletionSweep(sweep, now);
     return sweeps.length;
   }
 

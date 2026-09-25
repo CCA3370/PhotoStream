@@ -225,6 +225,7 @@ export class PhotoService {
     const now = new Date();
     const [
       [objectSweep],
+      [cleanupError],
       [faceIndex],
       [faceReferenceStats],
       [faceReferenceError],
@@ -239,6 +240,17 @@ export class PhotoService {
         })
         .from(schema.albumObjectDeletionSweeps)
         .where(eq(schema.albumObjectDeletionSweeps.albumId, album.id))
+        .limit(1),
+      this.#database
+        .select({
+          source: schema.albumDeletionErrors.source,
+          code: schema.albumDeletionErrors.code,
+          message: schema.albumDeletionErrors.message,
+          occurredAt: schema.albumDeletionErrors.occurredAt,
+        })
+        .from(schema.albumDeletionErrors)
+        .where(eq(schema.albumDeletionErrors.albumId, album.id))
+        .orderBy(desc(schema.albumDeletionErrors.occurredAt))
         .limit(1),
       this.#database
         .select({
@@ -348,12 +360,14 @@ export class PhotoService {
             : 95;
 
     const errorCandidates: AlbumDeletionProgress["latestError"][] = [];
-    if (objectSweep?.lastErrorCode != null) {
+    if (cleanupError !== undefined) {
       errorCandidates.push({
-        source: "object_storage",
-        code: objectSweep.lastErrorCode,
-        message: "对象存储或 CDN 清理失败，系统正在自动重试。",
-        occurredAt: iso(objectSweep.updatedAt),
+        source: cleanupError.source as "object_storage" | "cdn",
+        code: cleanupError.code,
+        message: includeProviderDetail
+          ? cleanupError.message.slice(0, 4_000)
+          : "对象存储或 CDN 清理失败，系统正在自动重试。",
+        occurredAt: iso(cleanupError.occurredAt),
       });
     }
     if (faceReferenceError?.lastErrorCode != null) {
