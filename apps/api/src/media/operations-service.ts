@@ -45,6 +45,8 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const recentAuthenticationMs = 15 * 60 * 1_000;
 const analyticsRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 const operationRetentionMs = 30 * 24 * 60 * 60 * 1_000;
+const presignedUploadDeletionGraceMs = 20 * 60 * 1_000;
+const presignedFaceReferenceDeletionGraceMs = 20 * 60 * 1_000;
 
 function requirePermission(role: UserRole, permission: Parameters<typeof hasPermission>[1]): void {
   if (!hasPermission(role, permission)) {
@@ -106,6 +108,337 @@ export class OperationsService {
     this.#storage = options.storage;
     this.#config = options.config;
     this.#cdn = options.cdnInvalidator ?? new LocalCdnInvalidator();
+  }
+
+  async deleteAlbum(options: {
+    readonly actor: InternalActor & { authenticatedAt: Date };
+    readonly albumId: string;
+    readonly confirmation: string;
+    readonly purgeFaceData?: () => Promise<void>;
+  }): Promise<void> {
+    requirePermission(options.actor.role, "album:configure");
+    assertRecentAuthentication(options.actor.authenticatedAt, new Date());
+
+    await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
+      const [album] = await transaction
+        .select({ id: schema.albums.id, title: schema.albums.title, state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, options.albumId))
+        .limit(1);
+      if (album === undefined) {
+        throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+      }
+      if (!safeEqual(options.confirmation, album.title)) {
+        throw new AppError({
+          code: "BAD_REQUEST",
+          message: "请输入完整活动标题以确认删除",
+          statusCode: 400,
+        });
+      }
+      if (album.state !== "deleting") {
+        const now = new Date();
+        await transaction
+          .update(schema.albums)
+          .set({
+            state: "deleting",
+            accessVersion: sql`${schema.albums.accessVersion} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(schema.albums.id, options.albumId));
+        await transaction.execute(sql`
+          update upload_intents
+          set status = 'cancelled', updated_at = ${now}
+          where status = 'active'
+            and media_id in (
+              select id from media where album_id = ${options.albumId}
+            )
+        `);
+      }
+    });
+
+    if (options.purgeFaceData === undefined) {
+      const faceReferenceCutoff = new Date(Date.now() - presignedFaceReferenceDeletionGraceMs);
+      const [[faceIndex], [undeletedFaceReference], [recentFaceReference]] = await Promise.all([
+        this.#database
+          .select({ datasetName: schema.albumFaceIndexes.datasetName })
+          .from(schema.albumFaceIndexes)
+          .where(eq(schema.albumFaceIndexes.albumId, options.albumId))
+          .limit(1),
+        this.#database
+          .select({ id: schema.faceSearchIntents.id })
+          .from(schema.faceSearchIntents)
+          .where(
+            and(
+              eq(schema.faceSearchIntents.albumId, options.albumId),
+              isNull(schema.faceSearchIntents.referenceDeletedAt),
+            ),
+          )
+          .limit(1),
+        this.#database
+          .select({ id: schema.faceSearchIntents.id })
+          .from(schema.faceSearchIntents)
+          .where(
+            and(
+              eq(schema.faceSearchIntents.albumId, options.albumId),
+              gt(schema.faceSearchIntents.createdAt, faceReferenceCutoff),
+            ),
+          )
+          .limit(1),
+      ]);
+      if (
+        faceIndex?.datasetName != null ||
+        undeletedFaceReference !== undefined ||
+        recentFaceReference !== undefined
+      ) {
+        throw new AppError({
+          code: "FACE_PROVIDER_UNAVAILABLE",
+          message: "当前无法确认活动的人脸云端数据已删除，请稍后重试",
+          statusCode: 503,
+          retryable: true,
+        });
+      }
+    } else {
+      await options.purgeFaceData();
+    }
+
+    const [variants, editVariants, microPreviews] = await Promise.all([
+      this.#database
+        .select({
+          id: schema.mediaVariants.id,
+          objectKey: schema.mediaVariants.objectKey,
+          providerMultipartUploadId: schema.mediaVariants.providerMultipartUploadId,
+        })
+        .from(schema.mediaVariants)
+        .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
+        .where(eq(schema.media.albumId, options.albumId)),
+      this.#database
+        .select({ objectKey: schema.mediaEditVariants.objectKey })
+        .from(schema.mediaEditVariants)
+        .innerJoin(
+          schema.mediaEditRevisions,
+          eq(schema.mediaEditVariants.editRevisionId, schema.mediaEditRevisions.id),
+        )
+        .innerJoin(schema.media, eq(schema.mediaEditRevisions.mediaId, schema.media.id))
+        .where(eq(schema.media.albumId, options.albumId)),
+      this.#database
+        .select({ objectKey: schema.mediaMicroPreviews.objectKey })
+        .from(schema.mediaMicroPreviews)
+        .where(eq(schema.mediaMicroPreviews.albumId, options.albumId)),
+    ]);
+
+    const multipartVariantIds =
+      variants.length === 0
+        ? new Set<string>()
+        : new Set(
+            (
+              await this.#database
+                .select({ variantId: schema.uploadParts.variantId })
+                .from(schema.uploadParts)
+                .where(
+                  inArray(
+                    schema.uploadParts.variantId,
+                    variants.map((variant) => variant.id),
+                  ),
+                )
+            ).map((part) => part.variantId),
+          );
+    for (const variant of variants) {
+      if (multipartVariantIds.has(variant.id)) {
+        await this.#storage.abortMultipart(
+          variant.providerMultipartUploadId ?? variant.id,
+          variant.objectKey,
+        );
+      }
+    }
+
+    const objectKeys = [
+      ...new Set([...variants, ...editVariants, ...microPreviews].map((row) => row.objectKey)),
+    ];
+    if (this.#storage.deleteMany === undefined) {
+      for (let offset = 0; offset < objectKeys.length; offset += 16) {
+        await Promise.all(
+          objectKeys.slice(offset, offset + 16).map((objectKey) => this.#storage.delete(objectKey)),
+        );
+      }
+    } else {
+      await this.#storage.deleteMany(objectKeys);
+    }
+
+    const albumPrefix = `media/albums/${options.albumId}/`;
+    await this.#storage.deletePrefix?.(albumPrefix);
+    const prefixedKeys = objectKeys.filter((objectKey) => objectKey.startsWith(albumPrefix));
+    const outlierKeys = objectKeys.filter((objectKey) => !objectKey.startsWith(albumPrefix));
+    if (this.#cdn.invalidateDirectory !== undefined) {
+      await this.#cdn.invalidateDirectory(`/${albumPrefix}`);
+    } else {
+      outlierKeys.push(...prefixedKeys);
+    }
+    await this.#cdn.invalidate(outlierKeys.map((objectKey) => `/${objectKey}`));
+
+    await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
+
+      // Quiesce every album/media FK writer, including code paths that do not use
+      // the album-state advisory lock. FOR UPDATE waits for existing FK users and
+      // prevents new child rows from being attached while deletion is finalized.
+      const lockedAlbum = await transaction.execute(sql`
+        select id from albums where id = ${options.albumId} for update
+      `);
+      if (lockedAlbum.rowCount !== 1) {
+        throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+      }
+      await transaction.execute(sql`
+        select id from media where album_id = ${options.albumId} for update
+      `);
+
+      // Snapshot identifiers before cascades remove their source rows. Non-FK
+      // operational tables are purged only after the parent deletion has waited
+      // for concurrent child transactions to finish.
+      await transaction.execute(sql`
+        create temporary table album_delete_media_ids (
+          id uuid primary key
+        ) on commit drop
+      `);
+      await transaction.execute(sql`
+        insert into album_delete_media_ids (id)
+        select id from media where album_id = ${options.albumId}
+      `);
+      await transaction.execute(sql`
+        create temporary table album_delete_bib_tag_ids (
+          id uuid primary key
+        ) on commit drop
+      `);
+      await transaction.execute(sql`
+        insert into album_delete_bib_tag_ids (id)
+        select id from media_bib_tags where album_id = ${options.albumId}
+      `);
+      await transaction.execute(sql`
+        create temporary table album_delete_provider_task_ids (
+          id varchar(256) primary key
+        ) on commit drop
+      `);
+      await transaction.execute(sql`
+        insert into album_delete_provider_task_ids (id)
+        select provider_task_id
+        from face_search_intents
+        where album_id = ${options.albumId} and provider_task_id is not null
+        union
+        select provider_task_id
+        from face_album_jobs
+        where album_id = ${options.albumId} and provider_task_id is not null
+        union
+        select provider_task_id
+        from media_face_index_tasks
+        where album_id = ${options.albumId} and provider_task_id is not null
+      `);
+
+      await transaction
+        .delete(schema.mediaMicroPreviews)
+        .where(eq(schema.mediaMicroPreviews.albumId, options.albumId));
+
+      // Explicitly remove the edit graph before media variants. Edit revisions retain
+      // a restrictive source-variant FK, so relying on top-level album cascades alone
+      // can make deletion order database-dependent.
+      await transaction.execute(sql`
+        delete from media_edit_states
+        where media_id in (select id from album_delete_media_ids)
+      `);
+      await transaction.execute(sql`
+        delete from media_edit_variants
+        where edit_revision_id in (
+          select media_edit_revisions.id
+          from media_edit_revisions
+          where media_edit_revisions.media_id in (select id from album_delete_media_ids)
+        )
+      `);
+      await transaction.execute(sql`
+        delete from media_edit_revisions
+        where media_id in (select id from album_delete_media_ids)
+      `);
+      await transaction.execute(sql`
+        delete from media_variants
+        where media_id in (select id from album_delete_media_ids)
+      `);
+
+      if (this.#storage.deletePrefix !== undefined) {
+        const now = new Date();
+        await transaction
+          .insert(schema.albumObjectDeletionSweeps)
+          .values({
+            albumId: options.albumId,
+            objectPrefix: albumPrefix,
+            executeAfter: new Date(now.getTime() + presignedUploadDeletionGraceMs),
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: schema.albumObjectDeletionSweeps.albumId,
+            set: {
+              objectPrefix: albumPrefix,
+              executeAfter: new Date(now.getTime() + presignedUploadDeletionGraceMs),
+              attempts: 0,
+              lastErrorCode: null,
+              updatedAt: now,
+            },
+          });
+      }
+
+      const deleted = await transaction
+        .delete(schema.albums)
+        .where(and(eq(schema.albums.id, options.albumId), eq(schema.albums.state, "deleting")))
+        .returning({ id: schema.albums.id });
+      if (deleted.length !== 1) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动删除状态已发生变化，请重试",
+          statusCode: 409,
+        });
+      }
+
+      // These tables deliberately have no FK. Purge them after the parent delete,
+      // so any transaction that was already using an album/media FK has committed
+      // before these final trace deletions run.
+      await transaction.execute(sql`
+        delete from operation_requests as operation_request
+        where operation_request.operation like ${`%${options.albumId}%`}
+           or operation_request.result::text like ${`%${options.albumId}%`}
+           or exists (
+             select 1 from album_delete_media_ids
+             where operation_request.operation like '%' || album_delete_media_ids.id::text || '%'
+                or operation_request.result::text like '%' || album_delete_media_ids.id::text || '%'
+           )
+           or exists (
+             select 1 from album_delete_bib_tag_ids
+             where operation_request.operation like '%' || album_delete_bib_tag_ids.id::text || '%'
+                or operation_request.result::text like '%' || album_delete_bib_tag_ids.id::text || '%'
+           )
+      `);
+      await transaction.execute(sql`
+        delete from media_batch_requests as batch_request
+        where exists (
+          select 1 from album_delete_media_ids
+          where batch_request.result::text like '%' || album_delete_media_ids.id::text || '%'
+        )
+      `);
+      await transaction.execute(sql`
+        delete from face_integration_events as integration_event
+        where integration_event.provider_task_id in (
+          select id from album_delete_provider_task_ids
+        )
+      `);
+      await transaction.execute(sql`
+        delete from audit_logs as audit_log
+        where audit_log.target_id = ${options.albumId}::uuid
+           or audit_log.target_id in (select id from album_delete_media_ids)
+           or audit_log.target_id in (select id from album_delete_bib_tag_ids)
+      `);
+    });
   }
 
   async hideMedia(options: {
@@ -401,6 +734,40 @@ export class OperationsService {
       );
     await this.processDeletionTask(options.taskId, now);
     return this.getDeletionTask(options.actor, options.taskId);
+  }
+
+  async processPendingAlbumObjectDeletionSweeps(limit = 10, now = new Date()): Promise<number> {
+    const deletePrefix = this.#storage.deletePrefix?.bind(this.#storage);
+    if (deletePrefix === undefined) return 0;
+
+    const sweeps = await this.#database
+      .select()
+      .from(schema.albumObjectDeletionSweeps)
+      .where(lte(schema.albumObjectDeletionSweeps.executeAfter, now))
+      .orderBy(asc(schema.albumObjectDeletionSweeps.executeAfter))
+      .limit(limit);
+    for (const sweep of sweeps) {
+      try {
+        await deletePrefix(sweep.objectPrefix);
+        await this.#cdn.invalidateDirectory?.(`/${sweep.objectPrefix}`);
+        await this.#database
+          .delete(schema.albumObjectDeletionSweeps)
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, sweep.albumId));
+      } catch (error) {
+        const attempts = sweep.attempts + 1;
+        const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
+        await this.#database
+          .update(schema.albumObjectDeletionSweeps)
+          .set({
+            attempts,
+            lastErrorCode: error instanceof Error ? error.name.slice(0, 100) : "UNKNOWN",
+            executeAfter: new Date(now.getTime() + retryDelay),
+            updatedAt: now,
+          })
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, sweep.albumId));
+      }
+    }
+    return sweeps.length;
   }
 
   async processPendingDeletionTasks(limit = 10, now = new Date()): Promise<number> {

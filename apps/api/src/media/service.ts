@@ -726,9 +726,19 @@ export class PhotoService {
   }): Promise<AlbumView> {
     requirePermission(options.actor.role, "album:configure");
     return this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
       await this.#advisoryLock(transaction, `album-settings:${options.albumId}`);
       const album = await this.#albumById(transaction, options.albumId);
       if (album === null) throw this.#albumNotFound();
+      if (album.state === "deleting") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动正在删除，只能重试删除操作",
+          statusCode: 409,
+        });
+      }
       const accessChanged =
         options.input.access !== undefined && options.input.access !== album.access;
       const now = new Date();
@@ -926,6 +936,9 @@ export class PhotoService {
         .limit(1);
       if (existing !== undefined) return existing.id;
 
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.input.albumId}`}, 0))`,
+      );
       const album = await this.#albumById(transaction, options.input.albumId);
       if (album === null) throw this.#albumNotFound();
       if (album.state !== "live") {
@@ -1379,40 +1392,43 @@ export class PhotoService {
     readonly intentId: string;
     readonly kind: PhotoVariantKind;
   }) {
-    const row = await this.#uploadVariant(options.intentId, options.kind);
-    this.#assertUploadAccess(options.actor, row.media.uploaderId);
-    if (row.intent.status !== "active" || row.intent.expiresAt <= new Date()) {
-      throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
-    }
-    if (row.variant.verified) {
-      throw new AppError({ code: "STATE_CONFLICT", message: "该对象已经完成", statusCode: 409 });
-    }
-    const multipartParts = await this.#database
-      .select({ id: schema.uploadParts.id })
-      .from(schema.uploadParts)
-      .where(eq(schema.uploadParts.variantId, row.variant.id))
-      .limit(1);
-    if (multipartParts.length > 0) {
-      throw new AppError({
-        code: "STATE_CONFLICT",
-        message: "该对象必须使用分片上传",
-        statusCode: 409,
+    return this.#database.transaction(async (transaction) => {
+      await this.#lockUploadAlbumShared(transaction, options.intentId);
+      const row = await this.#uploadVariant(options.intentId, options.kind, transaction);
+      this.#assertUploadAccess(options.actor, row.media.uploaderId);
+      if (row.intent.status !== "active" || row.intent.expiresAt <= new Date()) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
+      }
+      if (row.variant.verified) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "该对象已经完成", statusCode: 409 });
+      }
+      const multipartParts = await transaction
+        .select({ id: schema.uploadParts.id })
+        .from(schema.uploadParts)
+        .where(eq(schema.uploadParts.variantId, row.variant.id))
+        .limit(1);
+      if (multipartParts.length > 0) {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "该对象必须使用分片上传",
+          statusCode: 409,
+        });
+      }
+      const signed = await this.#storage.signPut({
+        key: row.variant.objectKey,
+        contentType: row.variant.contentType,
+        bytes: row.variant.expectedBytes,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1_000),
       });
-    }
-    const signed = await this.#storage.signPut({
-      key: row.variant.objectKey,
-      contentType: row.variant.contentType,
-      bytes: row.variant.expectedBytes,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1_000),
+      if (options.kind === "photo_1920" || options.kind === "photo_original") {
+        await this.#markSourceUploading(row.media.id, transaction);
+      }
+      return {
+        url: signed.url,
+        headers: signed.headers,
+        expiresAt: iso(signed.expiresAt),
+      };
     });
-    if (options.kind === "photo_1920" || options.kind === "photo_original") {
-      await this.#markSourceUploading(row.media.id);
-    }
-    return {
-      url: signed.url,
-      headers: signed.headers,
-      expiresAt: iso(signed.expiresAt),
-    };
   }
 
   async signUploadPart(options: {
@@ -1421,29 +1437,37 @@ export class PhotoService {
     readonly kind: PhotoVariantKind;
     readonly partNumber: number;
   }) {
-    const row = await this.#uploadPart(options.intentId, options.kind, options.partNumber);
-    this.#assertUploadAccess(options.actor, row.media.uploaderId);
-    if (row.intent.status !== "active" || row.intent.expiresAt <= new Date()) {
-      throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
-    }
-    if (row.variant.verified || row.part.completedAt !== null) {
-      throw new AppError({ code: "STATE_CONFLICT", message: "该分片已经完成", statusCode: 409 });
-    }
-    const providerUploadId = await this.#ensureMultipartUpload(row.variant);
-    const signed = await this.#storage.signMultipartPart({
-      key: row.variant.objectKey,
-      uploadId: providerUploadId,
-      partNumber: row.part.partNumber,
-      contentType: row.variant.contentType,
-      bytes: row.part.expectedBytes,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1_000),
+    return this.#database.transaction(async (transaction) => {
+      await this.#lockUploadAlbumShared(transaction, options.intentId);
+      const row = await this.#uploadPart(
+        options.intentId,
+        options.kind,
+        options.partNumber,
+        transaction,
+      );
+      this.#assertUploadAccess(options.actor, row.media.uploaderId);
+      if (row.intent.status !== "active" || row.intent.expiresAt <= new Date()) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
+      }
+      if (row.variant.verified || row.part.completedAt !== null) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "该分片已经完成", statusCode: 409 });
+      }
+      const providerUploadId = await this.#ensureMultipartUpload(row.variant, transaction);
+      const signed = await this.#storage.signMultipartPart({
+        key: row.variant.objectKey,
+        uploadId: providerUploadId,
+        partNumber: row.part.partNumber,
+        contentType: row.variant.contentType,
+        bytes: row.part.expectedBytes,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1_000),
+      });
+      await this.#markSourceUploading(row.media.id, transaction);
+      return {
+        url: signed.url,
+        headers: signed.headers,
+        expiresAt: iso(signed.expiresAt),
+      };
     });
-    await this.#markSourceUploading(row.media.id);
-    return {
-      url: signed.url,
-      headers: signed.headers,
-      expiresAt: iso(signed.expiresAt),
-    };
   }
 
   async completeUploadPart(options: {
@@ -2881,8 +2905,34 @@ export class PhotoService {
     return session !== undefined;
   }
 
-  async #uploadVariant(intentId: string, kind: PhotoVariantKind) {
-    const [row] = await this.#database
+  async #lockUploadAlbumShared(transaction: Transaction, intentId: string): Promise<void> {
+    const [scope] = await transaction
+      .select({ albumId: schema.media.albumId })
+      .from(schema.uploadIntents)
+      .innerJoin(schema.media, eq(schema.uploadIntents.mediaId, schema.media.id))
+      .where(eq(schema.uploadIntents.id, intentId))
+      .limit(1);
+    if (scope === undefined) throw this.#uploadNotFound();
+
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${scope.albumId}`}, 0))`,
+    );
+    const [album] = await transaction
+      .select({ state: schema.albums.state })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, scope.albumId))
+      .limit(1);
+    if (album?.state !== "live") {
+      throw new AppError({ code: "STATE_CONFLICT", message: "活动已停止上传", statusCode: 409 });
+    }
+  }
+
+  async #uploadVariant(
+    intentId: string,
+    kind: PhotoVariantKind,
+    executor: DbExecutor = this.#database,
+  ) {
+    const [row] = await executor
       .select({
         intent: schema.uploadIntents,
         media: schema.media,
@@ -2900,8 +2950,13 @@ export class PhotoService {
     return row;
   }
 
-  async #uploadPart(intentId: string, kind: PhotoVariantKind, partNumber: number) {
-    const [row] = await this.#database
+  async #uploadPart(
+    intentId: string,
+    kind: PhotoVariantKind,
+    partNumber: number,
+    executor: DbExecutor = this.#database,
+  ) {
+    const [row] = await executor
       .select({
         intent: schema.uploadIntents,
         media: schema.media,
@@ -2923,7 +2978,10 @@ export class PhotoService {
     return row;
   }
 
-  async #ensureMultipartUpload(variant: typeof schema.mediaVariants.$inferSelect): Promise<string> {
+  async #ensureMultipartUpload(
+    variant: typeof schema.mediaVariants.$inferSelect,
+    executor: DbExecutor = this.#database,
+  ): Promise<string> {
     if (variant.providerMultipartUploadId !== null) return variant.providerMultipartUploadId;
     const created =
       (await this.#storage.createMultipartUpload?.({
@@ -2932,7 +2990,7 @@ export class PhotoService {
         key: variant.objectKey,
       })) ?? variant.id;
     try {
-      const [claimed] = await this.#database
+      const [claimed] = await executor
         .update(schema.mediaVariants)
         .set({ providerMultipartUploadId: created })
         .where(
@@ -2948,7 +3006,7 @@ export class PhotoService {
       ) {
         return claimed.providerMultipartUploadId;
       }
-      const [winner] = await this.#database
+      const [winner] = await executor
         .select({ providerMultipartUploadId: schema.mediaVariants.providerMultipartUploadId })
         .from(schema.mediaVariants)
         .where(eq(schema.mediaVariants.id, variant.id))
@@ -2967,8 +3025,11 @@ export class PhotoService {
     }
   }
 
-  async #markSourceUploading(mediaId: string): Promise<void> {
-    await this.#database
+  async #markSourceUploading(
+    mediaId: string,
+    executor: DbExecutor = this.#database,
+  ): Promise<void> {
+    await executor
       .update(schema.media)
       .set({ ingestStatus: "uploading_source", updatedAt: new Date() })
       .where(and(eq(schema.media.id, mediaId), eq(schema.media.ingestStatus, "preview_ready")));

@@ -46,6 +46,15 @@ export function retainDerivedImage(
   };
 }
 const warmImages = new Map<string, WarmImage>();
+export function purgeWarmDerivedImages(scope: string): void {
+  const prefix = `${scope}\u0000`;
+  for (const [key, image] of warmImages) {
+    if (!key.startsWith(prefix)) continue;
+    warmImages.delete(key);
+    retained.delete(key);
+    if (image.objectUrl !== null) URL.revokeObjectURL(image.objectUrl);
+  }
+}
 
 function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
   return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}`;

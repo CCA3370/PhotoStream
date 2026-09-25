@@ -25,10 +25,10 @@
   border-radius: 0;
   background:
     linear-gradient(
-        color-mix(in oklab, var(--border) 82%, transparent),
-        color-mix(in oklab, var(--border) 82%, transparent)
-      )
-      left center / 1px 1.5rem no-repeat,
+      color-mix(in oklab, var(--border) 82%, transparent),
+      color-mix(in oklab, var(--border) 82%, transparent)
+    )
+    left center / 1px 1.5rem no-repeat,
     color-mix(in oklab, var(--background) 96%, transparent);
   box-shadow: -10px 0 16px -16px color-mix(in oklab, var(--foreground) 35%, transparent);
   backdrop-filter: blur(14px);

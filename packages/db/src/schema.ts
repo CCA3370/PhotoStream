@@ -20,7 +20,13 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "operator", "reviewer", "uploader"]);
-export const albumStateEnum = pgEnum("album_state", ["draft", "live", "ended", "archived"]);
+export const albumStateEnum = pgEnum("album_state", [
+  "draft",
+  "live",
+  "ended",
+  "archived",
+  "deleting",
+]);
 export const albumAccessEnum = pgEnum("album_access", ["password", "public"]);
 export const publishModeEnum = pgEnum("publish_mode", ["review", "auto"]);
 export const ingestStatusEnum = pgEnum("ingest_status", [
@@ -283,6 +289,31 @@ export const albums = pgTable(
     uniqueIndex("albums_creator_idempotency_unique").on(table.createdBy, table.idempotencyKey),
     index("albums_state_updated_idx").on(table.state, table.updatedAt),
   ],
+);
+
+export const albumObjectDeletionSweeps = pgTable(
+  "album_object_deletion_sweeps",
+  {
+    albumId: uuid("album_id").primaryKey(),
+    objectPrefix: varchar("object_prefix", { length: 512 }).notNull(),
+    executeAfter: timestamp("execute_after", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [index("album_object_deletion_sweeps_due_idx").on(table.executeAfter)],
+);
+
+export const faceReferenceDeletionSweeps = pgTable(
+  "face_reference_deletion_sweeps",
+  {
+    objectKey: varchar("object_key", { length: 512 }).primaryKey(),
+    executeAfter: timestamp("execute_after", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [index("face_reference_deletion_sweeps_due_idx").on(table.executeAfter)],
 );
 
 export const categories = pgTable(

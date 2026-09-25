@@ -24,6 +24,7 @@ const stateLabels: Record<AlbumSummaryView["state"], string> = {
   live: "直播中",
   ended: "已结束",
   archived: "已归档",
+  deleting: "删除中",
 };
 
 const filters: readonly { readonly id: AlbumFilter; readonly label: string }[] = [
@@ -32,6 +33,7 @@ const filters: readonly { readonly id: AlbumFilter; readonly label: string }[] =
   { id: "draft", label: "草稿" },
   { id: "ended", label: "已结束" },
   { id: "archived", label: "已归档" },
+  { id: "deleting", label: "删除中" },
 ];
 
 function formatBytes(bytes: number): string {

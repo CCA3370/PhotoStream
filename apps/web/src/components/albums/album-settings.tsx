@@ -7,7 +7,7 @@ import type {
   UpdateAlbumRequest,
 } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
-import { CopyIcon, ExternalLinkIcon, KeyRoundIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, KeyRoundIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AlbumDataSaverSetting } from "@/components/albums/album-data-saver-setting";
 import { CategoryForm } from "@/components/albums/category-form";
+import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
 import {
@@ -48,6 +49,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
+import { purgeWarmDerivedImages } from "@/lib/derived-image-cache";
+import { purgeLocalProcessingAlbum } from "@/lib/local-processing-runtime";
+import { purgeAlbumMediaBlobCache } from "@/lib/media-blob-cache";
+import { deleteUploadRecoveriesForAlbum } from "@/lib/upload-recovery";
 
 interface PasswordRotation {
   readonly album: AlbumView;
@@ -146,6 +151,8 @@ export function AlbumSettings({
   const [bibConfig, setBibConfig] = useState<BibConfigView | null>(initialBibConfig ?? null);
   const [faceConfig, setFaceConfig] = useState<FaceConfigView | null>(initialFaceConfig ?? null);
   const [featureLoading, setFeatureLoading] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   function isPending(action: PendingAction): boolean {
     return pendingActions.has(action);
@@ -209,6 +216,22 @@ export function AlbumSettings({
     } finally {
       endPending("password");
     }
+  }
+
+  async function deleteAlbum(password: string): Promise<void> {
+    await clientMutation<{ ok: true }>(`/api/v1/albums/${album.id}`, {
+      method: "DELETE",
+      body: { confirmation: deleteConfirmation },
+      confirmPassword: password,
+    });
+    purgeWarmDerivedImages(album.slug);
+    await Promise.allSettled([
+      purgeLocalProcessingAlbum(album.id),
+      deleteUploadRecoveriesForAlbum(album.id),
+      purgeAlbumMediaBlobCache(album.id, album.slug),
+    ]);
+    router.replace("/studio/albums");
+    router.refresh();
   }
 
   async function copyText(value: string, success: string): Promise<void> {
@@ -443,6 +466,45 @@ export function AlbumSettings({
               </CardContent>
             </Card>
           </div>
+
+          <Card className="mt-3 overflow-hidden border-destructive/40 shadow-none">
+            <CardHeader className="border-b py-3.5">
+              <CardTitle>删除活动</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-4">
+              <div>
+                <p className="text-sm font-medium">永久删除此活动及其全部数据</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  会删除照片与所有派生图、上传/审核数据、分类、查找配置、号码数据、人脸参考照与云端人脸索引、统计、反馈、分享及其他活动关联信息。此操作不可恢复。
+                </p>
+              </div>
+              <Field>
+                <FieldLabel htmlFor="delete-album-confirmation">
+                  输入活动标题“{album.title}”以确认
+                </FieldLabel>
+                <Input
+                  autoComplete="off"
+                  id="delete-album-confirmation"
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setDeleteConfirmation(value);
+                  }}
+                  value={deleteConfirmation}
+                />
+              </Field>
+              <div className="flex justify-end">
+                <Button
+                  disabled={deleteConfirmation !== album.title}
+                  onClick={() => setDeleteDialogOpen(true)}
+                  type="button"
+                  variant="destructive"
+                >
+                  <Trash2Icon data-icon="inline-start" />
+                  永久删除活动
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="access">
@@ -675,6 +737,16 @@ export function AlbumSettings({
           <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
+
+      <PasswordConfirmDialog
+        confirmLabel="确认永久删除"
+        description="会先清理当前可定位的 OSS/CDN 与人脸资源；临时上传签名失效后，系统还会自动复扫并删除可能晚到的残留对象。"
+        onConfirm={deleteAlbum}
+        onOpenChange={setDeleteDialogOpen}
+        open={deleteDialogOpen}
+        title="确认永久删除活动"
+        variant="destructive"
+      />
 
       <ErrorDialog message={error} onClose={() => setError(null)} title="操作失败" />
     </div>

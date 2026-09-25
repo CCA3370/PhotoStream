@@ -8,6 +8,7 @@ import {
   createLocalReviewPhoto,
   deleteLocalReviewPhoto,
   getLocalReviewPhoto,
+  listLocalReviewPhotos,
   patchLocalReviewPhoto,
   putLocalReviewPhoto,
   updateLocalReviewPhoto,
@@ -278,6 +279,7 @@ class LocalProcessingRuntime {
   #processingLimit = defaultProcessingProfile.initial;
   #healthySamples = 0;
   #adaptiveTimer: number | null = null;
+  #purged = false;
 
   constructor(albumId: string) {
     this.#albumId = albumId;
@@ -421,6 +423,39 @@ class LocalProcessingRuntime {
     for (const [id, task] of this.#tasks) {
       if (task.status === "staged" || task.status === "cancelled") this.#tasks.delete(id);
     }
+    this.#emit();
+  }
+
+  async purgeLocalData(): Promise<void> {
+    this.#purged = true;
+    this.#paused = true;
+    if (this.#adaptiveTimer !== null) {
+      window.clearInterval(this.#adaptiveTimer);
+      this.#adaptiveTimer = null;
+    }
+    for (const controller of this.#abortControllers.values()) controller.abort();
+
+    const [persisted, localPhotos] = await Promise.all([
+      listPersistedTasks(this.#albumId),
+      listLocalReviewPhotos(this.#albumId),
+    ]);
+    const localPhotoIds = new Set([
+      ...persisted.map((task) => task.localPhotoId),
+      ...localPhotos.map((photo) => photo.id),
+      ...[...this.#tasks.values()].map((task) => task.localPhotoId),
+    ]);
+
+    await Promise.all([
+      ...persisted.map((task) => deletePersistedTask(task.id)),
+      ...[...localPhotoIds].flatMap((localPhotoId) => [
+        deleteLocalReviewPhoto(localPhotoId),
+        deleteLocalPhotoEditDraft(localPhotoId),
+      ]),
+    ]);
+
+    this.#tasks.clear();
+    this.#intentPromises.clear();
+    this.#uploadProgress.clear();
     this.#emit();
   }
 
@@ -662,6 +697,14 @@ class LocalProcessingRuntime {
         // Keep the in-memory failure visible even if the persistence layer is unavailable.
       }
     } finally {
+      if (this.#purged) {
+        await Promise.all([
+          deletePersistedTask(task.id).catch(() => undefined),
+          deleteLocalReviewPhoto(task.localPhotoId).catch(() => undefined),
+          deleteLocalPhotoEditDraft(task.localPhotoId).catch(() => undefined),
+        ]);
+        this.#tasks.delete(task.id);
+      }
       this.#abortControllers.delete(task.id);
       this.#intentPromises.delete(task.id);
       this.#uploadProgress.delete(task.id);
@@ -722,4 +765,29 @@ export function getLocalProcessingRuntime(albumId: string): LocalProcessingRunti
     runtimes.set(albumId, runtime);
   }
   return runtime;
+}
+
+export async function purgeLocalProcessingAlbum(albumId: string): Promise<void> {
+  const runtime = runtimes.get(albumId);
+  if (runtime !== undefined) {
+    await runtime.purgeLocalData();
+    runtimes.delete(albumId);
+    return;
+  }
+
+  const [persisted, localPhotos] = await Promise.all([
+    listPersistedTasks(albumId),
+    listLocalReviewPhotos(albumId),
+  ]);
+  const localPhotoIds = new Set([
+    ...persisted.map((task) => task.localPhotoId),
+    ...localPhotos.map((photo) => photo.id),
+  ]);
+  await Promise.all([
+    ...persisted.map((task) => deletePersistedTask(task.id)),
+    ...[...localPhotoIds].flatMap((localPhotoId) => [
+      deleteLocalReviewPhoto(localPhotoId),
+      deleteLocalPhotoEditDraft(localPhotoId),
+    ]),
+  ]);
 }

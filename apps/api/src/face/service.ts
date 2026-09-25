@@ -22,6 +22,7 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type DiagnosticSource = "aliyun_imm" | "aliyun_oss" | "internal";
 type DiagnosticContext = Record<string, string | number | boolean | null>;
 const terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
+const presignedReferenceDeletionGraceMs = 20 * 60 * 1_000;
 
 const eventSchema = z
   .object({
@@ -247,6 +248,22 @@ export class FaceService {
         : existing.indexState;
 
     await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
+      const [currentAlbum] = await transaction
+        .select({ state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, options.albumId))
+        .limit(1);
+      if (currentAlbum === undefined || currentAlbum.state === "deleting") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动正在删除，不能更改人脸配置",
+          statusCode: 409,
+        });
+      }
+
       if (options.input.enabled) {
         await transaction
           .update(schema.faceAlbumJobs)
@@ -431,6 +448,8 @@ export class FaceService {
     requirePermission(actor, "album:configure");
     requireRecentAuthentication(actor.authenticatedAt);
     const index = await this.#index(albumId);
+    await this.#scheduleReferenceDeletionSweeps(albumId);
+
     await this.#database.transaction(async (transaction) => {
       await transaction
         .update(schema.albumFaceIndexes)
@@ -461,6 +480,92 @@ export class FaceService {
     return this.#configView(albumId);
   }
 
+  async purgeAlbumForDeletion(
+    actor: InternalActor & { authenticatedAt: Date },
+    albumId: string,
+  ): Promise<void> {
+    requirePermission(actor, "album:configure");
+    requireRecentAuthentication(actor.authenticatedAt);
+
+    const [album] = await this.#database
+      .select({ id: schema.albums.id })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId))
+      .limit(1);
+    if (album === undefined) throw this.#notFound();
+
+    const index = await this.#index(albumId);
+    await this.#scheduleReferenceDeletionSweeps(albumId);
+    await this.#database.transaction(async (transaction) => {
+      await transaction
+        .update(schema.faceAlbumJobs)
+        .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.faceAlbumJobs.albumId, albumId),
+            inArray(schema.faceAlbumJobs.status, ["pending", "processing"]),
+          ),
+        );
+      await this.#cancelAlbumSearches(transaction, albumId);
+      await transaction
+        .update(schema.albumFaceIndexes)
+        .set({
+          enabled: false,
+          indexState: index?.datasetName == null ? "disabled" : "deleting",
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId));
+    });
+
+    await this.#cleanupAlbumReferences(albumId);
+    const remainingReferences = await this.#database
+      .select({ id: schema.faceSearchIntents.id })
+      .from(schema.faceSearchIntents)
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          isNull(schema.faceSearchIntents.referenceDeletedAt),
+        ),
+      )
+      .limit(1);
+    if (remainingReferences.length > 0) {
+      throw new AppError({
+        code: "FACE_PROVIDER_UNAVAILABLE",
+        message: "活动的人脸参考照尚未完全删除，请稍后重试",
+        statusCode: 503,
+        retryable: true,
+      });
+    }
+
+    if (index?.datasetName == null) return;
+    let operation = "GetDataset";
+    try {
+      if (await this.#provider.datasetExists(index.datasetName)) {
+        operation = "DeleteDatasetContents";
+        await this.#provider.deleteDatasetContents(index.datasetName);
+        operation = "DeleteDataset";
+        await this.#provider.deleteDataset(index.datasetName);
+        operation = "GetDataset";
+        if (await this.#provider.datasetExists(index.datasetName)) {
+          throw new Error("dataset_delete_not_confirmed");
+        }
+      }
+    } catch (error) {
+      await this.#recordDiagnostic(albumId, error, {
+        source: "aliyun_imm",
+        operation,
+        datasetName: index.datasetName,
+        context: { reason: "album_deletion" },
+      });
+      throw new AppError({
+        code: "FACE_PROVIDER_UNAVAILABLE",
+        message: "活动的人脸索引尚未完全删除，请稍后重试",
+        statusCode: 503,
+        retryable: true,
+      });
+    }
+  }
+
   async createSearch(options: {
     slug: string;
     visitorToken: string | undefined;
@@ -484,18 +589,24 @@ export class FaceService {
     const objectKey = `face-search/${new Date().toISOString().slice(0, 10)}/${id}.jpg`;
     const referenceExpiresAt = new Date(Date.now() + 60 * 60_000);
     const resultExpiresAt = new Date(Date.now() + 2 * 60 * 60_000);
-    let upload: Awaited<ReturnType<FaceReferenceStorage["signPut"]>>;
-    try {
-      upload = await this.#references.signPut(objectKey, 15 * 60);
-    } catch (error) {
-      await this.#recordDiagnostic(album.id, error, {
-        source: "aliyun_oss",
-        operation: "SignPutObject",
-        context: { searchId: id },
-      });
-      throw providerFailure();
-    }
-    await this.#database.transaction(async (transaction) => {
+
+    const upload = await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${album.id}`}, 0))`,
+      );
+      const [currentAlbum] = await transaction
+        .select({ state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, album.id))
+        .limit(1);
+      if (currentAlbum === undefined || currentAlbum.state === "deleting") {
+        throw new AppError({
+          code: "FACE_SEARCH_DISABLED",
+          message: "此活动正在删除",
+          statusCode: 404,
+        });
+      }
+
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`face-session:${sessionDigest}`}, 0))`,
       );
@@ -552,6 +663,19 @@ export class FaceService {
           statusCode: 429,
         });
       }
+
+      let signed: Awaited<ReturnType<FaceReferenceStorage["signPut"]>>;
+      try {
+        signed = await this.#references.signPut(objectKey, 15 * 60);
+      } catch (error) {
+        await this.#recordDiagnostic(album.id, error, {
+          source: "aliyun_oss",
+          operation: "SignPutObject",
+          context: { searchId: id },
+        });
+        throw providerFailure();
+      }
+
       const [receipt] = await transaction
         .insert(schema.faceConsentReceipts)
         .values({
@@ -573,7 +697,9 @@ export class FaceService {
         referenceExpiresAt,
         resultExpiresAt,
       });
+      return signed;
     });
+
     return {
       id,
       status: "awaiting_upload" as const,
@@ -943,9 +1069,79 @@ export class FaceService {
       await this.#processMediaTasks();
       await this.#clusterQuietAlbums();
       await this.#cleanupExpiredSearches();
+      await this.#processReferenceDeletionSweeps();
     } finally {
       this.#maintenanceRunning = false;
     }
+  }
+
+  async #scheduleReferenceDeletionSweeps(albumId: string): Promise<void> {
+    const cutoff = new Date(Date.now() - presignedReferenceDeletionGraceMs);
+    const referenceKeys = await this.#database
+      .select({ objectKey: schema.faceSearchIntents.objectKey })
+      .from(schema.faceSearchIntents)
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          gt(schema.faceSearchIntents.createdAt, cutoff),
+        ),
+      );
+    if (referenceKeys.length === 0) return;
+
+    const executeAfter = new Date(Date.now() + presignedReferenceDeletionGraceMs);
+    for (let offset = 0; offset < referenceKeys.length; offset += 500) {
+      const now = new Date();
+      await this.#database
+        .insert(schema.faceReferenceDeletionSweeps)
+        .values(
+          referenceKeys.slice(offset, offset + 500).map((row) => ({
+            objectKey: row.objectKey,
+            executeAfter,
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: schema.faceReferenceDeletionSweeps.objectKey,
+          set: {
+            executeAfter,
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          },
+        });
+    }
+  }
+
+  async #processReferenceDeletionSweeps(limit = 100, now = new Date()): Promise<number> {
+    const sweeps = await this.#database
+      .select()
+      .from(schema.faceReferenceDeletionSweeps)
+      .where(lte(schema.faceReferenceDeletionSweeps.executeAfter, now))
+      .orderBy(asc(schema.faceReferenceDeletionSweeps.executeAfter))
+      .limit(limit);
+    for (const sweep of sweeps) {
+      try {
+        await this.#references.delete(sweep.objectKey);
+        await this.#database
+          .delete(schema.faceReferenceDeletionSweeps)
+          .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
+      } catch (error) {
+        const attempts = sweep.attempts + 1;
+        const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
+        await this.#database
+          .update(schema.faceReferenceDeletionSweeps)
+          .set({
+            attempts,
+            lastErrorCode: error instanceof Error ? error.name.slice(0, 100) : "UNKNOWN",
+            executeAfter: new Date(now.getTime() + retryDelay),
+            updatedAt: now,
+          })
+          .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
+      }
+    }
+    return sweeps.length;
   }
 
   async #authorizedSearchContext(options: {

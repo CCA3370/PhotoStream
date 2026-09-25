@@ -211,6 +211,50 @@ describe("media body reuse", () => {
     expect(network).toHaveBeenCalledTimes(1);
   });
 
+  it("purges only the deleted album from managed browser media caches", async () => {
+    const derived = await import("./derived-image-cache");
+    const mediaCache = await import("./media-blob-cache");
+    const target = {
+      scope: "deleted-album",
+      mediaId: "target",
+      kind: "photo_1920" as const,
+      bytes: 5,
+      sourceUrl: photo.sourceUrl,
+    };
+    const other = {
+      ...target,
+      scope: "other-album",
+      mediaId: "other",
+    };
+
+    await derived.loadDerivedImage(target);
+    await derived.loadDerivedImage(other);
+    await mediaCache.loadMediaBlob({
+      cacheName: "photostream-internal-images-v1",
+      key: "https://cdn.test/media/albums/album-id/photos/target/480.webp",
+      expectedBytes: 5,
+      sourceUrl: photo.sourceUrl,
+    });
+
+    derived.purgeWarmDerivedImages("deleted-album");
+    await mediaCache.purgeAlbumMediaBlobCache("album-id", "deleted-album");
+
+    const urls = [...cache.entries.keys()];
+    expect(urls.some((url) => new URL(url).pathname.includes("/deleted-album/"))).toBe(false);
+    expect(urls.some((url) => new URL(url).pathname.startsWith("/media/albums/album-id/"))).toBe(
+      false,
+    );
+    expect(urls.some((url) => new URL(url).pathname.includes("/other-album/"))).toBe(true);
+    expect(
+      derived.getWarmDerivedImageUrl({
+        scope: "deleted-album",
+        mediaId: "target",
+        kind: "photo_1920",
+        bytes: 5,
+      }),
+    ).toBeNull();
+  });
+
   it("aborts the underlying fetch when the last consumer cancels", async () => {
     cache = new MemoryCache();
     const storage = { open: async () => cache };

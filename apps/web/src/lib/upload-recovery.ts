@@ -86,3 +86,12 @@ export async function saveUploadRecovery(record: UploadRecoveryRecord): Promise<
 export async function deleteUploadRecovery(intentId: string): Promise<void> {
   await transaction("readwrite", (store) => store.delete(intentId));
 }
+
+export async function deleteUploadRecoveriesForAlbum(albumId: string): Promise<void> {
+  const records = await listUploadRecoveries();
+  await Promise.all(
+    records
+      .filter((record) => record.albumId === albumId)
+      .map((record) => deleteUploadRecovery(record.intentId)),
+  );
+}

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import type { MediaBatchRequest } from "@photostream/contracts";
 import { createDatabase, createPool, migrateDatabase, schema } from "@photostream/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { PasswordHasher } from "../auth/types.js";
@@ -95,6 +95,16 @@ class FakeStorage implements ObjectStorage {
     if (this.failDeleteOnce.delete(key)) throw new Error("synthetic delete failure");
     this.objects.delete(key);
   }
+
+  async deleteMany(keys: readonly string[]): Promise<void> {
+    for (const key of keys) await this.delete(key);
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    for (const key of [...this.objects.keys()]) {
+      if (key.startsWith(prefix)) await this.delete(key);
+    }
+  }
 }
 
 class FakeCdn implements CdnInvalidator {
@@ -136,6 +146,8 @@ maybeDescribe("stage 3 operations", () => {
     storage.failDeleteOnce.clear();
     cdn.failNext = false;
     cdn.invalidations.length = 0;
+    await database.delete(schema.albumObjectDeletionSweeps);
+    await database.delete(schema.faceReferenceDeletionSweeps);
     await database.delete(schema.liveEvents);
     await database.delete(schema.analyticsEvents);
     await database.delete(schema.analyticsDaily);
@@ -235,6 +247,227 @@ maybeDescribe("stage 3 operations", () => {
   });
 
   afterAll(async () => pool.end());
+
+  it("deletes an album with restrictive edit-source references", async () => {
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "hidden",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 200,
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("media fixture missing");
+
+    const baseKey = `media/albums/${albumId}/photos/${media.id}/original.jpg`;
+    const [baseVariant] = await database
+      .insert(schema.mediaVariants)
+      .values({
+        mediaId: media.id,
+        kind: "photo_original",
+        objectKey: baseKey,
+        format: "jpeg",
+        contentType: "image/jpeg",
+        width: 100,
+        height: 100,
+        expectedBytes: 100,
+        bytes: 100,
+        verified: true,
+      })
+      .returning({ id: schema.mediaVariants.id });
+    if (baseVariant === undefined) throw new Error("variant fixture missing");
+
+    const [revision] = await database
+      .insert(schema.mediaEditRevisions)
+      .values({
+        mediaId: media.id,
+        createdBy: adminId,
+        status: "ready",
+        basedOnGeneration: 0,
+        pipelineVersion: "fixture",
+        recipeVersion: 1,
+        recipeJson: {},
+        sourceVariantId: baseVariant.id,
+      })
+      .returning({ id: schema.mediaEditRevisions.id });
+    if (revision === undefined) throw new Error("revision fixture missing");
+
+    const editKey = `media/albums/${albumId}/photos/${media.id}/edits/${revision.id}/480.webp`;
+    await database.insert(schema.mediaEditVariants).values({
+      editRevisionId: revision.id,
+      kind: "photo_480",
+      objectKey: editKey,
+      format: "webp",
+      contentType: "image/webp",
+      width: 100,
+      height: 100,
+      expectedBytes: 100,
+      bytes: 100,
+      verified: true,
+    });
+    for (const key of [baseKey, editKey]) {
+      storage.objects.set(key, { bytes: 100, contentType: "image/jpeg", etag: key });
+    }
+
+    await service.deleteAlbum({
+      actor: { id: adminId, role: "admin", authenticatedAt: new Date() },
+      albumId,
+      confirmation: "运营相册",
+      purgeFaceData: async () => {},
+    });
+
+    expect(
+      await database.select().from(schema.albums).where(eq(schema.albums.id, albumId)),
+    ).toHaveLength(0);
+    expect(
+      await database.select().from(schema.albums).where(eq(schema.albums.id, otherAlbumId)),
+    ).toHaveLength(1);
+    expect(storage.objects.size).toBe(0);
+
+    const lateKey = `media/albums/${albumId}/photos/late-write.webp`;
+    storage.objects.set(lateKey, { bytes: 100, contentType: "image/webp", etag: lateKey });
+    const swept = await service.processPendingAlbumObjectDeletionSweeps(
+      10,
+      new Date(Date.now() + 21 * 60 * 1_000),
+    );
+    expect(swept).toBe(1);
+    expect(storage.objects.has(lateKey)).toBe(false);
+    expect(await database.select().from(schema.albumObjectDeletionSweeps)).toHaveLength(0);
+  });
+
+  it("purges non-FK traces committed concurrently with album deletion", async () => {
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "hidden",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("media fixture missing");
+
+    let releaseWriter: (() => void) | undefined;
+    const writerRelease = new Promise<void>((resolve) => {
+      releaseWriter = resolve;
+    });
+    let writerLocked: (() => void) | undefined;
+    const writerReady = new Promise<void>((resolve) => {
+      writerLocked = resolve;
+    });
+    const writer = database.transaction(async (transaction) => {
+      await transaction.execute(sql`
+        select id from media where id = ${media.id} for key share
+      `);
+      writerLocked?.();
+      await writerRelease;
+      await transaction.insert(schema.operationRequests).values({
+        actorScope: `user:${adminId}`,
+        operation: `media.hide:${media.id}`,
+        idempotencyKey: "album-delete-concurrent-operation",
+        requestHash: "f".repeat(64),
+        result: { mediaId: media.id },
+      });
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: adminId,
+        action: "media.concurrent-delete-fixture",
+        targetType: "media",
+        targetId: media.id,
+        result: "success",
+        changedFields: ["publicationStatus"],
+        requestId: "album-delete-concurrent-audit",
+      });
+    });
+    await writerReady;
+
+    const deletion = service.deleteAlbum({
+      actor: { id: adminId, role: "admin", authenticatedAt: new Date() },
+      albumId,
+      confirmation: "运营相册",
+      purgeFaceData: async () => {},
+    });
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const [album] = await database
+        .select({ state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, albumId));
+      if (album?.state === "deleting") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    releaseWriter?.();
+
+    await writer;
+    await deletion;
+
+    expect(
+      await database
+        .select()
+        .from(schema.operationRequests)
+        .where(eq(schema.operationRequests.idempotencyKey, "album-delete-concurrent-operation")),
+    ).toHaveLength(0);
+    expect(
+      await database
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.requestId, "album-delete-concurrent-audit")),
+    ).toHaveLength(0);
+  });
+
+  it("keeps a failed purge quiesced in deleting state", async () => {
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "hidden",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("media fixture missing");
+    const key = `media/albums/${albumId}/photos/${media.id}/original.jpg`;
+    await database.insert(schema.mediaVariants).values({
+      mediaId: media.id,
+      kind: "photo_original",
+      objectKey: key,
+      format: "jpeg",
+      contentType: "image/jpeg",
+      width: 100,
+      height: 100,
+      expectedBytes: 100,
+    });
+    storage.objects.set(key, { bytes: 100, contentType: "image/jpeg", etag: key });
+    storage.failDeleteOnce.add(key);
+
+    await expect(
+      service.deleteAlbum({
+        actor: { id: adminId, role: "admin", authenticatedAt: new Date() },
+        albumId,
+        confirmation: "运营相册",
+        purgeFaceData: async () => {},
+      }),
+    ).rejects.toThrow();
+
+    const [album] = await database
+      .select({ state: schema.albums.state })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId));
+    expect(album?.state).toBe("deleting");
+  });
 
   it("filters audit search and result state before pagination", async () => {
     await database.insert(schema.auditLogs).values([

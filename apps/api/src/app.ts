@@ -356,6 +356,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       authService,
       photoService: options.photoService,
       operationsService: options.operationsService,
+      ...(options.faceService === undefined ? {} : { faceService: options.faceService }),
       config: options.config,
     });
   }

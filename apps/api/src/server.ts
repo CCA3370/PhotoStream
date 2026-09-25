@@ -168,6 +168,7 @@ const deletionPoll = setInterval(() => {
     .runJob("deletion", async () => {
       await Promise.all([
         operationsService.processPendingDeletionTasks(),
+        operationsService.processPendingAlbumObjectDeletionSweeps(),
         photoService.processExpiredUploadCleanups(),
         mediaEditService.cleanupDiscardedRevisions(),
         microPreviewService.cleanupOrphans(),

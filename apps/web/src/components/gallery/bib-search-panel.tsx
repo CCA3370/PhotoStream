@@ -43,8 +43,8 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { clientGet, publicMutation } from "@/lib/client-api";
-import { userFacingErrorMessage } from "@/lib/user-facing-error";
 import { preprocessFaceReference } from "@/lib/face-reference";
+import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
 interface SearchPage {
   readonly items: readonly PublicMediaView[];
@@ -557,9 +557,7 @@ export function BibSearchPanel({
         >
           {resultItems.length === 0 ? (
             <div className="flex min-h-44 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground">
-              <span>
-                {resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}
-              </span>
+              <span>{resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}</span>
               <Button
                 className="h-11 rounded-xl border-blue-600 bg-blue-600 px-6 text-sm font-medium text-white shadow-sm hover:border-blue-700 hover:bg-blue-700 hover:text-white"
                 onClick={clearResult}

@@ -54,6 +54,8 @@ export interface ObjectStorage {
   }): Promise<void>;
   abortMultipart(uploadId: string, key?: string): Promise<void>;
   delete(key: string): Promise<void>;
+  deleteMany?(keys: readonly string[]): Promise<void>;
+  deletePrefix?(prefix: string): Promise<void>;
   head(key: string): Promise<ObjectMetadata | null>;
 }
 
@@ -175,6 +177,12 @@ export class LocalObjectStorage implements ObjectStorage {
       { method: "DELETE", signal: AbortSignal.timeout(10_000) },
     );
     if (!response.ok) throw new Error(`Object DELETE failed with status ${response.status}`);
+  }
+
+  async deleteMany(keys: readonly string[]): Promise<void> {
+    for (let offset = 0; offset < keys.length; offset += 16) {
+      await Promise.all(keys.slice(offset, offset + 16).map((key) => this.delete(key)));
+    }
   }
 
   async head(key: string): Promise<ObjectMetadata | null> {
@@ -402,6 +410,68 @@ export class AliyunObjectStorage implements ObjectStorage {
       await this.#client.delete(key);
     } catch (error) {
       if (!isMissingObject(error)) throw error;
+    }
+  }
+
+  async deleteMany(keys: readonly string[]): Promise<void> {
+    for (let offset = 0; offset < keys.length; offset += 1_000) {
+      const batch = [...keys.slice(offset, offset + 1_000)];
+      if (batch.length === 0) continue;
+      await this.#client.deleteMulti(batch, { quiet: true });
+    }
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    let previousUploadBatch = "";
+    let repeatedUploadBatchCount = 0;
+    for (;;) {
+      const result = await this.#client.listUploads({
+        prefix,
+        "max-uploads": 1_000,
+      });
+      const uploads = (result.uploads ?? []).flatMap((upload) =>
+        typeof upload.name === "string" &&
+        upload.name.length > 0 &&
+        typeof upload.uploadId === "string" &&
+        upload.uploadId.length > 0
+          ? [{ name: upload.name, uploadId: upload.uploadId }]
+          : [],
+      );
+      if (uploads.length === 0) break;
+
+      const batch = uploads
+        .map((upload) => `${upload.name}\u0000${upload.uploadId}`)
+        .sort()
+        .join("\n");
+      repeatedUploadBatchCount = batch === previousUploadBatch ? repeatedUploadBatchCount + 1 : 0;
+      if (repeatedUploadBatchCount >= 2) {
+        throw new Error("Multipart prefix deletion was not confirmed");
+      }
+      previousUploadBatch = batch;
+      for (const upload of uploads) {
+        await this.abortMultipart(upload.uploadId, upload.name);
+      }
+    }
+
+    let previousObjectBatch = "";
+    let repeatedObjectBatchCount = 0;
+    for (;;) {
+      const result = await this.#client.listV2({
+        prefix,
+        "max-keys": 1_000,
+      });
+      const keys = (result.objects ?? [])
+        .map((object) => object.name)
+        .filter((key): key is string => typeof key === "string" && key.length > 0);
+      if (keys.length === 0) return;
+
+      const batch = [...keys].sort().join("\n");
+      repeatedObjectBatchCount = batch === previousObjectBatch ? repeatedObjectBatchCount + 1 : 0;
+      if (repeatedObjectBatchCount >= 2) {
+        throw new Error("Object prefix deletion was not confirmed");
+      }
+      previousObjectBatch = batch;
+      await this.deleteMany(keys);
     }
   }
 

@@ -129,6 +129,9 @@ export class ProgressiveUploadService {
         .limit(1);
       if (existing !== undefined) return existing.id;
 
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${options.input.albumId}`}, 0))`,
+      );
       const [album] = await transaction
         .select()
         .from(schema.albums)
@@ -356,6 +359,32 @@ export class ProgressiveUploadService {
           message: "当前角色无权访问该上传任务",
           statusCode: 403,
         });
+      }
+
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${row.media.albumId}`}, 0))`,
+      );
+      const [[albumState], [currentIntent]] = await Promise.all([
+        transaction
+          .select({ state: schema.albums.state })
+          .from(schema.albums)
+          .where(eq(schema.albums.id, row.media.albumId))
+          .limit(1),
+        transaction
+          .select({
+            status: schema.uploadIntents.status,
+            expiresAt: schema.uploadIntents.expiresAt,
+          })
+          .from(schema.uploadIntents)
+          .where(eq(schema.uploadIntents.id, options.intentId))
+          .limit(1),
+      ]);
+      if (
+        albumState?.state !== "live" ||
+        currentIntent?.status !== "active" ||
+        currentIntent.expiresAt <= new Date()
+      ) {
+        throw new AppError({ code: "STATE_CONFLICT", message: "上传任务已失效", statusCode: 409 });
       }
 
       const maxEdges = { photo_480: 480, photo_960: 960, photo_1920: 1_920 } as const;
