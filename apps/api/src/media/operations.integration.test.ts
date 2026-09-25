@@ -321,8 +321,12 @@ maybeDescribe("stage 3 operations", () => {
       purgeFaceData: async () => {},
     });
 
-    expect(await database.select().from(schema.albums).where(eq(schema.albums.id, albumId))).toHaveLength(0);
-    expect(await database.select().from(schema.albums).where(eq(schema.albums.id, otherAlbumId))).toHaveLength(1);
+    expect(
+      await database.select().from(schema.albums).where(eq(schema.albums.id, albumId)),
+    ).toHaveLength(0);
+    expect(
+      await database.select().from(schema.albums).where(eq(schema.albums.id, otherAlbumId)),
+    ).toHaveLength(1);
     expect(storage.objects.size).toBe(0);
 
     const lateKey = `media/albums/${albumId}/photos/late-write.webp`;
