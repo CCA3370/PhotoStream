@@ -46,6 +46,7 @@ const recentAuthenticationMs = 15 * 60 * 1_000;
 const analyticsRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 const operationRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 const presignedUploadDeletionGraceMs = 20 * 60 * 1_000;
+const presignedFaceReferenceDeletionGraceMs = 20 * 60 * 1_000;
 
 function requirePermission(role: UserRole, permission: Parameters<typeof hasPermission>[1]): void {
   if (!hasPermission(role, permission)) {
@@ -159,7 +160,10 @@ export class OperationsService {
     });
 
     if (options.purgeFaceData === undefined) {
-      const [[faceIndex], [undeletedFaceReference]] = await Promise.all([
+      const faceReferenceCutoff = new Date(
+        Date.now() - presignedFaceReferenceDeletionGraceMs,
+      );
+      const [[faceIndex], [undeletedFaceReference], [recentFaceReference]] = await Promise.all([
         this.#database
           .select({ datasetName: schema.albumFaceIndexes.datasetName })
           .from(schema.albumFaceIndexes)
@@ -175,8 +179,22 @@ export class OperationsService {
             ),
           )
           .limit(1),
+        this.#database
+          .select({ id: schema.faceSearchIntents.id })
+          .from(schema.faceSearchIntents)
+          .where(
+            and(
+              eq(schema.faceSearchIntents.albumId, options.albumId),
+              gt(schema.faceSearchIntents.createdAt, faceReferenceCutoff),
+            ),
+          )
+          .limit(1),
       ]);
-      if (faceIndex?.datasetName != null || undeletedFaceReference !== undefined) {
+      if (
+        faceIndex?.datasetName != null ||
+        undeletedFaceReference !== undefined ||
+        recentFaceReference !== undefined
+      ) {
         throw new AppError({
           code: "FACE_PROVIDER_UNAVAILABLE",
           message: "当前无法确认活动的人脸云端数据已删除，请稍后重试",
@@ -266,6 +284,61 @@ export class OperationsService {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
       );
+
+      // Quiesce every album/media FK writer, including code paths that do not use
+      // the album-state advisory lock. FOR UPDATE waits for existing FK users and
+      // prevents new child rows from being attached while deletion is finalized.
+      const lockedAlbum = await transaction.execute(sql`
+        select id from albums where id = ${options.albumId} for update
+      `);
+      if (lockedAlbum.rowCount !== 1) {
+        throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+      }
+      await transaction.execute(sql`
+        select id from media where album_id = ${options.albumId} for update
+      `);
+
+      // Snapshot identifiers before cascades remove their source rows. Non-FK
+      // operational tables are purged only after the parent deletion has waited
+      // for concurrent child transactions to finish.
+      await transaction.execute(sql`
+        create temporary table album_delete_media_ids (
+          id uuid primary key
+        ) on commit drop
+      `);
+      await transaction.execute(sql`
+        insert into album_delete_media_ids (id)
+        select id from media where album_id = ${options.albumId}
+      `);
+      await transaction.execute(sql`
+        create temporary table album_delete_bib_tag_ids (
+          id uuid primary key
+        ) on commit drop
+      `);
+      await transaction.execute(sql`
+        insert into album_delete_bib_tag_ids (id)
+        select id from media_bib_tags where album_id = ${options.albumId}
+      `);
+      await transaction.execute(sql`
+        create temporary table album_delete_provider_task_ids (
+          id varchar(256) primary key
+        ) on commit drop
+      `);
+      await transaction.execute(sql`
+        insert into album_delete_provider_task_ids (id)
+        select provider_task_id
+        from face_search_intents
+        where album_id = ${options.albumId} and provider_task_id is not null
+        union
+        select provider_task_id
+        from face_album_jobs
+        where album_id = ${options.albumId} and provider_task_id is not null
+        union
+        select provider_task_id
+        from media_face_index_tasks
+        where album_id = ${options.albumId} and provider_task_id is not null
+      `);
+
       await transaction
         .delete(schema.mediaMicroPreviews)
         .where(eq(schema.mediaMicroPreviews.albumId, options.albumId));
@@ -275,96 +348,23 @@ export class OperationsService {
       // can make deletion order database-dependent.
       await transaction.execute(sql`
         delete from media_edit_states
-        where media_id in (select id from media where album_id = ${options.albumId})
+        where media_id in (select id from album_delete_media_ids)
       `);
       await transaction.execute(sql`
         delete from media_edit_variants
         where edit_revision_id in (
           select media_edit_revisions.id
           from media_edit_revisions
-          join media on media.id = media_edit_revisions.media_id
-          where media.album_id = ${options.albumId}
+          where media_edit_revisions.media_id in (select id from album_delete_media_ids)
         )
       `);
       await transaction.execute(sql`
         delete from media_edit_revisions
-        where media_id in (select id from media where album_id = ${options.albumId})
+        where media_id in (select id from album_delete_media_ids)
       `);
       await transaction.execute(sql`
         delete from media_variants
-        where media_id in (select id from media where album_id = ${options.albumId})
-      `);
-
-      // These operational tables intentionally have no album FK. Purge rows that
-      // still reference this album, one of its media records, or one of its bib tags.
-      await transaction.execute(sql`
-        delete from operation_requests as operation_request
-        where operation_request.operation like ${`%${options.albumId}%`}
-           or operation_request.result::text like ${`%${options.albumId}%`}
-           or exists (
-             select 1
-             from media
-             where media.album_id = ${options.albumId}
-               and (
-                 operation_request.operation like '%' || media.id::text || '%'
-                 or operation_request.result::text like '%' || media.id::text || '%'
-               )
-           )
-           or exists (
-             select 1
-             from media_bib_tags
-             where media_bib_tags.album_id = ${options.albumId}
-               and (
-                 operation_request.operation like '%' || media_bib_tags.id::text || '%'
-                 or operation_request.result::text like '%' || media_bib_tags.id::text || '%'
-               )
-           )
-      `);
-      await transaction.execute(sql`
-        delete from media_batch_requests as batch_request
-        where exists (
-          select 1
-          from media
-          where media.album_id = ${options.albumId}
-            and batch_request.result::text like '%' || media.id::text || '%'
-        )
-      `);
-      await transaction.execute(sql`
-        delete from face_integration_events as integration_event
-        where exists (
-          select 1
-          from face_search_intents
-          where face_search_intents.album_id = ${options.albumId}
-            and face_search_intents.provider_task_id = integration_event.provider_task_id
-        )
-           or exists (
-             select 1
-             from face_album_jobs
-             where face_album_jobs.album_id = ${options.albumId}
-               and face_album_jobs.provider_task_id = integration_event.provider_task_id
-           )
-           or exists (
-             select 1
-             from media_face_index_tasks
-             where media_face_index_tasks.album_id = ${options.albumId}
-               and media_face_index_tasks.provider_task_id = integration_event.provider_task_id
-           )
-      `);
-      await transaction.execute(sql`
-        delete from audit_logs as audit_log
-        where audit_log.target_id = ${options.albumId}::uuid
-           or exists (
-             select 1
-             from media
-             where media.album_id = ${options.albumId}
-               and audit_log.target_id = media.id
-           )
-           or exists (
-             select 1
-             from media_bib_tags
-             where media_bib_tags.album_id = ${options.albumId}
-               and audit_log.target_id = media_bib_tags.id
-           )
+        where media_id in (select id from album_delete_media_ids)
       `);
 
       if (this.#storage.deletePrefix !== undefined) {
@@ -402,6 +402,44 @@ export class OperationsService {
           statusCode: 409,
         });
       }
+
+      // These tables deliberately have no FK. Purge them after the parent delete,
+      // so any transaction that was already using an album/media FK has committed
+      // before these final trace deletions run.
+      await transaction.execute(sql`
+        delete from operation_requests as operation_request
+        where operation_request.operation like ${`%${options.albumId}%`}
+           or operation_request.result::text like ${`%${options.albumId}%`}
+           or exists (
+             select 1 from album_delete_media_ids
+             where operation_request.operation like '%' || album_delete_media_ids.id::text || '%'
+                or operation_request.result::text like '%' || album_delete_media_ids.id::text || '%'
+           )
+           or exists (
+             select 1 from album_delete_bib_tag_ids
+             where operation_request.operation like '%' || album_delete_bib_tag_ids.id::text || '%'
+                or operation_request.result::text like '%' || album_delete_bib_tag_ids.id::text || '%'
+           )
+      `);
+      await transaction.execute(sql`
+        delete from media_batch_requests as batch_request
+        where exists (
+          select 1 from album_delete_media_ids
+          where batch_request.result::text like '%' || album_delete_media_ids.id::text || '%'
+        )
+      `);
+      await transaction.execute(sql`
+        delete from face_integration_events as integration_event
+        where integration_event.provider_task_id in (
+          select id from album_delete_provider_task_ids
+        )
+      `);
+      await transaction.execute(sql`
+        delete from audit_logs as audit_log
+        where audit_log.target_id = ${options.albumId}::uuid
+           or audit_log.target_id in (select id from album_delete_media_ids)
+           or audit_log.target_id in (select id from album_delete_bib_tag_ids)
+      `);
     });
   }
 
