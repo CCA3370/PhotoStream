@@ -22,6 +22,7 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type DiagnosticSource = "aliyun_imm" | "aliyun_oss" | "internal";
 type DiagnosticContext = Record<string, string | number | boolean | null>;
 const terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
+const presignedReferenceDeletionGraceMs = 20 * 60 * 1_000;
 
 const eventSchema = z
   .object({
@@ -431,6 +432,36 @@ export class FaceService {
     requirePermission(actor, "album:configure");
     requireRecentAuthentication(actor.authenticatedAt);
     const index = await this.#index(albumId);
+    const referenceKeys = await this.#database
+      .select({ objectKey: schema.faceSearchIntents.objectKey })
+      .from(schema.faceSearchIntents)
+      .where(eq(schema.faceSearchIntents.albumId, albumId));
+    if (referenceKeys.length > 0) {
+      const executeAfter = new Date(Date.now() + presignedReferenceDeletionGraceMs);
+      for (let offset = 0; offset < referenceKeys.length; offset += 500) {
+        await this.#database
+          .insert(schema.faceReferenceDeletionSweeps)
+          .values(
+            referenceKeys.slice(offset, offset + 500).map((row) => ({
+              objectKey: row.objectKey,
+              executeAfter,
+              attempts: 0,
+              lastErrorCode: null,
+              updatedAt: new Date(),
+            })),
+          )
+          .onConflictDoUpdate({
+            target: schema.faceReferenceDeletionSweeps.objectKey,
+            set: {
+              executeAfter,
+              attempts: 0,
+              lastErrorCode: null,
+              updatedAt: new Date(),
+            },
+          });
+      }
+    }
+
     await this.#database.transaction(async (transaction) => {
       await transaction
         .update(schema.albumFaceIndexes)
@@ -569,18 +600,24 @@ export class FaceService {
     const objectKey = `face-search/${new Date().toISOString().slice(0, 10)}/${id}.jpg`;
     const referenceExpiresAt = new Date(Date.now() + 60 * 60_000);
     const resultExpiresAt = new Date(Date.now() + 2 * 60 * 60_000);
-    let upload: Awaited<ReturnType<FaceReferenceStorage["signPut"]>>;
-    try {
-      upload = await this.#references.signPut(objectKey, 15 * 60);
-    } catch (error) {
-      await this.#recordDiagnostic(album.id, error, {
-        source: "aliyun_oss",
-        operation: "SignPutObject",
-        context: { searchId: id },
-      });
-      throw providerFailure();
-    }
-    await this.#database.transaction(async (transaction) => {
+
+    const upload = await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock_shared(hashtextextended(${`album-state:${album.id}`}, 0))`,
+      );
+      const [currentAlbum] = await transaction
+        .select({ state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, album.id))
+        .limit(1);
+      if (currentAlbum === undefined || currentAlbum.state === "deleting") {
+        throw new AppError({
+          code: "FACE_SEARCH_DISABLED",
+          message: "此活动正在删除",
+          statusCode: 404,
+        });
+      }
+
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`face-session:${sessionDigest}`}, 0))`,
       );
@@ -637,6 +674,19 @@ export class FaceService {
           statusCode: 429,
         });
       }
+
+      let signed: Awaited<ReturnType<FaceReferenceStorage["signPut"]>>;
+      try {
+        signed = await this.#references.signPut(objectKey, 15 * 60);
+      } catch (error) {
+        await this.#recordDiagnostic(album.id, error, {
+          source: "aliyun_oss",
+          operation: "SignPutObject",
+          context: { searchId: id },
+        });
+        throw providerFailure();
+      }
+
       const [receipt] = await transaction
         .insert(schema.faceConsentReceipts)
         .values({
@@ -658,7 +708,9 @@ export class FaceService {
         referenceExpiresAt,
         resultExpiresAt,
       });
+      return signed;
     });
+
     return {
       id,
       status: "awaiting_upload" as const,
@@ -1028,9 +1080,40 @@ export class FaceService {
       await this.#processMediaTasks();
       await this.#clusterQuietAlbums();
       await this.#cleanupExpiredSearches();
+      await this.#processReferenceDeletionSweeps();
     } finally {
       this.#maintenanceRunning = false;
     }
+  }
+
+  async #processReferenceDeletionSweeps(limit = 100, now = new Date()): Promise<number> {
+    const sweeps = await this.#database
+      .select()
+      .from(schema.faceReferenceDeletionSweeps)
+      .where(lte(schema.faceReferenceDeletionSweeps.executeAfter, now))
+      .orderBy(asc(schema.faceReferenceDeletionSweeps.executeAfter))
+      .limit(limit);
+    for (const sweep of sweeps) {
+      try {
+        await this.#references.delete(sweep.objectKey);
+        await this.#database
+          .delete(schema.faceReferenceDeletionSweeps)
+          .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
+      } catch (error) {
+        const attempts = sweep.attempts + 1;
+        const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
+        await this.#database
+          .update(schema.faceReferenceDeletionSweeps)
+          .set({
+            attempts,
+            lastErrorCode: error instanceof Error ? error.name.slice(0, 100) : "UNKNOWN",
+            executeAfter: new Date(now.getTime() + retryDelay),
+            updatedAt: now,
+          })
+          .where(eq(schema.faceReferenceDeletionSweeps.objectKey, sweep.objectKey));
+      }
+    }
+    return sweeps.length;
   }
 
   async #authorizedSearchContext(options: {
