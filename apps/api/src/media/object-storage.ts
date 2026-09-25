@@ -54,6 +54,7 @@ export interface ObjectStorage {
   }): Promise<void>;
   abortMultipart(uploadId: string, key?: string): Promise<void>;
   delete(key: string): Promise<void>;
+  deleteMany?(keys: readonly string[]): Promise<void>;
   head(key: string): Promise<ObjectMetadata | null>;
 }
 
@@ -175,6 +176,12 @@ export class LocalObjectStorage implements ObjectStorage {
       { method: "DELETE", signal: AbortSignal.timeout(10_000) },
     );
     if (!response.ok) throw new Error(`Object DELETE failed with status ${response.status}`);
+  }
+
+  async deleteMany(keys: readonly string[]): Promise<void> {
+    for (let offset = 0; offset < keys.length; offset += 16) {
+      await Promise.all(keys.slice(offset, offset + 16).map((key) => this.delete(key)));
+    }
   }
 
   async head(key: string): Promise<ObjectMetadata | null> {
@@ -402,6 +409,14 @@ export class AliyunObjectStorage implements ObjectStorage {
       await this.#client.delete(key);
     } catch (error) {
       if (!isMissingObject(error)) throw error;
+    }
+  }
+
+  async deleteMany(keys: readonly string[]): Promise<void> {
+    for (let offset = 0; offset < keys.length; offset += 1_000) {
+      const batch = [...keys.slice(offset, offset + 1_000)];
+      if (batch.length === 0) continue;
+      await this.#client.deleteMulti(batch, { quiet: true });
     }
   }
 
