@@ -72,7 +72,7 @@ function MediaTile({
   return (
     <div
       className={cn(
-        "group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.975] sm:rounded-xl sm:hover:-translate-y-0.5 sm:hover:shadow-md sm:hover:ring-border motion-reduce:transform-none motion-reduce:transition-none",
+        "group relative aspect-[4/3] min-h-11 overflow-hidden rounded-[10px] bg-muted ring-1 ring-border/45 transition-[transform,box-shadow,ring-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.975] sm:rounded-xl sm:hover:shadow-md sm:hover:ring-border motion-reduce:transform-none motion-reduce:transition-none",
         animateIn &&
           "animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
       )}
@@ -104,7 +104,7 @@ function MediaTile({
         <span className="sr-only">打开活动照片</span>
       </button>
       {slug === undefined || !likesEnabled ? null : (
-        <div className="absolute bottom-1 left-1 z-20 transition-[transform,opacity] duration-200 sm:bottom-1.5 sm:left-1.5 sm:translate-y-0.5 sm:opacity-90 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 motion-reduce:transform-none motion-reduce:transition-none">
+        <div className="absolute bottom-1 left-1 z-20 transition-opacity duration-200 sm:bottom-1.5 sm:left-1.5 sm:opacity-90 sm:group-hover:opacity-100 motion-reduce:transition-none">
           <PhotoLikeButton
             mediaId={media.id}
             mode="thumbnail"
