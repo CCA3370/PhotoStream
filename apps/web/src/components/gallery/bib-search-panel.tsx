@@ -555,9 +555,9 @@ export function BibSearchPanel({
           aria-label="照片查找结果"
           className="flex flex-col gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-250 motion-reduce:animate-none"
         >
-          <div className="flex justify-center">
+          <div className="layer-transient-status pointer-events-none fixed inset-x-0 bottom-5 flex justify-center px-4 sm:bottom-6">
             <Button
-              className="rounded-full"
+              className="pointer-events-auto rounded-full bg-background/95 shadow-lg backdrop-blur"
               onClick={clearResult}
               size="sm"
               type="button"
