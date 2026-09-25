@@ -424,7 +424,8 @@ export class AliyunObjectStorage implements ObjectStorage {
     try {
       await this.#client.abortMultipartUpload(key, uploadId);
     } catch (error) {
-      if (!isMissingObject(error)) throw new ObjectStorageProviderError("AbortMultipartUpload", error);
+      if (!isMissingObject(error))
+        throw new ObjectStorageProviderError("AbortMultipartUpload", error);
     }
   }
 
