@@ -169,6 +169,9 @@ const deletionPoll = setInterval(() => {
       await Promise.all([
         operationsService.processPendingDeletionTasks(),
         operationsService.processPendingAlbumObjectDeletionSweeps(),
+        operationsService.processPendingAlbumDeletions((albumId) =>
+          faceService.purgeAlbumForDeletionInternal(albumId),
+        ),
         photoService.processExpiredUploadCleanups(),
         mediaEditService.cleanupDiscardedRevisions(),
         microPreviewService.cleanupOrphans(),
