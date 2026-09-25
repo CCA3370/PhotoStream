@@ -535,6 +535,7 @@ export function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
       recordMediaCacheDiagnostic("sizeMismatch", request.telemetryScope);
       throw new Error("图片大小与记录不一致，请刷新相册后重试。");
     }
+    controller.signal.throwIfAborted();
     // Persist before settling the shared task so a second consumer never races a write.
     await writeMediaBlob(request, blob);
     return blob;
