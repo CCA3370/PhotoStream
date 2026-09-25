@@ -846,7 +846,7 @@ export class PhotoService {
       options.input.password ?? this.#deriveAlbumPassword(options.actor.id, idempotencyKey);
     const passwordHash = await this.#hasher.hash(generatedPassword);
     const scheduledStartAt =
-      options.input.scheduledStartAt === null ? null : new Date(options.input.scheduledStartAt);
+      options.input.scheduledStartAt == null ? null : new Date(options.input.scheduledStartAt);
     const now = new Date();
     if (scheduledStartAt !== null && scheduledStartAt <= now) {
       throw new AppError({
