@@ -248,7 +248,10 @@ function simpleConstraintSummary(constraint: SimpleConstraintDraft): string {
     constraint.width === 1
       ? `第 ${constraint.startPosition} 位`
       : `第 ${constraint.startPosition}–${last} 位`;
-  const range = constraint.start === constraint.end ? constraint.start : `${constraint.start}–${constraint.end}`;
+  const range =
+    constraint.start === constraint.end
+      ? constraint.start
+      : `${constraint.start}–${constraint.end}`;
   return `${position}为 ${range}`;
 }
 
@@ -485,7 +488,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   ): void {
     editRuleDraft((current) => ({
       ...current,
-      baseRules: current.baseRules.map((rule, index) => (index === ruleIndex ? update(rule) : rule)),
+      baseRules: current.baseRules.map((rule, index) =>
+        index === ruleIndex ? update(rule) : rule,
+      ),
     }));
   }
 
@@ -840,14 +845,19 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             </div>
 
             {ruleDraft.baseRules.length === 0 ? (
-              <div className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
+              <div
+                className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground"
+              >
                 暂无基础限制。若第一位只能是 1–6，可在这里添加“第 1 位，1–6”。
               </div>
             ) : null}
 
             {ruleDraft.baseRules.map((rule, ruleIndex) => (
               <div
-                className="grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+                className={
+                  "grid gap-3 rounded-xl border p-3 " +
+                  "md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end"
+                }
                 key={rule.id}
               >
                 <Field>
@@ -956,7 +966,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             </div>
 
             {ruleDraft.conditionalRules.length === 0 ? (
-              <div className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
+              <div
+                className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground"
+              >
                 暂无条件限制。只有基础限制时，满足基础限制的号码即可通过。
               </div>
             ) : null}
