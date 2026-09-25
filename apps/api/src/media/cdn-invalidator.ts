@@ -5,6 +5,7 @@ import { ALIYUN_REGION } from "../config.js";
 
 export interface CdnInvalidator {
   invalidate(paths: readonly string[]): Promise<void>;
+  invalidateDirectory?(path: string): Promise<void>;
 }
 
 export class LocalCdnInvalidator implements CdnInvalidator {
@@ -38,19 +39,36 @@ export class AliyunCdnInvalidator implements CdnInvalidator {
   }
 
   async invalidate(paths: readonly string[]): Promise<void> {
-    if (paths.length === 0) return;
-    const urls = paths.map((path) => {
-      const url = new URL(this.#mediaBaseUrl);
-      url.pathname = path.startsWith("/") ? path : `/${path}`;
-      url.search = "";
-      url.hash = "";
-      return url.href;
-    });
+    for (let offset = 0; offset < paths.length; offset += 1_000) {
+      const urls = paths.slice(offset, offset + 1_000).map((path) => {
+        const url = new URL(this.#mediaBaseUrl);
+        url.pathname = path.startsWith("/") ? path : `/${path}`;
+        url.search = "";
+        url.hash = "";
+        return url.href;
+      });
+      if (urls.length === 0) continue;
+      await this.#client.refreshObjectCaches(
+        new RefreshObjectCachesRequest({
+          force: true,
+          objectPath: urls.join("\n"),
+          objectType: "File",
+        }),
+      );
+    }
+  }
+
+  async invalidateDirectory(path: string): Promise<void> {
+    const url = new URL(this.#mediaBaseUrl);
+    const normalized = path.startsWith("/") ? path : `/${path}`;
+    url.pathname = normalized.endsWith("/") ? normalized : `${normalized}/`;
+    url.search = "";
+    url.hash = "";
     await this.#client.refreshObjectCaches(
       new RefreshObjectCachesRequest({
         force: true,
-        objectPath: urls.join("\n"),
-        objectType: "File",
+        objectPath: url.href,
+        objectType: "Directory",
       }),
     );
   }
