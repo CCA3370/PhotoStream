@@ -116,10 +116,7 @@ export function PhotoShareButton({
     } catch (caught) {
       toast.add({
         title: "分享失败",
-        description: userFacingErrorMessage(
-          caught,
-          "暂时无法创建分享链接，请稍后重试。",
-        ),
+        description: userFacingErrorMessage(caught, "暂时无法创建分享链接，请稍后重试。"),
         type: "error",
         timeout: 4_000,
       });
