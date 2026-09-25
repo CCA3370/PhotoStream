@@ -253,6 +253,13 @@
       "when": 1790340000000,
       "tag": "0035_album_deleting_state",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790352000000,
+      "tag": "0036_album_deletion_error_history",
+      "breakpoints": true
     }
   ]
 }
