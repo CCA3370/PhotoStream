@@ -133,7 +133,35 @@ export class OperationsService {
       });
     }
 
-    await options.purgeFaceData?.();
+    if (options.purgeFaceData === undefined) {
+      const [[faceIndex], [undeletedFaceReference]] = await Promise.all([
+        this.#database
+          .select({ datasetName: schema.albumFaceIndexes.datasetName })
+          .from(schema.albumFaceIndexes)
+          .where(eq(schema.albumFaceIndexes.albumId, options.albumId))
+          .limit(1),
+        this.#database
+          .select({ id: schema.faceSearchIntents.id })
+          .from(schema.faceSearchIntents)
+          .where(
+            and(
+              eq(schema.faceSearchIntents.albumId, options.albumId),
+              isNull(schema.faceSearchIntents.referenceDeletedAt),
+            ),
+          )
+          .limit(1),
+      ]);
+      if (faceIndex?.datasetName != null || undeletedFaceReference !== undefined) {
+        throw new AppError({
+          code: "FACE_PROVIDER_UNAVAILABLE",
+          message: "当前无法确认活动的人脸云端数据已删除，请稍后重试",
+          statusCode: 503,
+          retryable: true,
+        });
+      }
+    } else {
+      await options.purgeFaceData();
+    }
 
     const [variants, editVariants, microPreviews] = await Promise.all([
       this.#database
@@ -229,6 +257,27 @@ export class OperationsService {
           where media.album_id = ${options.albumId}
             and batch_request.result::text like '%' || media.id::text || '%'
         )
+      `);
+      await transaction.execute(sql`
+        delete from face_integration_events as integration_event
+        where exists (
+          select 1
+          from face_search_intents
+          where face_search_intents.album_id = ${options.albumId}
+            and face_search_intents.provider_task_id = integration_event.provider_task_id
+        )
+           or exists (
+             select 1
+             from face_album_jobs
+             where face_album_jobs.album_id = ${options.albumId}
+               and face_album_jobs.provider_task_id = integration_event.provider_task_id
+           )
+           or exists (
+             select 1
+             from media_face_index_tasks
+             where media_face_index_tasks.album_id = ${options.albumId}
+               and media_face_index_tasks.provider_task_id = integration_event.provider_task_id
+           )
       `);
       await transaction.execute(sql`
         delete from audit_logs as audit_log
