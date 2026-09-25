@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "@/components/ui/toast";
 import {
   Table,
   TableBody,
@@ -48,6 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "@/components/ui/toast";
 import { clientMutation } from "@/lib/client-api";
 
 const roleLabels: Record<UserRole, string> = {
@@ -224,9 +224,7 @@ export function UserManagement({
     }
   }
 
-  const activeAdminCount = users.filter(
-    (user) => user.role === "admin" && user.isActive,
-  ).length;
+  const activeAdminCount = users.filter((user) => user.role === "admin" && user.isActive).length;
 
   return (
     <div className="flex flex-col gap-3">
@@ -390,9 +388,7 @@ export function UserManagement({
                           title={
                             user.id === currentUserId
                               ? "不能删除当前登录账号"
-                              : user.role === "admin" &&
-                                  user.isActive &&
-                                  activeAdminCount <= 1
+                              : user.role === "admin" && user.isActive && activeAdminCount <= 1
                                 ? "必须至少保留一名启用的管理员"
                                 : "删除账号"
                           }
