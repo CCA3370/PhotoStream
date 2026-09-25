@@ -1,3 +1,4 @@
+import { subscribeAlbumPurge } from "./album-purge-broadcast";
 import { derivedCacheSegment, derivedSegmentBudget, mediaCacheBudget } from "./media-cache-policy";
 import { type MediaDeliveryMetric, recordMediaDeliveryMetric } from "./media-delivery-telemetry";
 
@@ -432,6 +433,7 @@ export async function purgeAlbumMediaBlobCache(albumId: string, slug: string): P
     }
   }
 
+  const cleanupFailures: unknown[] = [];
   if (cacheSupported()) {
     for (const cacheName of albumMediaCacheNames) {
       try {
@@ -442,8 +444,8 @@ export async function purgeAlbumMediaBlobCache(albumId: string, slug: string): P
             .filter((request) => albumMediaCacheKeyMatches(cacheName, request.url, albumId, slug))
             .map((request) => cache.delete(request)),
         );
-      } catch {
-        // Cache cleanup is best-effort; server-side deletion remains authoritative.
+      } catch (error) {
+        cleanupFailures.push(error);
       }
       diskIndexes.delete(cacheName);
     }
@@ -458,7 +460,15 @@ export async function purgeAlbumMediaBlobCache(albumId: string, slug: string): P
       recentReads.delete(key);
     }
   }
+
+  if (cleanupFailures.length > 0) {
+    throw new AggregateError(cleanupFailures, "Album browser cache cleanup failed");
+  }
 }
+
+subscribeAlbumPurge(({ albumId, slug }) => {
+  void purgeAlbumMediaBlobCache(albumId, slug).catch(() => undefined);
+});
 
 export function loadMediaBlob(request: MediaBlobRequest): Promise<Blob> {
   if (request.signal?.aborted) return Promise.reject(abortReason(request.signal));
