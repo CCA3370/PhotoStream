@@ -491,6 +491,29 @@ maybeDescribe("stage 3 operations", () => {
       .from(schema.albums)
       .where(eq(schema.albums.id, albumId));
     expect(album?.state).toBe("deleting");
+
+    const photos = new PhotoService({
+      database,
+      storage,
+      passwordHasher: fakeHasher,
+      config,
+      cdnInvalidator: cdn,
+    });
+    const summary = (await photos.listAlbumSummaries({ id: adminId, role: "admin" })).find(
+      (item) => item.id === albumId,
+    );
+    expect(summary?.deletionProgress).toMatchObject({
+      phase: "waiting_upload_expiry",
+      objectCleanup: {
+        status: "waiting",
+        attempts: 1,
+        lastErrorCode: "OBJECT_DELETE_FAILED",
+      },
+      latestError: {
+        source: "object_storage",
+        code: "OBJECT_DELETE_FAILED",
+      },
+    });
   });
 
   it("accepts deletion when face cleanup is temporarily unavailable", async () => {
@@ -510,6 +533,49 @@ maybeDescribe("stage 3 operations", () => {
       .from(schema.albums)
       .where(eq(schema.albums.id, albumId));
     expect(album?.state).toBe("deleting");
+  });
+
+  it("reports album deletion progress and cleanup errors", async () => {
+    const photos = new PhotoService({
+      database,
+      storage,
+      passwordHasher: fakeHasher,
+      config,
+      cdnInvalidator: cdn,
+    });
+
+    await service.deleteAlbum({
+      actor: { id: adminId, role: "admin", authenticatedAt: new Date() },
+      albumId,
+      confirmation: "运营相册",
+      purgeFaceData: async () => {},
+    });
+
+    const waitingSummary = (await photos.listAlbumSummaries({ id: adminId, role: "admin" })).find(
+      (album) => album.id === albumId,
+    );
+    expect(waitingSummary?.deletionProgress).toMatchObject({
+      phase: "waiting_upload_expiry",
+      progressPercent: 35,
+      objectCleanup: { status: "waiting", attempts: 0, lastErrorCode: null },
+    });
+
+    const lateKey = `media/albums/${albumId}/photos/late-progress-check.webp`;
+    storage.objects.set(lateKey, { bytes: 100, contentType: "image/webp", etag: lateKey });
+    storage.failDeleteOnce.add(lateKey);
+    const future = new Date(Date.now() + 21 * 60 * 1_000);
+    await service.processPendingAlbumObjectDeletionSweeps(10, future);
+
+    const retryingSummary = (await photos.listAlbumSummaries({ id: adminId, role: "admin" })).find(
+      (album) => album.id === albumId,
+    );
+    expect(retryingSummary?.deletionProgress).toMatchObject({
+      phase: "object_cleanup",
+      progressPercent: 60,
+      objectCleanup: { status: "retrying", attempts: 1 },
+      latestError: { source: "object_storage" },
+    });
+    expect(retryingSummary?.deletionProgress?.nextAttemptAt).not.toBeNull();
   });
 
   it("filters audit search and result state before pagination", async () => {

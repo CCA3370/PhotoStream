@@ -540,7 +540,13 @@ export class FaceService {
       });
     }
 
-    if (index?.datasetName == null) return;
+    if (index?.datasetName == null) {
+      await this.#database
+        .update(schema.albumFaceIndexes)
+        .set({ indexState: "disabled", lastErrorCode: null, updatedAt: new Date() })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId));
+      return;
+    }
     let operation = "GetDataset";
     try {
       if (await this.#provider.datasetExists(index.datasetName)) {
@@ -553,7 +559,24 @@ export class FaceService {
           throw new Error("dataset_delete_not_confirmed");
         }
       }
+      await this.#database
+        .update(schema.albumFaceIndexes)
+        .set({
+          datasetName: null,
+          indexState: "disabled",
+          lastErrorCode: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId));
     } catch (error) {
+      const provider = providerErrorDetails(error);
+      await this.#database
+        .update(schema.albumFaceIndexes)
+        .set({
+          lastErrorCode: (provider.code ?? "provider_unavailable").slice(0, 100),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId));
       await this.#recordDiagnostic(albumId, error, {
         source: "aliyun_imm",
         operation,
@@ -1129,7 +1152,12 @@ export class FaceService {
           .update(schema.faceReferenceDeletionSweeps)
           .set({
             attempts,
-            lastErrorCode: error instanceof Error ? error.name.slice(0, 100) : "UNKNOWN",
+            lastErrorCode:
+              error instanceof AppError
+                ? error.code
+                : error instanceof Error
+                  ? error.name.slice(0, 100)
+                  : "UNKNOWN",
             executeAfter: new Date(now.getTime() + retryDelay),
             updatedAt: now,
           })

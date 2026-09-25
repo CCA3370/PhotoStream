@@ -775,12 +775,51 @@ export const rotateAlbumPasswordResponseSchema = z
   .object({ generatedPassword: z.string().min(8), album: albumViewSchema })
   .strict();
 
+export const albumDeletionProgressSchema = z
+  .object({
+    phase: z.enum(["waiting_upload_expiry", "object_cleanup", "face_cleanup", "finalizing"]),
+    progressPercent: z.number().int().min(0).max(99),
+    startedAt: z.string().datetime(),
+    nextAttemptAt: z.string().datetime().nullable(),
+    objectCleanup: z
+      .object({
+        status: z.enum(["waiting", "running", "retrying", "complete"]),
+        attempts: z.number().int().min(0),
+        lastErrorCode: z.string().max(100).nullable(),
+        executeAfter: z.string().datetime().nullable(),
+        updatedAt: z.string().datetime().nullable(),
+      })
+      .strict(),
+    faceCleanup: z
+      .object({
+        status: z.enum(["pending", "retrying", "complete"]),
+        pendingReferences: z.number().int().min(0),
+        attempts: z.number().int().min(0),
+        lastErrorCode: z.string().max(200).nullable(),
+        updatedAt: z.string().datetime().nullable(),
+      })
+      .strict(),
+    latestError: z
+      .object({
+        source: z.enum(["object_storage", "face_provider", "face_reference"]),
+        code: z.string().max(200).nullable(),
+        message: z.string().min(1).max(4_000),
+        occurredAt: z.string().datetime(),
+      })
+      .strict()
+      .nullable(),
+    lastUpdatedAt: z.string().datetime(),
+  })
+  .strict();
+export type AlbumDeletionProgress = z.infer<typeof albumDeletionProgressSchema>;
+
 export const albumSummaryViewSchema = albumViewSchema
   .extend({
     mediaCount: z.number().int().min(0),
     pendingReviewCount: z.number().int().min(0),
     incompleteCount: z.number().int().min(0),
     logicalBytes: z.number().int().min(0),
+    deletionProgress: albumDeletionProgressSchema.nullable(),
   })
   .strict();
 export type AlbumSummaryView = z.infer<typeof albumSummaryViewSchema>;

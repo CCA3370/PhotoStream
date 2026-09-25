@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
+  type AlbumDeletionProgress,
   type AlbumView,
   type CreateAlbumRequest,
   type CreatePhotoUploadRequest,
@@ -59,6 +60,7 @@ const publicVariantKinds = new Set<PhotoVariantKind>(["photo_480", "photo_960", 
 const multipartThreshold = 16 * 1024 * 1024;
 const uploadCleanupInitialGraceMs = 30 * 60 * 1_000;
 const uploadCleanupVerificationDelayMs = 24 * 60 * 60 * 1_000;
+const albumDeletionUploadGraceMs = 20 * 60 * 1_000;
 const multipartPartBytes = 8 * 1024 * 1024;
 const maxActiveUploadIntentsPerUploader = 32;
 const maxOutstandingUploadBytesPerUploader = 4 * 1024 * 1024 * 1024;
@@ -176,35 +178,269 @@ export class PhotoService {
     const albums = await this.listAlbums(actor);
     return Promise.all(
       albums.map(async (album) => {
-        const [counts] = await this.#database
-          .select({
-            mediaCount: sql<number>`count(*)::int`,
-            pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.publicationStatus} = 'pending_review')::int`,
-            incompleteCount: sql<number>`count(*) filter (where ${schema.media.ingestStatus} not in ('ready', 'failed', 'cancelled'))::int`,
-          })
-          .from(schema.media)
-          .where(
-            and(
-              eq(schema.media.albumId, album.id),
-              sql`${schema.media.publicationStatus} <> 'deleted'`,
+        const [[counts], [storage], deletionProgress] = await Promise.all([
+          this.#database
+            .select({
+              mediaCount: sql<number>`count(*)::int`,
+              pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.publicationStatus} = 'pending_review')::int`,
+              incompleteCount: sql<number>`count(*) filter (where ${schema.media.ingestStatus} not in ('ready', 'failed', 'cancelled'))::int`,
+            })
+            .from(schema.media)
+            .where(
+              and(
+                eq(schema.media.albumId, album.id),
+                sql`${schema.media.publicationStatus} <> 'deleted'`,
+              ),
             ),
-          );
-        const [storage] = await this.#database
-          .select({
-            logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint`,
-          })
-          .from(schema.mediaVariants)
-          .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
-          .where(and(eq(schema.media.albumId, album.id), eq(schema.mediaVariants.verified, true)));
+          this.#database
+            .select({
+              logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint`,
+            })
+            .from(schema.mediaVariants)
+            .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
+            .where(
+              and(eq(schema.media.albumId, album.id), eq(schema.mediaVariants.verified, true)),
+            ),
+          album.state === "deleting"
+            ? this.#albumDeletionProgress(album, hasPermission(actor.role, "album:configure"))
+            : Promise.resolve(null),
+        ]);
         return {
           ...album,
           mediaCount: counts?.mediaCount ?? 0,
           pendingReviewCount: counts?.pendingReviewCount ?? 0,
           incompleteCount: counts?.incompleteCount ?? 0,
           logicalBytes: Number(storage?.logicalBytes ?? 0),
+          deletionProgress,
         };
       }),
     );
+  }
+
+  async #albumDeletionProgress(
+    album: AlbumView,
+    includeProviderDetail: boolean,
+  ): Promise<AlbumDeletionProgress> {
+    const startedAt = new Date(album.updatedAt);
+    const now = new Date();
+    const [
+      [objectSweep],
+      [faceIndex],
+      [faceReferenceStats],
+      [faceReferenceError],
+      [faceDiagnostic],
+    ] = await Promise.all([
+      this.#database
+        .select({
+          attempts: schema.albumObjectDeletionSweeps.attempts,
+          executeAfter: schema.albumObjectDeletionSweeps.executeAfter,
+          lastErrorCode: schema.albumObjectDeletionSweeps.lastErrorCode,
+          updatedAt: schema.albumObjectDeletionSweeps.updatedAt,
+        })
+        .from(schema.albumObjectDeletionSweeps)
+        .where(eq(schema.albumObjectDeletionSweeps.albumId, album.id))
+        .limit(1),
+      this.#database
+        .select({
+          datasetName: schema.albumFaceIndexes.datasetName,
+          indexState: schema.albumFaceIndexes.indexState,
+          lastErrorCode: schema.albumFaceIndexes.lastErrorCode,
+          updatedAt: schema.albumFaceIndexes.updatedAt,
+        })
+        .from(schema.albumFaceIndexes)
+        .where(eq(schema.albumFaceIndexes.albumId, album.id))
+        .limit(1),
+      this.#database
+        .select({
+          pendingReferences: sql<number>`count(*)::int`,
+          attempts: sql<number>`coalesce(max(${schema.faceReferenceDeletionSweeps.attempts}), 0)::int`,
+          nextAttemptAt: sql<Date | null>`min(${schema.faceReferenceDeletionSweeps.executeAfter})`,
+          updatedAt: sql<Date | null>`max(${schema.faceReferenceDeletionSweeps.updatedAt})`,
+        })
+        .from(schema.faceReferenceDeletionSweeps)
+        .innerJoin(
+          schema.faceSearchIntents,
+          eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
+        )
+        .where(eq(schema.faceSearchIntents.albumId, album.id)),
+      this.#database
+        .select({
+          lastErrorCode: schema.faceReferenceDeletionSweeps.lastErrorCode,
+          updatedAt: schema.faceReferenceDeletionSweeps.updatedAt,
+        })
+        .from(schema.faceReferenceDeletionSweeps)
+        .innerJoin(
+          schema.faceSearchIntents,
+          eq(schema.faceReferenceDeletionSweeps.objectKey, schema.faceSearchIntents.objectKey),
+        )
+        .where(
+          and(
+            eq(schema.faceSearchIntents.albumId, album.id),
+            isNotNull(schema.faceReferenceDeletionSweeps.lastErrorCode),
+          ),
+        )
+        .orderBy(desc(schema.faceReferenceDeletionSweeps.updatedAt))
+        .limit(1),
+      this.#database
+        .select({
+          providerCode: schema.faceOperationDiagnostics.providerCode,
+          providerMessage: schema.faceOperationDiagnostics.providerMessage,
+          occurredAt: schema.faceOperationDiagnostics.occurredAt,
+          attempts: sql<number>`count(*) over()::int`,
+        })
+        .from(schema.faceOperationDiagnostics)
+        .where(
+          and(
+            eq(schema.faceOperationDiagnostics.albumId, album.id),
+            gt(schema.faceOperationDiagnostics.occurredAt, startedAt),
+            sql`${schema.faceOperationDiagnostics.context}->>'reason' = 'album_deletion'`,
+          ),
+        )
+        .orderBy(desc(schema.faceOperationDiagnostics.occurredAt))
+        .limit(1),
+    ]);
+
+    const uploadGraceEndsAt = new Date(startedAt.getTime() + albumDeletionUploadGraceMs);
+    const objectStatus =
+      objectSweep === undefined
+        ? ("complete" as const)
+        : objectSweep.executeAfter <= uploadGraceEndsAt
+          ? ("waiting" as const)
+          : objectSweep.attempts > 0
+            ? ("retrying" as const)
+            : objectSweep.executeAfter > now
+              ? ("waiting" as const)
+              : ("running" as const);
+
+    const pendingReferences = faceReferenceStats?.pendingReferences ?? 0;
+    const facePending = faceIndex?.datasetName != null || pendingReferences > 0;
+    const faceAttempts = Math.max(
+      faceReferenceStats?.attempts ?? 0,
+      faceDiagnostic?.attempts ?? 0,
+      faceIndex?.lastErrorCode == null ? 0 : 1,
+    );
+    const faceLastErrorCode =
+      faceReferenceError?.lastErrorCode ??
+      faceIndex?.lastErrorCode ??
+      faceDiagnostic?.providerCode ??
+      null;
+    const faceStatus = !facePending
+      ? ("complete" as const)
+      : faceAttempts > 0 || faceDiagnostic !== undefined
+        ? ("retrying" as const)
+        : ("pending" as const);
+
+    const phase =
+      objectStatus === "waiting"
+        ? ("waiting_upload_expiry" as const)
+        : objectStatus === "running" || objectStatus === "retrying"
+          ? ("object_cleanup" as const)
+          : faceStatus !== "complete"
+            ? ("face_cleanup" as const)
+            : ("finalizing" as const);
+    const progressPercent =
+      phase === "waiting_upload_expiry"
+        ? 35
+        : phase === "object_cleanup"
+          ? 60
+          : phase === "face_cleanup"
+            ? 80
+            : 95;
+
+    const errorCandidates: AlbumDeletionProgress["latestError"][] = [];
+    if (objectSweep?.lastErrorCode != null) {
+      errorCandidates.push({
+        source: "object_storage",
+        code: objectSweep.lastErrorCode,
+        message: "对象存储或 CDN 清理失败，系统正在自动重试。",
+        occurredAt: iso(objectSweep.updatedAt),
+      });
+    }
+    if (faceReferenceError?.lastErrorCode != null) {
+      errorCandidates.push({
+        source: "face_reference",
+        code: faceReferenceError.lastErrorCode,
+        message: "人脸参考照清理失败，系统正在自动重试。",
+        occurredAt: iso(faceReferenceError.updatedAt),
+      });
+    }
+    if (faceDiagnostic !== undefined) {
+      errorCandidates.push({
+        source: "face_provider",
+        code: faceDiagnostic.providerCode,
+        message: includeProviderDetail
+          ? faceDiagnostic.providerMessage.slice(0, 4_000)
+          : "人脸云端资源清理失败，系统正在自动重试。",
+        occurredAt: iso(faceDiagnostic.occurredAt),
+      });
+    }
+    if (
+      faceDiagnostic === undefined &&
+      faceIndex?.lastErrorCode != null &&
+      faceIndex.updatedAt > startedAt
+    ) {
+      errorCandidates.push({
+        source: "face_provider",
+        code: faceIndex.lastErrorCode,
+        message: "人脸云端资源清理失败，系统正在自动重试。",
+        occurredAt: iso(faceIndex.updatedAt),
+      });
+    }
+    const latestError =
+      errorCandidates
+        .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+        .sort(
+          (left, right) =>
+            new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
+        )[0] ?? null;
+
+    const nextAttemptDates = [
+      objectSweep?.executeAfter ?? null,
+      faceReferenceStats?.nextAttemptAt ?? null,
+    ].filter((value): value is Date => value !== null);
+    const nextAttemptAt =
+      nextAttemptDates.length === 0
+        ? null
+        : iso(nextAttemptDates.reduce((earliest, value) => (value < earliest ? value : earliest)));
+
+    const updatedDates = [
+      startedAt,
+      objectSweep?.updatedAt ?? null,
+      faceIndex?.updatedAt ?? null,
+      faceReferenceStats?.updatedAt ?? null,
+      latestError === null ? null : new Date(latestError.occurredAt),
+    ].filter((value): value is Date => value !== null);
+    const lastUpdatedAt = iso(
+      updatedDates.reduce((latest, value) => (value > latest ? value : latest)),
+    );
+
+    return {
+      phase,
+      progressPercent,
+      startedAt: iso(startedAt),
+      nextAttemptAt,
+      objectCleanup: {
+        status: objectStatus,
+        attempts: objectSweep?.attempts ?? 0,
+        lastErrorCode: objectSweep?.lastErrorCode ?? null,
+        executeAfter: objectSweep === undefined ? null : iso(objectSweep.executeAfter),
+        updatedAt: objectSweep === undefined ? null : iso(objectSweep.updatedAt),
+      },
+      faceCleanup: {
+        status: faceStatus,
+        pendingReferences,
+        attempts: faceAttempts,
+        lastErrorCode: faceLastErrorCode,
+        updatedAt:
+          faceReferenceStats?.updatedAt != null
+            ? iso(faceReferenceStats.updatedAt)
+            : faceIndex === undefined
+              ? null
+              : iso(faceIndex.updatedAt),
+      },
+      latestError,
+      lastUpdatedAt,
+    };
   }
 
   async getAlbum(actor: InternalActor, albumId: string): Promise<AlbumView> {
