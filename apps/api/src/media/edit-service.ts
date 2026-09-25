@@ -841,13 +841,21 @@ export class MediaEditService {
   }
 
   async #media(executor: Executor, mediaId: string) {
-    const [media] = await executor
-      .select()
+    const [row] = await executor
+      .select({ media: schema.media, albumState: schema.albums.state })
       .from(schema.media)
+      .innerJoin(schema.albums, eq(schema.albums.id, schema.media.albumId))
       .where(eq(schema.media.id, mediaId))
       .limit(1);
-    if (media === undefined || media.publicationStatus === "deleted") throw this.#notFound();
-    return media;
+    if (row === undefined || row.media.publicationStatus === "deleted") throw this.#notFound();
+    if (row.albumState === "deleting") {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "活动正在删除，不能继续修改照片",
+        statusCode: 409,
+      });
+    }
+    return row.media;
   }
 
   async #baseOriginal(executor: Executor, mediaId: string) {
