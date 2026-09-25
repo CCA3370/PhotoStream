@@ -1981,6 +1981,12 @@ export class FaceService {
         and(
           lt(schema.faceSearchIntents.createdAt, historyCutoff),
           sql`${schema.faceSearchIntents.referenceDeletedAt} is not null`,
+          sql`not exists (
+            select 1
+            from albums
+            where albums.id = ${schema.faceSearchIntents.albumId}
+              and albums.state = 'deleting'
+          )`,
         ),
       );
     await this.#database
