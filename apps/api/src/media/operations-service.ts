@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 
 import {
+  type AlbumDeletionErrorList,
   type DeletionTaskView,
   type DownloadKind,
   hasPermission,
@@ -38,10 +39,47 @@ import {
 import type { CdnInvalidator } from "./cdn-invalidator.js";
 import { LocalCdnInvalidator } from "./cdn-invalidator.js";
 import { liveEventChannel } from "./live-event-broker.js";
-import type { ObjectStorage } from "./object-storage.js";
+import { ObjectStorageProviderError, type ObjectStorage } from "./object-storage.js";
 import type { InternalActor } from "./service.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type AlbumDeletionErrorSource = "object_storage" | "cdn";
+
+class AlbumCdnCleanupError extends Error {
+  readonly operation: string;
+  readonly providerError: unknown;
+
+  constructor(operation: string, providerError: unknown) {
+    super(providerError instanceof Error ? providerError.message : String(providerError));
+    this.name = "AlbumCdnCleanupError";
+    this.operation = operation;
+    this.providerError = providerError;
+  }
+}
+
+interface ProviderErrorFields {
+  readonly code?: unknown;
+  readonly requestId?: unknown;
+  readonly requestid?: unknown;
+  readonly status?: unknown;
+  readonly statusCode?: unknown;
+  readonly hostId?: unknown;
+  readonly name?: unknown;
+  readonly stack?: unknown;
+}
+
+function providerErrorFields(error: unknown): ProviderErrorFields {
+  return typeof error === "object" && error !== null ? (error as ProviderErrorFields) : {};
+}
+
+function stringField(value: unknown, maxLength: number): string | null {
+  return typeof value === "string" && value.length > 0 ? value.slice(0, maxLength) : null;
+}
+
+function numberField(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : null;
+}
+
 const recentAuthenticationMs = 15 * 60 * 1_000;
 const analyticsRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 const operationRetentionMs = 30 * 24 * 60 * 60 * 1_000;
@@ -187,6 +225,169 @@ export class OperationsService {
       // The album is already quiesced and has a durable recovery gate.
       // External cleanup continues from the deletion maintenance loop.
     }
+  }
+
+  async retryAlbumDeletion(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly retryFaceData?: (deletingSince: Date, now: Date) => Promise<void>;
+    readonly now?: Date;
+  }): Promise<void> {
+    requirePermission(options.actor.role, "album:configure");
+    const now = options.now ?? new Date();
+    const [album] = await this.#database
+      .select({ state: schema.albums.state, deletingSince: schema.albums.updatedAt })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, options.albumId))
+      .limit(1);
+    if (album === undefined) {
+      throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+    }
+    if (album.state !== "deleting") {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "该活动当前不在删除流程中",
+        statusCode: 409,
+      });
+    }
+
+    await this.#ensureAlbumDeletionRecoveryGate(options.albumId, album.deletingSince, now);
+    const graceEndsAt = new Date(album.deletingSince.getTime() + presignedUploadDeletionGraceMs);
+    const [sweep] = await this.#database
+      .select({ albumId: schema.albumObjectDeletionSweeps.albumId })
+      .from(schema.albumObjectDeletionSweeps)
+      .where(eq(schema.albumObjectDeletionSweeps.albumId, options.albumId))
+      .limit(1);
+    if (sweep !== undefined && now >= graceEndsAt) {
+      await this.#database
+        .update(schema.albumObjectDeletionSweeps)
+        .set({ executeAfter: now, updatedAt: now })
+        .where(eq(schema.albumObjectDeletionSweeps.albumId, options.albumId));
+    }
+
+    let objectCleanupComplete = false;
+    try {
+      await this.#purgeAlbumObjects(options.albumId);
+      objectCleanupComplete = true;
+      if (now >= graceEndsAt) {
+        await this.#database
+          .delete(schema.albumObjectDeletionSweeps)
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, options.albumId));
+      } else {
+        await this.#database
+          .update(schema.albumObjectDeletionSweeps)
+          .set({ lastErrorCode: null, executeAfter: graceEndsAt, updatedAt: now })
+          .where(eq(schema.albumObjectDeletionSweeps.albumId, options.albumId));
+      }
+    } catch (error) {
+      await this.#recordAlbumObjectDeletionFailure(options.albumId, error, now);
+    }
+
+    let faceCleanupComplete = options.retryFaceData === undefined;
+    if (options.retryFaceData !== undefined) {
+      try {
+        await options.retryFaceData(album.deletingSince, now);
+        faceCleanupComplete = true;
+      } catch {
+        faceCleanupComplete = false;
+      }
+    }
+
+    if (objectCleanupComplete && faceCleanupComplete && now >= graceEndsAt) {
+      await this.#finalizeAlbumDeletionIfReady(options.albumId);
+    }
+  }
+
+  async listAlbumDeletionErrors(
+    actor: InternalActor,
+    albumId: string,
+  ): Promise<AlbumDeletionErrorList> {
+    requirePermission(actor.role, "album:configure");
+    const [album] = await this.#database
+      .select({ state: schema.albums.state, deletingSince: schema.albums.updatedAt })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId))
+      .limit(1);
+    if (album === undefined) {
+      throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+    }
+    if (album.state !== "deleting") {
+      throw new AppError({
+        code: "STATE_CONFLICT",
+        message: "该活动当前不在删除流程中",
+        statusCode: 409,
+      });
+    }
+
+    const [cleanupErrors, faceDiagnostics] = await Promise.all([
+      this.#database
+        .select()
+        .from(schema.albumDeletionErrors)
+        .where(eq(schema.albumDeletionErrors.albumId, albumId))
+        .orderBy(desc(schema.albumDeletionErrors.occurredAt)),
+      this.#database
+        .select()
+        .from(schema.faceOperationDiagnostics)
+        .where(
+          and(
+            eq(schema.faceOperationDiagnostics.albumId, albumId),
+            gt(schema.faceOperationDiagnostics.occurredAt, album.deletingSince),
+          ),
+        )
+        .orderBy(asc(schema.faceOperationDiagnostics.occurredAt)),
+    ]);
+
+    const faceAttempts = new Map<string, number>();
+    const faceErrors = faceDiagnostics.map((diagnostic) => {
+      const key = `${diagnostic.source}:${diagnostic.operation}`;
+      const attempt = (faceAttempts.get(key) ?? 0) + 1;
+      faceAttempts.set(key, attempt);
+      return {
+        id: diagnostic.id,
+        source:
+          diagnostic.source === "aliyun_oss"
+            ? ("face_reference" as const)
+            : ("face_provider" as const),
+        stage: "face_cleanup" as const,
+        operation: diagnostic.operation,
+        code: diagnostic.providerCode,
+        message: diagnostic.providerMessage,
+        providerRequestId: diagnostic.providerRequestId,
+        httpStatus: diagnostic.httpStatus,
+        attempt,
+        details: {
+          diagnosticSource: diagnostic.source,
+          region: diagnostic.region,
+          endpoint: diagnostic.endpoint,
+          projectName: diagnostic.projectName,
+          datasetName: diagnostic.datasetName,
+          context: diagnostic.context,
+        },
+        occurredAt: diagnostic.occurredAt.toISOString(),
+      };
+    });
+
+    return {
+      items: [
+        ...cleanupErrors.map((error) => ({
+          id: error.id,
+          source: error.source as "object_storage" | "cdn",
+          stage: "object_cleanup" as const,
+          operation: error.operation,
+          code: error.code,
+          message: error.message,
+          providerRequestId: error.providerRequestId,
+          httpStatus: error.httpStatus,
+          attempt: error.attempt,
+          details: error.details,
+          occurredAt: error.occurredAt.toISOString(),
+        })),
+        ...faceErrors,
+      ].sort(
+        (left, right) =>
+          new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
+      ),
+    };
   }
 
   async hideMedia(options: {
@@ -1233,10 +1434,59 @@ export class OperationsService {
     await this.#finalizeAlbumDeletionIfReady(albumId);
   }
 
-  #albumObjectDeletionErrorCode(error: unknown): string {
-    if (error instanceof AppError) return error.code;
-    if (error instanceof Error && error.name !== "Error") return error.name.slice(0, 100);
-    return "OBJECT_DELETE_FAILED";
+  #albumObjectDeletionError(error: unknown): {
+    readonly source: AlbumDeletionErrorSource;
+    readonly operation: string;
+    readonly code: string;
+    readonly message: string;
+    readonly providerRequestId: string | null;
+    readonly httpStatus: number | null;
+    readonly details: Record<string, unknown>;
+  } {
+    const wrapped =
+      error instanceof ObjectStorageProviderError || error instanceof AlbumCdnCleanupError
+        ? error
+        : null;
+    const providerError = wrapped?.providerError ?? error;
+    const fields = providerErrorFields(providerError);
+    const source: AlbumDeletionErrorSource =
+      error instanceof AlbumCdnCleanupError ? "cdn" : "object_storage";
+    const operation =
+      error instanceof ObjectStorageProviderError || error instanceof AlbumCdnCleanupError
+        ? error.operation
+        : "AlbumObjectCleanup";
+    const code =
+      stringField(fields.code, 200) ??
+      (providerError instanceof AppError
+        ? providerError.code
+        : providerError instanceof Error && providerError.name !== "Error"
+          ? providerError.name
+          : "OBJECT_DELETE_FAILED");
+    const message =
+      providerError instanceof Error ? providerError.message : String(providerError);
+    const providerRequestId =
+      stringField(fields.requestId, 256) ?? stringField(fields.requestid, 256);
+    const httpStatus = numberField(fields.statusCode) ?? numberField(fields.status);
+    const details: Record<string, unknown> = {
+      errorName:
+        providerError instanceof Error
+          ? providerError.name
+          : stringField(fields.name, 200) ?? typeof providerError,
+    };
+    const hostId = stringField(fields.hostId, 512);
+    if (hostId !== null) details.hostId = hostId;
+    if (providerError instanceof Error && providerError.stack !== undefined) {
+      details.stack = providerError.stack.slice(0, 12_000);
+    }
+    return {
+      source,
+      operation,
+      code: code.slice(0, 200),
+      message: message.slice(0, 8_000),
+      providerRequestId,
+      httpStatus,
+      details,
+    };
   }
 
   async #recordAlbumObjectDeletionFailure(
@@ -1258,27 +1508,43 @@ export class OperationsService {
     const retryAt = new Date(now.getTime() + retryDelay);
     const executeAfter =
       existing !== undefined && existing.executeAfter > now ? existing.executeAfter : retryAt;
-    const lastErrorCode = this.#albumObjectDeletionErrorCode(error);
+    const failure = this.#albumObjectDeletionError(error);
+    const lastErrorCode = failure.code.slice(0, 100);
 
-    await this.#database
-      .insert(schema.albumObjectDeletionSweeps)
-      .values({
-        albumId,
-        objectPrefix: `media/albums/${albumId}/`,
-        executeAfter,
-        attempts,
-        lastErrorCode,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: schema.albumObjectDeletionSweeps.albumId,
-        set: {
+    await this.#database.transaction(async (transaction) => {
+      await transaction
+        .insert(schema.albumObjectDeletionSweeps)
+        .values({
+          albumId,
+          objectPrefix: `media/albums/${albumId}/`,
           executeAfter,
           attempts,
           lastErrorCode,
           updatedAt: now,
-        },
+        })
+        .onConflictDoUpdate({
+          target: schema.albumObjectDeletionSweeps.albumId,
+          set: {
+            executeAfter,
+            attempts,
+            lastErrorCode,
+            updatedAt: now,
+          },
+        });
+      await transaction.insert(schema.albumDeletionErrors).values({
+        albumId,
+        source: failure.source,
+        stage: "object_cleanup",
+        operation: failure.operation,
+        code: failure.code,
+        message: failure.message,
+        providerRequestId: failure.providerRequestId,
+        httpStatus: failure.httpStatus,
+        attempt: attempts,
+        details: failure.details,
+        occurredAt: now,
       });
+    });
   }
 
   async #ensureAlbumDeletionRecoveryGate(
@@ -1429,11 +1695,19 @@ export class OperationsService {
     const prefixedKeys = objectKeys.filter((objectKey) => objectKey.startsWith(albumPrefix));
     const outlierKeys = objectKeys.filter((objectKey) => !objectKey.startsWith(albumPrefix));
     if (this.#cdn.invalidateDirectory !== undefined) {
-      await this.#cdn.invalidateDirectory(`/${albumPrefix}`);
+      try {
+        await this.#cdn.invalidateDirectory(`/${albumPrefix}`);
+      } catch (error) {
+        throw new AlbumCdnCleanupError("RefreshObjectCachesDirectory", error);
+      }
     } else {
       outlierKeys.push(...prefixedKeys);
     }
-    await this.#cdn.invalidate(outlierKeys.map((objectKey) => `/${objectKey}`));
+    try {
+      await this.#cdn.invalidate(outlierKeys.map((objectKey) => `/${objectKey}`));
+    } catch (error) {
+      throw new AlbumCdnCleanupError("RefreshObjectCachesFiles", error);
+    }
   }
 
   async #finalizeAlbumDeletionIfReady(albumId: string): Promise<boolean> {
