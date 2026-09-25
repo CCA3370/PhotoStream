@@ -1975,20 +1975,18 @@ export class FaceService {
       .delete(schema.faceSearchCandidates)
       .where(lte(schema.faceSearchCandidates.expiresAt, now));
     const historyCutoff = new Date(now.getTime() - 26 * 60 * 60_000);
-    await this.#database
-      .delete(schema.faceSearchIntents)
-      .where(
-        and(
-          lt(schema.faceSearchIntents.createdAt, historyCutoff),
-          sql`${schema.faceSearchIntents.referenceDeletedAt} is not null`,
-          sql`not exists (
-            select 1
-            from albums
-            where albums.id = ${schema.faceSearchIntents.albumId}
-              and albums.state = 'deleting'
-          )`,
-        ),
-      );
+    await this.#database.delete(schema.faceSearchIntents).where(
+      and(
+        lt(schema.faceSearchIntents.createdAt, historyCutoff),
+        sql`${schema.faceSearchIntents.referenceDeletedAt} is not null`,
+        sql`not exists (
+          select 1
+          from albums
+          where albums.id = ${schema.faceSearchIntents.albumId}
+            and albums.state = 'deleting'
+        )`,
+      ),
+    );
     await this.#database
       .delete(schema.faceIntegrationEvents)
       .where(lt(schema.faceIntegrationEvents.processedAt, historyCutoff));
