@@ -285,6 +285,31 @@ export const albums = pgTable(
   ],
 );
 
+export const albumObjectDeletionSweeps = pgTable(
+  "album_object_deletion_sweeps",
+  {
+    albumId: uuid("album_id").primaryKey(),
+    objectPrefix: varchar("object_prefix", { length: 512 }).notNull(),
+    executeAfter: timestamp("execute_after", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [index("album_object_deletion_sweeps_due_idx").on(table.executeAfter)],
+);
+
+export const faceReferenceDeletionSweeps = pgTable(
+  "face_reference_deletion_sweeps",
+  {
+    objectKey: varchar("object_key", { length: 512 }).primaryKey(),
+    executeAfter: timestamp("execute_after", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastErrorCode: varchar("last_error_code", { length: 100 }),
+    ...timestampColumns(),
+  },
+  (table) => [index("face_reference_deletion_sweeps_due_idx").on(table.executeAfter)],
+);
+
 export const categories = pgTable(
   "categories",
   {
