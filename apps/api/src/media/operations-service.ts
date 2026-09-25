@@ -700,10 +700,7 @@ export class OperationsService {
     return this.getDeletionTask(options.actor, options.taskId);
   }
 
-  async processPendingAlbumObjectDeletionSweeps(
-    limit = 10,
-    now = new Date(),
-  ): Promise<number> {
+  async processPendingAlbumObjectDeletionSweeps(limit = 10, now = new Date()): Promise<number> {
     const deletePrefix = this.#storage.deletePrefix?.bind(this.#storage);
     if (deletePrefix === undefined) return 0;
 
