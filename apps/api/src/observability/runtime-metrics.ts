@@ -4,6 +4,7 @@ import type { LiveEventBroker } from "../media/live-event-broker.js";
 
 export const runtimeJobNames = [
   "deletion",
+  "scheduledAlbumStart",
   "analyticsCleanup",
   "bibMaintenance",
   "faceMaintenance",
