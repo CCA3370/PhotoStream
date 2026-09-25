@@ -20,7 +20,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "operator", "reviewer", "uploader"]);
-export const albumStateEnum = pgEnum("album_state", ["draft", "live", "ended", "archived"]);
+export const albumStateEnum = pgEnum("album_state", ["draft", "live", "ended", "archived", "deleting"]);
 export const albumAccessEnum = pgEnum("album_access", ["password", "public"]);
 export const publishModeEnum = pgEnum("publish_mode", ["review", "auto"]);
 export const ingestStatusEnum = pgEnum("ingest_status", [
