@@ -19,14 +19,36 @@
   align-items: center;
   gap: 0.125rem;
   margin: 0;
-  padding: 0 0.625rem 0 0.5rem;
+  padding: 0 0.625rem 0 0.75rem;
   border: 0;
-  border-left: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
   border-bottom: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
   border-radius: 0;
-  background: color-mix(in oklab, var(--background) 96%, transparent);
+  background:
+    linear-gradient(
+        color-mix(in oklab, var(--border) 82%, transparent),
+        color-mix(in oklab, var(--border) 82%, transparent)
+      )
+      left center / 1px 1.5rem no-repeat,
+    color-mix(in oklab, var(--background) 96%, transparent);
   box-shadow: -10px 0 16px -16px color-mix(in oklab, var(--foreground) 35%, transparent);
   backdrop-filter: blur(14px);
+}
+
+@media (max-width: 1023px) {
+  .searchToolbar > section > div > div:first-child::before {
+    position: absolute;
+    top: 0;
+    bottom: 1px;
+    left: -1rem;
+    width: 1rem;
+    pointer-events: none;
+    content: "";
+    background: linear-gradient(
+      to right,
+      transparent,
+      color-mix(in oklab, var(--background) 96%, transparent)
+    );
+  }
 }
 
 .searchToolbar > section > div > div:first-child > button:first-child {
