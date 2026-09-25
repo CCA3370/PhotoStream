@@ -1394,20 +1394,10 @@ export class OperationsService {
         sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${albumId}`}, 0))`,
       );
 
-      const [album] = await transaction
-        .select({ id: schema.albums.id, state: schema.albums.state })
-        .from(schema.albums)
-        .where(eq(schema.albums.id, albumId))
-        .for("update")
-        .limit(1);
-      if (album === undefined) return;
-      if (album.state !== "deleting") {
-        throw new AppError({
-          code: "STATE_CONFLICT",
-          message: "活动删除状态已发生变化，请重试",
-          statusCode: 409,
-        });
-      }
+      const lockedAlbum = await transaction.execute(sql`
+        select id from albums where id = ${albumId} for update
+      `);
+      if (lockedAlbum.rowCount !== 1) return;
       await transaction.execute(sql`
         select id from media where album_id = ${albumId} for update
       `);
