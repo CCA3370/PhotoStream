@@ -26,6 +26,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorDialog } from "@/components/ui/error-dialog";
@@ -92,6 +93,10 @@ function resizeSimpleConstraint(
   };
 }
 
+function simpleConstraintIsRepresentable(constraint: BibConstraintInput): boolean {
+  return constraint.ranges.length === 1;
+}
+
 function simpleConstraintFromBib(constraint: BibConstraintInput): SimpleConstraintDraft | null {
   const range = constraint.ranges.length === 1 ? constraint.ranges[0] : undefined;
   if (range === undefined) return null;
@@ -129,7 +134,7 @@ function simpleRuleDraftFromPatterns(patterns: readonly BibPatternInput[]): Simp
     enabled.every(
       (pattern) =>
         pattern.totalLength === totalLength &&
-        pattern.constraints.every((constraint) => simpleConstraintFromBib(constraint) !== null),
+        pattern.constraints.every(simpleConstraintIsRepresentable),
     );
   if (!structurallySimple) {
     return {
