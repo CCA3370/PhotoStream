@@ -48,6 +48,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
+import { broadcastAlbumPurge } from "@/lib/album-purge-broadcast";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { purgeWarmDerivedImages } from "@/lib/derived-image-cache";
 import { purgeLocalProcessingAlbum } from "@/lib/local-processing-runtime";
@@ -224,12 +225,20 @@ export function AlbumSettings({
       body: { confirmation: deleteConfirmation },
       confirmPassword: password,
     });
+    broadcastAlbumPurge({ albumId: album.id, slug: album.slug });
     purgeWarmDerivedImages(album.slug);
-    await Promise.allSettled([
+    const cleanup = await Promise.allSettled([
       purgeLocalProcessingAlbum(album.id),
       deleteUploadRecoveriesForAlbum(album.id),
       purgeAlbumMediaBlobCache(album.id, album.slug),
     ]);
+    if (cleanup.some((result) => result.status === "rejected")) {
+      toast.add({
+        title: "活动已进入删除流程",
+        description: "服务器端删除会继续进行，但当前浏览器有部分本地缓存未能清理。",
+        type: "warning",
+      });
+    }
     router.replace("/studio/albums");
     router.refresh();
   }
@@ -740,7 +749,7 @@ export function AlbumSettings({
 
       <PasswordConfirmDialog
         confirmLabel="确认永久删除"
-        description="会先清理当前可定位的 OSS/CDN 与人脸资源；临时上传签名失效后，系统还会自动复扫并删除可能晚到的残留对象。"
+        description="活动会立即停止访问并进入删除中；旧临时上传签名失效并完成最终复扫后，系统才会彻底移除活动记录。"
         onConfirm={deleteAlbum}
         onOpenChange={setDeleteDialogOpen}
         open={deleteDialogOpen}
