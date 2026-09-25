@@ -275,7 +275,6 @@ maybeDescribe("photo vertical slice transactions", () => {
 
   afterAll(async () => pool.end());
 
-
   it("exposes scheduled draft metadata, starts it when due, and accepts a custom password", async () => {
     const scheduledStart = new Date("2099-06-01T01:30:00.000Z");
     const created = await service.createAlbum({
@@ -323,16 +322,10 @@ maybeDescribe("photo vertical slice transactions", () => {
     ).rejects.toMatchObject({ code: "ALBUM_NOT_FOUND" });
 
     expect(
-      await service.processScheduledAlbumStarts(
-        50,
-        new Date(scheduledStart.getTime() - 1),
-      ),
+      await service.processScheduledAlbumStarts(50, new Date(scheduledStart.getTime() - 1)),
     ).toBe(0);
     expect(
-      await service.processScheduledAlbumStarts(
-        50,
-        new Date(scheduledStart.getTime() + 1),
-      ),
+      await service.processScheduledAlbumStarts(50, new Date(scheduledStart.getTime() + 1)),
     ).toBe(1);
 
     const started = await service.getAlbum({ id: adminId, role: "admin" }, created.album.id);
