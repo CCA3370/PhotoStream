@@ -320,9 +320,7 @@ export function PaginatedMediaGrid({
             attempt += 1;
             if (!errorReported && attempt >= 3 && !disposed) {
               errorReported = true;
-              setLiveError(
-                userFacingErrorMessage(caught, "新照片缩略图加载失败，正在重试。"),
-              );
+              setLiveError(userFacingErrorMessage(caught, "新照片缩略图加载失败，正在重试。"));
             }
           }
         }
