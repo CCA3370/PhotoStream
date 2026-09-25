@@ -39,7 +39,7 @@ import {
 import type { CdnInvalidator } from "./cdn-invalidator.js";
 import { LocalCdnInvalidator } from "./cdn-invalidator.js";
 import { liveEventChannel } from "./live-event-broker.js";
-import { ObjectStorageProviderError, type ObjectStorage } from "./object-storage.js";
+import { type ObjectStorage, ObjectStorageProviderError } from "./object-storage.js";
 import type { InternalActor } from "./service.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -384,8 +384,7 @@ export class OperationsService {
         })),
         ...faceErrors,
       ].sort(
-        (left, right) =>
-          new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
+        (left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
       ),
     };
   }
@@ -1462,8 +1461,7 @@ export class OperationsService {
         : providerError instanceof Error && providerError.name !== "Error"
           ? providerError.name
           : "OBJECT_DELETE_FAILED");
-    const message =
-      providerError instanceof Error ? providerError.message : String(providerError);
+    const message = providerError instanceof Error ? providerError.message : String(providerError);
     const providerRequestId =
       stringField(fields.requestId, 256) ?? stringField(fields.requestid, 256);
     const httpStatus = numberField(fields.statusCode) ?? numberField(fields.status);
