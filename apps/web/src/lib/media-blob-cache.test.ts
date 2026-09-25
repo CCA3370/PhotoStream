@@ -240,12 +240,10 @@ describe("media body reuse", () => {
     await mediaCache.purgeAlbumMediaBlobCache("album-id", "deleted-album");
 
     const urls = [...cache.entries.keys()];
-    expect(
-      urls.some((url) => new URL(url).pathname.includes("/deleted-album/")),
-    ).toBe(false);
-    expect(
-      urls.some((url) => new URL(url).pathname.startsWith("/media/albums/album-id/")),
-    ).toBe(false);
+    expect(urls.some((url) => new URL(url).pathname.includes("/deleted-album/"))).toBe(false);
+    expect(urls.some((url) => new URL(url).pathname.startsWith("/media/albums/album-id/"))).toBe(
+      false,
+    );
     expect(urls.some((url) => new URL(url).pathname.includes("/other-album/"))).toBe(true);
     expect(
       derived.getWarmDerivedImageUrl({
