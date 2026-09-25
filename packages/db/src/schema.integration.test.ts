@@ -211,6 +211,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       "face_consent_receipts",
       "face_integration_events",
       "face_operation_diagnostics",
+      "face_reference_deletion_sweeps",
       "face_search_candidates",
       "face_search_intents",
       "media_face_index_tasks",
@@ -226,6 +227,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
            'face_consent_receipts',
            'face_integration_events',
            'face_operation_diagnostics',
+           'face_reference_deletion_sweeps',
            'face_search_candidates',
            'face_search_intents',
            'media_face_index_tasks'
