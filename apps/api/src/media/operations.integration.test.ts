@@ -515,10 +515,7 @@ maybeDescribe("stage 3 operations", () => {
       },
     });
 
-    const history = await service.listAlbumDeletionErrors(
-      { id: adminId, role: "admin" },
-      albumId,
-    );
+    const history = await service.listAlbumDeletionErrors({ id: adminId, role: "admin" }, albumId);
     expect(history.items).toHaveLength(1);
     expect(history.items[0]).toMatchObject({
       source: "object_storage",
@@ -598,10 +595,7 @@ maybeDescribe("stage 3 operations", () => {
       },
     ]);
 
-    const history = await service.listAlbumDeletionErrors(
-      { id: adminId, role: "admin" },
-      albumId,
-    );
+    const history = await service.listAlbumDeletionErrors({ id: adminId, role: "admin" }, albumId);
     expect(history.items).toHaveLength(2);
     expect(history.items[0]).toMatchObject({
       source: "face_reference",
