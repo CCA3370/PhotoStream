@@ -117,21 +117,45 @@ export class OperationsService {
     requirePermission(options.actor.role, "album:configure");
     assertRecentAuthentication(options.actor.authenticatedAt, new Date());
 
-    const [album] = await this.#database
-      .select({ id: schema.albums.id, title: schema.albums.title })
-      .from(schema.albums)
-      .where(eq(schema.albums.id, options.albumId))
-      .limit(1);
-    if (album === undefined) {
-      throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
-    }
-    if (!safeEqual(options.confirmation, album.title)) {
-      throw new AppError({
-        code: "BAD_REQUEST",
-        message: "请输入完整活动标题以确认删除",
-        statusCode: 400,
-      });
-    }
+    await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
+      const [album] = await transaction
+        .select({ id: schema.albums.id, title: schema.albums.title, state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, options.albumId))
+        .limit(1);
+      if (album === undefined) {
+        throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+      }
+      if (!safeEqual(options.confirmation, album.title)) {
+        throw new AppError({
+          code: "BAD_REQUEST",
+          message: "请输入完整活动标题以确认删除",
+          statusCode: 400,
+        });
+      }
+      if (album.state !== "deleting") {
+        const now = new Date();
+        await transaction
+          .update(schema.albums)
+          .set({
+            state: "deleting",
+            accessVersion: sql`${schema.albums.accessVersion} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(schema.albums.id, options.albumId));
+        await transaction.execute(sql`
+          update upload_intents
+          set status = 'cancelled', updated_at = ${now}
+          where status = 'active'
+            and media_id in (
+              select id from media where album_id = ${options.albumId}
+            )
+        `);
+      }
+    });
 
     if (options.purgeFaceData === undefined) {
       const [[faceIndex], [undeletedFaceReference]] = await Promise.all([
@@ -216,13 +240,58 @@ export class OperationsService {
     const objectKeys = [
       ...new Set([...variants, ...editVariants, ...microPreviews].map((row) => row.objectKey)),
     ];
-    for (const objectKey of objectKeys) await this.#storage.delete(objectKey);
-    await this.#cdn.invalidate(objectKeys.map((objectKey) => `/${objectKey}`));
+    if (this.#storage.deleteMany === undefined) {
+      for (let offset = 0; offset < objectKeys.length; offset += 16) {
+        await Promise.all(
+          objectKeys.slice(offset, offset + 16).map((objectKey) => this.#storage.delete(objectKey)),
+        );
+      }
+    } else {
+      await this.#storage.deleteMany(objectKeys);
+    }
+
+    const albumPrefix = `media/albums/${options.albumId}/`;
+    const prefixedKeys = objectKeys.filter((objectKey) => objectKey.startsWith(albumPrefix));
+    const outlierKeys = objectKeys.filter((objectKey) => !objectKey.startsWith(albumPrefix));
+    if (this.#cdn.invalidateDirectory !== undefined) {
+      await this.#cdn.invalidateDirectory(`/${albumPrefix}`);
+    } else {
+      outlierKeys.push(...prefixedKeys);
+    }
+    await this.#cdn.invalidate(outlierKeys.map((objectKey) => `/${objectKey}`));
 
     await this.#database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
+      );
       await transaction
         .delete(schema.mediaMicroPreviews)
         .where(eq(schema.mediaMicroPreviews.albumId, options.albumId));
+
+      // Explicitly remove the edit graph before media variants. Edit revisions retain
+      // a restrictive source-variant FK, so relying on top-level album cascades alone
+      // can make deletion order database-dependent.
+      await transaction.execute(sql`
+        delete from media_edit_states
+        where media_id in (select id from media where album_id = ${options.albumId})
+      `);
+      await transaction.execute(sql`
+        delete from media_edit_variants
+        where edit_revision_id in (
+          select media_edit_revisions.id
+          from media_edit_revisions
+          join media on media.id = media_edit_revisions.media_id
+          where media.album_id = ${options.albumId}
+        )
+      `);
+      await transaction.execute(sql`
+        delete from media_edit_revisions
+        where media_id in (select id from media where album_id = ${options.albumId})
+      `);
+      await transaction.execute(sql`
+        delete from media_variants
+        where media_id in (select id from media where album_id = ${options.albumId})
+      `);
 
       // These operational tables intentionally have no album FK. Purge rows that
       // still reference this album, one of its media records, or one of its bib tags.
@@ -298,10 +367,14 @@ export class OperationsService {
 
       const deleted = await transaction
         .delete(schema.albums)
-        .where(eq(schema.albums.id, options.albumId))
+        .where(and(eq(schema.albums.id, options.albumId), eq(schema.albums.state, "deleting")))
         .returning({ id: schema.albums.id });
       if (deleted.length !== 1) {
-        throw new AppError({ code: "NOT_FOUND", message: "活动不存在", statusCode: 404 });
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动删除状态已发生变化，请重试",
+          statusCode: 409,
+        });
       }
     });
   }
