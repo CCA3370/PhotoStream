@@ -538,7 +538,10 @@ export function AlbumSettings({
                   <Input
                     disabled={album.state !== "draft"}
                     id="scheduled-start-at"
-                    onChange={(event) => setScheduledStartValue(event.currentTarget.value)}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setScheduledStartValue(value);
+                    }}
                     type="datetime-local"
                     value={scheduledStartValue}
                   />
@@ -818,7 +821,10 @@ export function AlbumSettings({
               id="custom-album-password"
               maxLength={128}
               minLength={4}
-              onChange={(event) => setPasswordInput(event.currentTarget.value)}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setPasswordInput(value);
+              }}
               placeholder="留空则自动生成"
               type="password"
               value={passwordInput}
