@@ -793,7 +793,6 @@ export async function purgeLocalProcessingAlbum(albumId: string): Promise<void> 
   ]);
 }
 
-
 subscribeAlbumPurge(({ albumId }) => {
   void purgeLocalProcessingAlbum(albumId).catch(() => undefined);
 });
