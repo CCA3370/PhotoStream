@@ -461,6 +461,91 @@ export class FaceService {
     return this.#configView(albumId);
   }
 
+  async purgeAlbumForDeletion(
+    actor: InternalActor & { authenticatedAt: Date },
+    albumId: string,
+  ): Promise<void> {
+    requirePermission(actor, "album:configure");
+    requireRecentAuthentication(actor.authenticatedAt);
+
+    const [album] = await this.#database
+      .select({ id: schema.albums.id })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId))
+      .limit(1);
+    if (album === undefined) throw this.#notFound();
+
+    const index = await this.#index(albumId);
+    await this.#database.transaction(async (transaction) => {
+      await transaction
+        .update(schema.faceAlbumJobs)
+        .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.faceAlbumJobs.albumId, albumId),
+            inArray(schema.faceAlbumJobs.status, ["pending", "processing"]),
+          ),
+        );
+      await this.#cancelAlbumSearches(transaction, albumId);
+      await transaction
+        .update(schema.albumFaceIndexes)
+        .set({
+          enabled: false,
+          indexState: index?.datasetName == null ? "disabled" : "deleting",
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.albumFaceIndexes.albumId, albumId));
+    });
+
+    await this.#cleanupAlbumReferences(albumId);
+    const remainingReferences = await this.#database
+      .select({ id: schema.faceSearchIntents.id })
+      .from(schema.faceSearchIntents)
+      .where(
+        and(
+          eq(schema.faceSearchIntents.albumId, albumId),
+          isNull(schema.faceSearchIntents.referenceDeletedAt),
+        ),
+      )
+      .limit(1);
+    if (remainingReferences.length > 0) {
+      throw new AppError({
+        code: "FACE_PROVIDER_UNAVAILABLE",
+        message: "活动的人脸参考照尚未完全删除，请稍后重试",
+        statusCode: 503,
+        retryable: true,
+      });
+    }
+
+    if (index?.datasetName == null) return;
+    let operation = "GetDataset";
+    try {
+      if (await this.#provider.datasetExists(index.datasetName)) {
+        operation = "DeleteDatasetContents";
+        await this.#provider.deleteDatasetContents(index.datasetName);
+        operation = "DeleteDataset";
+        await this.#provider.deleteDataset(index.datasetName);
+        operation = "GetDataset";
+        if (await this.#provider.datasetExists(index.datasetName)) {
+          throw new Error("dataset_delete_not_confirmed");
+        }
+      }
+    } catch (error) {
+      await this.#recordDiagnostic(albumId, error, {
+        source: "aliyun_imm",
+        operation,
+        datasetName: index.datasetName,
+        context: { reason: "album_deletion" },
+      });
+      throw new AppError({
+        code: "FACE_PROVIDER_UNAVAILABLE",
+        message: "活动的人脸索引尚未完全删除，请稍后重试",
+        statusCode: 503,
+        retryable: true,
+      });
+    }
+  }
+
   async createSearch(options: {
     slug: string;
     visitorToken: string | undefined;
