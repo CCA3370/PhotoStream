@@ -486,7 +486,7 @@ export class OperationsService {
     limit = 10,
   ): Promise<number> {
     const albums = await this.#database
-      .select({ id: schema.albums.id })
+      .select({ id: schema.albums.id, deletingSince: schema.albums.updatedAt })
       .from(schema.albums)
       .where(eq(schema.albums.state, "deleting"))
       .orderBy(asc(schema.albums.updatedAt))
@@ -494,6 +494,7 @@ export class OperationsService {
     const failures: unknown[] = [];
     for (const album of albums) {
       try {
+        await this.#ensureAlbumDeletionRecoveryGate(album.id, album.deletingSince);
         await this.#continueAlbumDeletion(
           album.id,
           purgeFaceData === undefined ? undefined : () => purgeFaceData(album.id),
@@ -1195,23 +1196,31 @@ export class OperationsService {
     albumId: string,
     purgeFaceData?: () => Promise<void>,
   ): Promise<void> {
-    await this.#ensureAlbumDeletionSweep(albumId);
     await this.#ensureAlbumFacePurged(albumId, purgeFaceData);
     await this.#purgeAlbumObjects(albumId);
     await this.#finalizeAlbumDeletionIfReady(albumId);
   }
 
-  async #ensureAlbumDeletionSweep(albumId: string): Promise<void> {
-    const now = new Date();
+  async #ensureAlbumDeletionRecoveryGate(albumId: string, deletingSince: Date): Promise<void> {
+    const [existing] = await this.#database
+      .select({ albumId: schema.albumObjectDeletionSweeps.albumId })
+      .from(schema.albumObjectDeletionSweeps)
+      .where(eq(schema.albumObjectDeletionSweeps.albumId, albumId))
+      .limit(1);
+    if (existing !== undefined) return;
+
+    const executeAfter = new Date(deletingSince.getTime() + presignedUploadDeletionGraceMs);
+    if (executeAfter <= new Date()) return;
+
     await this.#database
       .insert(schema.albumObjectDeletionSweeps)
       .values({
         albumId,
         objectPrefix: `media/albums/${albumId}/`,
-        executeAfter: new Date(now.getTime() + presignedUploadDeletionGraceMs),
+        executeAfter,
         attempts: 0,
         lastErrorCode: null,
-        updatedAt: now,
+        updatedAt: new Date(),
       })
       .onConflictDoNothing();
   }
