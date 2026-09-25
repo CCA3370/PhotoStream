@@ -239,7 +239,7 @@ export const createAlbumRequestSchema = z
     title: z.string().trim().min(1).max(120),
     description: z.string().trim().max(1_000).default(""),
     publishMode: publishModeSchema.default("review"),
-    scheduledStartAt: z.string().datetime().nullable().default(null),
+    scheduledStartAt: z.string().datetime().nullable().optional(),
     password: albumPasswordSchema.optional(),
   })
   .strict();
