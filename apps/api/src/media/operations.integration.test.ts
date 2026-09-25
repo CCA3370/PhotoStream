@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import type { MediaBatchRequest } from "@photostream/contracts";
 import { createDatabase, createPool, migrateDatabase, schema } from "@photostream/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { PasswordHasher } from "../auth/types.js";
@@ -338,6 +338,90 @@ maybeDescribe("stage 3 operations", () => {
     expect(swept).toBe(1);
     expect(storage.objects.has(lateKey)).toBe(false);
     expect(await database.select().from(schema.albumObjectDeletionSweeps)).toHaveLength(0);
+  });
+
+  it("purges non-FK traces committed concurrently with album deletion", async () => {
+    const [media] = await database
+      .insert(schema.media)
+      .values({
+        albumId,
+        uploaderId,
+        ingestStatus: "ready",
+        publicationStatus: "hidden",
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      })
+      .returning({ id: schema.media.id });
+    if (media === undefined) throw new Error("media fixture missing");
+
+    let releaseWriter: (() => void) | undefined;
+    const writerRelease = new Promise<void>((resolve) => {
+      releaseWriter = resolve;
+    });
+    let writerLocked: (() => void) | undefined;
+    const writerReady = new Promise<void>((resolve) => {
+      writerLocked = resolve;
+    });
+    const writer = database.transaction(async (transaction) => {
+      await transaction.execute(sql`
+        select id from media where id = ${media.id} for key share
+      `);
+      writerLocked?.();
+      await writerRelease;
+      await transaction.insert(schema.operationRequests).values({
+        actorScope: `user:${adminId}`,
+        operation: `media.hide:${media.id}`,
+        idempotencyKey: "album-delete-concurrent-operation",
+        requestHash: "f".repeat(64),
+        result: { mediaId: media.id },
+      });
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: adminId,
+        action: "media.concurrent-delete-fixture",
+        targetType: "media",
+        targetId: media.id,
+        result: "success",
+        changedFields: ["publicationStatus"],
+        requestId: "album-delete-concurrent-audit",
+      });
+    });
+    await writerReady;
+
+    const deletion = service.deleteAlbum({
+      actor: { id: adminId, role: "admin", authenticatedAt: new Date() },
+      albumId,
+      confirmation: "运营相册",
+      purgeFaceData: async () => {},
+    });
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const [album] = await database
+        .select({ state: schema.albums.state })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, albumId));
+      if (album?.state === "deleting") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    releaseWriter?.();
+
+    await writer;
+    await deletion;
+
+    expect(
+      await database
+        .select()
+        .from(schema.operationRequests)
+        .where(eq(schema.operationRequests.idempotencyKey, "album-delete-concurrent-operation")),
+    ).toHaveLength(0);
+    expect(
+      await database
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.requestId, "album-delete-concurrent-audit")),
+    ).toHaveLength(0);
   });
 
   it("keeps a failed purge quiesced in deleting state", async () => {
