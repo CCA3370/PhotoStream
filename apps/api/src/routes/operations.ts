@@ -26,6 +26,7 @@ import {
 } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
+import type { FaceService } from "../face/service.js";
 import type { OperationsService } from "../media/operations-service.js";
 import type { PhotoService } from "../media/service.js";
 import { anonymousVisitorId, visitorSessionToken } from "../media/visitor-http.js";
@@ -66,6 +67,7 @@ export async function registerOperationsRoutes(
     readonly authService: AuthService;
     readonly photoService: PhotoService;
     readonly operationsService: OperationsService;
+    readonly faceService?: FaceService;
     readonly config: AppConfig;
   },
 ): Promise<void> {
@@ -78,6 +80,33 @@ export async function registerOperationsRoutes(
     409: apiErrorSchema,
     500: apiErrorSchema,
   };
+
+  typed.delete(
+    "/api/v1/albums/:id",
+    {
+      schema: {
+        operationId: "deleteAlbum",
+        tags: ["albums"],
+        params: idParamsSchema,
+        body: deleteMediaRequestSchema,
+        response: { 200: okResponseSchema, ...errors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await verifyPasswordConfirmation(request, options.authService, session);
+      const actor = { ...actorFrom(session), authenticatedAt: new Date() };
+      if (options.faceService !== undefined) {
+        await options.faceService.purgeAlbumForDeletion(actor, request.params.id);
+      }
+      await options.operationsService.deleteAlbum({
+        actor,
+        albumId: request.params.id,
+        confirmation: request.body.confirmation,
+      });
+      return { ok: true as const };
+    },
+  );
 
   typed.patch(
     "/api/v1/albums/:id",
