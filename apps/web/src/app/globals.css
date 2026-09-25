@@ -302,7 +302,7 @@ body:has(.public-theme) {
 
   .public-theme .group[data-media-id] > span > img {
     transform-origin: center;
-    transition-property: transform, opacity, filter !important;
+    transition-property: transform, translate, scale, rotate, opacity, filter !important;
     transition-duration: 320ms !important;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
   }
