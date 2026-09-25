@@ -55,6 +55,7 @@ export interface ObjectStorage {
   abortMultipart(uploadId: string, key?: string): Promise<void>;
   delete(key: string): Promise<void>;
   deleteMany?(keys: readonly string[]): Promise<void>;
+  deletePrefix?(prefix: string): Promise<void>;
   head(key: string): Promise<ObjectMetadata | null>;
 }
 
@@ -417,6 +418,29 @@ export class AliyunObjectStorage implements ObjectStorage {
       const batch = [...keys.slice(offset, offset + 1_000)];
       if (batch.length === 0) continue;
       await this.#client.deleteMulti(batch, { quiet: true });
+    }
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    let previousBatch = "";
+    let repeatedBatchCount = 0;
+    for (;;) {
+      const result = await this.#client.listV2({
+        prefix,
+        "max-keys": 1_000,
+      });
+      const keys = (result.objects ?? [])
+        .map((object) => object.name)
+        .filter((key): key is string => typeof key === "string" && key.length > 0);
+      if (keys.length === 0) return;
+
+      const batch = [...keys].sort().join("\n");
+      repeatedBatchCount = batch === previousBatch ? repeatedBatchCount + 1 : 0;
+      if (repeatedBatchCount >= 2) {
+        throw new Error("Object prefix deletion was not confirmed");
+      }
+      previousBatch = batch;
+      await this.deleteMany(keys);
     }
   }
 
