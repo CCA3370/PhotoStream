@@ -137,7 +137,11 @@ export class OperationsService {
 
     const [variants, editVariants, microPreviews] = await Promise.all([
       this.#database
-        .select({ objectKey: schema.mediaVariants.objectKey })
+        .select({
+          id: schema.mediaVariants.id,
+          objectKey: schema.mediaVariants.objectKey,
+          providerMultipartUploadId: schema.mediaVariants.providerMultipartUploadId,
+        })
         .from(schema.mediaVariants)
         .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
         .where(eq(schema.media.albumId, options.albumId)),
@@ -155,6 +159,31 @@ export class OperationsService {
         .from(schema.mediaMicroPreviews)
         .where(eq(schema.mediaMicroPreviews.albumId, options.albumId)),
     ]);
+
+    const multipartVariantIds =
+      variants.length === 0
+        ? new Set<string>()
+        : new Set(
+            (
+              await this.#database
+                .select({ variantId: schema.uploadParts.variantId })
+                .from(schema.uploadParts)
+                .where(
+                  inArray(
+                    schema.uploadParts.variantId,
+                    variants.map((variant) => variant.id),
+                  ),
+                )
+            ).map((part) => part.variantId),
+          );
+    for (const variant of variants) {
+      if (multipartVariantIds.has(variant.id)) {
+        await this.#storage.abortMultipart(
+          variant.providerMultipartUploadId ?? variant.id,
+          variant.objectKey,
+        );
+      }
+    }
 
     const objectKeys = [
       ...new Set([...variants, ...editVariants, ...microPreviews].map((row) => row.objectKey)),
