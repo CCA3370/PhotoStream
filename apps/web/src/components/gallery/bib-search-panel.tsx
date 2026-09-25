@@ -555,21 +555,20 @@ export function BibSearchPanel({
           aria-label="照片查找结果"
           className="flex flex-col gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-250 motion-reduce:animate-none"
         >
-          <div className="layer-transient-status pointer-events-none fixed inset-x-0 bottom-5 flex justify-center px-4 sm:bottom-6">
-            <Button
-              className="pointer-events-auto rounded-full bg-background/95 shadow-lg backdrop-blur"
-              onClick={clearResult}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <XIcon data-icon="inline-start" />
-              关闭查找
-            </Button>
-          </div>
           {resultItems.length === 0 ? (
-            <div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground">
-              {resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}
+            <div className="flex min-h-44 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground">
+              <span>
+                {resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}
+              </span>
+              <Button
+                className="h-11 rounded-xl border-blue-600 bg-blue-600 px-6 text-sm font-medium text-white shadow-sm hover:border-blue-700 hover:bg-blue-700 hover:text-white"
+                onClick={clearResult}
+                type="button"
+                variant="outline"
+              >
+                <XIcon data-icon="inline-start" />
+                关闭查找
+              </Button>
             </div>
           ) : (
             <>
