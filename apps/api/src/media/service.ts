@@ -197,12 +197,11 @@ export class PhotoService {
             })
             .from(schema.mediaVariants)
             .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
-            .where(and(eq(schema.media.albumId, album.id), eq(schema.mediaVariants.verified, true))),
+            .where(
+              and(eq(schema.media.albumId, album.id), eq(schema.mediaVariants.verified, true)),
+            ),
           album.state === "deleting"
-            ? this.#albumDeletionProgress(
-                album,
-                hasPermission(actor.role, "album:configure"),
-              )
+            ? this.#albumDeletionProgress(album, hasPermission(actor.role, "album:configure"))
             : Promise.resolve(null),
         ]);
         return {
@@ -223,8 +222,13 @@ export class PhotoService {
   ): Promise<AlbumDeletionProgress> {
     const startedAt = new Date(album.updatedAt);
     const now = new Date();
-    const [[objectSweep], [faceIndex], [faceReferenceStats], [faceReferenceError], [faceDiagnostic]] =
-      await Promise.all([
+    const [
+      [objectSweep],
+      [faceIndex],
+      [faceReferenceStats],
+      [faceReferenceError],
+      [faceDiagnostic],
+    ] = await Promise.all([
         this.#database
           .select({
             attempts: schema.albumObjectDeletionSweeps.attempts,
