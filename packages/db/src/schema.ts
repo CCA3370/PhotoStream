@@ -263,6 +263,7 @@ export const albums = pgTable(
     state: albumStateEnum("state").notNull().default("draft"),
     access: albumAccessEnum("access").notNull().default("password"),
     publishMode: publishModeEnum("publish_mode").notNull().default("review"),
+    scheduledStartAt: timestamp("scheduled_start_at", { withTimezone: true }),
     passwordHash: text("password_hash"),
     accessVersion: integer("access_version").notNull().default(1),
     previewDownloadEnabled: boolean("preview_download_enabled").notNull().default(false),
@@ -288,6 +289,7 @@ export const albums = pgTable(
     uniqueIndex("albums_slug_unique").on(table.slug),
     uniqueIndex("albums_creator_idempotency_unique").on(table.createdBy, table.idempotencyKey),
     index("albums_state_updated_idx").on(table.state, table.updatedAt),
+    index("albums_scheduled_start_idx").on(table.state, table.scheduledStartAt),
   ],
 );
 
