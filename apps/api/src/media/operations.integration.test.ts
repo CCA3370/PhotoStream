@@ -95,6 +95,16 @@ class FakeStorage implements ObjectStorage {
     if (this.failDeleteOnce.delete(key)) throw new Error("synthetic delete failure");
     this.objects.delete(key);
   }
+
+  async deleteMany(keys: readonly string[]): Promise<void> {
+    for (const key of keys) await this.delete(key);
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    for (const key of [...this.objects.keys()]) {
+      if (key.startsWith(prefix)) await this.delete(key);
+    }
+  }
 }
 
 class FakeCdn implements CdnInvalidator {
@@ -136,6 +146,8 @@ maybeDescribe("stage 3 operations", () => {
     storage.failDeleteOnce.clear();
     cdn.failNext = false;
     cdn.invalidations.length = 0;
+    await database.delete(schema.albumObjectDeletionSweeps);
+    await database.delete(schema.faceReferenceDeletionSweeps);
     await database.delete(schema.liveEvents);
     await database.delete(schema.analyticsEvents);
     await database.delete(schema.analyticsDaily);
@@ -312,6 +324,16 @@ maybeDescribe("stage 3 operations", () => {
     expect(await database.select().from(schema.albums).where(eq(schema.albums.id, albumId))).toHaveLength(0);
     expect(await database.select().from(schema.albums).where(eq(schema.albums.id, otherAlbumId))).toHaveLength(1);
     expect(storage.objects.size).toBe(0);
+
+    const lateKey = `media/albums/${albumId}/photos/late-write.webp`;
+    storage.objects.set(lateKey, { bytes: 100, contentType: "image/webp", etag: lateKey });
+    const swept = await service.processPendingAlbumObjectDeletionSweeps(
+      10,
+      new Date(Date.now() + 21 * 60 * 1_000),
+    );
+    expect(swept).toBe(1);
+    expect(storage.objects.has(lateKey)).toBe(false);
+    expect(await database.select().from(schema.albumObjectDeletionSweeps)).toHaveLength(0);
   });
 
   it("keeps a failed purge quiesced in deleting state", async () => {
