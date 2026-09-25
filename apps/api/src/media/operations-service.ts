@@ -520,7 +520,12 @@ export class OperationsService {
           .where(eq(schema.albumObjectDeletionSweeps.albumId, album.id))
           .limit(1);
         if (pendingSweep === undefined) {
-          await this.#purgeAlbumObjects(album.id);
+          try {
+            await this.#purgeAlbumObjects(album.id);
+          } catch (error) {
+            await this.#recordAlbumObjectDeletionFailure(album.id, error, now);
+            throw error;
+          }
           await this.#finalizeAlbumDeletionIfReady(album.id);
         }
       } catch (error) {
@@ -547,22 +552,7 @@ export class OperationsService {
           .delete(schema.albumObjectDeletionSweeps)
           .where(eq(schema.albumObjectDeletionSweeps.albumId, sweep.albumId));
       } catch (error) {
-        const attempts = sweep.attempts + 1;
-        const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
-        await this.#database
-          .update(schema.albumObjectDeletionSweeps)
-          .set({
-            attempts,
-            lastErrorCode:
-              error instanceof AppError
-                ? error.code
-                : error instanceof Error
-                  ? error.name.slice(0, 100)
-                  : "UNKNOWN",
-            executeAfter: new Date(now.getTime() + retryDelay),
-            updatedAt: now,
-          })
-          .where(eq(schema.albumObjectDeletionSweeps.albumId, sweep.albumId));
+        await this.#recordAlbumObjectDeletionFailure(sweep.albumId, error, now);
       }
     }
     return sweeps.length;
@@ -1229,6 +1219,7 @@ export class OperationsService {
     try {
       await this.#purgeAlbumObjects(albumId);
     } catch (error) {
+      await this.#recordAlbumObjectDeletionFailure(albumId, error, new Date());
       failures.push(error);
     }
     try {
@@ -1240,6 +1231,54 @@ export class OperationsService {
       throw new AggregateError(failures, "Initial album purge could not complete");
     }
     await this.#finalizeAlbumDeletionIfReady(albumId);
+  }
+
+  #albumObjectDeletionErrorCode(error: unknown): string {
+    if (error instanceof AppError) return error.code;
+    if (error instanceof Error && error.name !== "Error") return error.name.slice(0, 100);
+    return "OBJECT_DELETE_FAILED";
+  }
+
+  async #recordAlbumObjectDeletionFailure(
+    albumId: string,
+    error: unknown,
+    now: Date,
+  ): Promise<void> {
+    const [existing] = await this.#database
+      .select({
+        attempts: schema.albumObjectDeletionSweeps.attempts,
+        executeAfter: schema.albumObjectDeletionSweeps.executeAfter,
+      })
+      .from(schema.albumObjectDeletionSweeps)
+      .where(eq(schema.albumObjectDeletionSweeps.albumId, albumId))
+      .limit(1);
+
+    const attempts = (existing?.attempts ?? 0) + 1;
+    const retryDelay = Math.min(60 * 60 * 1_000, 30_000 * 2 ** Math.min(attempts, 7));
+    const retryAt = new Date(now.getTime() + retryDelay);
+    const executeAfter =
+      existing !== undefined && existing.executeAfter > now ? existing.executeAfter : retryAt;
+    const lastErrorCode = this.#albumObjectDeletionErrorCode(error);
+
+    await this.#database
+      .insert(schema.albumObjectDeletionSweeps)
+      .values({
+        albumId,
+        objectPrefix: `media/albums/${albumId}/`,
+        executeAfter,
+        attempts,
+        lastErrorCode,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.albumObjectDeletionSweeps.albumId,
+        set: {
+          executeAfter,
+          attempts,
+          lastErrorCode,
+          updatedAt: now,
+        },
+      });
   }
 
   async #ensureAlbumDeletionRecoveryGate(
