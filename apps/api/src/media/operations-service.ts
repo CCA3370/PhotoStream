@@ -493,6 +493,7 @@ export class OperationsService {
   async processPendingAlbumDeletions(
     purgeFaceData?: (albumId: string) => Promise<void>,
     limit = 10,
+    now = new Date(),
   ): Promise<number> {
     const albums = await this.#database
       .select({ id: schema.albums.id, deletingSince: schema.albums.updatedAt })
@@ -503,7 +504,7 @@ export class OperationsService {
     const failures: unknown[] = [];
     for (const album of albums) {
       try {
-        await this.#ensureAlbumDeletionRecoveryGate(album.id, album.deletingSince);
+        await this.#ensureAlbumDeletionRecoveryGate(album.id, album.deletingSince, now);
         await this.#ensureAlbumFacePurged(
           album.id,
           purgeFaceData === undefined ? undefined : () => purgeFaceData(album.id),
@@ -623,7 +624,7 @@ export class OperationsService {
           status: "pending",
           lastErrorCode: null,
           nextAttemptAt: new Date(now.getTime() + 30_000),
-          updatedAt: new Date(),
+          updatedAt: now,
         })
         .where(eq(schema.deletionTasks.id, claimed.id));
       return;
@@ -1219,7 +1220,11 @@ export class OperationsService {
     await this.#finalizeAlbumDeletionIfReady(albumId);
   }
 
-  async #ensureAlbumDeletionRecoveryGate(albumId: string, deletingSince: Date): Promise<void> {
+  async #ensureAlbumDeletionRecoveryGate(
+    albumId: string,
+    deletingSince: Date,
+    now: Date,
+  ): Promise<void> {
     const [existing] = await this.#database
       .select({ albumId: schema.albumObjectDeletionSweeps.albumId })
       .from(schema.albumObjectDeletionSweeps)
@@ -1228,7 +1233,7 @@ export class OperationsService {
     if (existing !== undefined) return;
 
     const executeAfter = new Date(deletingSince.getTime() + presignedUploadDeletionGraceMs);
-    if (executeAfter <= new Date()) return;
+    if (executeAfter <= now) return;
 
     await this.#database
       .insert(schema.albumObjectDeletionSweeps)
