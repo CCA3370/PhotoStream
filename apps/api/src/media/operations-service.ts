@@ -181,7 +181,12 @@ export class OperationsService {
       }
     });
 
-    await this.#continueAlbumDeletion(options.albumId, options.purgeFaceData);
+    try {
+      await this.#continueAlbumDeletion(options.albumId, options.purgeFaceData);
+    } catch {
+      // The album is already quiesced and has a durable recovery gate.
+      // External cleanup continues from the deletion maintenance loop.
+    }
   }
 
   async hideMedia(options: {
@@ -1215,8 +1220,20 @@ export class OperationsService {
     albumId: string,
     purgeFaceData?: () => Promise<void>,
   ): Promise<void> {
-    await this.#ensureAlbumFacePurged(albumId, purgeFaceData);
-    await this.#purgeAlbumObjects(albumId);
+    const failures: unknown[] = [];
+    try {
+      await this.#purgeAlbumObjects(albumId);
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await this.#ensureAlbumFacePurged(albumId, purgeFaceData);
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Initial album purge could not complete");
+    }
     await this.#finalizeAlbumDeletionIfReady(albumId);
   }
 
