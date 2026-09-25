@@ -514,6 +514,34 @@ maybeDescribe("stage 3 operations", () => {
         code: "OBJECT_DELETE_FAILED",
       },
     });
+
+    const history = await service.listAlbumDeletionErrors(
+      { id: adminId, role: "admin" },
+      albumId,
+    );
+    expect(history.items).toHaveLength(1);
+    expect(history.items[0]).toMatchObject({
+      source: "object_storage",
+      stage: "object_cleanup",
+      operation: "AlbumObjectCleanup",
+      code: "OBJECT_DELETE_FAILED",
+      attempt: 1,
+    });
+
+    await service.retryAlbumDeletion({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      now: new Date(Date.now() + 1_000),
+    });
+    const [retrySweep] = await database
+      .select()
+      .from(schema.albumObjectDeletionSweeps)
+      .where(eq(schema.albumObjectDeletionSweeps.albumId, albumId));
+    expect(retrySweep?.lastErrorCode).toBeNull();
+    expect(retrySweep?.attempts).toBe(1);
+    expect(
+      (await service.listAlbumDeletionErrors({ id: adminId, role: "admin" }, albumId)).items,
+    ).toHaveLength(1);
   });
 
   it("accepts deletion when face cleanup is temporarily unavailable", async () => {
@@ -533,6 +561,62 @@ maybeDescribe("stage 3 operations", () => {
       .from(schema.albums)
       .where(eq(schema.albums.id, albumId));
     expect(album?.state).toBe("deleting");
+  });
+
+  it("merges face provider diagnostics into album deletion error history", async () => {
+    const deletingSince = new Date();
+    await database
+      .update(schema.albums)
+      .set({ state: "deleting", updatedAt: deletingSince })
+      .where(eq(schema.albums.id, albumId));
+    await database.insert(schema.faceOperationDiagnostics).values([
+      {
+        albumId,
+        source: "aliyun_imm",
+        operation: "DeleteDataset",
+        providerCode: "AccessDenied",
+        providerMessage: "dataset delete denied",
+        providerRequestId: "request-1",
+        httpStatus: 403,
+        region: "cn-beijing",
+        endpoint: "imm.cn-beijing.aliyuncs.com",
+        context: { reason: "album_deletion" },
+        occurredAt: new Date(deletingSince.getTime() + 1_000),
+      },
+      {
+        albumId,
+        source: "aliyun_oss",
+        operation: "DeleteObject",
+        providerCode: "AccessDenied",
+        providerMessage: "reference delete denied",
+        providerRequestId: "request-2",
+        httpStatus: 403,
+        region: "oss-cn-beijing",
+        endpoint: "https://oss-cn-beijing.aliyuncs.com",
+        context: { reason: "album_deletion", objectKey: "face-search/example.jpg" },
+        occurredAt: new Date(deletingSince.getTime() + 2_000),
+      },
+    ]);
+
+    const history = await service.listAlbumDeletionErrors(
+      { id: adminId, role: "admin" },
+      albumId,
+    );
+    expect(history.items).toHaveLength(2);
+    expect(history.items[0]).toMatchObject({
+      source: "face_reference",
+      operation: "DeleteObject",
+      code: "AccessDenied",
+      providerRequestId: "request-2",
+      httpStatus: 403,
+    });
+    expect(history.items[1]).toMatchObject({
+      source: "face_provider",
+      operation: "DeleteDataset",
+      code: "AccessDenied",
+      providerRequestId: "request-1",
+      httpStatus: 403,
+    });
   });
 
   it("reports album deletion progress and cleanup errors", async () => {
