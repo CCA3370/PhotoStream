@@ -1,6 +1,7 @@
 import type { FaceIndexState, PublicAlbumView, PublicMediaView } from "@photostream/contracts";
 import type { DataSaverSettingView } from "@photostream/contracts/bandwidth";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { GalleryBrowser } from "@/components/gallery/gallery-browser";
@@ -10,7 +11,7 @@ import { ViewerHelpFeedback } from "@/components/gallery/viewer-help-feedback";
 import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
-import { serverApi } from "@/lib/api";
+import { ApiRequestError, serverApi } from "@/lib/api";
 import { orderFeaturedMedia } from "@/lib/featured-order";
 
 import styles from "./gallery-toolbar.module.css";
@@ -47,6 +48,15 @@ const dataSaverInitialMediaPageSize = 30;
 const initialFeaturedTarget = 8;
 const initialPrefetchPageLimit = 3;
 
+async function publicAlbumApi<T>(path: string): Promise<T> {
+  try {
+    return await serverApi<T>(path);
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) notFound();
+    throw error;
+  }
+}
+
 export async function generateMetadata({ params }: GalleryPageProps): Promise<Metadata> {
   const { slug } = await params;
 
@@ -75,7 +85,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   const requestedCategory = query.category;
   const featuredOnly = query.featured === "1";
 
-  const album = await serverApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
+  const album = await publicAlbumApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
 
   if (album.accessRequired) {
     return (
@@ -91,7 +101,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
     );
   }
 
-  const dataSaver = await serverApi<DataSaverSettingView>(
+  const dataSaver = await publicAlbumApi<DataSaverSettingView>(
     `/api/v1/public/albums/${encodeURIComponent(slug)}/data-saver`,
   );
   const initialMediaPageSize = dataSaver.enabled
@@ -103,9 +113,9 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   const mediaPath = new URLSearchParams({ limit: String(initialMediaPageSize) });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
   const [media, featured, faceState] = await Promise.all([
-    serverApi<MediaList>(`/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`),
-    serverApi<FeaturedList>(`/api/v1/public/albums/${slug}/featured`),
-    serverApi<FaceState>(`/api/v1/public/albums/${slug}/face-state`),
+    publicAlbumApi<MediaList>(`/api/v1/public/albums/${slug}/media?${mediaPath.toString()}`),
+    publicAlbumApi<FeaturedList>(`/api/v1/public/albums/${slug}/featured`),
+    publicAlbumApi<FaceState>(`/api/v1/public/albums/${slug}/face-state`),
   ]);
 
   const featuredIdSet = new Set(featured.mediaIds);
@@ -125,7 +135,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
         cursor: nextCursor,
         limit: String(initialMediaPageSize),
       });
-      const lookahead = await serverApi<MediaList>(
+      const lookahead = await publicAlbumApi<MediaList>(
         `/api/v1/public/albums/${slug}/media?${lookaheadPath.toString()}`,
       );
       prefetchedItems.push(...lookahead.items);
