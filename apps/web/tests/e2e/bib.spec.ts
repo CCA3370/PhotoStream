@@ -381,6 +381,7 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
     await bibTab.click();
     await expect(page.getByText(/规则版本 \d+ · 映射版本 \d+/u)).toBeVisible();
     await expect(page.getByRole("heading", { name: "号码规则" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "号码规则预设" })).toBeVisible();
     await expect(page.getByText("基础限制", { exact: true })).toBeVisible();
     await expect(page.getByText("条件限制", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "添加基础限制" })).toBeVisible();
