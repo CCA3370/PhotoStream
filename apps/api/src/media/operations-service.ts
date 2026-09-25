@@ -160,9 +160,7 @@ export class OperationsService {
     });
 
     if (options.purgeFaceData === undefined) {
-      const faceReferenceCutoff = new Date(
-        Date.now() - presignedFaceReferenceDeletionGraceMs,
-      );
+      const faceReferenceCutoff = new Date(Date.now() - presignedFaceReferenceDeletionGraceMs);
       const [[faceIndex], [undeletedFaceReference], [recentFaceReference]] = await Promise.all([
         this.#database
           .select({ datasetName: schema.albumFaceIndexes.datasetName })
