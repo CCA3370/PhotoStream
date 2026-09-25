@@ -48,11 +48,12 @@ const deletionPhaseLabels: Record<DeletionProgress["phase"], string> = {
   finalizing: "执行最终数据库清理",
 };
 
-const deletionSourceLabels: Record<NonNullable<DeletionProgress["latestError"]>["source"], string> = {
-  object_storage: "对象存储 / CDN",
-  face_provider: "人脸云端服务",
-  face_reference: "人脸参考照",
-};
+const deletionSourceLabels: Record<NonNullable<DeletionProgress["latestError"]>["source"], string> =
+  {
+    object_storage: "对象存储 / CDN",
+    face_provider: "人脸云端服务",
+    face_reference: "人脸参考照",
+  };
 
 const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   dateStyle: "short",
@@ -88,9 +89,7 @@ function statusVariant(state: AlbumSummaryView["state"]): "default" | "outline" 
 }
 
 function cleanupStatusLabel(
-  status:
-    | DeletionProgress["objectCleanup"]["status"]
-    | DeletionProgress["faceCleanup"]["status"],
+  status: DeletionProgress["objectCleanup"]["status"] | DeletionProgress["faceCleanup"]["status"],
 ): string {
   if (status === "complete") return "已完成";
   if (status === "retrying") return "自动重试中";
@@ -134,9 +133,7 @@ function DeletingAlbumRow({
       ) : (
         <div className="mt-4 flex flex-col gap-3">
           <Progress value={progress.progressPercent}>
-            <ProgressLabel>
-              阶段进度 · {deletionPhaseLabels[progress.phase]}
-            </ProgressLabel>
+            <ProgressLabel>阶段进度 · {deletionPhaseLabels[progress.phase]}</ProgressLabel>
             <ProgressValue />
           </Progress>
 
