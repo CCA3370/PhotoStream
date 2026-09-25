@@ -486,7 +486,10 @@ export class FaceService {
   ): Promise<void> {
     requirePermission(actor, "album:configure");
     requireRecentAuthentication(actor.authenticatedAt);
+    await this.purgeAlbumForDeletionInternal(albumId);
+  }
 
+  async purgeAlbumForDeletionInternal(albumId: string): Promise<void> {
     const [album] = await this.#database
       .select({ id: schema.albums.id })
       .from(schema.albums)
@@ -1102,15 +1105,7 @@ export class FaceService {
             updatedAt: now,
           })),
         )
-        .onConflictDoUpdate({
-          target: schema.faceReferenceDeletionSweeps.objectKey,
-          set: {
-            executeAfter,
-            attempts: 0,
-            lastErrorCode: null,
-            updatedAt: now,
-          },
-        });
+        .onConflictDoNothing();
     }
   }
 
