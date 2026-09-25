@@ -18,6 +18,16 @@ import { CategoryForm } from "@/components/albums/category-form";
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -173,6 +183,13 @@ export function AlbumSettings({
   const [featureLoading, setFeatureLoading] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<CategoryOption | null>(null);
+  const [deletingCategoryIds, setDeletingCategoryIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [removedCategoryIds, setRemovedCategoryIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   function isPending(action: PendingAction): boolean {
     return pendingActions.has(action);
@@ -280,6 +297,29 @@ export function AlbumSettings({
     router.refresh();
   }
 
+  async function deleteCategory(category: CategoryOption): Promise<void> {
+    if (deletingCategoryIds.has(category.id)) return;
+    setDeletingCategoryIds((current) => new Set(current).add(category.id));
+    setError(null);
+    try {
+      await clientMutation<{ ok: true }>(`/api/v1/albums/${album.id}/categories/${category.id}`, {
+        method: "DELETE",
+      });
+      setRemovedCategoryIds((current) => new Set(current).add(category.id));
+      setCategoryDeleteTarget(null);
+      showNotice("分类已删除");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除分类失败");
+    } finally {
+      setDeletingCategoryIds((current) => {
+        const next = new Set(current);
+        next.delete(category.id);
+        return next;
+      });
+    }
+  }
+
   async function copyText(value: string, success: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(value);
@@ -297,6 +337,7 @@ export function AlbumSettings({
     !(scheduledStartIso === null && album.scheduledStartAt === null);
   const dirty = basicDirty || privacyDirty || scheduleDirty;
   const galleryPath = `/g/${album.slug}`;
+  const visibleCategories = categories.filter((category) => !removedCategoryIds.has(category.id));
 
   useEffect(() => {
     if (!dirty) return;
@@ -728,27 +769,44 @@ export function AlbumSettings({
                     管理上传和观众页使用的活动分类。
                   </p>
                 </div>
-                <Badge variant="outline">{categories.length} 个</Badge>
+                <Badge variant="outline">{visibleCategories.length} 个</Badge>
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 p-4">
-              {categories.length === 0 ? (
+              {visibleCategories.length === 0 ? (
                 <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
                   还没有分类
                 </div>
               ) : (
                 <div className="divide-y rounded-lg border">
-                  {categories.map((category) => (
-                    <div
-                      className="flex items-center justify-between gap-3 px-3 py-2.5"
-                      key={category.id}
-                    >
-                      <span className="text-sm font-medium">{category.name}</span>
-                      <Badge variant={category.enabled ? "secondary" : "outline"}>
-                        {category.enabled ? "启用" : "停用"}
-                      </Badge>
-                    </div>
-                  ))}
+                  {visibleCategories.map((category) => {
+                    const deleting = deletingCategoryIds.has(category.id);
+                    return (
+                      <div
+                        className="flex items-center justify-between gap-3 px-3 py-2.5"
+                        key={category.id}
+                      >
+                        <span className="text-sm font-medium">{category.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant={category.enabled ? "secondary" : "outline"}>
+                            {category.enabled ? "启用" : "停用"}
+                          </Badge>
+                          <Button
+                            aria-label={`删除分类 ${category.name}`}
+                            className="text-destructive hover:text-destructive"
+                            disabled={deleting}
+                            onClick={() => setCategoryDeleteTarget(category)}
+                            size="icon-sm"
+                            title="删除分类"
+                            type="button"
+                            variant="ghost"
+                          >
+                            {deleting ? <Spinner className="animate-spin" /> : <Trash2Icon />}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <CategoryForm albumId={album.id} />
@@ -799,6 +857,37 @@ export function AlbumSettings({
           <AlbumDataSaverSetting albumId={album.id} initialSetting={dataSaver} />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={categoryDeleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setCategoryDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除分类</AlertDialogTitle>
+            <AlertDialogDescription>
+              {categoryDeleteTarget === null
+                ? ""
+                : `确定删除“${categoryDeleteTarget.name}”吗？使用该分类的照片会自动变为未分类，照片本身不会被删除。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                categoryDeleteTarget === null || deletingCategoryIds.has(categoryDeleteTarget.id)
+              }
+              onClick={() => {
+                if (categoryDeleteTarget !== null) void deleteCategory(categoryDeleteTarget);
+              }}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         onOpenChange={(open) => {

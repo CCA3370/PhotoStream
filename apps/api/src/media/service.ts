@@ -1231,6 +1231,38 @@ export class PhotoService {
     return categoryView(updated);
   }
 
+  async deleteCategory(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly categoryId: string;
+    readonly requestId: string;
+  }): Promise<void> {
+    requirePermission(options.actor.role, "album:configure");
+    await this.#database.transaction(async (transaction) => {
+      const [deleted] = await transaction
+        .delete(schema.categories)
+        .where(
+          and(
+            eq(schema.categories.id, options.categoryId),
+            eq(schema.categories.albumId, options.albumId),
+          ),
+        )
+        .returning({ id: schema.categories.id });
+      if (deleted === undefined) {
+        throw new AppError({ code: "NOT_FOUND", message: "分类不存在", statusCode: 404 });
+      }
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "category.deleted",
+        targetType: "category",
+        targetId: options.categoryId,
+        result: "success",
+        changedFields: ["categoryId"],
+        requestId: options.requestId,
+      });
+    });
+  }
+
   async createPhotoUpload(options: {
     readonly actor: InternalActor;
     readonly input: CreatePhotoUploadRequest;

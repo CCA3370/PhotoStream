@@ -267,6 +267,13 @@
       "when": 1790359200000,
       "tag": "0037_album_scheduled_start",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790362800000,
+      "tag": "0038_user_soft_delete",
+      "breakpoints": true
     }
   ]
 }

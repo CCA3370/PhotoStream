@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminUserView, UserRole } from "@photostream/contracts";
-import { CheckIcon, CopyIcon, KeyRoundIcon, UserPlusIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, KeyRoundIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
@@ -47,6 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "@/components/ui/toast";
 import { clientMutation } from "@/lib/client-api";
 
 const roleLabels: Record<UserRole, string> = {
@@ -87,6 +88,7 @@ export function UserManagement({
   const [temporaryCredential, setTemporaryCredential] = useState<TemporaryCredential | null>(null);
   const [copied, setCopied] = useState(false);
   const [resetTarget, setResetTarget] = useState<AdminUserView | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserView | null>(null);
   const [pendingChange, setPendingChange] = useState<PendingUserChange | null>(null);
   const [loginRequiredAfterCredential, setLoginRequiredAfterCredential] = useState(false);
 
@@ -184,6 +186,34 @@ export function UserManagement({
     setResetTarget(null);
   }
 
+  async function deleteAccount(userId: string, password: string): Promise<void> {
+    if (pendingUsers.has(userId)) return;
+    const target = users.find((user) => user.id === userId);
+    setUserPending(userId, true);
+    setError(null);
+    try {
+      await clientMutation<{ ok: true }>(`/api/v1/users/${userId}`, {
+        method: "DELETE",
+        confirmPassword: password,
+      });
+      setUsers((current) => current.filter((user) => user.id !== userId));
+      setDeleteTarget(null);
+      toast.add({
+        title: "账号已删除",
+        description:
+          target === undefined
+            ? "该成员已从账号列表移除。"
+            : `${target.displayName} 已无法登录，历史业务记录会继续保留。`,
+        type: "success",
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除成员失败");
+      throw caught;
+    } finally {
+      setUserPending(userId, false);
+    }
+  }
+
   async function copyTemporaryPassword(): Promise<void> {
     if (temporaryCredential === null) return;
     try {
@@ -193,6 +223,8 @@ export function UserManagement({
       setError("无法复制临时密码，请手动复制");
     }
   }
+
+  const activeAdminCount = users.filter((user) => user.role === "admin" && user.isActive).length;
 
   return (
     <div className="flex flex-col gap-3">
@@ -333,16 +365,40 @@ export function UserManagement({
                       </div>
                     </TableCell>
                     <TableCell className="pr-4 text-right">
-                      <Button
-                        disabled={userPending}
-                        onClick={() => setResetTarget(user)}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <KeyRoundIcon data-icon="inline-start" />
-                        重置密码
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          disabled={userPending}
+                          onClick={() => setResetTarget(user)}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <KeyRoundIcon data-icon="inline-start" />
+                          重置密码
+                        </Button>
+                        <Button
+                          className="text-destructive hover:text-destructive"
+                          disabled={
+                            userPending ||
+                            user.id === currentUserId ||
+                            (user.role === "admin" && user.isActive && activeAdminCount <= 1)
+                          }
+                          onClick={() => setDeleteTarget(user)}
+                          size="sm"
+                          title={
+                            user.id === currentUserId
+                              ? "不能删除当前登录账号"
+                              : user.role === "admin" && user.isActive && activeAdminCount <= 1
+                                ? "必须至少保留一名启用的管理员"
+                                : "删除账号"
+                          }
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2Icon data-icon="inline-start" />
+                          删除
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -405,6 +461,24 @@ export function UserManagement({
         }}
         open={resetTarget !== null}
         title="重置成员密码"
+        variant="destructive"
+      />
+
+      <PasswordConfirmDialog
+        confirmLabel="确认删除"
+        description={
+          deleteTarget === null
+            ? undefined
+            : `永久删除 ${deleteTarget.displayName} 的登录账号。该账号会立即失效并从成员列表移除；已上传照片、已创建活动及审计历史会保留。`
+        }
+        onConfirm={(password) =>
+          deleteTarget === null ? Promise.resolve() : deleteAccount(deleteTarget.id, password)
+        }
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        open={deleteTarget !== null}
+        title="删除成员账号"
         variant="destructive"
       />
 
