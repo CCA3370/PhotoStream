@@ -448,7 +448,7 @@ maybeDescribe("stage 3 operations", () => {
     ).toHaveLength(0);
   });
 
-  it("keeps a failed purge quiesced in deleting state", async () => {
+  it("accepts deletion and keeps the album quiesced when the initial object purge fails", async () => {
     const [media] = await database
       .insert(schema.media)
       .values({
@@ -484,7 +484,26 @@ maybeDescribe("stage 3 operations", () => {
         confirmation: "运营相册",
         purgeFaceData: async () => {},
       }),
-    ).rejects.toThrow();
+    ).resolves.toBeUndefined();
+
+    const [album] = await database
+      .select({ state: schema.albums.state })
+      .from(schema.albums)
+      .where(eq(schema.albums.id, albumId));
+    expect(album?.state).toBe("deleting");
+  });
+
+  it("accepts deletion when face cleanup is temporarily unavailable", async () => {
+    await expect(
+      service.deleteAlbum({
+        actor: { id: adminId, role: "admin", authenticatedAt: new Date() },
+        albumId,
+        confirmation: "运营相册",
+        purgeFaceData: async () => {
+          throw new Error("face provider unavailable");
+        },
+      }),
+    ).resolves.toBeUndefined();
 
     const [album] = await database
       .select({ state: schema.albums.state })
