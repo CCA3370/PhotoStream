@@ -18,9 +18,7 @@ export function ScheduledAlbumAutoRefresh({
     const schedule = () => {
       if (cancelled) return;
       const remaining =
-        scheduledStartAt === null
-          ? null
-          : new Date(scheduledStartAt).getTime() - Date.now();
+        scheduledStartAt === null ? null : new Date(scheduledStartAt).getTime() - Date.now();
       const delay =
         remaining === null
           ? preStartRefreshMs
