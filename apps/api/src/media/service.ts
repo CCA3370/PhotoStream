@@ -1044,7 +1044,8 @@ export class PhotoService {
           statusCode: 400,
         });
       }
-      const { scheduledStartAt: _scheduledStartAt, ...plainInput } = options.input;
+      const plainInput = { ...options.input };
+      delete plainInput.scheduledStartAt;
       const [updated] = await transaction
         .update(schema.albums)
         .set({
