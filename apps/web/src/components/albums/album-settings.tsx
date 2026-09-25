@@ -14,8 +14,8 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { AlbumDataSaverSetting } from "@/components/albums/album-data-saver-setting";
-import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { CategoryForm } from "@/components/albums/category-form";
+import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
 import {
@@ -475,7 +475,10 @@ export function AlbumSettings({
                 <Input
                   autoComplete="off"
                   id="delete-album-confirmation"
-                  onChange={(event) => setDeleteConfirmation(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setDeleteConfirmation(value);
+                  }}
                   value={deleteConfirmation}
                 />
               </Field>
