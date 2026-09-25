@@ -49,7 +49,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { clientGet, clientMutation } from "@/lib/client-api";
+import { purgeWarmDerivedImages } from "@/lib/derived-image-cache";
 import { purgeLocalProcessingAlbum } from "@/lib/local-processing-runtime";
+import { purgeAlbumMediaBlobCache } from "@/lib/media-blob-cache";
 import { deleteUploadRecoveriesForAlbum } from "@/lib/upload-recovery";
 
 interface PasswordRotation {
@@ -222,9 +224,11 @@ export function AlbumSettings({
       body: { confirmation: deleteConfirmation },
       confirmPassword: password,
     });
+    purgeWarmDerivedImages(album.slug);
     await Promise.allSettled([
       purgeLocalProcessingAlbum(album.id),
       deleteUploadRecoveriesForAlbum(album.id),
+      purgeAlbumMediaBlobCache(album.id, album.slug),
     ]);
     router.replace("/studio/albums");
     router.refresh();
