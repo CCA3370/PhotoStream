@@ -60,6 +60,7 @@ const publicVariantKinds = new Set<PhotoVariantKind>(["photo_480", "photo_960", 
 const multipartThreshold = 16 * 1024 * 1024;
 const uploadCleanupInitialGraceMs = 30 * 60 * 1_000;
 const uploadCleanupVerificationDelayMs = 24 * 60 * 60 * 1_000;
+const albumDeletionUploadGraceMs = 20 * 60 * 1_000;
 const multipartPartBytes = 8 * 1024 * 1024;
 const maxActiveUploadIntentsPerUploader = 32;
 const maxOutstandingUploadBytesPerUploader = 4 * 1024 * 1024 * 1024;
@@ -299,14 +300,17 @@ export class PhotoService {
           .limit(1),
       ]);
 
+    const uploadGraceEndsAt = new Date(startedAt.getTime() + albumDeletionUploadGraceMs);
     const objectStatus =
       objectSweep === undefined
         ? ("complete" as const)
-        : objectSweep.executeAfter > now
+        : objectSweep.executeAfter <= uploadGraceEndsAt
           ? ("waiting" as const)
           : objectSweep.attempts > 0
             ? ("retrying" as const)
-            : ("running" as const);
+            : objectSweep.executeAfter > now
+              ? ("waiting" as const)
+              : ("running" as const);
 
     const pendingReferences = faceReferenceStats?.pendingReferences ?? 0;
     const facePending = faceIndex?.datasetName != null || pendingReferences > 0;
