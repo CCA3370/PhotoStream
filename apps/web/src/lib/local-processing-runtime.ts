@@ -2,6 +2,7 @@
 
 import type { BibConfigView, UploadIntentView } from "@photostream/contracts";
 
+import { subscribeAlbumPurge } from "@/lib/album-purge-broadcast";
 import { clientMutation } from "@/lib/client-api";
 import { startLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
@@ -791,3 +792,8 @@ export async function purgeLocalProcessingAlbum(albumId: string): Promise<void> 
     ]),
   ]);
 }
+
+
+subscribeAlbumPurge(({ albumId }) => {
+  void purgeLocalProcessingAlbum(albumId).catch(() => undefined);
+});
