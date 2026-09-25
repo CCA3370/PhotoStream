@@ -137,7 +137,7 @@ export function AlbumDeletionControls({
       </div>
 
       <Dialog onOpenChange={setHistoryOpen} open={historyOpen}>
-        <DialogContent className="h-[min(760px,calc(100dvh-2rem))] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        <DialogContent className="h-[min(760px,calc(100dvh-2rem))] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-5xl">
           <DialogHeader className="border-b px-5 py-4 pr-12">
             <DialogTitle>删除错误历史</DialogTitle>
             <DialogDescription>
