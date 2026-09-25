@@ -171,7 +171,7 @@ export function normalizeUsername(value: string): string {
   return value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
 }
 
-export const albumStateSchema = z.enum(["draft", "live", "ended", "archived"]);
+export const albumStateSchema = z.enum(["draft", "live", "ended", "archived", "deleting"]);
 export const albumAccessSchema = z.enum(["password", "public"]);
 export const publishModeSchema = z.enum(["review", "auto"]);
 export const ingestStatusSchema = z.enum([
