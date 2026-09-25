@@ -371,7 +371,10 @@ export class ProgressiveUploadService {
           .where(eq(schema.albums.id, row.media.albumId))
           .limit(1),
         transaction
-          .select({ status: schema.uploadIntents.status, expiresAt: schema.uploadIntents.expiresAt })
+          .select({
+            status: schema.uploadIntents.status,
+            expiresAt: schema.uploadIntents.expiresAt,
+          })
           .from(schema.uploadIntents)
           .where(eq(schema.uploadIntents.id, options.intentId))
           .limit(1),
