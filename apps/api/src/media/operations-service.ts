@@ -125,7 +125,12 @@ export class OperationsService {
         sql`select pg_advisory_xact_lock(hashtextextended(${`album-state:${options.albumId}`}, 0))`,
       );
       const [album] = await transaction
-        .select({ id: schema.albums.id, title: schema.albums.title, state: schema.albums.state })
+        .select({
+          id: schema.albums.id,
+          title: schema.albums.title,
+          state: schema.albums.state,
+          updatedAt: schema.albums.updatedAt,
+        })
         .from(schema.albums)
         .where(eq(schema.albums.id, options.albumId))
         .limit(1);
@@ -141,13 +146,14 @@ export class OperationsService {
       }
 
       const now = new Date();
+      const deletingSince = album.state === "deleting" ? album.updatedAt : now;
       if (album.state !== "deleting") {
         await transaction
           .update(schema.albums)
           .set({
             state: "deleting",
             accessVersion: sql`${schema.albums.accessVersion} + 1`,
-            updatedAt: now,
+            updatedAt: deletingSince,
           })
           .where(eq(schema.albums.id, options.albumId));
       }
@@ -159,17 +165,20 @@ export class OperationsService {
             select id from media where album_id = ${options.albumId}
           )
       `);
-      await transaction
-        .insert(schema.albumObjectDeletionSweeps)
-        .values({
-          albumId: options.albumId,
-          objectPrefix: albumPrefix,
-          executeAfter: new Date(now.getTime() + presignedUploadDeletionGraceMs),
-          attempts: 0,
-          lastErrorCode: null,
-          updatedAt: now,
-        })
-        .onConflictDoNothing();
+      const executeAfter = new Date(deletingSince.getTime() + presignedUploadDeletionGraceMs);
+      if (executeAfter > now) {
+        await transaction
+          .insert(schema.albumObjectDeletionSweeps)
+          .values({
+            albumId: options.albumId,
+            objectPrefix: albumPrefix,
+            executeAfter,
+            attempts: 0,
+            lastErrorCode: null,
+            updatedAt: now,
+          })
+          .onConflictDoNothing();
+      }
     });
 
     await this.#continueAlbumDeletion(options.albumId, options.purgeFaceData);
