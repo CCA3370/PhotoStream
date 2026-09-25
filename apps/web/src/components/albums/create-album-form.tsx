@@ -119,11 +119,7 @@ export function CreateAlbumForm() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="album-scheduled-start">开始时间（北京时间）</FieldLabel>
-                  <Input
-                    id="album-scheduled-start"
-                    name="scheduledStartAt"
-                    type="datetime-local"
-                  />
+                  <Input id="album-scheduled-start" name="scheduledStartAt" type="datetime-local" />
                   <p className="text-xs leading-5 text-muted-foreground">
                     可选。设置后活动会在该时间自动开始；未开始前观众仍可看到活动名称和开始时间。
                   </p>
