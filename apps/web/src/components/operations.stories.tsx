@@ -152,6 +152,7 @@ const album: AlbumView = {
   state: "live",
   access: "password",
   publishMode: "review",
+  scheduledStartAt: null,
   previewDownloadEnabled: false,
   originalDownloadEnabled: false,
   privacyNotice: "仅用于校内活动记录。",

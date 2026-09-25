@@ -185,6 +185,17 @@ const deletionPoll = setInterval(() => {
     });
 }, 30_000);
 deletionPoll.unref();
+const scheduledStartPoll = setInterval(() => {
+  void runtimeMetrics
+    .runJob("scheduledAlbumStart", () => photoService.processScheduledAlbumStarts())
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : "unknown" },
+        "scheduled album start poll failed",
+      );
+    });
+}, 15_000);
+scheduledStartPoll.unref();
 const analyticsCleanup = setInterval(
   () => {
     void runtimeMetrics
@@ -250,6 +261,7 @@ bibCleanup.unref();
 
 async function shutdown(signal: string): Promise<void> {
   clearInterval(deletionPoll);
+  clearInterval(scheduledStartPoll);
   clearInterval(analyticsCleanup);
   clearInterval(bibMaintenance);
   clearInterval(faceMaintenance);

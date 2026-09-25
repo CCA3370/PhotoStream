@@ -18,6 +18,19 @@ describe("public gallery not-found handling", () => {
     expect(source).toContain("publicAlbumApi<PublicAlbumView>");
   });
 
+  it("renders scheduled draft albums as pre-start activities instead of not-found", () => {
+    const source = readFileSync(galleryPagePath, "utf8");
+    const draftBranch = source.indexOf('if (album.state === "draft")');
+    const accessBranch = source.indexOf("if (album.accessRequired)");
+
+    expect(draftBranch).toBeGreaterThan(-1);
+    expect(accessBranch).toBeGreaterThan(draftBranch);
+    expect(source).toContain('status="未开始"');
+    expect(source).toContain("开始时间（北京时间）");
+    expect(source).toContain("ScheduledAlbumAutoRefresh");
+    expect(source).toContain("活动开始后，此页面会自动更新并显示直播照片。");
+  });
+
   it("renders an audience-facing activity-not-found page", () => {
     const source = readFileSync(galleryNotFoundPath, "utf8");
 

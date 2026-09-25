@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { AlbumOpenTracker } from "@/components/gallery/album-open-tracker";
 import { GalleryBrowser } from "@/components/gallery/gallery-browser";
 import { LiveUpdates } from "@/components/gallery/live-updates";
+import { ScheduledAlbumAutoRefresh } from "@/components/gallery/scheduled-album-auto-refresh";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerHelpFeedback } from "@/components/gallery/viewer-help-feedback";
 import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
@@ -86,6 +87,40 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   const featuredOnly = query.featured === "1";
 
   const album = await publicAlbumApi<PublicAlbumView>(`/api/v1/public/albums/${slug}`);
+
+  if (album.state === "draft") {
+    const scheduledStartText =
+      album.scheduledStartAt === null
+        ? "开始时间待定"
+        : new Intl.DateTimeFormat("zh-CN", {
+            dateStyle: "long",
+            timeStyle: "short",
+            timeZone: "Asia/Shanghai",
+          }).format(new Date(album.scheduledStartAt));
+    return (
+      <PublicGalleryShell
+        albumDescription={album.description}
+        albumTitle={album.title}
+        status="未开始"
+      >
+        <ScheduledAlbumAutoRefresh scheduledStartAt={album.scheduledStartAt} />
+        <div className="mx-auto flex min-h-[55dvh] max-w-xl items-center justify-center py-8 sm:py-14">
+          <div className="w-full rounded-2xl border bg-card px-5 py-7 text-center shadow-sm sm:px-8 sm:py-10">
+            <p className="text-xs font-medium text-muted-foreground">活动状态</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">{album.title}</h2>
+            <p className="mt-3 text-sm font-medium">未开始</p>
+            <div className="mx-auto mt-5 max-w-sm rounded-xl bg-muted/45 px-4 py-3">
+              <p className="text-xs text-muted-foreground">开始时间（北京时间）</p>
+              <p className="mt-1 text-base font-semibold tabular-nums">{scheduledStartText}</p>
+            </div>
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              活动开始后，此页面会自动更新并显示直播照片。
+            </p>
+          </div>
+        </div>
+      </PublicGalleryShell>
+    );
+  }
 
   if (album.accessRequired) {
     return (

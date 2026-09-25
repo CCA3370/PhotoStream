@@ -56,7 +56,7 @@ export class ViewerFeedbackService {
     readonly reportReason?: ViewerReportReason | null;
   }): Promise<{ readonly id: number; readonly received: true }> {
     const publicAlbum = await this.#photoService.getPublicAlbum(options.slug, options.visitorToken);
-    if (publicAlbum.view.accessRequired) {
+    if (publicAlbum.view.state === "draft" || publicAlbum.view.accessRequired) {
       throw new AppError({
         code: "NOT_FOUND",
         message: "相册不存在或当前访问无效",

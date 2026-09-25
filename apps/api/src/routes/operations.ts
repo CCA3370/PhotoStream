@@ -11,6 +11,7 @@ import {
   mediaBatchRequestSchema,
   mediaBatchResultSchema,
   okResponseSchema,
+  rotateAlbumPasswordRequestSchema,
   rotateAlbumPasswordResponseSchema,
   signedDownloadSchema,
   updateAlbumRequestSchema,
@@ -223,6 +224,7 @@ export async function registerOperationsRoutes(
         operationId: "rotateAlbumPassword",
         tags: ["albums"],
         params: idParamsSchema,
+        body: rotateAlbumPasswordRequestSchema,
         response: { 200: rotateAlbumPasswordResponseSchema, ...errors },
       },
     },
@@ -231,6 +233,7 @@ export async function registerOperationsRoutes(
       return options.photoService.rotateAlbumPassword({
         actor: actorFrom(session),
         albumId: request.params.id,
+        password: request.body.password,
         idempotencyKey: idempotencyKey(request),
         requestId: request.id,
       });

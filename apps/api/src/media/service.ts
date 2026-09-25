@@ -86,6 +86,7 @@ function albumView(row: typeof schema.albums.$inferSelect): AlbumView {
     state: row.state,
     access: row.access,
     publishMode: row.publishMode,
+    scheduledStartAt: row.scheduledStartAt === null ? null : iso(row.scheduledStartAt),
     previewDownloadEnabled: true,
     originalDownloadEnabled: true,
     privacyNotice: row.privacyNotice,
@@ -841,8 +842,19 @@ export class PhotoService {
   }): Promise<{ album: AlbumView; generatedPassword: string }> {
     requirePermission(options.actor.role, "album:create");
     const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
-    const generatedPassword = this.#deriveAlbumPassword(options.actor.id, idempotencyKey);
+    const generatedPassword =
+      options.input.password ?? this.#deriveAlbumPassword(options.actor.id, idempotencyKey);
     const passwordHash = await this.#hasher.hash(generatedPassword);
+    const scheduledStartAt =
+      options.input.scheduledStartAt == null ? null : new Date(options.input.scheduledStartAt);
+    const now = new Date();
+    if (scheduledStartAt !== null && scheduledStartAt <= now) {
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "预约开始时间必须晚于当前时间",
+        statusCode: 400,
+      });
+    }
 
     return this.#database.transaction(async (transaction) => {
       await this.#advisoryLock(transaction, `album:${options.actor.id}:${idempotencyKey}`);
@@ -857,6 +869,25 @@ export class PhotoService {
         )
         .limit(1);
       if (existing !== undefined) {
+        const sameSchedule =
+          existing.scheduledStartAt?.toISOString() === scheduledStartAt?.toISOString() ||
+          (existing.scheduledStartAt === null && scheduledStartAt === null);
+        const samePassword =
+          existing.passwordHash !== null &&
+          (await this.#hasher.verify(existing.passwordHash, generatedPassword));
+        if (
+          existing.title !== options.input.title ||
+          existing.description !== options.input.description ||
+          existing.publishMode !== options.input.publishMode ||
+          !sameSchedule ||
+          !samePassword
+        ) {
+          throw new AppError({
+            code: "IDEMPOTENCY_CONFLICT",
+            message: "同一幂等键不能用于不同的活动创建请求",
+            statusCode: 409,
+          });
+        }
         return { album: albumView(existing), generatedPassword };
       }
 
@@ -867,6 +898,7 @@ export class PhotoService {
           title: options.input.title,
           description: options.input.description,
           publishMode: options.input.publishMode,
+          scheduledStartAt,
           access: "password",
           state: "draft",
           passwordHash,
@@ -881,7 +913,7 @@ export class PhotoService {
         targetType: "album",
         targetId: created.id,
         result: "success",
-        changedFields: ["title", "description", "publishMode", "passwordHash"],
+        changedFields: ["title", "description", "publishMode", "scheduledStartAt", "passwordHash"],
         requestId: options.requestId,
       });
       return { album: albumView(created), generatedPassword };
@@ -909,7 +941,7 @@ export class PhotoService {
       const now = new Date();
       const [updated] = await transaction
         .update(schema.albums)
-        .set({ state: "live", updatedAt: now })
+        .set({ state: "live", scheduledStartAt: null, updatedAt: now })
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw new Error("Album state update returned no row");
@@ -992,10 +1024,41 @@ export class PhotoService {
       const accessChanged =
         options.input.access !== undefined && options.input.access !== album.access;
       const now = new Date();
+      const scheduledStartAt =
+        options.input.scheduledStartAt === undefined
+          ? undefined
+          : options.input.scheduledStartAt === null
+            ? null
+            : new Date(options.input.scheduledStartAt);
+      if (scheduledStartAt !== undefined && album.state !== "draft") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "只有未开始的活动可以设置预约开始时间",
+          statusCode: 409,
+        });
+      }
+      if (scheduledStartAt !== undefined && scheduledStartAt !== null && scheduledStartAt <= now) {
+        throw new AppError({
+          code: "BAD_REQUEST",
+          message: "预约开始时间必须晚于当前时间",
+          statusCode: 400,
+        });
+      }
       const [updated] = await transaction
         .update(schema.albums)
         .set({
-          ...options.input,
+          ...(options.input.title === undefined ? {} : { title: options.input.title }),
+          ...(options.input.description === undefined
+            ? {}
+            : { description: options.input.description }),
+          ...(options.input.access === undefined ? {} : { access: options.input.access }),
+          ...(options.input.publishMode === undefined
+            ? {}
+            : { publishMode: options.input.publishMode }),
+          ...(options.input.privacyNotice === undefined
+            ? {}
+            : { privacyNotice: options.input.privacyNotice }),
+          ...(scheduledStartAt === undefined ? {} : { scheduledStartAt }),
           previewDownloadEnabled: true,
           originalDownloadEnabled: true,
           ...(options.input.access === "public" ? { bibSearchEnabled: false } : {}),
@@ -1024,20 +1087,23 @@ export class PhotoService {
   async rotateAlbumPassword(options: {
     readonly actor: InternalActor;
     readonly albumId: string;
+    readonly password?: string | undefined;
     readonly idempotencyKey: string | undefined;
     readonly requestId: string;
   }): Promise<{ readonly album: AlbumView; readonly generatedPassword: string }> {
     requirePermission(options.actor.role, "album:configure");
     const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
-    const generatedPassword = this.#deriveAlbumPassword(
-      options.actor.id,
-      `rotate:${options.albumId}:${idempotencyKey}`,
-    );
+    const generatedPassword =
+      options.password ??
+      this.#deriveAlbumPassword(options.actor.id, `rotate:${options.albumId}:${idempotencyKey}`);
     const passwordHash = await this.#hasher.hash(generatedPassword);
     return this.#database.transaction(async (transaction) => {
       const actorScope = `user:${options.actor.id}`;
       const operation = `album.password.rotate:${options.albumId}`;
-      const requestHash = operationRequestHash({ albumId: options.albumId });
+      const requestHash = operationRequestHash({
+        albumId: options.albumId,
+        password: options.password ?? null,
+      });
       await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
       const retried = await findOperationRequest(transaction, {
         actorScope,
@@ -2697,7 +2763,33 @@ export class PhotoService {
   }
 
   async getPublicAlbum(slug: string, visitorToken?: string) {
-    const album = await this.#publicAlbumBySlug(slug);
+    const album = await this.#viewerAlbumBySlug(slug);
+    if (album.state === "draft") {
+      return {
+        album,
+        view: {
+          slug: album.slug,
+          title: album.title,
+          description: album.description,
+          state: album.state,
+          scheduledStartAt: album.scheduledStartAt === null ? null : iso(album.scheduledStartAt),
+          access: album.access,
+          accessRequired: false,
+          previewDownloadEnabled: true,
+          originalDownloadEnabled: true,
+          privacyNotice: album.privacyNotice,
+          faceSearchAvailable: false,
+          faceSearchNoticeVersion: null,
+          bibSearchEnabled: false,
+          bibNumberLengths: [],
+          bibAttributeFilterEnabled: false,
+          bibAttributeOptions: [],
+          bibAttributePairs: [],
+          categories: [],
+        },
+        unlocked: false,
+      };
+    }
     const unlocked = await this.#isVisitorAuthorized(album, visitorToken);
     const [faceIndex] = await this.#database
       .select({
@@ -2789,6 +2881,7 @@ export class PhotoService {
         title: album.title,
         description: album.description,
         state: album.state,
+        scheduledStartAt: album.scheduledStartAt === null ? null : iso(album.scheduledStartAt),
         access: album.access,
         accessRequired: album.access === "password" && !unlocked,
         previewDownloadEnabled: true,
@@ -3109,6 +3202,92 @@ export class PhotoService {
       .where(eq(schema.albums.id, albumId))
       .limit(1);
     return row ?? null;
+  }
+
+  async processScheduledAlbumStarts(limit = 50, now = new Date()): Promise<number> {
+    const due = await this.#database
+      .select({ id: schema.albums.id })
+      .from(schema.albums)
+      .where(
+        and(
+          eq(schema.albums.state, "draft"),
+          isNotNull(schema.albums.scheduledStartAt),
+          lte(schema.albums.scheduledStartAt, now),
+        ),
+      )
+      .orderBy(asc(schema.albums.scheduledStartAt))
+      .limit(limit);
+    let started = 0;
+    for (const album of due) {
+      if (await this.#startScheduledAlbumIfDue(album.id, now)) started += 1;
+    }
+    return started;
+  }
+
+  async #startScheduledAlbumIfDue(albumId: string, now: Date): Promise<boolean> {
+    return this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `album-state:${albumId}`);
+      const album = await this.#albumById(transaction, albumId);
+      if (
+        album === null ||
+        album.state !== "draft" ||
+        album.scheduledStartAt === null ||
+        album.scheduledStartAt > now
+      ) {
+        return false;
+      }
+      const [updated] = await transaction
+        .update(schema.albums)
+        .set({ state: "live", scheduledStartAt: null, updatedAt: now })
+        .where(and(eq(schema.albums.id, albumId), eq(schema.albums.state, "draft")))
+        .returning({ id: schema.albums.id });
+      if (updated === undefined) return false;
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: null,
+        action: "album.scheduled_started",
+        targetType: "album",
+        targetId: albumId,
+        result: "success",
+        changedFields: ["state", "scheduledStartAt"],
+        requestId: `scheduled-start:${albumId}:${now.toISOString()}`,
+      });
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${albumId})`);
+      return true;
+    });
+  }
+
+  async #viewerAlbumBySlug(slug: string) {
+    let [album] = await this.#database
+      .select()
+      .from(schema.albums)
+      .where(
+        and(
+          eq(schema.albums.slug, slug),
+          or(
+            eq(schema.albums.state, "draft"),
+            eq(schema.albums.state, "live"),
+            eq(schema.albums.state, "ended"),
+            eq(schema.albums.state, "archived"),
+          ),
+        ),
+      )
+      .limit(1);
+    if (album === undefined) throw this.#albumNotFound();
+    const now = new Date();
+    if (
+      album.state === "draft" &&
+      album.scheduledStartAt !== null &&
+      album.scheduledStartAt <= now
+    ) {
+      await this.#startScheduledAlbumIfDue(album.id, now);
+      [album] = await this.#database
+        .select()
+        .from(schema.albums)
+        .where(eq(schema.albums.id, album.id))
+        .limit(1);
+      if (album === undefined || album.state === "deleting") throw this.#albumNotFound();
+    }
+    return album;
   }
 
   async #publicAlbumBySlug(slug: string) {

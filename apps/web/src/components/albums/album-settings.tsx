@@ -18,17 +18,6 @@ import { CategoryForm } from "@/components/albums/category-form";
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
 import { FaceConfigEditor } from "@/components/face/face-config-editor";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,13 +55,37 @@ interface CategoryOption {
   readonly enabled: boolean;
 }
 
+function isoToBeijingLocalDateTime(value: string | null): string {
+  if (value === null) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+  }).formatToParts(new Date(value));
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+function beijingLocalDateTimeToIso(value: string): string | null {
+  if (value.trim().length === 0) return null;
+  const normalized = value.length === 16 ? `${value}:00` : value;
+  const date = new Date(`${normalized}+08:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 type PendingAction =
   | "access"
   | "basic"
   | "originalDownload"
   | "password"
   | "previewDownload"
-  | "privacy";
+  | "privacy"
+  | "schedule";
 type SettingsTab = "access" | "basic" | "categories" | "features" | "traffic";
 type FeatureTab = "bib" | "face";
 
@@ -86,6 +99,7 @@ function mergeAlbumUpdate(
     ...(input.title === undefined ? {} : { title: updated.title }),
     ...(input.description === undefined ? {} : { description: updated.description }),
     ...(input.access === undefined ? {} : { access: updated.access }),
+    ...(input.scheduledStartAt === undefined ? {} : { scheduledStartAt: updated.scheduledStartAt }),
     ...(input.previewDownloadEnabled === undefined
       ? {}
       : { previewDownloadEnabled: updated.previewDownloadEnabled }),
@@ -147,6 +161,11 @@ export function AlbumSettings({
   const [title, setTitle] = useState(initialAlbum.title);
   const [description, setDescription] = useState(initialAlbum.description);
   const [privacyNotice, setPrivacyNotice] = useState(initialAlbum.privacyNotice);
+  const [scheduledStartValue, setScheduledStartValue] = useState(
+    isoToBeijingLocalDateTime(initialAlbum.scheduledStartAt),
+  );
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
   const [activeTab, setActiveTab] = useState<SettingsTab>("basic");
   const [featureTab, setFeatureTab] = useState<FeatureTab>("bib");
   const [bibConfig, setBibConfig] = useState<BibConfigView | null>(initialBibConfig ?? null);
@@ -194,6 +213,9 @@ export function AlbumSettings({
         router.refresh();
       }
       if (action === "privacy") setPrivacyNotice(updated.privacyNotice);
+      if (action === "schedule") {
+        setScheduledStartValue(isoToBeijingLocalDateTime(updated.scheduledStartAt));
+      }
       showNotice(label);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存设置失败");
@@ -208,9 +230,18 @@ export function AlbumSettings({
     try {
       const result = await clientMutation<PasswordRotation>(
         `/api/v1/albums/${album.id}/rotate-password`,
-        { idempotencyKey: crypto.randomUUID() },
+        {
+          body: passwordInput.length === 0 ? {} : { password: passwordInput },
+          idempotencyKey: crypto.randomUUID(),
+        },
       );
-      setAlbum((current) => ({ ...current, updatedAt: result.album.updatedAt }));
+      setAlbum((current) => ({
+        ...current,
+        access: result.album.access,
+        updatedAt: result.album.updatedAt,
+      }));
+      setPasswordDialogOpen(false);
+      setPasswordInput("");
       setNewPassword(result.generatedPassword);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更换口令失败");
@@ -260,7 +291,11 @@ export function AlbumSettings({
 
   const basicDirty = title.trim() !== album.title || description.trim() !== album.description;
   const privacyDirty = privacyNotice.trim() !== album.privacyNotice;
-  const dirty = basicDirty || privacyDirty;
+  const scheduledStartIso = beijingLocalDateTimeToIso(scheduledStartValue);
+  const scheduleDirty =
+    scheduledStartIso !== album.scheduledStartAt &&
+    !(scheduledStartIso === null && album.scheduledStartAt === null);
+  const dirty = basicDirty || privacyDirty || scheduleDirty;
   const galleryPath = `/g/${album.slug}`;
 
   useEffect(() => {
@@ -482,6 +517,59 @@ export function AlbumSettings({
             </Card>
           </div>
 
+          <Card className="mt-3 overflow-hidden shadow-none">
+            <CardHeader className="border-b py-3.5">
+              <CardTitle>开始安排</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <form
+                className="flex flex-col gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void update(
+                    { scheduledStartAt: scheduledStartIso },
+                    scheduledStartIso === null ? "已清除预约开始时间" : "预约开始时间已保存",
+                    "schedule",
+                  );
+                }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="scheduled-start-at">开始时间（北京时间）</FieldLabel>
+                  <Input
+                    disabled={album.state !== "draft"}
+                    id="scheduled-start-at"
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setScheduledStartValue(value);
+                    }}
+                    type="datetime-local"
+                    value={scheduledStartValue}
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {album.state === "draft"
+                      ? "到达此时间后活动会自动切换为直播中；留空则继续等待手动开始。"
+                      : "活动已经开始或结束，不能再修改预约开始时间。"}
+                  </p>
+                </Field>
+                <div className="flex min-h-7 items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {scheduleDirty ? "有未保存修改" : "已保存"}
+                  </span>
+                  <Button
+                    disabled={album.state !== "draft" || !scheduleDirty || isPending("schedule")}
+                    size="sm"
+                    type="submit"
+                  >
+                    {isPending("schedule") ? (
+                      <Spinner className="animate-spin" data-icon="inline-start" />
+                    ) : null}
+                    {isPending("schedule") ? "保存中" : "保存"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
           <Card className="mt-3 overflow-hidden border-destructive/40 shadow-none">
             <CardHeader className="border-b py-3.5">
               <CardTitle>删除活动</CardTitle>
@@ -561,34 +649,24 @@ export function AlbumSettings({
                   <Badge variant="outline">默认隐藏</Badge>
                 </SettingRow>
 
-                <SettingRow description="更换后旧访客会话立即失效" title="活动口令">
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      disabled={isPending("password")}
-                      render={<Button size="sm" type="button" variant="outline" />}
-                    >
-                      {isPending("password") ? (
-                        <Spinner className="animate-spin" data-icon="inline-start" />
-                      ) : (
-                        <KeyRoundIcon data-icon="inline-start" />
-                      )}
-                      {isPending("password") ? "更换中" : "更换"}
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>更换活动口令？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          更换后当前旧口令和已有访客会话会立即失效，需要把新口令重新发送给观众。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>取消</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => void rotatePassword()}>
-                          确认更换
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                <SettingRow
+                  description="可自定义 4–128 个字符；更换后旧口令和已有访客会话立即失效"
+                  title="活动口令"
+                >
+                  <Button
+                    disabled={isPending("password")}
+                    onClick={() => setPasswordDialogOpen(true)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {isPending("password") ? (
+                      <Spinner className="animate-spin" data-icon="inline-start" />
+                    ) : (
+                      <KeyRoundIcon data-icon="inline-start" />
+                    )}
+                    {isPending("password") ? "更换中" : "设置口令"}
+                  </Button>
                 </SettingRow>
               </CardContent>
             </Card>
@@ -721,6 +799,53 @@ export function AlbumSettings({
           <AlbumDataSaverSetting albumId={album.id} initialSetting={dataSaver} />
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        onOpenChange={(open) => {
+          setPasswordDialogOpen(open);
+          if (!open) setPasswordInput("");
+        }}
+        open={passwordDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>设置活动口令</DialogTitle>
+            <DialogDescription>
+              输入自定义口令；留空则自动生成。保存后旧口令和已有访客会话立即失效。
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="custom-album-password">新活动口令</FieldLabel>
+            <Input
+              autoComplete="new-password"
+              id="custom-album-password"
+              maxLength={128}
+              minLength={4}
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+                setPasswordInput(value);
+              }}
+              placeholder="留空则自动生成"
+              type="password"
+              value={passwordInput}
+            />
+          </Field>
+          <DialogFooter>
+            <Button
+              disabled={
+                isPending("password") || (passwordInput.length > 0 && passwordInput.length < 4)
+              }
+              onClick={() => void rotatePassword()}
+              type="button"
+            >
+              {isPending("password") ? (
+                <Spinner className="animate-spin" data-icon="inline-start" />
+              ) : null}
+              {isPending("password") ? "保存中" : "确认更换"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         onOpenChange={(open) => {
