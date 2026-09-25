@@ -39,15 +39,17 @@ function initialize(): void {
     });
   }
 
-  window.addEventListener("storage", (event) => {
-    if (event.key !== storageKey || event.newValue === null) return;
-    try {
-      const notice = parsedNotice(JSON.parse(event.newValue));
-      if (notice !== null) emit(notice);
-    } catch {
-      // A malformed transient notice must not affect application state.
-    }
-  });
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("storage", (event) => {
+      if (event.key !== storageKey || event.newValue === null) return;
+      try {
+        const notice = parsedNotice(JSON.parse(event.newValue));
+        if (notice !== null) emit(notice);
+      } catch {
+        // A malformed transient notice must not affect application state.
+      }
+    });
+  }
 }
 
 export function subscribeAlbumPurge(listener: (notice: AlbumPurgeNotice) => void): () => void {
