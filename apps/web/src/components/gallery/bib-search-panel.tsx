@@ -485,6 +485,8 @@ export function BibSearchPanel({
     const emptySearchResult = resultMode !== null && resultItems.length === 0 && !open;
     if (!emptySearchResult) return;
 
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
     const root = document.documentElement;
     const body = document.body;
     const previousRootOverflow = root.style.overflowY;
