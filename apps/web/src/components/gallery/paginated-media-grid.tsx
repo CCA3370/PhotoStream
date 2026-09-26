@@ -190,6 +190,8 @@ export function PaginatedMediaGrid({
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [visibilityNow, setVisibilityNow] = useState(initialVisibilityNow);
+  const [renderFeaturedOnly, setRenderFeaturedOnly] = useState(featuredOnly);
+  const [filterTransitioning, setFilterTransitioning] = useState(false);
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
   const cancelledLiveIds = useRef(new Set<string>());
@@ -199,6 +201,22 @@ export function PaginatedMediaGrid({
   const pageSize = dataSaverEnabled ? dataSaverMediaPageSize : publicMediaPageSize;
 
   const allItems = useMemo(() => pages.flat(), [pages]);
+
+  useEffect(() => {
+    if (renderFeaturedOnly === featuredOnly) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setRenderFeaturedOnly(featuredOnly);
+      setFilterTransitioning(false);
+      return;
+    }
+
+    setFilterTransitioning(true);
+    const timer = window.setTimeout(() => {
+      setRenderFeaturedOnly(featuredOnly);
+      window.requestAnimationFrame(() => setFilterTransitioning(false));
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [featuredOnly, renderFeaturedOnly]);
 
   const applyFeaturedSnapshot = useCallback(
     (mediaIds: readonly string[]) => {
@@ -484,19 +502,25 @@ export function PaginatedMediaGrid({
   );
   const visibleItems = useMemo(
     () =>
-      featuredOnly
+      renderFeaturedOnly
         ? eligiblePages.flat().filter((item) => featuredIds.has(item.id))
         : eligiblePages.flatMap((page) => orderFeaturedMedia(page, featuredIds)),
-    [eligiblePages, featuredIds, featuredOnly],
+    [eligiblePages, featuredIds, renderFeaturedOnly],
   );
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      <MediaGrid
-        {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
-        items={visibleItems}
-        slug={slug}
-      />
+      <div
+        className={`transition-[opacity,transform] duration-150 ease-out motion-reduce:transform-none motion-reduce:transition-none ${
+          filterTransitioning ? "translate-y-px opacity-55" : "translate-y-0 opacity-100"
+        }`}
+      >
+        <MediaGrid
+          {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
+          items={visibleItems}
+          slug={slug}
+        />
+      </div>
       {featuredOnly && cursor !== null ? (
         <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
           <Spinner className="size-4 animate-spin" />
