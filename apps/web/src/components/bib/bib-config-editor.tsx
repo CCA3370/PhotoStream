@@ -325,7 +325,9 @@ function isSchoolFiveDigitPreset(draft: SimpleBibRuleDraft): boolean {
     "1:1:4:4>2:2:01:08",
     "1:1:5:6>2:2:01:06",
   ].toSorted();
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+  return (
+    actual.length === expected.length && actual.every((value, index) => value === expected[index])
+  );
 }
 
 function requestFrom(config: BibConfigView): BibConfigUpdate {
@@ -445,7 +447,9 @@ function isSchoolGradeClassAttributePreset(
   }
   const expected = schoolGradeClassAttributeRules().map(attributeRuleKey).toSorted();
   const actual = rules.map(attributeRuleKey).toSorted();
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+  return (
+    actual.length === expected.length && actual.every((value, index) => value === expected[index])
+  );
 }
 
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
