@@ -119,16 +119,11 @@ export function LiveUpdates({
         const secondMediaId = unpairedPublishedIdsRef.current.shift();
         if (firstMediaId === undefined || secondMediaId === undefined) return;
 
-        const nearLatest = viewerNearLatest();
-        for (const mediaId of [firstMediaId, secondMediaId]) {
-          if (!nearLatest) pendingMediaIdsRef.current.add(mediaId);
-          window.dispatchEvent(
-            new CustomEvent("photostream:media-published", {
-              detail: { mediaId },
-            }),
-          );
+        if (!viewerNearLatest()) {
+          pendingMediaIdsRef.current.add(firstMediaId);
+          pendingMediaIdsRef.current.add(secondMediaId);
+          setPendingMediaCount(pendingMediaIdsRef.current.size);
         }
-        if (!nearLatest) setPendingMediaCount(pendingMediaIdsRef.current.size);
       }
     };
 
@@ -139,6 +134,11 @@ export function LiveUpdates({
       if (event.type === "media.published") {
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
+          window.dispatchEvent(
+            new CustomEvent("photostream:media-published", {
+              detail: { mediaId: event.mediaId },
+            }),
+          );
           unpairedPublishedIdsRef.current.push(event.mediaId);
           flushPublishedMediaPairs();
         }
