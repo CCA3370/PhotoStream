@@ -192,6 +192,8 @@ export function PaginatedMediaGrid({
   const loadMoreRef = useRef<HTMLButtonElement>(null);
   const requestInFlight = useRef(false);
   const cancelledLiveIds = useRef(new Set<string>());
+  const liveQueueRef = useRef<string[]>([]);
+  const preparedLiveMediaRef = useRef(new Map<string, PublicMediaView>());
   const pageSize = dataSaverEnabled ? dataSaverMediaPageSize : publicMediaPageSize;
 
   const allItems = useMemo(() => pages.flat(), [pages]);
@@ -243,6 +245,8 @@ export function PaginatedMediaGrid({
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string") return;
       cancelledLiveIds.current.add(detail.mediaId);
+      liveQueueRef.current = liveQueueRef.current.filter((mediaId) => mediaId !== detail.mediaId);
+      preparedLiveMediaRef.current.delete(detail.mediaId);
       setPages((current) =>
         current
           .map((page) => page.filter((item) => item.id !== detail.mediaId))
@@ -267,6 +271,44 @@ export function PaginatedMediaGrid({
   useEffect(() => {
     let disposed = false;
     const inFlightIds = new Set<string>();
+
+    const removeQueuedLiveMedia = (mediaId: string) => {
+      liveQueueRef.current = liveQueueRef.current.filter((queuedId) => queuedId !== mediaId);
+      preparedLiveMediaRef.current.delete(mediaId);
+    };
+
+    const flushPreparedLivePairs = () => {
+      if (disposed) return;
+      const batch: PublicMediaView[] = [];
+      while (liveQueueRef.current.length >= 2) {
+        const firstId = liveQueueRef.current[0];
+        const secondId = liveQueueRef.current[1];
+        if (firstId === undefined || secondId === undefined) break;
+        const first = preparedLiveMediaRef.current.get(firstId);
+        const second = preparedLiveMediaRef.current.get(secondId);
+        if (first === undefined || second === undefined) break;
+
+        liveQueueRef.current.splice(0, 2);
+        preparedLiveMediaRef.current.delete(firstId);
+        preparedLiveMediaRef.current.delete(secondId);
+        batch.push(first, second);
+      }
+      if (batch.length === 0) return;
+
+      const viewportAnchor = currentViewportAnchor();
+      setPreparedLiveIds((current) => {
+        const next = new Set(current);
+        for (const media of batch) next.add(media.id);
+        return next;
+      });
+      setPages((current) => {
+        const firstPage = current[0] ?? [];
+        return [mergeMedia(firstPage, batch), ...current.slice(1)];
+      });
+      restoreViewportAnchor(viewportAnchor);
+      setLiveError(null);
+      void refreshFeatured().catch(() => undefined);
+    };
 
     const resolvePublishedMedia = async (mediaId: string): Promise<PublicMediaView | null> => {
       if (categoryId === undefined) {
@@ -294,27 +336,22 @@ export function PaginatedMediaGrid({
 
           try {
             const media = await resolvePublishedMedia(mediaId);
-            if (media === null || disposed || cancelledLiveIds.current.has(mediaId)) return;
+            if (media === null) {
+              removeQueuedLiveMedia(mediaId);
+              flushPreparedLivePairs();
+              return;
+            }
+            if (disposed || cancelledLiveIds.current.has(mediaId)) return;
             await prepareGridPreview(media, slug);
             if (disposed || cancelledLiveIds.current.has(mediaId)) return;
 
-            const viewportAnchor = currentViewportAnchor();
-            setPreparedLiveIds((current) => {
-              if (current.has(media.id)) return current;
-              const next = new Set(current);
-              next.add(media.id);
-              return next;
-            });
-            setPages((current) => {
-              const firstPage = current[0] ?? [];
-              return [mergeMedia(firstPage, [media]), ...current.slice(1)];
-            });
-            restoreViewportAnchor(viewportAnchor);
-            setLiveError(null);
-            void refreshFeatured().catch(() => undefined);
+            preparedLiveMediaRef.current.set(media.id, media);
+            flushPreparedLivePairs();
             return;
           } catch (caught) {
             if (caught instanceof ClientApiError && caught.response?.code === "MEDIA_NOT_FOUND") {
+              removeQueuedLiveMedia(mediaId);
+              flushPreparedLivePairs();
               return;
             }
             attempt += 1;
@@ -333,12 +370,20 @@ export function PaginatedMediaGrid({
       const detail = (event as CustomEvent<{ readonly mediaId?: string }>).detail;
       if (typeof detail?.mediaId !== "string") return;
       cancelledLiveIds.current.delete(detail.mediaId);
+      if (
+        !liveQueueRef.current.includes(detail.mediaId) &&
+        !preparedLiveMediaRef.current.has(detail.mediaId)
+      ) {
+        liveQueueRef.current.push(detail.mediaId);
+      }
       void preparePublishedMedia(detail.mediaId);
     };
 
     window.addEventListener("photostream:media-published", published);
     return () => {
       disposed = true;
+      liveQueueRef.current = [];
+      preparedLiveMediaRef.current.clear();
       window.removeEventListener("photostream:media-published", published);
     };
   }, [categoryId, pageSize, refreshFeatured, slug]);
