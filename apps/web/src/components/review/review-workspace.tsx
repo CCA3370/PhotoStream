@@ -137,14 +137,14 @@ interface RemoteSelectionPage {
 interface LocalView {
   readonly photo: LocalReviewPhoto;
   readonly originalUrl: string;
-  readonly previewUrl: string;
-  readonly viewerUrl: string;
+  readonly previewUrl: string | null;
+  readonly viewerUrl: string | null;
 }
 
 interface LocalObjectUrls {
   readonly originalUrl: string;
-  readonly previewUrl: string;
-  readonly viewerUrl: string;
+  readonly previewUrl: string | null;
+  readonly viewerUrl: string | null;
 }
 
 interface DragSelectionState {
@@ -159,8 +159,8 @@ type ReviewItem =
       readonly key: string;
       readonly source: "local";
       readonly local: LocalView;
-      readonly previewUrl: string;
-      readonly viewerUrl: string;
+      readonly previewUrl: string | null;
+      readonly viewerUrl: string | null;
       readonly viewerFallbackUrl: null;
       readonly remoteOriginalUrl: string;
       readonly localPreferred: true;
@@ -215,6 +215,30 @@ const bibOcrFilters = new Set<BibOcrFilter>([
 const sortOrders = new Set<SortOrder>(["newest", "oldest"]);
 const gridDensities = new Set<GridDensity>(["compact", "standard", "large"]);
 const reviewGridDensityStorageKey = "photostream:review-grid-density";
+const reviewStandardLocalThumbnailOrder = [
+  "photo_960",
+  "photo_480",
+  "photo_1920",
+  "photo_240",
+] as const;
+const reviewStandardRemoteThumbnailOrder = [
+  "photo_960",
+  "photo_480",
+  "photo_240",
+  "photo_1920",
+] as const;
+const reviewCompactLocalThumbnailOrder = [
+  "photo_480",
+  "photo_960",
+  "photo_1920",
+  "photo_240",
+] as const;
+const reviewCompactRemoteThumbnailOrder = [
+  "photo_480",
+  "photo_960",
+  "photo_240",
+  "photo_1920",
+] as const;
 
 function enumQueryValue<T extends string>(
   params: URLSearchParams,
@@ -232,6 +256,7 @@ function simpleQueryValue(params: URLSearchParams, key: string): string {
 
 function preview(media: InternalMediaView): string | null {
   return (
+    media.variants.find((variant) => variant.kind === "photo_960")?.url ??
     media.variants.find((variant) => variant.kind === "photo_480")?.url ??
     media.variants.find((variant) => variant.kind === "photo_1920")?.url ??
     null
@@ -486,8 +511,8 @@ export function ReviewWorkspace({
     const activeIds = new Set(rows.map((photo) => photo.id));
     for (const [photoId, urls] of localUrlCache.current) {
       if (activeIds.has(photoId)) continue;
-      URL.revokeObjectURL(urls.previewUrl);
-      URL.revokeObjectURL(urls.viewerUrl);
+      if (urls.previewUrl !== null) URL.revokeObjectURL(urls.previewUrl);
+      if (urls.viewerUrl !== null) URL.revokeObjectURL(urls.viewerUrl);
       URL.revokeObjectURL(urls.originalUrl);
       localUrlCache.current.delete(photoId);
     }
@@ -495,18 +520,19 @@ export function ReviewWorkspace({
       let urls = localUrlCache.current.get(photo.id);
       if (urls === undefined) {
         const previewBlob =
-          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
           photo.variants.find((variant) => variant.kind === "photo_960")?.blob ??
+          photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
           photo.variants.find((variant) => variant.kind === "photo_1920")?.blob ??
-          photo.originalBlob;
+          photo.microPreviewBlob ??
+          null;
         const viewerBlob =
           photo.variants.find((variant) => variant.kind === "photo_1920")?.blob ??
           photo.variants.find((variant) => variant.kind === "photo_960")?.blob ??
           photo.variants.find((variant) => variant.kind === "photo_480")?.blob ??
-          photo.originalBlob;
+          null;
         urls = {
-          previewUrl: URL.createObjectURL(previewBlob),
-          viewerUrl: URL.createObjectURL(viewerBlob),
+          previewUrl: previewBlob === null ? null : URL.createObjectURL(previewBlob),
+          viewerUrl: viewerBlob === null ? null : URL.createObjectURL(viewerBlob),
           originalUrl: URL.createObjectURL(photo.originalBlob),
         };
         localUrlCache.current.set(photo.id, urls);
@@ -642,8 +668,8 @@ export function ReviewWorkspace({
       window.removeEventListener("photostream:local-review-changed", localChanged);
       window.removeEventListener(LOCAL_BIB_SERVER_STATE_EVENT, serverBibChanged);
       for (const urls of localUrlCache.current.values()) {
-        URL.revokeObjectURL(urls.previewUrl);
-        URL.revokeObjectURL(urls.viewerUrl);
+        if (urls.previewUrl !== null) URL.revokeObjectURL(urls.previewUrl);
+        if (urls.viewerUrl !== null) URL.revokeObjectURL(urls.viewerUrl);
         URL.revokeObjectURL(urls.originalUrl);
       }
       localUrlCache.current.clear();
@@ -2366,24 +2392,29 @@ export function ReviewWorkspace({
                     }}
                     type="button"
                   >
-                    {item.previewUrl === null ? null : (
-                      <InternalCachedImage
-                        alt="审核图片"
-                        className="object-cover"
-                        fill
-                        mediaId={item.source === "remote" ? item.remote.id : null}
-                        sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
-                        src={item.previewUrl}
-                        unoptimized
-                        variantKind={
-                          item.source === "remote"
-                            ? item.remote.variants.find(
-                                (variant) => variant.url === item.previewUrl,
-                              )?.kind
-                            : undefined
-                        }
-                      />
-                    )}
+                    <InternalCachedImage
+                      alt="审核图片"
+                      className="object-cover"
+                      fill
+                      localPhoto={item.source === "local" ? item.local.photo : item.local?.photo}
+                      localVariantOrder={
+                        gridDensity === "compact"
+                          ? reviewCompactLocalThumbnailOrder
+                          : reviewStandardLocalThumbnailOrder
+                      }
+                      mediaId={
+                        item.source === "remote" ? item.remote.id : item.local.photo.mediaId
+                      }
+                      remoteVariantOrder={
+                        gridDensity === "compact"
+                          ? reviewCompactRemoteThumbnailOrder
+                          : reviewStandardRemoteThumbnailOrder
+                      }
+                      remoteVariants={item.source === "remote" ? item.remote.variants : undefined}
+                      sizes="(max-width: 639px) 50vw, (max-width: 767px) 33vw, 20vw"
+                      src={item.previewUrl}
+                      unoptimized
+                    />
                   </button>
                   {selectionMode ? (
                     <Button

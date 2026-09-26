@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 const minZoom = 1;
 const maxZoom = 5;
 const toolbarButtonClass = "rounded-lg";
+const reviewViewerVariantOrder = ["photo_1920", "photo_960", "photo_480"] as const;
 
 type Point = { x: number; y: number };
 type Gesture =
@@ -179,6 +180,7 @@ export function ReviewLightbox({
   const originalObjectUrlRef = useRef<string | null>(null);
   const [viewingOriginal, setViewingOriginal] = useState(false);
   const [originalLoading, setOriginalLoading] = useState(false);
+  const [originalUnavailable, setOriginalUnavailable] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [bibDialogOpen, setBibDialogOpen] = useState(false);
@@ -256,6 +258,7 @@ export function ReviewLightbox({
     setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
     setViewingOriginal(false);
     setOriginalLoading(false);
+    setOriginalUnavailable(false);
     if (originalObjectUrlRef.current !== null) {
       URL.revokeObjectURL(originalObjectUrlRef.current);
       originalObjectUrlRef.current = null;
@@ -461,6 +464,7 @@ export function ReviewLightbox({
     if (selected === null) return;
 
     const selectedKeyAtStart = selected.key;
+    setOriginalUnavailable(false);
     setOriginalLoading(true);
     try {
       let objectUrl: string;
@@ -487,7 +491,10 @@ export function ReviewLightbox({
       setLoadFailed(false);
       resetView();
     } catch {
-      if (selectedKeyRef.current === selectedKeyAtStart) setLoadFailed(true);
+      if (selectedKeyRef.current === selectedKeyAtStart) {
+        setOriginalUnavailable(true);
+        setLoadFailed(true);
+      }
     } finally {
       if (selectedKeyRef.current === selectedKeyAtStart) setOriginalLoading(false);
     }
@@ -499,6 +506,7 @@ export function ReviewLightbox({
     displayIdentityRef.current = `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(nextSource) ?? "none"}`;
     setDisplaySrc(nextSource);
     setViewingOriginal(false);
+    setOriginalUnavailable(false);
     setLoaded(false);
     setLoadFailed(false);
     resetView();
@@ -507,12 +515,7 @@ export function ReviewLightbox({
   function onImageError(): void {
     if (selected === null) return;
     setLoaded(false);
-    if (selected.fallbackSrc !== null && displaySrc !== selected.fallbackSrc) {
-      displayIdentityRef.current = `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(selected.fallbackSrc) ?? "none"}`;
-      setDisplaySrc(selected.fallbackSrc);
-      setLoadFailed(false);
-      return;
-    }
+    if (viewingOriginal) setOriginalUnavailable(true);
     setLoadFailed(true);
   }
 
@@ -599,7 +602,7 @@ export function ReviewLightbox({
                     ) : null}
                     {loadFailed ? (
                       <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
-                        图片加载失败
+                        {originalUnavailable ? "大图暂不可用" : "图片加载失败"}
                       </div>
                     ) : null}
                     <div
@@ -622,9 +625,17 @@ export function ReviewLightbox({
                           if (!readOnly) onViewed(selected.key);
                         }}
                         loading="eager"
+                        localPhotoId={selected.localPhotoId}
+                        localVariantOrder={
+                          readOnly || viewingOriginal ? undefined : reviewViewerVariantOrder
+                        }
+                        mediaId={selected.mediaId}
+                        remoteVariantOrder={
+                          readOnly || viewingOriginal ? undefined : reviewViewerVariantOrder
+                        }
+                        remoteVariants={selected.variants}
                         sizes="100vw"
                         src={displaySrc}
-                        mediaId={selected.mediaId}
                         variantKind={
                           selected.variants?.find((variant) => variant.url === displaySrc)?.kind
                         }
@@ -643,7 +654,7 @@ export function ReviewLightbox({
                   {(selected.localPreferred && selected.originalSrc !== null) ||
                   (!selected.localPreferred && selected.mediaId !== null) ? (
                     <Button
-                      aria-label={viewingOriginal ? "返回 1920" : "查看原图"}
+                      aria-label={viewingOriginal ? "返回预览" : "查看原图"}
                       className="border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white"
                       disabled={originalLoading}
                       onClick={() => {
@@ -651,12 +662,12 @@ export function ReviewLightbox({
                         else void showOriginal();
                       }}
                       size="sm"
-                      title={viewingOriginal ? "返回 1920 预览" : "查看上传原图"}
+                      title={viewingOriginal ? "返回预览" : "查看上传原图"}
                       type="button"
                       variant="review-lightbox"
                     >
                       {originalLoading ? <Spinner className="animate-spin" /> : <ImageIcon />}
-                      <span>{viewingOriginal ? "返回 1920" : "查看原图"}</span>
+                      <span>{viewingOriginal ? "返回预览" : "查看原图"}</span>
                     </Button>
                   ) : null}
                   {fullscreenSupported ? (

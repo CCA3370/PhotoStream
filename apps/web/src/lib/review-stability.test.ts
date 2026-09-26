@@ -45,29 +45,30 @@ describe("management review stability guards", () => {
     expect(source).toContain("openItemKeysRef.current");
   });
 
-  it("uses local 480/1920 management derivatives and keeps originals on demand", () => {
+  it("uses density-aware thumbnail priorities and keeps originals on demand", () => {
     const lightbox = readFileSync(lightboxPath, "utf8");
     const workspace = readFileSync(workspacePath, "utf8");
 
-    expect(workspace).toContain('variant.kind === "photo_480"');
-    expect(workspace).toContain('variant.kind === "photo_1920"');
-    expect(workspace).toContain(
-      'variant.kind === "photo_1920")?.url ??\n    media.variants.find((variant) => variant.kind === "photo_960")?.url ??',
-    );
-    expect(workspace).toContain(
-      'variant.kind === "photo_480")?.url ??\n    media.variants.find((variant) => variant.kind === "photo_1920")?.url ??',
-    );
-    expect(workspace).toContain('variant.kind === "photo_480")?.blob');
-    expect(workspace).toContain('variant.kind === "photo_1920")?.blob');
-    expect(workspace).toContain("previewUrl: item.previewUrl");
-    expect(workspace).toContain("viewerUrl: item.viewerUrl");
-    expect(workspace).toContain("previewUrl: localPreviewUrl ?? previewUrl");
-    expect(workspace).toContain("viewerUrl: localViewerUrl ?? ordinaryUrl");
+    expect(workspace).toContain("reviewStandardLocalThumbnailOrder");
+    expect(workspace).toContain("reviewStandardRemoteThumbnailOrder");
+    expect(workspace).toContain("reviewCompactLocalThumbnailOrder");
+    expect(workspace).toContain("reviewCompactRemoteThumbnailOrder");
+    expect(workspace).toContain('"photo_960"');
+    expect(workspace).toContain('"photo_480"');
+    expect(workspace).toContain('"photo_240"');
+    expect(workspace).toContain("photo.microPreviewBlob");
+    expect(workspace).not.toContain("photo.originalBlob;\n        const viewerBlob");
+    expect(workspace).toContain("localVariantOrder={");
+    expect(workspace).toContain("remoteVariantOrder={");
 
+    expect(lightbox).toContain(
+      'const reviewViewerVariantOrder = ["photo_1920", "photo_960", "photo_480"] as const',
+    );
     expect(lightbox).toContain("resolveMediaEditSource");
     expect(lightbox).toContain("selected.localPreferred && selected.originalSrc !== null");
     expect(lightbox).toContain('"查看原图"');
-    expect(lightbox).toContain("mediaId={selected.mediaId}");
+    expect(lightbox).toContain('"大图暂不可用"');
+    expect(lightbox).toContain("localPhotoId={selected.localPhotoId}");
   });
 
   it("docks the management inspector beside the image and opens it by default", () => {

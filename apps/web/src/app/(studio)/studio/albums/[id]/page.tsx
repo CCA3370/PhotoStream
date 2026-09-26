@@ -35,6 +35,9 @@ interface CategoryView {
   readonly enabled: boolean;
 }
 
+const managementThumbnailLocalOrder = ["photo_960", "photo_480", "photo_1920", "photo_240"] as const;
+const managementThumbnailRemoteOrder = ["photo_960", "photo_480", "photo_240", "photo_1920"] as const;
+
 const publicationLabels: Record<InternalMediaView["publicationStatus"], string> = {
   draft: "已隐藏",
   pending_review: "已隐藏",
@@ -51,8 +54,9 @@ function formatBytes(bytes: number): string {
 
 function recentPreview(media: InternalMediaView) {
   return (
-    media.variants.find((variant) => variant.kind === "photo_480") ??
     media.variants.find((variant) => variant.kind === "photo_960") ??
+    media.variants.find((variant) => variant.kind === "photo_480") ??
+    media.variants.find((variant) => variant.kind === "photo_1920") ??
     null
   );
 }
@@ -276,7 +280,10 @@ export default async function AlbumOverviewPage({ params }: { params: Promise<{ 
                             alt="最近上传照片"
                             className="object-cover transition-transform group-hover:scale-[1.02]"
                             fill
+                            localVariantOrder={managementThumbnailLocalOrder}
                             mediaId={media.id}
+                            remoteVariantOrder={managementThumbnailRemoteOrder}
+                            remoteVariants={media.variants}
                             sizes="240px"
                             src={preview.url}
                             unoptimized
