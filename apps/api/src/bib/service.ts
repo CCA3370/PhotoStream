@@ -210,7 +210,7 @@ export class BibService {
       })),
     };
     const rule = validateBibRuleSet(normalized.patterns);
-    const mapping = validateBibMappings(
+    const mapping = validateBibAttributeRules(
       normalized.patterns,
       normalized.attributeOptions,
       normalized.attributeRules,

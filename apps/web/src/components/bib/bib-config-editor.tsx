@@ -408,10 +408,26 @@ function attributeRuleKey(rule: BibAttributeRuleInput): string {
   return [rule.dimension, rule.startPosition, rule.width, rule.firstValue].join(":");
 }
 
-function isSchoolGradeClassAttributePreset(rules: readonly BibAttributeRuleInput[]): boolean {
+function isSchoolGradeClassAttributePreset(
+  options: readonly BibAttributeOptionInput[],
+  rules: readonly BibAttributeRuleInput[],
+): boolean {
+  const gradeNames = orderedOptions(options, "grade")
+    .filter((option) => option.enabled)
+    .slice(0, schoolGradeNames.length)
+    .map((option) => option.displayName.trim());
+  if (
+    gradeNames.length < schoolGradeNames.length ||
+    gradeNames.some((name, index) => name !== schoolGradeNames[index])
+  ) {
+    return false;
+  }
   const expected = schoolGradeClassAttributeRules().map(attributeRuleKey).toSorted();
   const actual = rules.map(attributeRuleKey).toSorted();
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+  return (
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index])
+  );
 }
 
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
@@ -470,7 +486,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       : null,
   );
   const [mappingPreset, setMappingPreset] = useState<"school-grade-class" | null>(() =>
-    isSchoolGradeClassAttributePreset(initial.attributeRules) ? "school-grade-class" : null,
+    isSchoolGradeClassAttributePreset(initial.attributeOptions, initial.attributeRules)
+      ? "school-grade-class"
+      : null,
   );
   const [saved, setSaved] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -631,6 +649,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function moveOption(optionId: string, direction: -1 | 1): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const option = current.attributeOptions.find((item) => item.id === optionId);
       if (option === undefined) return current;
@@ -655,6 +674,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function removeOption(optionId: string): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const removed = current.attributeOptions.find((option) => option.id === optionId);
       if (removed === undefined) return current;
@@ -680,7 +700,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             ? { ...option, sortOrder: gradeSortOrderById.get(option.id) ?? option.sortOrder }
             : option,
         ),
-        mappings: current.mappings.filter((mapping) => !removedIds.has(mapping.outputOptionId)),
       };
     });
   }
@@ -777,6 +796,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function setAttributeRuleEnabled(dimension: BibAttributeDimension, enabled: boolean): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const remaining = current.attributeRules.filter((rule) => rule.dimension !== dimension);
       if (!enabled) return { ...current, attributeRules: remaining };
@@ -817,7 +837,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       (config.recognitionEnabled || config.searchEnabled) &&
       (!validation.rule.usable || !validation.mapping.usable)
     ) {
-      setError("当前规则或映射存在冲突，关闭开关后可保存草稿，不能直接启用。");
+      setError("当前号码规则或属性解析规则不可用，关闭开关后可保存草稿，不能直接启用。");
       return;
     }
     setPending(true);
@@ -834,7 +854,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       setRuleDraft(updatedRuleDraft);
       setRulePreset(isSchoolFiveDigitPreset(updatedRuleDraft) ? "school-five-digit" : null);
       setMappingPreset(
-        isSchoolGradeClassAttributePreset(updated.attributeRules) ? "school-grade-class" : null,
+        isSchoolGradeClassAttributePreset(updated.attributeOptions, updated.attributeRules)
+          ? "school-grade-class"
+          : null,
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "号码配置保存失败");
@@ -1613,7 +1635,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
       <Button disabled={pending} onClick={() => void save()} type="button">
         <SaveIcon data-icon="inline-start" />
-        {pending ? "正在保存…" : "保存号码规则与映射"}
+        {pending ? "正在保存…" : "保存号码规则与属性解析"}
       </Button>
       <ErrorDialog message={error} onClose={() => setError(null)} title="号码配置失败" />
     </div>

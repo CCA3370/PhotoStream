@@ -349,7 +349,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
           constraints: pattern.constraints
             .map((constraint) => ({ ...constraint, sortOrder: constraint.sortOrder + 10 }))
             .toReversed(),
-        }))
+        })),
       },
       requestId: "bib-display-name-only",
     });

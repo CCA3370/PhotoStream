@@ -264,7 +264,7 @@ describe("bib rule engine", () => {
             enabled: true,
           },
         ],
-        mappings: [],
+        attributeRules: [],
       }).success,
     ).toBe(false);
     expect(
