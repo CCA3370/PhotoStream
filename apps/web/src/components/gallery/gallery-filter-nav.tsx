@@ -66,15 +66,15 @@ export function GalleryFilterNav({
         className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         ref={scrollRef}
       >
-        <div className="flex h-full w-max items-center gap-0.5 pr-2 sm:gap-1 sm:pr-3">
+        <div className="flex h-full w-max items-stretch pr-2 sm:pr-3">
           {items.map((item) => {
             const active = selectedKey === item.key;
             return (
               <button
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-8 shrink-0 touch-manipulation items-center justify-center rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/45 hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70 sm:px-3 lg:h-9 lg:px-3.5 lg:text-[15px]",
-                  active && "bg-muted/80 text-foreground",
+                  "relative flex h-full shrink-0 touch-manipulation items-center justify-center bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-wait disabled:opacity-70 sm:px-3.5 lg:px-5 lg:text-[15px] lg:after:inset-x-3",
+                  active && "text-foreground after:bg-primary",
                 )}
                 data-gallery-filter-key={item.key}
                 disabled={pendingKey !== null}
@@ -89,16 +89,16 @@ export function GalleryFilterNav({
         </div>
       </div>
 
-      <div className="relative flex shrink-0 items-center border-l border-border/75 bg-background/96 px-2 sm:px-3 lg:px-4">
+      <div className="relative flex shrink-0 items-center border-l-2 border-border bg-background/98 px-2.5 sm:px-3.5 lg:px-4">
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 -left-3 w-3 bg-gradient-to-r from-transparent to-background/96"
+          className="pointer-events-none absolute inset-y-0 -left-4 w-4 bg-gradient-to-r from-transparent to-background/98"
         />
         <button
           aria-pressed={featuredOnly}
           className={cn(
-            "flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/45 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70 lg:h-9 lg:px-3 lg:text-[15px]",
-            featuredOnly && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+            "flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-border/80 bg-muted/25 px-2.5 text-sm font-medium text-foreground shadow-xs transition-[background-color,border-color,color] duration-150 hover:border-border hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70 lg:h-9 lg:px-3 lg:text-[15px]",
+            featuredOnly && "border-primary/35 bg-primary/10 text-primary hover:border-primary/45 hover:bg-primary/15",
           )}
           disabled={pendingKey !== null}
           onClick={() => onFeaturedChange(!featuredOnly)}
