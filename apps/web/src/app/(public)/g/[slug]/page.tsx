@@ -15,7 +15,6 @@ import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { ApiRequestError, serverApi } from "@/lib/api";
 import { orderFeaturedMedia } from "@/lib/featured-order";
 
-
 interface MediaList {
   readonly items: readonly PublicMediaView[];
   readonly nextCursor: string | null;
