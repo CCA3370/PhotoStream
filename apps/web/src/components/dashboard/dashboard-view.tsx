@@ -36,8 +36,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseShanghaiInputValue, shanghaiInputValue } from "@/lib/dashboard-range";
 import { cn } from "@/lib/utils";
 
-const managementThumbnailLocalOrder = ["photo_960", "photo_480", "photo_1920", "photo_240"] as const;
-const managementThumbnailRemoteOrder = ["photo_960", "photo_480", "photo_240", "photo_1920"] as const;
+const managementThumbnailLocalOrder = [
+  "photo_960",
+  "photo_480",
+  "photo_1920",
+  "photo_240",
+] as const;
+const managementThumbnailRemoteOrder = [
+  "photo_960",
+  "photo_480",
+  "photo_240",
+  "photo_1920",
+] as const;
 
 export interface DashboardStatistics {
   readonly from: string;

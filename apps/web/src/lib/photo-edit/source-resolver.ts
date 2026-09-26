@@ -10,7 +10,7 @@ export interface ResolvedMediaEditSource {
   readonly sourceOrigin: MediaEditSourceOrigin;
 }
 
-interface MediaEditSourceDependencies {
+export interface MediaEditSourceDependencies {
   readonly findLocal: (mediaId: string) => Promise<{ readonly originalBlob: Blob } | null>;
   readonly requestRemote: (mediaId: string) => Promise<MediaEditSourceView>;
   readonly fetchRemote: (url: string) => Promise<Response>;
@@ -28,18 +28,10 @@ const defaultDependencies: MediaEditSourceDependencies = {
   fetchRemote: (url) => fetch(url, { method: "GET", credentials: "omit" }),
 };
 
-export async function resolveMediaEditSource(
+export async function resolveRemoteMediaEditSource(
   mediaId: string,
   dependencies: MediaEditSourceDependencies = defaultDependencies,
 ): Promise<ResolvedMediaEditSource> {
-  const local = await dependencies.findLocal(mediaId);
-  if (local !== null) {
-    return {
-      blob: local.originalBlob,
-      sourceOrigin: "local-original",
-    };
-  }
-
   const remote = await dependencies.requestRemote(mediaId);
   const response = await dependencies.fetchRemote(remote.url);
   if (!response.ok) {
@@ -51,4 +43,18 @@ export async function resolveMediaEditSource(
     blob,
     sourceOrigin: "remote-original",
   };
+}
+
+export async function resolveMediaEditSource(
+  mediaId: string,
+  dependencies: MediaEditSourceDependencies = defaultDependencies,
+): Promise<ResolvedMediaEditSource> {
+  const local = await dependencies.findLocal(mediaId);
+  if (local !== null) {
+    return {
+      blob: local.originalBlob,
+      sourceOrigin: "local-original",
+    };
+  }
+  return resolveRemoteMediaEditSource(mediaId, dependencies);
 }

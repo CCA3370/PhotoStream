@@ -44,7 +44,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
-import { resolveMediaEditSource } from "@/lib/photo-edit/source-resolver";
+import {
+  type MediaEditSourceOrigin,
+  resolveMediaEditSource,
+  resolveRemoteMediaEditSource,
+} from "@/lib/photo-edit/source-resolver";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -178,7 +182,9 @@ export function ReviewLightbox({
   const selectedKeyRef = useRef<string | null>(selectedKey);
   selectedKeyRef.current = selectedKey;
   const originalObjectUrlRef = useRef<string | null>(null);
+  const originalObjectOriginRef = useRef<MediaEditSourceOrigin | null>(null);
   const [viewingOriginal, setViewingOriginal] = useState(false);
+  const [originalSource, setOriginalSource] = useState<MediaEditSourceOrigin | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const [originalUnavailable, setOriginalUnavailable] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -257,11 +263,13 @@ export function ReviewLightbox({
     setEditMode(false);
     setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
     setViewingOriginal(false);
+    setOriginalSource(null);
     setOriginalLoading(false);
     setOriginalUnavailable(false);
     if (originalObjectUrlRef.current !== null) {
       URL.revokeObjectURL(originalObjectUrlRef.current);
       originalObjectUrlRef.current = null;
+      originalObjectOriginRef.current = null;
     }
     resetView();
     pointersRef.current.clear();
@@ -293,6 +301,7 @@ export function ReviewLightbox({
       if (originalObjectUrlRef.current !== null) {
         URL.revokeObjectURL(originalObjectUrlRef.current);
         originalObjectUrlRef.current = null;
+        originalObjectOriginRef.current = null;
       }
     },
     [],
@@ -468,18 +477,23 @@ export function ReviewLightbox({
     setOriginalLoading(true);
     try {
       let objectUrl: string;
+      let sourceOrigin: MediaEditSourceOrigin;
       if (selected.localPreferred && selected.originalSrc !== null) {
         objectUrl = selected.originalSrc;
+        sourceOrigin = "local-original";
       } else {
         if (selected.mediaId === null) return;
         const cached = originalObjectUrlRef.current;
-        if (cached !== null) {
+        if (cached !== null && originalObjectOriginRef.current !== null) {
           objectUrl = cached;
+          sourceOrigin = originalObjectOriginRef.current;
         } else {
           const resolved = await resolveMediaEditSource(selected.mediaId);
           if (selectedKeyRef.current !== selectedKeyAtStart) return;
           objectUrl = URL.createObjectURL(resolved.blob);
+          sourceOrigin = resolved.sourceOrigin;
           originalObjectUrlRef.current = objectUrl;
+          originalObjectOriginRef.current = sourceOrigin;
         }
       }
       if (selectedKeyRef.current !== selectedKeyAtStart) return;
@@ -487,6 +501,41 @@ export function ReviewLightbox({
       displayIdentityRef.current = `${selected.key}\u0000original\u0000${internalImageSourceIdentity(objectUrl) ?? "local-original"}`;
       setDisplaySrc(objectUrl);
       setViewingOriginal(true);
+      setOriginalSource(sourceOrigin);
+      setLoaded(false);
+      setLoadFailed(false);
+      resetView();
+    } catch {
+      if (selectedKeyRef.current === selectedKeyAtStart) {
+        setOriginalUnavailable(true);
+        setLoadFailed(true);
+      }
+    } finally {
+      if (selectedKeyRef.current === selectedKeyAtStart) setOriginalLoading(false);
+    }
+  }
+
+  async function showRemoteOriginalFallback(selectedKeyAtStart: string): Promise<void> {
+    if (selected === null || selected.mediaId === null) {
+      setOriginalUnavailable(true);
+      setLoadFailed(true);
+      return;
+    }
+    setOriginalLoading(true);
+    try {
+      const resolved = await resolveRemoteMediaEditSource(selected.mediaId);
+      if (selectedKeyRef.current !== selectedKeyAtStart) return;
+      if (originalObjectUrlRef.current !== null) {
+        URL.revokeObjectURL(originalObjectUrlRef.current);
+      }
+      const objectUrl = URL.createObjectURL(resolved.blob);
+      originalObjectUrlRef.current = objectUrl;
+      originalObjectOriginRef.current = resolved.sourceOrigin;
+      displayIdentityRef.current = `${selected.key}\u0000original\u0000${internalImageSourceIdentity(objectUrl) ?? "remote-original"}`;
+      setDisplaySrc(objectUrl);
+      setViewingOriginal(true);
+      setOriginalSource("remote-original");
+      setOriginalUnavailable(false);
       setLoaded(false);
       setLoadFailed(false);
       resetView();
@@ -506,6 +555,7 @@ export function ReviewLightbox({
     displayIdentityRef.current = `${selected.key}\u0000${selected.visualRevision ?? "base"}\u0000${internalImageSourceIdentity(nextSource) ?? "none"}`;
     setDisplaySrc(nextSource);
     setViewingOriginal(false);
+    setOriginalSource(null);
     setOriginalUnavailable(false);
     setLoaded(false);
     setLoadFailed(false);
@@ -515,6 +565,15 @@ export function ReviewLightbox({
   function onImageError(): void {
     if (selected === null) return;
     setLoaded(false);
+    if (
+      viewingOriginal &&
+      originalSource === "local-original" &&
+      selected.mediaId !== null
+    ) {
+      setLoadFailed(false);
+      void showRemoteOriginalFallback(selected.key);
+      return;
+    }
     if (viewingOriginal) setOriginalUnavailable(true);
     setLoadFailed(true);
   }
@@ -589,7 +648,9 @@ export function ReviewLightbox({
                       正在准备修图源…
                     </div>
                   )
-                ) : displaySrc === null ? (
+                ) : displaySrc === null &&
+                  selected.localPhotoId === null &&
+                  selected.mediaId === null ? (
                   <div className="absolute inset-0 grid place-items-center text-sm text-white/60">
                     暂无可预览图片
                   </div>
