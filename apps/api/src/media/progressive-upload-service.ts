@@ -140,10 +140,10 @@ export class ProgressiveUploadService {
       if (album === undefined) {
         throw new AppError({ code: "NOT_FOUND", message: "相册不存在", statusCode: 404 });
       }
-      if (album.state !== "live") {
+      if (album.state !== "draft" && album.state !== "live") {
         throw new AppError({
           code: "ALBUM_NOT_LIVE",
-          message: "相册未在直播中，不能创建上传任务",
+          message: "活动当前状态不允许上传照片",
           statusCode: 409,
         });
       }
@@ -380,7 +380,8 @@ export class ProgressiveUploadService {
           .limit(1),
       ]);
       if (
-        albumState?.state !== "live" ||
+        albumState === undefined ||
+        (albumState.state !== "draft" && albumState.state !== "live") ||
         currentIntent?.status !== "active" ||
         currentIntent.expiresAt <= new Date()
       ) {
