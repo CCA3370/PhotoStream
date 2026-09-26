@@ -1,27 +1,64 @@
-import { Clock3Icon, RadioIcon } from "lucide-react";
-import type { ReactNode } from "react";
+"use client";
 
-import { Badge } from "@/components/ui/badge";
+import { SearchIcon, XIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toast";
+
+interface SearchHeaderState {
+  readonly active: boolean;
+  readonly count: number;
+  readonly label: string;
+}
 
 export interface PublicGalleryShellProps {
   readonly albumTitle: string;
   readonly albumDescription?: string;
   readonly children: ReactNode;
-  readonly reserveSearchAction?: boolean;
-  readonly status?: "未开始" | "直播中" | "已结束";
+  readonly searchAvailable?: boolean;
 }
 
 export function PublicGalleryShell({
   albumTitle,
   albumDescription = "",
   children,
-  reserveSearchAction = false,
-  status = "直播中",
+  searchAvailable = false,
 }: PublicGalleryShellProps) {
+  const [searchState, setSearchState] = useState<SearchHeaderState>({
+    active: false,
+    count: 0,
+    label: "找照片",
+  });
   const headerHeightClass = albumDescription
     ? "[--public-gallery-header-height:4rem] lg:[--public-gallery-header-height:6.25rem]"
     : "[--public-gallery-header-height:3rem] lg:[--public-gallery-header-height:5.5rem]";
+
+  useEffect(() => {
+    const updateSearchState = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          readonly active?: boolean;
+          readonly count?: number;
+          readonly label?: string;
+        }>
+      ).detail;
+      setSearchState({
+        active: detail?.active === true,
+        count: typeof detail?.count === "number" ? detail.count : 0,
+        label:
+          typeof detail?.label === "string" && detail.label.length > 0
+            ? detail.label
+            : "找照片",
+      });
+    };
+    window.addEventListener("photostream:search-status", updateSearchState);
+    return () => window.removeEventListener("photostream:search-status", updateSearchState);
+  }, []);
+
+  const openSearch = () => window.dispatchEvent(new Event("photostream:open-search"));
+  const clearSearch = () => window.dispatchEvent(new Event("photostream:clear-search"));
 
   return (
     <Toaster>
@@ -52,19 +89,37 @@ export function PublicGalleryShell({
                 ) : null}
               </div>
 
-              <Badge
-                className={`h-6 shrink-0 self-center gap-1 rounded-full px-2.5 text-[10px] shadow-xs sm:text-[11px] lg:h-9 lg:gap-1.5 lg:px-4 lg:text-[13px] ${
-                  reserveSearchAction ? "lg:mr-40" : ""
-                }`}
-                variant={status === "直播中" ? "default" : "secondary"}
-              >
-                {status === "未开始" ? (
-                  <Clock3Icon aria-hidden="true" className="size-2.5 lg:size-3.5" />
-                ) : (
-                  <RadioIcon aria-hidden="true" className="size-2.5 lg:size-3.5" />
-                )}
-                {status}
-              </Badge>
+              {searchAvailable ? (
+                <div
+                  className="flex shrink-0 items-center gap-0.5 rounded-xl border bg-background/78 p-0.5 shadow-xs backdrop-blur-sm lg:rounded-full"
+                  data-viewer-onboarding-target="search"
+                >
+                  <button
+                    className="flex h-9 min-w-0 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] px-2.5 text-sm font-medium transition-colors hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 lg:h-10 lg:max-w-[13rem] lg:rounded-full lg:px-3.5"
+                    onClick={openSearch}
+                    type="button"
+                  >
+                    <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">
+                      {searchState.active
+                        ? `${searchState.label} · ${searchState.count}张`
+                        : "找照片"}
+                    </span>
+                  </button>
+                  {searchState.active ? (
+                    <Button
+                      aria-label="关闭找照片"
+                      className="size-8 shrink-0 rounded-lg lg:rounded-full"
+                      onClick={clearSearch}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <XIcon aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
