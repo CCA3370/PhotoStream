@@ -95,11 +95,11 @@ export function PublicGalleryShell({
                   data-viewer-onboarding-target="search"
                 >
                   <button
-                    className="flex h-8 min-w-0 max-w-[8.5rem] items-center gap-1.5 rounded-lg bg-muted/55 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 sm:max-w-[10rem] sm:text-sm lg:h-9 lg:max-w-[13rem] lg:px-3"
+                    className="flex h-8 min-w-0 max-w-[8.5rem] items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 text-xs font-semibold text-foreground shadow-xs transition-[background-color,border-color] hover:border-primary/40 hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 sm:max-w-[10rem] sm:text-sm lg:h-9 lg:max-w-[13rem] lg:px-3"
                     onClick={openSearch}
                     type="button"
                   >
-                    <SearchIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground sm:size-4" />
+                    <SearchIcon aria-hidden="true" className="size-3.5 shrink-0 text-primary sm:size-4" />
                     <span className="truncate">
                       {searchState.active
                         ? `${searchState.label} · ${searchState.count}张`
