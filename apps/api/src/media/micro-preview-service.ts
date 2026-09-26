@@ -171,6 +171,39 @@ export class MicroPreviewService {
     return { ok: true };
   }
 
+  async internalUrl(actor: InternalActor, mediaId: string): Promise<string> {
+    if (!hasPermission(actor.role, "album:read")) {
+      throw new AppError({ code: "FORBIDDEN", message: "没有查看权限", statusCode: 403 });
+    }
+    const [preview] = await this.#database
+      .select({
+        objectKey: schema.mediaMicroPreviews.objectKey,
+        uploaderId: schema.media.uploaderId,
+        publicationStatus: schema.media.publicationStatus,
+      })
+      .from(schema.mediaMicroPreviews)
+      .innerJoin(schema.media, eq(schema.media.id, schema.mediaMicroPreviews.mediaId))
+      .where(
+        and(
+          eq(schema.mediaMicroPreviews.mediaId, mediaId),
+          eq(schema.mediaMicroPreviews.verified, true),
+        ),
+      )
+      .limit(1);
+    if (
+      preview === undefined ||
+      preview.publicationStatus === "deleted" ||
+      (actor.role === "uploader" && preview.uploaderId !== actor.id)
+    ) {
+      throw new AppError({ code: "MEDIA_NOT_FOUND", message: "极小缩略图不存在", statusCode: 404 });
+    }
+    return this.#storage.signRead({
+      key: preview.objectKey,
+      expiresAt: previewExpiresAt(15 * 60 * 1_000),
+      stable: true,
+    });
+  }
+
   async publicUrl(options: {
     readonly slug: string;
     readonly mediaId: string;

@@ -57,6 +57,7 @@ export interface LocalReviewPhoto {
   readonly totalBytes: number;
   readonly capturedAt: string | null;
   readonly variants: readonly LocalReviewVariant[];
+  readonly microPreviewBlob?: Blob | null;
   readonly featured: boolean;
   readonly createdAt: string;
   readonly intentId: string | null;
@@ -68,7 +69,7 @@ export interface LocalReviewPhoto {
 
 const databaseName = "photostream-local-review";
 const storeName = "photos";
-const databaseVersion = 1;
+const databaseVersion = 2;
 const broadcastChannelName = "photostream-local-review-events";
 const mutationTails = new Map<string, Promise<void>>();
 let broadcastChannel: BroadcastChannel | null = null;
@@ -100,6 +101,7 @@ function normalizeStoredPhoto(photo: LocalReviewPhoto): LocalReviewPhoto {
     ...photo,
     sourceFileName: photo.sourceFileName ?? photo.fileName,
     sourceHash: photo.sourceHash ?? null,
+    microPreviewBlob: photo.microPreviewBlob ?? null,
     bib:
       storedBib === undefined
         ? { ...defaultBibState(), ocrStatus: "disabled" }
@@ -136,9 +138,17 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(databaseName, databaseVersion);
     request.addEventListener("upgradeneeded", () => {
       const database = request.result;
-      if (database.objectStoreNames.contains(storeName)) return;
-      const store = database.createObjectStore(storeName, { keyPath: "id" });
-      store.createIndex("albumId", "albumId", { unique: false });
+      const transaction = request.transaction;
+      if (transaction === null) return;
+      const store = database.objectStoreNames.contains(storeName)
+        ? transaction.objectStore(storeName)
+        : database.createObjectStore(storeName, { keyPath: "id" });
+      if (!store.indexNames.contains("albumId")) {
+        store.createIndex("albumId", "albumId", { unique: false });
+      }
+      if (!store.indexNames.contains("mediaId")) {
+        store.createIndex("mediaId", "mediaId", { unique: false });
+      }
     });
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () =>
@@ -214,6 +224,7 @@ export function createLocalReviewPhoto(options: {
     totalBytes: options.file.size,
     capturedAt: options.processed.capturedAt,
     variants: options.processed.variants.map((variant) => ({ ...variant })),
+    microPreviewBlob: null,
     featured: false,
     createdAt: new Date().toISOString(),
     intentId: null,
@@ -249,11 +260,12 @@ export async function findLocalReviewPhotoByMediaId(
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readonly");
-    const rows = await requestResult(
-      transaction.objectStore(storeName).getAll() as IDBRequest<LocalReviewPhoto[]>,
+    const row = await requestResult(
+      transaction.objectStore(storeName).index("mediaId").get(mediaId) as IDBRequest<
+        LocalReviewPhoto | undefined
+      >,
     );
     await complete(transaction);
-    const row = rows.find((candidate) => candidate.mediaId === mediaId);
     return row === undefined ? null : normalizeStoredPhoto(row);
   } finally {
     database.close();

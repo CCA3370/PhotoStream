@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { requireInternalCsrf } from "../auth/http.js";
+import { requireInternalCsrf, requireInternalSession } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import type { AppConfig } from "../config.js";
 import type { MicroPreviewService } from "../media/micro-preview-service.js";
@@ -18,7 +18,11 @@ const publicParamsSchema = z
   })
   .strict();
 
-function actorFrom(session: Awaited<ReturnType<typeof requireInternalCsrf>>) {
+function actorFrom(
+  session:
+    | Awaited<ReturnType<typeof requireInternalCsrf>>
+    | Awaited<ReturnType<typeof requireInternalSession>>,
+) {
   return { id: session.record.user.id, role: session.record.user.role };
 }
 
@@ -80,6 +84,28 @@ export async function registerMicroPreviewRoutes(
         actor: actorFrom(session),
         mediaId: request.params.id,
       });
+    },
+  );
+
+  typed.get(
+    "/api/v1/media/:id/micro-preview",
+    {
+      schema: {
+        operationId: "readInternalMicroPreview",
+        tags: ["media"],
+        params: mediaParamsSchema,
+        response: {
+          200: z.object({ url: z.string().url() }).strict(),
+          ...commonErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return {
+        url: await options.microPreviewService.internalUrl(actorFrom(session), request.params.id),
+      };
     },
   );
 

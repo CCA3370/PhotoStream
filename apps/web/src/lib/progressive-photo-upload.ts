@@ -230,8 +230,8 @@ export async function uploadProgressiveMicroPreview(
   originalWidth: number,
   originalHeight: number,
   signal?: AbortSignal,
-): Promise<void> {
-  if (source.kind !== "photo_480") return;
+): Promise<Blob | null> {
+  if (source.kind !== "photo_480") return null;
   const bitmap = await createImageBitmap(source.blob);
   try {
     const size = microPreviewDimensions(originalWidth, originalHeight);
@@ -271,6 +271,7 @@ export async function uploadProgressiveMicroPreview(
       `/api/v1/media/${encodeURIComponent(mediaId)}/micro-preview/complete`,
       signalOptions(signal),
     );
+    return blob;
   } finally {
     bitmap.close();
   }

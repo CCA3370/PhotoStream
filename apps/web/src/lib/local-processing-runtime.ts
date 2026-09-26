@@ -652,15 +652,18 @@ class LocalProcessingRuntime {
               const currentMetadata = metadata;
               if (currentMetadata !== null) {
                 uploads.push(
-                  uploaded.then((latest) =>
-                    uploadProgressiveMicroPreview(
+                  uploaded.then(async (latest) => {
+                    const microPreviewBlob = await uploadProgressiveMicroPreview(
                       latest.mediaId,
                       variant,
                       currentMetadata.width,
                       currentMetadata.height,
                       controller.signal,
-                    ),
-                  ),
+                    );
+                    if (microPreviewBlob !== null) {
+                      await patchLocalReviewPhoto(task.localPhotoId, { microPreviewBlob });
+                    }
+                  }),
                 );
               }
             }
