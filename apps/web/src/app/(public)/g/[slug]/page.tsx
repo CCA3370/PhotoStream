@@ -103,7 +103,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
         albumTitle={album.title}
         status="未开始"
       >
-        <ScheduledAlbumAutoRefresh scheduledStartAt={album.scheduledStartAt} />
+        <ScheduledAlbumAutoRefresh scheduledStartAt={album.scheduledStartAt} slug={slug} />
         <div className="mx-auto flex min-h-[55dvh] max-w-xl items-center justify-center py-8 sm:py-14">
           <div className="w-full rounded-2xl border bg-card px-5 py-7 text-center shadow-sm sm:px-8 sm:py-10">
             <p className="text-xs font-medium text-muted-foreground">活动状态</p>
