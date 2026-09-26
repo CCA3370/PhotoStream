@@ -510,7 +510,7 @@ export function MediaGrid({
       Math.abs(previous.viewportWidth - snapshot.viewportWidth) > 1 ||
       window.scrollY > 220 ||
       prefersReducedMotion() ||
-      !mediaIds.some((id) => !previous.ids.has(id))
+      (mediaIds.length === previous.ids.size && mediaIds.every((id) => previous.ids.has(id)))
     ) {
       return;
     }
