@@ -702,8 +702,11 @@ export function ReviewWorkspace({
     for (const item of localMedia) {
       if (item.photo.mediaId !== null) localByMediaId.set(item.photo.mediaId, item);
     }
+    const remoteMediaIds = new Set(remoteMedia.map((item) => item.id));
     const localItems: ReviewItem[] = localMedia
-      .filter((item) => item.photo.mediaId === null)
+      .filter(
+        (item) => item.photo.mediaId === null || !remoteMediaIds.has(item.photo.mediaId),
+      )
       .map((item) => ({
         key: `local:${item.photo.id}`,
         source: "local",

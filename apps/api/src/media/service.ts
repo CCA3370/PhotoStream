@@ -1446,6 +1446,7 @@ export class PhotoService {
         })
         .returning({ id: schema.uploadIntents.id });
       if (intent === undefined) throw new Error("Upload intent insert returned no row");
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${album.id})`);
       return intent.id;
     });
     return this.getUploadIntent(options.actor, intentId);
@@ -1970,6 +1971,7 @@ export class PhotoService {
       let publicationStatus = currentMedia.publicationStatus;
       let publishSequence = currentMedia.publishSequence;
       let publishedAt = currentMedia.publishedAt;
+      let reviewNotified = false;
 
       if (previewReady && publicationStatus === "draft") {
         const album = await this.#albumById(transaction, currentMedia.albumId);
@@ -1987,6 +1989,7 @@ export class PhotoService {
           publicationStatus = "published";
           publishSequence = published.publishSequence;
           publishedAt = now;
+          reviewNotified = true;
         } else {
           publicationStatus = "pending_review";
         }
@@ -2022,7 +2025,13 @@ export class PhotoService {
             mediaId: currentMedia.id,
             type: "media.updated",
           });
+          reviewNotified = true;
         }
+      }
+      if (!reviewNotified) {
+        await transaction.execute(
+          sql`select pg_notify(${liveEventChannel}, ${currentMedia.albumId})`,
+        );
       }
     });
     return this.getUploadIntent(options.actor, options.intentId);
