@@ -288,6 +288,13 @@
       "when": 1790370000000,
       "tag": "0040_bib_attribute_rule_compatibility",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790373600000,
+      "tag": "0041_compact_legacy_bib_mappings",
+      "breakpoints": true
     }
   ]
 }

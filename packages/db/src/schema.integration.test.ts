@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { eq } from "drizzle-orm";
@@ -243,6 +244,161 @@ maybeDescribe("PostgreSQL identity schema", () => {
          )`,
     );
     expect(forbiddenColumns.rows).toEqual([]);
+  });
+
+  it("compacts legacy exact bib mappings without deleting rollback data", async () => {
+    const admin = await insertAdmin();
+    const [album] = await database
+      .insert(schema.albums)
+      .values({
+        slug: "legacy-bib",
+        title: "Legacy bib migration",
+        access: "password",
+        passwordHash: "hash:test",
+        idempotencyKey: "legacy-bib-migration",
+        createdBy: admin.id,
+      })
+      .returning();
+    if (album === undefined) throw new Error("Expected inserted album");
+
+    const gradeOne = "019d1000-0000-7000-8000-000000000001";
+    const gradeTwo = "019d1000-0000-7000-8000-000000000002";
+    const gradeOneClassOne = "019d1000-0000-7000-8000-000000000003";
+    const gradeOneClassTwo = "019d1000-0000-7000-8000-000000000004";
+    const gradeTwoClassOne = "019d1000-0000-7000-8000-000000000005";
+    await database.insert(schema.bibAttributeOptions).values([
+      {
+        id: gradeOne,
+        albumId: album.id,
+        dimension: "grade",
+        displayName: "初一",
+        sortOrder: 0,
+        ordinal: null,
+        enabled: true,
+      },
+      {
+        id: gradeTwo,
+        albumId: album.id,
+        dimension: "grade",
+        displayName: "初二",
+        sortOrder: 1,
+        ordinal: null,
+        enabled: true,
+      },
+      {
+        id: gradeOneClassOne,
+        albumId: album.id,
+        dimension: "class",
+        displayName: "1班",
+        sortOrder: 0,
+        ordinal: null,
+        enabled: true,
+        parentGradeOptionId: gradeOne,
+      },
+      {
+        id: gradeOneClassTwo,
+        albumId: album.id,
+        dimension: "class",
+        displayName: "2班",
+        sortOrder: 1,
+        ordinal: null,
+        enabled: true,
+        parentGradeOptionId: gradeOne,
+      },
+      {
+        id: gradeTwoClassOne,
+        albumId: album.id,
+        dimension: "class",
+        displayName: "1班",
+        sortOrder: 0,
+        ordinal: null,
+        enabled: true,
+        parentGradeOptionId: gradeTwo,
+      },
+    ]);
+
+    const legacy = [
+      { dimension: "grade" as const, startPosition: 1, width: 1, value: "1", outputOptionId: gradeOne },
+      { dimension: "grade" as const, startPosition: 1, width: 1, value: "2", outputOptionId: gradeTwo },
+      { dimension: "class" as const, startPosition: 2, width: 2, value: "01", outputOptionId: gradeOneClassOne },
+      { dimension: "class" as const, startPosition: 2, width: 2, value: "02", outputOptionId: gradeOneClassTwo },
+      { dimension: "class" as const, startPosition: 2, width: 2, value: "01", outputOptionId: gradeTwoClassOne },
+    ];
+    for (const [sortOrder, item] of legacy.entries()) {
+      const [mapping] = await database
+        .insert(schema.bibAttributeMappingsLegacy)
+        .values({
+          albumId: album.id,
+          dimension: item.dimension,
+          startPosition: item.startPosition,
+          width: item.width,
+          outputOptionId: item.outputOptionId,
+          sortOrder,
+        })
+        .returning({ id: schema.bibAttributeMappingsLegacy.id });
+      if (mapping === undefined) throw new Error("Expected inserted legacy mapping");
+      await database.insert(schema.bibAttributeMappingRangesLegacy).values({
+        mappingId: mapping.id,
+        startValue: item.value,
+        endValue: item.value,
+        sortOrder: 0,
+      });
+    }
+
+    const migrationPath = fileURLToPath(
+      new URL("../drizzle/0041_compact_legacy_bib_mappings.sql", import.meta.url),
+    );
+    const migrationSql = await readFile(migrationPath, "utf8");
+    const statements = migrationSql
+      .split("--> statement-breakpoint")
+      .map((statement) => statement.trim())
+      .filter((statement) => statement.length > 0);
+    for (const statement of statements) await pool.query(statement);
+    for (const statement of statements) await pool.query(statement);
+
+    const rules = await database
+      .select()
+      .from(schema.bibAttributeRules)
+      .where(eq(schema.bibAttributeRules.albumId, album.id));
+    expect(rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dimension: "grade",
+          startPosition: 1,
+          width: 1,
+          firstValue: 1,
+        }),
+        expect.objectContaining({
+          dimension: "class",
+          startPosition: 2,
+          width: 2,
+          firstValue: 1,
+        }),
+      ]),
+    );
+
+    const options = await database
+      .select({
+        id: schema.bibAttributeOptions.id,
+        ordinal: schema.bibAttributeOptions.ordinal,
+      })
+      .from(schema.bibAttributeOptions)
+      .where(eq(schema.bibAttributeOptions.albumId, album.id));
+    expect(options).toEqual(
+      expect.arrayContaining([
+        { id: gradeOne, ordinal: 0 },
+        { id: gradeTwo, ordinal: 1 },
+        { id: gradeOneClassOne, ordinal: 0 },
+        { id: gradeOneClassTwo, ordinal: 1 },
+        { id: gradeTwoClassOne, ordinal: 0 },
+      ]),
+    );
+
+    const retainedLegacyMappings = await database
+      .select()
+      .from(schema.bibAttributeMappingsLegacy)
+      .where(eq(schema.bibAttributeMappingsLegacy.albumId, album.id));
+    expect(retainedLegacyMappings).toHaveLength(5);
   });
 
   async function insertAdmin() {
