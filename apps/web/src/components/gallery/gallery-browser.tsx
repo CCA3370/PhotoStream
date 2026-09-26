@@ -13,7 +13,6 @@ import { ErrorDialog } from "@/components/ui/error-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { clientGet } from "@/lib/client-api";
 import { userFacingErrorMessage } from "@/lib/user-facing-error";
-import { cn } from "@/lib/utils";
 
 interface MediaPage {
   readonly items: readonly PublicMediaView[];
@@ -62,13 +61,13 @@ export function GalleryBrowser({
   dataSaverEnabled,
   faceSearch,
   initialFeaturedIds,
+  initialFeaturedOnly = false,
   initialFilterKey,
   initialPage,
   initialSelectedId,
   initialVisibilityNow,
   numberLengths,
   searchAvailable,
-  searchToolbarClassName,
   slug,
 }: Readonly<{
   attributeFilterEnabled: boolean;
@@ -79,26 +78,21 @@ export function GalleryBrowser({
   dataSaverEnabled: boolean;
   faceSearch?: FaceSearchOptions;
   initialFeaturedIds: readonly string[];
+  initialFeaturedOnly?: boolean;
   initialFilterKey: string;
   initialPage: MediaPage;
   initialSelectedId?: string;
   initialVisibilityNow: number;
   numberLengths: readonly number[];
   searchAvailable: boolean;
-  searchToolbarClassName?: string;
   slug: string;
 }>) {
   const initialCategory = categories.find((category) => category.id === initialFilterKey);
   const [state, setState] = useState<BrowserState>(() => ({
     ...(initialCategory === undefined ? {} : { categoryId: initialCategory.id }),
-    featuredOnly: initialFilterKey === "featured",
-    filterKey: initialFilterKey,
-    label:
-      initialFilterKey === "featured"
-        ? "精选"
-        : initialCategory === undefined
-          ? "全部"
-          : initialCategory.name,
+    featuredOnly: initialFeaturedOnly,
+    filterKey: initialCategory?.id ?? "all",
+    label: initialCategory?.name ?? "全部",
     page: initialPage,
     revision: 0,
     visibilityNow: initialVisibilityNow,
@@ -107,8 +101,11 @@ export function GalleryBrowser({
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const pageSize = dataSaverEnabled ? 30 : 60;
-  const inlineSearch = searchAvailable && !state.featuredOnly;
-  const sectionTitle = state.featuredOnly ? "精选照片" : `${state.label}照片`;
+  const sectionTitle = state.featuredOnly
+    ? state.filterKey === "all"
+      ? "精选照片"
+      : `${state.label}精选`
+    : `${state.label}照片`;
 
   const selectFilter = useCallback(
     async (selection: GalleryFilterSelection): Promise<void> => {
@@ -124,7 +121,7 @@ export function GalleryBrowser({
         const query = new URLSearchParams({ limit: String(pageSize) });
         if (selection.categoryId !== undefined) query.set("categoryId", selection.categoryId);
         const page = await clientGet<MediaPage>(
-          `/api/v1/public/albums/${encodeURIComponent(slug)}/media?${query.toString()}`,
+          `/api/v1/public/albums/${slug}/media?${query.toString()}`,
           controller.signal,
         );
         if (controller.signal.aborted) return;
@@ -132,7 +129,7 @@ export function GalleryBrowser({
         const visibilityNow = Date.now();
         setState((current) => ({
           ...(selection.categoryId === undefined ? {} : { categoryId: selection.categoryId }),
-          featuredOnly: selection.featuredOnly,
+          featuredOnly: current.featuredOnly,
           filterKey: selection.key,
           label: selection.label,
           page,
@@ -150,6 +147,18 @@ export function GalleryBrowser({
     [pageSize, pendingKey, slug, state.filterKey],
   );
 
+  const setFeaturedOnly = useCallback((featuredOnly: boolean) => {
+    setState((current) => {
+      if (current.featuredOnly === featuredOnly) return current;
+      return {
+        ...current,
+        featuredOnly,
+        revision: current.revision + 1,
+        visibilityNow: Date.now(),
+      };
+    });
+  }, []);
+
   const grid = (
     <PaginatedMediaGrid
       {...(state.categoryId === undefined ? {} : { categoryId: state.categoryId })}
@@ -159,18 +168,35 @@ export function GalleryBrowser({
       initialPage={state.page}
       {...(state.revision === 0 && initialSelectedId !== undefined ? { initialSelectedId } : {})}
       initialVisibilityNow={state.visibilityNow}
-      key={`${state.filterKey}:${state.revision}`}
+      key={`${state.filterKey}:${state.featuredOnly ? "featured" : "all"}:${state.revision}`}
       slug={slug}
     />
   );
 
+  const content = searchAvailable ? (
+    <BibSearchPanel
+      attributeFilterEnabled={attributeFilterEnabled}
+      attributeOptions={attributeOptions}
+      attributePairs={attributePairs}
+      bibSearchEnabled={bibSearchEnabled}
+      {...(faceSearch === undefined ? {} : { faceSearch })}
+      numberLengths={numberLengths}
+      slug={slug}
+    >
+      {grid}
+    </BibSearchPanel>
+  ) : (
+    grid
+  );
+
   return (
-    <div className={cn(inlineSearch && searchToolbarClassName)}>
+    <div>
       <GalleryFilterNav
         categories={categories}
+        featuredOnly={state.featuredOnly}
+        onFeaturedChange={setFeaturedOnly}
         onSelect={(selection) => void selectFilter(selection)}
         pendingKey={pendingKey}
-        reserveSearchSpace={inlineSearch}
         selectedKey={state.filterKey}
       />
 
@@ -188,26 +214,7 @@ export function GalleryBrowser({
       ) : null}
 
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
-        {inlineSearch ? (
-          <BibSearchPanel
-            attributeFilterEnabled={attributeFilterEnabled}
-            attributeOptions={attributeOptions}
-            attributePairs={attributePairs}
-            bibSearchEnabled={bibSearchEnabled}
-            {...(state.categoryId === undefined ? {} : { categoryId: state.categoryId })}
-            {...(faceSearch === undefined ? {} : { faceSearch })}
-            key={`search:${state.filterKey}:${state.revision}`}
-            numberLengths={numberLengths}
-            slug={slug}
-          >
-            {grid}
-          </BibSearchPanel>
-        ) : (
-          <>
-            <div className="px-0.5 text-sm font-medium text-foreground/85">{sectionTitle}</div>
-            {grid}
-          </>
-        )}
+        {content}
       </section>
 
       <ErrorDialog message={error} onClose={() => setError(null)} title="无法切换照片筛选" />
