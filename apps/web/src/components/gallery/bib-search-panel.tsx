@@ -16,7 +16,6 @@ import {
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { AnimatedResultCount } from "@/components/gallery/animated-result-count";
 import { MediaGrid } from "@/components/gallery/media-grid";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -124,7 +123,6 @@ export function BibSearchPanel({
   attributeOptions,
   attributePairs,
   bibSearchEnabled = true,
-  categoryId,
   children,
   faceSearch,
   numberLengths,
@@ -134,7 +132,6 @@ export function BibSearchPanel({
   attributeOptions: readonly AttributeOption[];
   attributePairs: readonly AttributePair[];
   bibSearchEnabled?: boolean;
-  categoryId?: string;
   children: ReactNode;
   faceSearch?: FaceSearchOptions;
   numberLengths: readonly number[];
@@ -225,7 +222,6 @@ export function BibSearchPanel({
                 body: {
                   gradeOptionId,
                   ...(classOptionId === null ? {} : { classOptionId }),
-                  ...(categoryId === undefined ? {} : { categoryId }),
                   ...(cursor === undefined ? {} : { cursor }),
                 },
               },
@@ -485,69 +481,45 @@ export function BibSearchPanel({
         : resultMode === "face"
           ? "人脸找图"
           : "找照片";
-  const resultCountKey =
+  const searchStatusLabel =
     resultMode === "number"
-      ? `number:${number}`
+      ? number
       : resultMode === "attributes"
-        ? `attributes:${gradeOptionId ?? ""}:${classOptionId ?? ""}`
-        : `face:${faceSearchId ?? ""}`;
-  const resultSummary =
-    resultMode === null ? (
-      `按${searchModes.map((item) => item.label).join("、")}筛选`
-    ) : resultMode === "face" && faceStatus === "failed" ? (
-      <>
-        检索未完整完成 · 已找到{" "}
-        <AnimatedResultCount key={resultCountKey} value={resultItems.length} /> 张候选
-      </>
-    ) : (
-      <>
-        找到 <AnimatedResultCount key={resultCountKey} value={resultItems.length} /> 张照片
-      </>
+        ? "年级班级"
+        : resultMode === "face"
+          ? "人脸"
+          : "找照片";
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("photostream:search-status", {
+        detail: {
+          active: resultMode !== null,
+          count: resultItems.length,
+          label: searchStatusLabel,
+        },
+      }),
     );
+  }, [resultItems.length, resultMode, searchStatusLabel]);
+
+  useEffect(() => {
+    const openSearch = () => openSearchDialog();
+    const clearSearch = () => clearResult();
+    window.addEventListener("photostream:open-search", openSearch);
+    window.addEventListener("photostream:clear-search", clearSearch);
+    return () => {
+      window.removeEventListener("photostream:open-search", openSearch);
+      window.removeEventListener("photostream:clear-search", clearSearch);
+      window.dispatchEvent(
+        new CustomEvent("photostream:search-status", {
+          detail: { active: false, count: 0, label: "找照片" },
+        }),
+      );
+    };
+  });
 
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className="flex items-center gap-1 rounded-xl border bg-background/75 p-1 shadow-xs backdrop-blur-sm"
-        data-gallery-search-toolbar
-      >
-        <button
-          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg lg:flex-none px-2 text-left transition-[transform,background-color] duration-150 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
-          data-viewer-onboarding-target="search"
-          onClick={openSearchDialog}
-          type="button"
-        >
-          <span
-            className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/65 transition-[transform,background-color] duration-200 group-hover:bg-muted group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
-            data-gallery-search-icon
-          >
-            <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">{resultLabel}</span>
-            <span
-              className="block truncate text-[11px] leading-4 text-muted-foreground"
-              data-gallery-search-summary
-            >
-              {resultSummary}
-            </span>
-          </span>
-        </button>
-        {resultMode === null || resultItems.length === 0 ? null : (
-          <Button
-            aria-label="清除找照片条件"
-            className="shrink-0 rounded-lg animate-in fade-in-0 zoom-in-90 duration-200 motion-reduce:animate-none"
-            data-gallery-search-clear
-            onClick={clearResult}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <XIcon aria-hidden="true" />
-          </Button>
-        )}
-      </div>
-
       {resultMode === null ? (
         children
       ) : (
