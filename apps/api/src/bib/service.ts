@@ -314,7 +314,8 @@ export class BibService {
       const ruleChanged =
         canonicalPatterns(current.patterns) !== canonicalPatterns(normalized.patterns);
       const mappingChanged =
-        canonicalAttributeRules(current.attributeRules) !== canonicalAttributeRules(normalized.attributeRules) ||
+        canonicalAttributeRules(current.attributeRules) !==
+          canonicalAttributeRules(normalized.attributeRules) ||
         canonicalAttributeHierarchy(current.attributeOptions) !==
           canonicalAttributeHierarchy(normalized.attributeOptions);
       const ruleVersion = album.bibRuleVersion + (ruleChanged ? 1 : 0);

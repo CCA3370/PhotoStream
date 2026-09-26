@@ -446,7 +446,9 @@ function isSchoolGradeClassAttributePreset(
   rules: readonly BibAttributeRuleInput[],
 ): boolean {
   const resolvedGrades = schoolGradeOptions(options);
-  if (resolvedGrades.some((grade, ordinal) => grade === undefined || grade.ordinal !== ordinal)) {
+  if (
+    resolvedGrades.some((grade, ordinal) => grade === undefined || grade.ordinal !== ordinal)
+  ) {
     return false;
   }
   const expected = schoolGradeClassAttributeRules().map(attributeRuleKey).toSorted();
