@@ -482,6 +482,30 @@ export function BibSearchPanel({
           : "找照片";
 
   useEffect(() => {
+    const emptySearchResult = resultMode !== null && resultItems.length === 0 && !open;
+    if (!emptySearchResult) return;
+
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflow = root.style.overflowY;
+    const previousBodyOverflow = body.style.overflowY;
+    const previousRootOverscroll = root.style.overscrollBehaviorY;
+    const previousBodyOverscroll = body.style.overscrollBehaviorY;
+
+    root.style.overflowY = "hidden";
+    body.style.overflowY = "hidden";
+    root.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+
+    return () => {
+      root.style.overflowY = previousRootOverflow;
+      body.style.overflowY = previousBodyOverflow;
+      root.style.overscrollBehaviorY = previousRootOverscroll;
+      body.style.overscrollBehaviorY = previousBodyOverscroll;
+    };
+  }, [open, resultItems.length, resultMode]);
+
+  useEffect(() => {
     window.dispatchEvent(
       new CustomEvent("photostream:search-status", {
         detail: {
@@ -525,12 +549,12 @@ export function BibSearchPanel({
             <div className="flex min-h-44 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed bg-muted/15 px-5 text-center text-sm text-muted-foreground">
               <span>{resultMode === "face" ? "检索已完成，没有找到匹配照片" : "没有匹配照片"}</span>
               <Button
-                className="h-11 rounded-xl border-blue-600 bg-blue-600 px-6 text-sm font-medium text-white shadow-sm hover:border-blue-700 hover:bg-blue-700 hover:text-white"
+                className="h-10 rounded-full border-border/80 bg-background px-4 text-sm font-medium text-foreground shadow-xs hover:bg-muted/55"
                 onClick={clearResult}
                 type="button"
                 variant="outline"
               >
-                <XIcon data-icon="inline-start" />
+                <XIcon className="size-4 text-muted-foreground" data-icon="inline-start" />
                 关闭查找
               </Button>
             </div>
