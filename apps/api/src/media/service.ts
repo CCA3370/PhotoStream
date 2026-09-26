@@ -1289,10 +1289,10 @@ export class PhotoService {
       );
       const album = await this.#albumById(transaction, options.input.albumId);
       if (album === null) throw this.#albumNotFound();
-      if (album.state !== "live") {
+      if (album.state !== "draft" && album.state !== "live") {
         throw new AppError({
           code: "ALBUM_NOT_LIVE",
-          message: "相册未在直播中，不能创建上传任务",
+          message: "活动当前状态不允许上传照片",
           statusCode: 409,
         });
       }
@@ -3383,7 +3383,7 @@ export class PhotoService {
       .from(schema.albums)
       .where(eq(schema.albums.id, scope.albumId))
       .limit(1);
-    if (album?.state !== "live") {
+    if (album === undefined || (album.state !== "draft" && album.state !== "live")) {
       throw new AppError({ code: "STATE_CONFLICT", message: "活动已停止上传", statusCode: 409 });
     }
   }
