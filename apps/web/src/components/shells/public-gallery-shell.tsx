@@ -91,15 +91,15 @@ export function PublicGalleryShell({
 
               {searchAvailable ? (
                 <div
-                  className="flex shrink-0 items-center gap-0.5 rounded-xl border bg-background/78 p-0.5 shadow-xs backdrop-blur-sm lg:rounded-full"
+                  className="flex shrink-0 items-center gap-0.5"
                   data-viewer-onboarding-target="search"
                 >
                   <button
-                    className="flex h-9 min-w-0 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] px-2.5 text-sm font-medium transition-colors hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 lg:h-10 lg:max-w-[13rem] lg:rounded-full lg:px-3.5"
+                    className="flex h-8 min-w-0 max-w-[8.5rem] items-center gap-1.5 rounded-lg bg-muted/55 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 sm:max-w-[10rem] sm:text-sm lg:h-9 lg:max-w-[13rem] lg:px-3"
                     onClick={openSearch}
                     type="button"
                   >
-                    <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                    <SearchIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground sm:size-4" />
                     <span className="truncate">
                       {searchState.active
                         ? `${searchState.label} · ${searchState.count}张`
@@ -109,7 +109,7 @@ export function PublicGalleryShell({
                   {searchState.active ? (
                     <Button
                       aria-label="关闭找照片"
-                      className="size-8 shrink-0 rounded-lg lg:rounded-full"
+                      className="size-7 shrink-0 rounded-lg"
                       onClick={clearSearch}
                       size="icon-sm"
                       type="button"
