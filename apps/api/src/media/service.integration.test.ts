@@ -13,6 +13,7 @@ import { MediaEditService } from "./edit-service.js";
 import { LiveEventBroker } from "./live-event-broker.js";
 import type { ObjectMetadata, ObjectStorage, SignedPut } from "./object-storage.js";
 import { OperationsService } from "./operations-service.js";
+import { ProgressiveUploadService } from "./progressive-upload-service.js";
 import { PhotoService } from "./service.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -191,6 +192,7 @@ maybeDescribe("photo vertical slice transactions", () => {
   const dataSaverService = new AlbumDataSaverService({ database });
   const editService = new MediaEditService({ database, storage });
   const operationsService = new OperationsService({ database, storage, config });
+  const progressiveUploadService = new ProgressiveUploadService(database);
   const userAdminService = new UserAdminService({ database, passwordHasher: fakeHasher, config });
   let adminId = "";
   let operatorId = "";
@@ -296,6 +298,55 @@ maybeDescribe("photo vertical slice transactions", () => {
       state: "draft",
       scheduledStartAt: scheduledStart.toISOString(),
     });
+
+    const draftIntent = await service.createPhotoUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: photoRequest(created.album.id),
+      idempotencyKey: "scheduled-draft-standard-upload-0001",
+    });
+    expect(draftIntent.mediaId).toBeTruthy();
+    await expect(
+      service.signUpload({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: draftIntent.id,
+        kind: "photo_480",
+      }),
+    ).resolves.toMatchObject({ url: expect.stringContaining("https://objects.example/") });
+
+    const progressiveDraftIntentId = await progressiveUploadService.createUpload({
+      actor: { id: uploaderId, role: "uploader" },
+      input: {
+        albumId: created.album.id,
+        categoryId: null,
+        width: 4_000,
+        height: 3_000,
+        totalBytes: 4_000_000,
+        capturedAt: null,
+        sourceHash: null,
+        allowDuplicate: false,
+        original: {
+          format: "jpeg",
+          contentType: "image/jpeg",
+          bytes: 4_000_000,
+        },
+      },
+      idempotencyKey: "scheduled-draft-progressive-upload-0001",
+    });
+    expect(progressiveDraftIntentId).toBeTruthy();
+    await expect(
+      progressiveUploadService.registerDerivedVariant({
+        actor: { id: uploaderId, role: "uploader" },
+        intentId: progressiveDraftIntentId,
+        variant: {
+          kind: "photo_480",
+          format: "webp",
+          contentType: "image/webp",
+          width: 480,
+          height: 360,
+          bytes: 30_000,
+        },
+      }),
+    ).resolves.toBeUndefined();
 
     const publicBeforeStart = await service.getPublicAlbum(created.album.slug);
     expect(publicBeforeStart.view).toMatchObject({
