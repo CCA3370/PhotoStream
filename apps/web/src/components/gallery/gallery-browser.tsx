@@ -153,7 +153,6 @@ export function GalleryBrowser({
       return {
         ...current,
         featuredOnly,
-        revision: current.revision + 1,
         visibilityNow: Date.now(),
       };
     });
@@ -168,7 +167,7 @@ export function GalleryBrowser({
       initialPage={state.page}
       {...(state.revision === 0 && initialSelectedId !== undefined ? { initialSelectedId } : {})}
       initialVisibilityNow={state.visibilityNow}
-      key={`${state.filterKey}:${state.featuredOnly ? "featured" : "all"}:${state.revision}`}
+      key={`${state.filterKey}:${state.revision}`}
       slug={slug}
     />
   );
