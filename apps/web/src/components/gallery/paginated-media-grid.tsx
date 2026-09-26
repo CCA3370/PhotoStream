@@ -183,6 +183,7 @@ export function PaginatedMediaGrid({
   const [featuredIds, setFeaturedIds] = useState<ReadonlySet<string>>(
     () => new Set(initialFeaturedIds),
   );
+  const featuredIdsRef = useRef<ReadonlySet<string>>(new Set(initialFeaturedIds));
   const [preparedLiveIds, setPreparedLiveIds] = useState<ReadonlySet<string>>(() => new Set());
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loading, setLoading] = useState(false);
@@ -199,22 +200,22 @@ export function PaginatedMediaGrid({
 
   const allItems = useMemo(() => pages.flat(), [pages]);
 
-  const refreshFeatured = useCallback(async () => {
-    const result = await clientGet<{ readonly mediaIds: readonly string[] }>(
-      `/api/v1/public/albums/${slug}/featured`,
-    );
-    const next = new Set(result.mediaIds);
-    setFeaturedIds((current) => {
+  const applyFeaturedSnapshot = useCallback(
+    (mediaIds: readonly string[]) => {
+      const next = new Set(mediaIds);
+      const current = featuredIdsRef.current;
       if (!featuredOnly) {
         pendingFeaturedIdsRef.current = [];
-        return sameStringSet(current, next) ? current : next;
+        featuredIdsRef.current = next;
+        setFeaturedIds((rendered) => (sameStringSet(rendered, next) ? rendered : next));
+        return;
       }
 
       pendingFeaturedIdsRef.current = pendingFeaturedIdsRef.current.filter(
         (mediaId) => next.has(mediaId) && !current.has(mediaId),
       );
       const pending = new Set(pendingFeaturedIdsRef.current);
-      for (const mediaId of result.mediaIds) {
+      for (const mediaId of mediaIds) {
         if (!current.has(mediaId) && !pending.has(mediaId)) {
           pendingFeaturedIdsRef.current.push(mediaId);
           pending.add(mediaId);
@@ -229,9 +230,22 @@ export function PaginatedMediaGrid({
         if (next.has(firstMediaId)) visible.add(firstMediaId);
         if (next.has(secondMediaId)) visible.add(secondMediaId);
       }
-      return sameStringSet(current, visible) ? current : visible;
-    });
-  }, [featuredOnly, slug]);
+
+      if (sameStringSet(current, visible)) return;
+      const viewportAnchor = currentViewportAnchor();
+      featuredIdsRef.current = visible;
+      setFeaturedIds(visible);
+      restoreViewportAnchor(viewportAnchor);
+    },
+    [featuredOnly],
+  );
+
+  const refreshFeatured = useCallback(async () => {
+    const result = await clientGet<{ readonly mediaIds: readonly string[] }>(
+      `/api/v1/public/albums/${slug}/featured`,
+    );
+    applyFeaturedSnapshot(result.mediaIds);
+  }, [applyFeaturedSnapshot, slug]);
 
   useEffect(() => {
     setPages((current) => {
@@ -244,16 +258,8 @@ export function PaginatedMediaGrid({
   }, [initialPage.items, initialPage.nextCursor]);
 
   useEffect(() => {
-    const next = new Set(initialFeaturedIds);
-    setFeaturedIds((current) => {
-      if (featuredOnly && pendingFeaturedIdsRef.current.length > 0) {
-        const held = new Set(pendingFeaturedIdsRef.current);
-        const visible = new Set([...next].filter((mediaId) => !held.has(mediaId)));
-        return sameStringSet(current, visible) ? current : visible;
-      }
-      return sameStringSet(current, next) ? current : next;
-    });
-  }, [featuredOnly, initialFeaturedIds]);
+    applyFeaturedSnapshot(initialFeaturedIds);
+  }, [applyFeaturedSnapshot, initialFeaturedIds]);
 
   useEffect(() => {
     let nextVisibleAt: number | null = null;
