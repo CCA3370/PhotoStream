@@ -86,7 +86,7 @@ function MediaTile({
           "animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
       )}
       data-media-grid-tile="true"
-        data-media-id={media.id}
+      data-media-id={media.id}
       style={
         animateIn && animationIndex !== undefined
           ? { animationDelay: `${animationIndex * 30}ms` }
