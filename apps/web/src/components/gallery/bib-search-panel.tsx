@@ -470,17 +470,8 @@ export function BibSearchPanel({
   const faceWorking = mode === "face" && isFaceWorking(faceView, faceStage);
   const faceCompleting = mode === "face" && faceStage === "complete";
   const faceItems = faceView?.items ?? [];
-  const faceStatus = faceView?.search.status;
   const resultItems = resultMode === "face" ? faceItems : (result?.items ?? []);
   const resultNextCursor = resultMode === "face" ? faceView?.nextCursor : result?.nextCursor;
-  const resultLabel =
-    resultMode === "number"
-      ? `号码 ${number}`
-      : resultMode === "attributes"
-        ? "年级班级"
-        : resultMode === "face"
-          ? "人脸找图"
-          : "找照片";
   const searchStatusLabel =
     resultMode === "number"
       ? number
@@ -502,9 +493,12 @@ export function BibSearchPanel({
     );
   }, [resultItems.length, resultMode, searchStatusLabel]);
 
+  const openSearchFromHeader = useEffectEvent(() => openSearchDialog());
+  const clearSearchFromHeader = useEffectEvent(() => clearResult());
+
   useEffect(() => {
-    const openSearch = () => openSearchDialog();
-    const clearSearch = () => clearResult();
+    const openSearch = () => openSearchFromHeader();
+    const clearSearch = () => clearSearchFromHeader();
     window.addEventListener("photostream:open-search", openSearch);
     window.addEventListener("photostream:clear-search", clearSearch);
     return () => {
@@ -516,7 +510,7 @@ export function BibSearchPanel({
         }),
       );
     };
-  });
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
