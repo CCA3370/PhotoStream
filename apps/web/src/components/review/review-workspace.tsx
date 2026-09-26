@@ -398,6 +398,7 @@ export function ReviewWorkspace({
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
   );
+  const [deletingKeys, setDeletingKeys] = useState<ReadonlySet<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());
   const [remoteSelection, setRemoteSelection] = useState<ReadonlyMap<
@@ -682,13 +683,6 @@ export function ReviewWorkspace({
         event as CustomEvent<{ readonly albumId?: string; readonly revision?: string }>
       ).detail;
       if (detail?.albumId !== albumId) return;
-      if (openItemKeysRef.current.size > 0) {
-        toast.add({
-          title: "审核数据已实时同步",
-          description: "当前打开的照片可能已在其他会话或操作中发生变化，已加载最新状态。",
-          type: "info",
-        });
-      }
       void Promise.all([refreshRemote(), refreshFeatured(), refreshReviewCollaboration()]).catch(
         (cause) => setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
       );
@@ -780,12 +774,14 @@ export function ReviewWorkspace({
           createdAt: linkedLocal?.photo.createdAt ?? item.createdAt,
         };
       });
-    return [...localItems, ...remoteItems].sort((left, right) =>
-      sortOrder === "oldest"
-        ? left.createdAt.localeCompare(right.createdAt)
-        : right.createdAt.localeCompare(left.createdAt),
-    );
-  }, [featuredIds, localMedia, remoteMedia, sortOrder]);
+    return [...localItems, ...remoteItems]
+      .filter((item) => !deletingKeys.has(item.key))
+      .sort((left, right) =>
+        sortOrder === "oldest"
+          ? left.createdAt.localeCompare(right.createdAt)
+          : right.createdAt.localeCompare(left.createdAt),
+      );
+  }, [deletingKeys, featuredIds, localMedia, remoteMedia, sortOrder]);
 
   const visibleItems = useMemo(
     () =>
@@ -1174,44 +1170,75 @@ export function ReviewWorkspace({
   }
 
   async function deleteItem(item: ReviewItem): Promise<void> {
-    if (isPending(item.key) || !canDeleteItem(item)) return;
+    if (isPending(item.key) || deletingKeys.has(item.key) || !canDeleteItem(item)) return;
     const currentIndex = lightboxSourceItems.findIndex((candidate) => candidate.key === item.key);
     const nextKey =
       activeKey === item.key && lightboxSourceItems.length > 1 && currentIndex >= 0
         ? (lightboxSourceItems[(currentIndex + 1) % lightboxSourceItems.length]?.key ?? null)
         : null;
-    setPending(item.key, "delete");
+    const mediaId = remoteId(item);
+
+    // Optimistic delete: remove the item from every active review surface immediately.
+    // The API only needs to accept the deletion task; storage/index cleanup continues server-side.
+    setDeletingKeys((current) => new Set(current).add(item.key));
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      next.delete(item.key);
+      return next;
+    });
+    if (activeKey === item.key) setActiveKey(nextKey);
+    if (inspectorKey === item.key) setInspectorKey(null);
+    if (bibDialogKey === item.key) setBibDialogKey(null);
+
+    if (item.source === "remote" && mediaId !== null) {
+      setRemoteMedia((current) => current.filter((candidate) => candidate.id !== mediaId));
+      setFeaturedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
+    } else if (item.source === "local" && mediaId === null) {
+      setLocalMedia((current) =>
+        current.filter((candidate) => candidate.photo.id !== item.local.photo.id),
+      );
+    }
+
+    showNotice("已开始删除");
+
     try {
-      const mediaId = remoteId(item);
       if (item.source === "local" && mediaId === null) {
         await deleteLocalReviewState(item.local.photo.id);
-      } else if (mediaId !== null) {
-        await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
-        setRemoteMedia((current) => current.filter((candidate) => candidate.id !== mediaId));
-        setFeaturedIds((current) => {
-          const next = new Set(current);
-          next.delete(mediaId);
-          return next;
-        });
-        if (item.source === "local") {
-          await deleteLocalReviewState(item.local.photo.id).catch(() => undefined);
-        } else if (item.local !== null) {
-          await deleteLocalReviewState(item.local.photo.id).catch(() => undefined);
-        }
+        await refreshLocal();
+        return;
       }
-      setSelectedKeys((current) => {
+      if (mediaId === null) return;
+
+      await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
+      const linkedLocal = item.source === "local" ? item.local : item.local;
+      if (linkedLocal !== null) {
+        await deleteLocalReviewState(linkedLocal.photo.id).catch(() => undefined);
+        await refreshLocal().catch(() => undefined);
+      }
+    } catch (cause) {
+      // The task was not accepted. Allow the item to return and restore its remote snapshot.
+      setDeletingKeys((current) => {
         const next = new Set(current);
         next.delete(item.key);
         return next;
       });
-      if (activeKey === item.key) setActiveKey(nextKey);
-      if (inspectorKey === item.key) setInspectorKey(null);
-      if (bibDialogKey === item.key) setBibDialogKey(null);
-      showNotice("已删除");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "删除失败");
-    } finally {
-      setPending(item.key, null);
+      if (item.source === "remote") {
+        setRemoteMedia((current) =>
+          current.some((candidate) => candidate.id === item.remote.id)
+            ? current
+            : [...current, item.remote],
+        );
+        if (item.featured) {
+          setFeaturedIds((current) => new Set(current).add(item.remote.id));
+        }
+      } else {
+        await refreshLocal().catch(() => undefined);
+      }
+      setError(cause instanceof Error ? cause.message : "删除任务创建失败");
     }
   }
 

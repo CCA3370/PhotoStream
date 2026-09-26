@@ -4,7 +4,7 @@ import Image, { type ImageProps } from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { clientGet } from "@/lib/client-api";
-import { internalImageKey } from "@/lib/internal-media-url";
+import { internalImageKey, internalImageSourceIdentity } from "@/lib/internal-media-url";
 import {
   findLocalReviewPhotoByMediaId,
   getLocalReviewPhoto,
@@ -82,31 +82,66 @@ export function InternalCachedImage({
   const failedCandidatesRef = useRef(new Set<string>());
   const [visible, setVisible] = useState(false);
   const [retryRevision, setRetryRevision] = useState(0);
-  const [resolved, setResolved] = useState<{
+  type ResolvedImage = {
     readonly strategy: string;
     readonly candidateId: string;
     readonly url: string;
-  } | null>(null);
+    readonly ownedObjectUrl: boolean;
+  };
+  const [resolved, setResolved] = useState<ResolvedImage | null>(null);
+  const resolvedRef = useRef<ResolvedImage | null>(null);
+  const requestRef = useRef({
+    src,
+    mediaId,
+    localPhotoId,
+    localPhoto,
+    variantKind,
+    remoteVariants,
+    localVariantOrder,
+    remoteVariantOrder,
+  });
+  requestRef.current = {
+    src,
+    mediaId,
+    localPhotoId,
+    localPhoto,
+    variantKind,
+    remoteVariants,
+    localVariantOrder,
+    remoteVariantOrder,
+  };
   const errorRef = useRef(onError);
   errorRef.current = onError;
   const eager = props.loading === "eager" || props.priority || props.preload;
 
   const exactKind = previewKind(variantKind);
+  const localOrder = localVariantOrder ?? (exactKind === null ? [] : ([exactKind] as const));
+  const localVariantSignature =
+    localPhoto === null || localPhoto === undefined
+      ? null
+      : localOrder
+          .map((kind) => {
+            const blob = localVariantBlob(localPhoto, kind);
+            return blob === null ? `${kind}:missing` : `${kind}:${blob.size}:${blob.type}`;
+          })
+          .join("|");
   const strategy = useMemo(
     () =>
       JSON.stringify({
-        src,
+        src: internalImageSourceIdentity(src),
         mediaId: mediaId ?? null,
         localPhotoId: localPhotoId ?? null,
-        localOrder: localVariantOrder ?? (exactKind === null ? [] : [exactKind]),
+        localVariants: localVariantSignature,
+        localOrder,
         remoteOrder: remoteVariantOrder ?? (exactKind === null ? [] : [exactKind]),
         remoteVariants:
           remoteVariants?.map((variant) => [variant.kind, internalImageKey(variant.url)]) ?? [],
       }),
     [
       exactKind,
+      localOrder,
       localPhotoId,
-      localVariantOrder,
+      localVariantSignature,
       mediaId,
       remoteVariantOrder,
       remoteVariants,
@@ -116,9 +151,17 @@ export function InternalCachedImage({
 
   useEffect(() => {
     failedCandidatesRef.current.clear();
-    setResolved(null);
     setRetryRevision(0);
   }, [strategy]);
+
+  useEffect(
+    () => () => {
+      const current = resolvedRef.current;
+      if (current?.ownedObjectUrl) URL.revokeObjectURL(current.url);
+      resolvedRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (eager || visible) return;
@@ -144,26 +187,42 @@ export function InternalCachedImage({
   useEffect(() => {
     if (!eager && !visible) return;
     let disposed = false;
-    let objectUrl: string | null = null;
+
+    const commitResolved = (next: ResolvedImage): void => {
+      if (disposed) {
+        if (next.ownedObjectUrl) URL.revokeObjectURL(next.url);
+        return;
+      }
+      const previous = resolvedRef.current;
+      resolvedRef.current = next;
+      setResolved(next);
+      if (previous?.ownedObjectUrl && previous.url !== next.url) {
+        URL.revokeObjectURL(previous.url);
+      }
+    };
 
     const resolveImage = async (): Promise<void> => {
+      const request = requestRef.current;
       const failed = failedCandidatesRef.current;
-      const localOrder =
-        localVariantOrder ?? (exactKind === null ? [] : ([exactKind] as const));
-      const remoteOrder =
-        remoteVariantOrder ?? (exactKind === null ? [] : ([exactKind] as const));
+      const requestExactKind = previewKind(request.variantKind);
+      const requestLocalOrder =
+        request.localVariantOrder ??
+        (requestExactKind === null ? [] : ([requestExactKind] as const));
+      const requestRemoteOrder =
+        request.remoteVariantOrder ??
+        (requestExactKind === null ? [] : ([requestExactKind] as const));
 
-      let local = localPhoto ?? null;
-      if (local === null && localPhotoId) {
+      let local = request.localPhoto ?? null;
+      if (local === null && request.localPhotoId) {
         try {
-          local = await getLocalReviewPhoto(localPhotoId);
+          local = await getLocalReviewPhoto(request.localPhotoId);
         } catch {
           local = null;
         }
       }
-      if (local === null && mediaId) {
+      if (local === null && request.mediaId) {
         try {
-          local = await findLocalReviewPhotoByMediaId(mediaId);
+          local = await findLocalReviewPhotoByMediaId(request.mediaId);
         } catch {
           local = null;
         }
@@ -171,27 +230,32 @@ export function InternalCachedImage({
       if (disposed) return;
 
       if (local !== null) {
-        for (const kind of localOrder) {
+        for (const kind of requestLocalOrder) {
           const candidateId = `local:${kind}`;
           if (failed.has(candidateId)) continue;
           const blob = localVariantBlob(local, kind);
           if (blob === null || blob.size === 0) continue;
-          objectUrl = URL.createObjectURL(blob);
-          setResolved({ strategy, candidateId, url: objectUrl });
+          const objectUrl = URL.createObjectURL(blob);
+          commitResolved({
+            strategy,
+            candidateId,
+            url: objectUrl,
+            ownedObjectUrl: true,
+          });
           return;
         }
       }
 
       const attemptedRemoteKeys = new Set<string>();
-      if (mediaId) {
-        for (const kind of remoteOrder) {
+      if (request.mediaId) {
+        for (const kind of requestRemoteOrder) {
           const candidateId = `remote:${kind}`;
           if (failed.has(candidateId)) continue;
           try {
             const known =
-              remoteVariants?.find((variant) => variant.kind === kind)?.url ??
-              (variantKind === kind ? src : null);
-            const sourceUrl = known ?? (await freshRemoteVariantUrl(mediaId, kind));
+              request.remoteVariants?.find((variant) => variant.kind === kind)?.url ??
+              (request.variantKind === kind ? request.src : null);
+            const sourceUrl = known ?? (await freshRemoteVariantUrl(request.mediaId, kind));
             const key = internalImageKey(sourceUrl);
             attemptedRemoteKeys.add(key);
             const blob = await loadMediaBlob({
@@ -199,11 +263,16 @@ export function InternalCachedImage({
               key,
               expectedBytes: null,
               sourceUrl,
-              refreshUrl: () => freshRemoteVariantUrl(mediaId, kind),
+              refreshUrl: () => freshRemoteVariantUrl(request.mediaId as string, kind),
             });
             if (disposed) return;
-            objectUrl = URL.createObjectURL(blob);
-            setResolved({ strategy, candidateId, url: objectUrl });
+            const objectUrl = URL.createObjectURL(blob);
+            commitResolved({
+              strategy,
+              candidateId,
+              url: objectUrl,
+              ownedObjectUrl: true,
+            });
             return;
           } catch {
             // Continue through the requested fallback order.
@@ -211,32 +280,45 @@ export function InternalCachedImage({
         }
       }
 
-      if (src !== null) {
+      if (request.src !== null) {
         const candidateId = "direct";
         if (!failed.has(candidateId)) {
-          if (/^https?:\/\//u.test(src)) {
-            const key = internalImageKey(src);
+          if (/^https?:\/\//u.test(request.src)) {
+            const key = internalImageKey(request.src);
             if (!attemptedRemoteKeys.has(key)) {
               try {
                 const blob = await loadMediaBlob({
                   cacheName: "photostream-internal-images-v1",
                   key,
                   expectedBytes: null,
-                  sourceUrl: src,
-                  ...(mediaId && exactKind
-                    ? { refreshUrl: () => freshRemoteVariantUrl(mediaId, exactKind) }
+                  sourceUrl: request.src,
+                  ...(request.mediaId && requestExactKind
+                    ? {
+                        refreshUrl: () =>
+                          freshRemoteVariantUrl(request.mediaId as string, requestExactKind),
+                      }
                     : {}),
                 });
                 if (disposed) return;
-                objectUrl = URL.createObjectURL(blob);
-                setResolved({ strategy, candidateId, url: objectUrl });
+                const objectUrl = URL.createObjectURL(blob);
+                commitResolved({
+                  strategy,
+                  candidateId,
+                  url: objectUrl,
+                  ownedObjectUrl: true,
+                });
                 return;
               } catch {
                 // Fall through to the user-facing failure below.
               }
             }
           } else {
-            setResolved({ strategy, candidateId, url: src });
+            commitResolved({
+              strategy,
+              candidateId,
+              url: request.src,
+              ownedObjectUrl: false,
+            });
             return;
           }
         }
@@ -248,25 +330,10 @@ export function InternalCachedImage({
     void resolveImage();
     return () => {
       disposed = true;
-      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
     };
-  }, [
-    eager,
-    exactKind,
-    localPhoto,
-    localPhotoId,
-    localVariantOrder,
-    mediaId,
-    remoteVariantOrder,
-    remoteVariants,
-    retryRevision,
-    src,
-    strategy,
-    variantKind,
-    visible,
-  ]);
+  }, [eager, retryRevision, strategy, visible]);
 
-  const display = resolved?.strategy === strategy ? resolved.url : null;
+  const display = resolved?.url ?? null;
 
   return (
     <span className="absolute inset-0" ref={host}>
@@ -276,13 +343,12 @@ export function InternalCachedImage({
           src={display}
           unoptimized
           onError={() => {
-            const candidateId = resolved?.candidateId;
+            const candidateId = resolved?.strategy === strategy ? resolved.candidateId : undefined;
             if (candidateId === undefined) {
               errorRef.current?.();
               return;
             }
             failedCandidatesRef.current.add(candidateId);
-            setResolved(null);
             setRetryRevision((current) => current + 1);
           }}
         />

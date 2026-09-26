@@ -288,7 +288,6 @@ export function ReviewLightbox({
     if (displayIdentityRef.current === nextIdentity) return;
     displayIdentityRef.current = nextIdentity;
     setDisplaySrc(nextSource);
-    setLoaded(false);
     setLoadFailed(false);
   }, [editMode, selected, viewingOriginal]);
 
@@ -502,7 +501,6 @@ export function ReviewLightbox({
       setDisplaySrc(objectUrl);
       setViewingOriginal(true);
       setOriginalSource(sourceOrigin);
-      setLoaded(false);
       setLoadFailed(false);
       resetView();
     } catch {
@@ -536,7 +534,6 @@ export function ReviewLightbox({
       setViewingOriginal(true);
       setOriginalSource("remote-original");
       setOriginalUnavailable(false);
-      setLoaded(false);
       setLoadFailed(false);
       resetView();
     } catch {
@@ -557,14 +554,12 @@ export function ReviewLightbox({
     setViewingOriginal(false);
     setOriginalSource(null);
     setOriginalUnavailable(false);
-    setLoaded(false);
     setLoadFailed(false);
     resetView();
   }
 
   function onImageError(): void {
     if (selected === null) return;
-    setLoaded(false);
     if (
       viewingOriginal &&
       originalSource === "local-original" &&
@@ -678,7 +673,6 @@ export function ReviewLightbox({
                         )}
                         draggable={false}
                         fill
-                        key={`${selected.key}:${selected.visualRevision ?? "base"}`}
                         onError={onImageError}
                         onLoad={() => {
                           setLoaded(true);

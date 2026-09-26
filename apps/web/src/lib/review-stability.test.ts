@@ -26,6 +26,7 @@ describe("management review stability guards", () => {
     expect(source).toContain('addEventListener("wheel", handleWheel, { passive: false })');
     expect(source).not.toContain("onWheel={");
     expect(source).not.toContain("key={displaySrc}");
+    expect(source).not.toContain('key={`${selected.key}:${selected.visualRevision ?? "base"}`}');
     expect(source).toContain('selected.visualRevision ?? "base"');
   });
 
@@ -37,12 +38,23 @@ describe("management review stability guards", () => {
     expect(source).not.toContain("useRouter");
   });
 
-  it("preserves open records and stabilizes signed variant URLs during list reconciliation", () => {
+  it("preserves open records without noisy realtime toasts", () => {
     const source = readFileSync(workspacePath, "utf8");
 
     expect(source).toContain("reconcileRemotePage(");
     expect(source).toContain("stableRemoteMedia(");
     expect(source).toContain("openItemKeysRef.current");
+    expect(source).not.toContain("审核数据已实时同步");
+    expect(source).not.toContain("当前打开的照片可能已在其他会话或操作中发生变化");
+  });
+
+  it("optimistically removes deleting media before the backend task completes", () => {
+    const source = readFileSync(workspacePath, "utf8");
+
+    expect(source).toContain("deletingKeys");
+    expect(source).toContain('showNotice("已开始删除")');
+    expect(source).toContain("setActiveKey(nextKey)");
+    expect(source).toContain("await clientMutation");
   });
 
   it("uses density-aware thumbnail priorities and keeps originals on demand", () => {
