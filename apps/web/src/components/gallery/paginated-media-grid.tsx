@@ -208,8 +208,10 @@ export function PaginatedMediaGrid({
 
   useEffect(() => {
     setPages((current) => {
+      const heldLiveIds = new Set(liveQueueRef.current);
+      const safeInitialItems = initialPage.items.filter((item) => !heldLiveIds.has(item.id));
       const firstPage = current[0] ?? [];
-      return [mergeMedia(firstPage, initialPage.items), ...current.slice(1)];
+      return [mergeMedia(firstPage, safeInitialItems), ...current.slice(1)];
     });
     setCursor(initialPage.nextCursor);
   }, [initialPage.items, initialPage.nextCursor]);
