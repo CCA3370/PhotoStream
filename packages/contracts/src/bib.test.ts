@@ -187,11 +187,13 @@ describe("bib rule engine", () => {
     const gradeTwo = "019d0000-0000-7000-8000-000000000002";
     const gradeOneClassOne = "019d0000-0000-7000-8000-000000000003";
     const gradeTwoClassOne = "019d0000-0000-7000-8000-000000000004";
+    const gradeOneClassTwo = "019d0000-0000-7000-8000-000000000005";
     const options: BibAttributeOptionInput[] = [
       { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
       { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, enabled: true },
       { id: gradeOneClassOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeOne },
       { id: gradeTwoClassOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeTwo },
+      { id: gradeOneClassTwo, dimension: "class", displayName: "2班", sortOrder: 1, enabled: true, parentGradeOptionId: gradeOne },
     ];
     const rules: BibAttributeRuleInput[] = [
       { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
@@ -202,7 +204,25 @@ describe("bib rule engine", () => {
       gradeOptionId: gradeOne,
       classOptionId: gradeOneClassOne,
     });
+    expect(deriveBibAttributes("102999", rules, options)).toEqual({
+      gradeOptionId: gradeOne,
+      classOptionId: gradeOneClassTwo,
+    });
+    expect(deriveBibAttributes("103999", rules, options)).toEqual({
+      gradeOptionId: gradeOne,
+      classOptionId: null,
+    });
     expect(deriveBibAttributes("201999", rules, options)).toEqual({
+      gradeOptionId: gradeTwo,
+      classOptionId: gradeTwoClassOne,
+    });
+    expect(
+      deriveBibAttributes(
+        "201999",
+        rules,
+        options.map((option) => (option.id === gradeOne ? { ...option, enabled: false } : option)),
+      ),
+    ).toEqual({
       gradeOptionId: gradeTwo,
       classOptionId: gradeTwoClassOne,
     });
@@ -225,6 +245,22 @@ describe("bib rule engine", () => {
       { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
       { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
     ])).toMatchObject({ usable: false });
+    expect(
+      validateBibAttributeRules(
+        patterns,
+        [
+          ...options,
+          {
+            id: "019d0000-0000-7000-8000-000000000103",
+            dimension: "grade",
+            displayName: "重复顺序位",
+            sortOrder: 0,
+            enabled: true,
+          },
+        ],
+        [{ dimension: "grade", startPosition: 1, width: 1, firstValue: 1 }],
+      ),
+    ).toMatchObject({ usable: false });
   });
 
   it("filters invalid OCR text and merges overlapping duplicate boxes by confidence", () => {

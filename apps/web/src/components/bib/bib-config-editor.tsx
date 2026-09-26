@@ -1420,7 +1420,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <CardHeader>
           <CardTitle>号码到年级/班级解析</CardTitle>
           <CardDescription>
-            不再维护逐值映射。系统读取号码中的数字并把它当作顺序编号：年级按启用年级顺序，班级按当前年级下的启用班级顺序解析。
+            不再维护逐值映射。系统读取号码中的数字并直接对应年级/班级的顺序位；停用某一项只会留下空位，不会让后续号码整体前移。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -1461,8 +1461,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       <CardTitle>{label}解析</CardTitle>
                       <CardDescription>
                         {dimension === "grade"
-                          ? "解析出的数字 1 表示第 1 个启用年级，2 表示第 2 个，以此类推。"
-                          : "先确定年级，再在该年级自己的班级列表中按顺序解析。"}
+                          ? "解析出的数字 1 对应顺序位 0（第 1 个年级），2 对应顺序位 1；停用中间年级不会改变其他号码。"
+                          : "先确定年级，再按该年级班级的顺序位解析；不存在或停用的顺序位不会匹配。"}
                       </CardDescription>
                     </div>
                     <Switch

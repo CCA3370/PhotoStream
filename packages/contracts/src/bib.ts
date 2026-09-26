@@ -569,24 +569,20 @@ function attributeRuleIndex(number: string, rule: BibAttributeRuleInput): number
   return Number.isSafeInteger(index) && index >= 0 ? index : null;
 }
 
-function orderedEnabledAttributeOptions(
+function attributeOptionAtOrdinal(
   options: readonly BibAttributeOptionInput[],
   dimension: BibAttributeDimension,
+  ordinal: number | null,
   parentGradeOptionId?: string,
-): BibAttributeOptionInput[] {
-  return options
-    .filter(
-      (option) =>
-        option.enabled &&
-        option.dimension === dimension &&
-        (dimension === "grade" || option.parentGradeOptionId === parentGradeOptionId),
-    )
-    .toSorted(
-      (left, right) =>
-        left.sortOrder - right.sortOrder ||
-        left.displayName.localeCompare(right.displayName, "zh-CN") ||
-        left.id.localeCompare(right.id),
-    );
+): BibAttributeOptionInput | undefined {
+  if (ordinal === null) return undefined;
+  return options.find(
+    (option) =>
+      option.enabled &&
+      option.dimension === dimension &&
+      option.sortOrder === ordinal &&
+      (dimension === "grade" || option.parentGradeOptionId === parentGradeOptionId),
+  );
 }
 
 export function validateBibAttributeRules(
@@ -629,6 +625,28 @@ export function validateBibAttributeRules(
 
   const gradeRule = rules.find((rule) => rule.dimension === "grade");
   const classRule = rules.find((rule) => rule.dimension === "class");
+
+  const enabledOptions = options.filter((option) => option.enabled);
+  const sortOrderScopes = new Map<string, Set<number>>();
+  for (const option of enabledOptions) {
+    const scope =
+      option.dimension === "grade"
+        ? "grade"
+        : `class:${option.parentGradeOptionId ?? "missing"}`;
+    const used = sortOrderScopes.get(scope) ?? new Set<number>();
+    if (used.has(option.sortOrder)) {
+      issues.push({
+        code: "DUPLICATE_ATTRIBUTE_ORDINAL",
+        path: "attributeOptions",
+        message:
+          option.dimension === "grade"
+            ? "启用年级的顺序位不能重复"
+            : "同一年级下启用班级的顺序位不能重复",
+      });
+    }
+    used.add(option.sortOrder);
+    sortOrderScopes.set(scope, used);
+  }
   if (classRule !== undefined && gradeRule === undefined) {
     issues.push({
       code: "CLASS_RULE_REQUIRES_GRADE_RULE",
@@ -665,17 +683,15 @@ export function deriveBibAttributes(
   options: readonly BibAttributeOptionInput[],
 ): { readonly gradeOptionId: string | null; readonly classOptionId: string | null } {
   const gradeRule = rules.find((rule) => rule.dimension === "grade");
-  const gradeIndex = gradeRule === undefined ? null : attributeRuleIndex(number, gradeRule);
-  const grades = orderedEnabledAttributeOptions(options, "grade");
-  const gradeOption =
-    gradeIndex === null || gradeIndex >= grades.length ? undefined : grades[gradeIndex];
+  const gradeOrdinal = gradeRule === undefined ? null : attributeRuleIndex(number, gradeRule);
+  const gradeOption = attributeOptionAtOrdinal(options, "grade", gradeOrdinal);
 
   const classRule = rules.find((rule) => rule.dimension === "class");
-  const classIndex = classRule === undefined ? null : attributeRuleIndex(number, classRule);
-  const classes =
-    gradeOption === undefined ? [] : orderedEnabledAttributeOptions(options, "class", gradeOption.id);
+  const classOrdinal = classRule === undefined ? null : attributeRuleIndex(number, classRule);
   const classOption =
-    classIndex === null || classIndex >= classes.length ? undefined : classes[classIndex];
+    gradeOption === undefined
+      ? undefined
+      : attributeOptionAtOrdinal(options, "class", classOrdinal, gradeOption.id);
 
   return {
     gradeOptionId: gradeOption?.id ?? null,
