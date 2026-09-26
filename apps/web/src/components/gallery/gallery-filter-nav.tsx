@@ -89,10 +89,10 @@ export function GalleryFilterNav({
         </div>
       </div>
 
-      <div className="relative flex shrink-0 items-center border-l-2 border-border bg-background/98 px-2.5 sm:px-3.5 lg:px-4">
+      <div className="relative flex shrink-0 items-center border-l-2 border-foreground/30 bg-background/82 px-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 sm:px-3.5 lg:px-4">
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 -left-4 w-4 bg-gradient-to-r from-transparent to-background/98"
+          className="pointer-events-none absolute inset-y-0 -left-4 w-4 bg-gradient-to-r from-transparent to-background/82 supports-[backdrop-filter]:to-background/70"
         />
         <button
           aria-pressed={featuredOnly}
