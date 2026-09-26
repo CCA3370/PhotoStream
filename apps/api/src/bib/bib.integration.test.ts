@@ -96,8 +96,22 @@ function validConfig(overrides: Partial<BibConfigUpdate> = {}): BibConfigUpdate 
       },
     ],
     attributeOptions: [
-      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
-      { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, ordinal: 1, enabled: true },
+      {
+        id: gradeOne,
+        dimension: "grade",
+        displayName: "初一",
+        sortOrder: 0,
+        ordinal: 0,
+        enabled: true,
+      },
+      {
+        id: gradeTwo,
+        dimension: "grade",
+        displayName: "初二",
+        sortOrder: 1,
+        ordinal: 1,
+        enabled: true,
+      },
       {
         id: classOne,
         dimension: "class",

@@ -139,9 +139,10 @@ function simpleRuleDraftFromPatterns(patterns: readonly BibPatternInput[]): Simp
   if (!structurallySimple) {
     return {
       totalLength,
-      baseRules: enabled[0]?.constraints
-        .map(simpleConstraintFromBib)
-        .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null) ?? [],
+      baseRules:
+        enabled[0]?.constraints
+          .map(simpleConstraintFromBib)
+          .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null) ?? [],
       conditionalRules: [],
       compatible: false,
       dirty: false,
@@ -151,9 +152,10 @@ function simpleRuleDraftFromPatterns(patterns: readonly BibPatternInput[]): Simp
   if (enabled.length === 1) {
     return {
       totalLength,
-      baseRules: enabled[0]?.constraints
-        .map(simpleConstraintFromBib)
-        .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null) ?? [],
+      baseRules:
+        enabled[0]?.constraints
+          .map(simpleConstraintFromBib)
+          .filter((constraint): constraint is SimpleConstraintDraft => constraint !== null) ?? [],
       conditionalRules: [],
       compatible: true,
       dirty: false,
@@ -306,12 +308,7 @@ function schoolFiveDigitPresetDraft(): SimpleBibRuleDraft {
 }
 
 function simpleConstraintKey(constraint: SimpleConstraintDraft): string {
-  return [
-    constraint.startPosition,
-    constraint.width,
-    constraint.start,
-    constraint.end,
-  ].join(":");
+  return [constraint.startPosition, constraint.width, constraint.start, constraint.end].join(":");
 }
 
 function isSchoolFiveDigitPreset(draft: SimpleBibRuleDraft): boolean {
@@ -328,10 +325,7 @@ function isSchoolFiveDigitPreset(draft: SimpleBibRuleDraft): boolean {
     "1:1:4:4>2:2:01:08",
     "1:1:5:6>2:2:01:06",
   ].toSorted();
-  return (
-    actual.length === expected.length &&
-    actual.every((value, index) => value === expected[index])
-  );
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function requestFrom(config: BibConfigView): BibConfigUpdate {
@@ -446,17 +440,12 @@ function isSchoolGradeClassAttributePreset(
   rules: readonly BibAttributeRuleInput[],
 ): boolean {
   const resolvedGrades = schoolGradeOptions(options);
-  if (
-    resolvedGrades.some((grade, ordinal) => grade === undefined || grade.ordinal !== ordinal)
-  ) {
+  if (resolvedGrades.some((grade, ordinal) => grade === undefined || grade.ordinal !== ordinal)) {
     return false;
   }
   const expected = schoolGradeClassAttributeRules().map(attributeRuleKey).toSorted();
   const actual = rules.map(attributeRuleKey).toSorted();
-  return (
-    actual.length === expected.length &&
-    actual.every((value, index) => value === expected[index])
-  );
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
@@ -777,7 +766,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         { length: Math.max(classCount, existing.length) },
         (_, index) => {
           const currentClass = existing[index];
-          if (index >= classCount && currentClass !== undefined) return { ...currentClass, enabled: false };
+          if (index >= classCount && currentClass !== undefined)
+            return { ...currentClass, enabled: false };
           return {
             id: currentClass?.id ?? crypto.randomUUID(),
             dimension: "class" as const,
@@ -793,7 +783,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         ...current,
         attributeOptions: [
           ...current.attributeOptions.filter(
-            (option) => !(option.dimension === "class" && option.parentGradeOptionId === gradeOptionId),
+            (option) =>
+              !(option.dimension === "class" && option.parentGradeOptionId === gradeOptionId),
           ),
           ...nextClasses,
         ],
@@ -963,7 +954,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <CardHeader>
           <CardTitle>号码规则</CardTitle>
           <CardDescription>
-            先设置号码总位数和始终生效的基础限制，再按“当…时…”添加条件限制。系统会自动转换为底层匹配规则，无需手动拆分 OR/AND 分支。
+            先设置号码总位数和始终生效的基础限制，再按“当…时…”添加条件限制。系统会自动转换为底层匹配规则，无需手动拆分
+            OR/AND 分支。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -1004,8 +996,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             <div className="rounded-xl border bg-muted/20 p-4 text-sm">
               <p className="font-medium">5位年级班级号码（1–6）</p>
               <p className="mt-1 text-muted-foreground">
-                5 位；第 1 位为 1–6；1–2 → 第 2–3 位 01–10；3 → 01–11；4 → 01–08；5–6 →
-                01–06。
+                5 位；第 1 位为 1–6；1–2 → 第 2–3 位 01–10；3 → 01–11；4 → 01–08；5–6 → 01–06。
               </p>
             </div>
           ) : null}
@@ -1053,9 +1044,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             </div>
 
             {ruleDraft.baseRules.length === 0 ? (
-              <div
-                className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground"
-              >
+              <div className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
                 暂无基础限制。若第一位只能是 1–6，可在这里添加“第 1 位，1–6”。
               </div>
             ) : null}
@@ -1145,7 +1134,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
               <div>
                 <h3 className="text-sm font-semibold">条件限制</h3>
                 <p className="text-xs text-muted-foreground">
-                  例如：当第 1 位为 1–2 时，第 2–3 位必须为 01–10。添加条件限制后，号码必须至少满足其中一条。
+                  例如：当第 1 位为 1–2 时，第 2–3 位必须为
+                  01–10。添加条件限制后，号码必须至少满足其中一条。
                 </p>
               </div>
               <Button
@@ -1173,9 +1163,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             </div>
 
             {ruleDraft.conditionalRules.length === 0 ? (
-              <div
-                className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground"
-              >
+              <div className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
                 暂无条件限制。只有基础限制时，满足基础限制的号码即可通过。
               </div>
             ) : null}
@@ -1187,7 +1175,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     <div>
                       <CardTitle>条件 {ruleIndex + 1}</CardTitle>
                       <CardDescription>
-                        当{simpleConstraintSummary(rule.when)}时，{simpleConstraintSummary(rule.require)}
+                        当{simpleConstraintSummary(rule.when)}时，
+                        {simpleConstraintSummary(rule.require)}
                       </CardDescription>
                     </div>
                     <Button
@@ -1464,7 +1453,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           <Field>
             <FieldLabel htmlFor="bib-mapping-preset">解析预设</FieldLabel>
             <FieldDescription>
-              学校预设：第 1 位 1–6 对应初一～高三；第 2–3 位从 01 开始对应该年级的 1班、2班……，自动以当前班级数量为上限。
+              学校预设：第 1 位 1–6 对应初一～高三；第 2–3 位从 01 开始对应该年级的
+              1班、2班……，自动以当前班级数量为上限。
             </FieldDescription>
             <Select
               items={[
@@ -1488,7 +1478,9 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           </Field>
 
           {(["grade", "class"] as const).map((dimension) => {
-            const rule = config.attributeRules.find((candidate) => candidate.dimension === dimension);
+            const rule = config.attributeRules.find(
+              (candidate) => candidate.dimension === dimension,
+            );
             const label = dimensionLabel(dimension);
             return (
               <Card key={dimension} size="sm">
@@ -1513,37 +1505,52 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <CardContent>
                     <FieldGroup className="md:grid md:grid-cols-3">
                       <Field>
-                        <FieldLabel htmlFor={`attribute-rule-${dimension}-start`}>起始位置</FieldLabel>
+                        <FieldLabel htmlFor={`attribute-rule-${dimension}-start`}>
+                          起始位置
+                        </FieldLabel>
                         <DraftNumberInput
                           id={`attribute-rule-${dimension}-start`}
                           max={12}
                           min={1}
                           onValueChange={(value) =>
-                            updateAttributeRule(dimension, (current) => ({ ...current, startPosition: value }))
+                            updateAttributeRule(dimension, (current) => ({
+                              ...current,
+                              startPosition: value,
+                            }))
                           }
                           value={rule.startPosition}
                         />
                       </Field>
                       <Field>
-                        <FieldLabel htmlFor={`attribute-rule-${dimension}-width`}>读取位数</FieldLabel>
+                        <FieldLabel htmlFor={`attribute-rule-${dimension}-width`}>
+                          读取位数
+                        </FieldLabel>
                         <DraftNumberInput
                           id={`attribute-rule-${dimension}-width`}
                           max={12}
                           min={1}
                           onValueChange={(value) =>
-                            updateAttributeRule(dimension, (current) => ({ ...current, width: value }))
+                            updateAttributeRule(dimension, (current) => ({
+                              ...current,
+                              width: value,
+                            }))
                           }
                           value={rule.width}
                         />
                       </Field>
                       <Field>
-                        <FieldLabel htmlFor={`attribute-rule-${dimension}-first`}>第 1 项对应数字</FieldLabel>
+                        <FieldLabel htmlFor={`attribute-rule-${dimension}-first`}>
+                          第 1 项对应数字
+                        </FieldLabel>
                         <DraftNumberInput
                           id={`attribute-rule-${dimension}-first`}
                           max={10 ** rule.width - 1}
                           min={0}
                           onValueChange={(value) =>
-                            updateAttributeRule(dimension, (current) => ({ ...current, firstValue: value }))
+                            updateAttributeRule(dimension, (current) => ({
+                              ...current,
+                              firstValue: value,
+                            }))
                           }
                           value={rule.firstValue}
                         />

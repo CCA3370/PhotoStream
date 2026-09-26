@@ -108,7 +108,10 @@ export const bibConfigUpdateSchema = z
       }
     }
 
-    if (new Set(value.attributeRules.map((rule) => rule.dimension)).size !== value.attributeRules.length) {
+    if (
+      new Set(value.attributeRules.map((rule) => rule.dimension)).size !==
+      value.attributeRules.length
+    ) {
       context.addIssue({
         code: "custom",
         message: "同一属性只能配置一条解析规则",
@@ -631,9 +634,7 @@ export function validateBibAttributeRules(
   const ordinalScopes = new Map<string, Set<number>>();
   for (const option of enabledOptions) {
     const scope =
-      option.dimension === "grade"
-        ? "grade"
-        : `class:${option.parentGradeOptionId ?? "missing"}`;
+      option.dimension === "grade" ? "grade" : `class:${option.parentGradeOptionId ?? "missing"}`;
     const used = ordinalScopes.get(scope) ?? new Set<number>();
     if (used.has(option.ordinal)) {
       issues.push({

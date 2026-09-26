@@ -1070,7 +1070,9 @@ export const bibAttributeRules = pgTable(
   "bib_attribute_rules",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    albumId: uuid("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
     dimension: bibAttributeDimensionEnum("dimension").notNull(),
     startPosition: integer("start_position").notNull(),
     width: integer("width").notNull(),
