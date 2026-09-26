@@ -203,7 +203,10 @@ export function PaginatedMediaGrid({
   const allItems = useMemo(() => pages.flat(), [pages]);
 
   useEffect(() => {
-    if (renderFeaturedOnly === featuredOnly) return;
+    if (renderFeaturedOnly === featuredOnly) {
+      setFilterTransitioning(false);
+      return;
+    }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setRenderFeaturedOnly(featuredOnly);
       setFilterTransitioning(false);
