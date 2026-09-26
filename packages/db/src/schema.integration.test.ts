@@ -318,11 +318,41 @@ maybeDescribe("PostgreSQL identity schema", () => {
     ]);
 
     const legacy = [
-      { dimension: "grade" as const, startPosition: 1, width: 1, value: "1", outputOptionId: gradeOne },
-      { dimension: "grade" as const, startPosition: 1, width: 1, value: "2", outputOptionId: gradeTwo },
-      { dimension: "class" as const, startPosition: 2, width: 2, value: "01", outputOptionId: gradeOneClassOne },
-      { dimension: "class" as const, startPosition: 2, width: 2, value: "02", outputOptionId: gradeOneClassTwo },
-      { dimension: "class" as const, startPosition: 2, width: 2, value: "01", outputOptionId: gradeTwoClassOne },
+      {
+        dimension: "grade" as const,
+        startPosition: 1,
+        width: 1,
+        value: "1",
+        outputOptionId: gradeOne,
+      },
+      {
+        dimension: "grade" as const,
+        startPosition: 1,
+        width: 1,
+        value: "2",
+        outputOptionId: gradeTwo,
+      },
+      {
+        dimension: "class" as const,
+        startPosition: 2,
+        width: 2,
+        value: "01",
+        outputOptionId: gradeOneClassOne,
+      },
+      {
+        dimension: "class" as const,
+        startPosition: 2,
+        width: 2,
+        value: "02",
+        outputOptionId: gradeOneClassTwo,
+      },
+      {
+        dimension: "class" as const,
+        startPosition: 2,
+        width: 2,
+        value: "01",
+        outputOptionId: gradeTwoClassOne,
+      },
     ];
     for (const [sortOrder, item] of legacy.entries()) {
       const [mapping] = await database
