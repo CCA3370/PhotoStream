@@ -115,39 +115,9 @@ function validConfig(overrides: Partial<BibConfigUpdate> = {}): BibConfigUpdate 
         parentGradeOptionId: gradeOne,
       },
     ],
-    mappings: [
-      {
-        dimension: "grade",
-        startPosition: 1,
-        width: 1,
-        ranges: [{ start: "1", end: "1" }],
-        outputOptionId: gradeOne,
-        sortOrder: 0,
-      },
-      {
-        dimension: "grade",
-        startPosition: 1,
-        width: 1,
-        ranges: [{ start: "2", end: "2" }],
-        outputOptionId: gradeTwo,
-        sortOrder: 1,
-      },
-      {
-        dimension: "class",
-        startPosition: 2,
-        width: 2,
-        ranges: [{ start: "01", end: "01" }],
-        outputOptionId: classOne,
-        sortOrder: 0,
-      },
-      {
-        dimension: "class",
-        startPosition: 2,
-        width: 2,
-        ranges: [{ start: "02", end: "02" }],
-        outputOptionId: classTwo,
-        sortOrder: 1,
-      },
+    attributeRules: [
+      { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+      { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
     ],
     ...overrides,
   };
@@ -160,7 +130,7 @@ function updateFromView(view: BibConfigView): BibConfigUpdate {
     modelVersion: view.modelVersion,
     patterns: view.patterns,
     attributeOptions: view.attributeOptions,
-    mappings: view.mappings,
+    attributeRules: view.attributeRules,
   };
 }
 
@@ -199,8 +169,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
     await database.delete(schema.bibRecalculationTasks);
     await database.delete(schema.mediaBibTags);
     await database.delete(schema.mediaBibReviews);
-    await database.delete(schema.bibAttributeMappingRanges);
-    await database.delete(schema.bibAttributeMappings);
+    await database.delete(schema.bibAttributeRules);
     await database.delete(schema.bibAttributeOptions);
     await database.delete(schema.bibAllowedRanges);
     await database.delete(schema.bibConstraints);
@@ -323,7 +292,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
             ],
           },
         ],
-        mappings: [],
+        attributeRules: [],
       },
       requestId: "bib-draft",
     });
@@ -372,9 +341,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
       input: {
         ...updateFromView(saved),
         attributeOptions: saved.attributeOptions.map((option) =>
-          option.id === gradeOne
-            ? { ...option, displayName: "七年级", sortOrder: option.sortOrder + 10 }
-            : option,
+          option.id === gradeOne ? { ...option, displayName: "七年级" } : option,
         ),
         patterns: saved.patterns.map((pattern) => ({
           ...pattern,
@@ -382,10 +349,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
           constraints: pattern.constraints
             .map((constraint) => ({ ...constraint, sortOrder: constraint.sortOrder + 10 }))
             .toReversed(),
-        })),
-        mappings: saved.mappings
-          .map((mapping) => ({ ...mapping, sortOrder: mapping.sortOrder + 10 }))
-          .toReversed(),
+        }))
       },
       requestId: "bib-display-name-only",
     });
@@ -401,7 +365,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
           ...updateFromView(renamed),
           recognitionEnabled: false,
           searchEnabled: false,
-          mappings: [],
+          attributeRules: [],
           attributeOptions: renamed.attributeOptions.map((option) =>
             option.id === gradeOne ? { ...option, dimension: "class" } : option,
           ),

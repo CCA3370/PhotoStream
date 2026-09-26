@@ -51,18 +51,24 @@ export const bibAttributeOptionInputSchema = z
   .strict();
 export type BibAttributeOptionInput = z.infer<typeof bibAttributeOptionInputSchema>;
 
-export const bibAttributeMappingInputSchema = z
+export const bibAttributeRuleInputSchema = z
   .object({
-    id: z.string().uuid().optional(),
     dimension: bibAttributeDimensionSchema,
     startPosition: z.number().int().min(1).max(12),
     width: z.number().int().min(1).max(12),
-    ranges: z.array(bibRangeSchema).min(1).max(50),
-    outputOptionId: z.string().uuid(),
-    sortOrder: z.number().int().min(0).max(10_000).default(0),
+    firstValue: z.number().int().min(0).max(999_999_999_999).default(1),
   })
-  .strict();
-export type BibAttributeMappingInput = z.infer<typeof bibAttributeMappingInputSchema>;
+  .strict()
+  .superRefine((value, context) => {
+    if (value.firstValue > 10 ** value.width - 1) {
+      context.addIssue({
+        code: "custom",
+        message: "起始序号超出当前读取位数可表示的范围",
+        path: ["firstValue"],
+      });
+    }
+  });
+export type BibAttributeRuleInput = z.infer<typeof bibAttributeRuleInputSchema>;
 
 export const bibConfigUpdateSchema = z
   .object({
@@ -71,7 +77,7 @@ export const bibConfigUpdateSchema = z
     modelVersion: z.string().trim().min(1).max(80),
     patterns: z.array(bibPatternInputSchema).max(20),
     attributeOptions: z.array(bibAttributeOptionInputSchema).max(100),
-    mappings: z.array(bibAttributeMappingInputSchema).max(100),
+    attributeRules: z.array(bibAttributeRuleInputSchema).max(2),
   })
   .strict()
   .superRefine((value, context) => {
@@ -93,17 +99,20 @@ export const bibConfigUpdateSchema = z
         path: "patterns.constraints.ranges",
       },
       { ids: value.attributeOptions.map((option) => option.id), path: "attributeOptions" },
-      { ids: value.mappings.map((mapping) => mapping.id), path: "mappings" },
-      {
-        ids: value.mappings.flatMap((mapping) => mapping.ranges.map((range) => range.id)),
-        path: "mappings.ranges",
-      },
     ];
     for (const group of groups) {
       const present = group.ids.filter((id): id is string => id !== undefined);
       if (new Set(present).size !== present.length) {
         context.addIssue({ code: "custom", message: "配置实体 ID 不能重复", path: [group.path] });
       }
+    }
+
+    if (new Set(value.attributeRules.map((rule) => rule.dimension)).size !== value.attributeRules.length) {
+      context.addIssue({
+        code: "custom",
+        message: "同一属性只能配置一条解析规则",
+        path: ["attributeRules"],
+      });
     }
 
     const optionById = new Map(value.attributeOptions.map((option) => [option.id, option]));
@@ -188,7 +197,6 @@ export const bibTestResponseSchema = z
     ),
     gradeOptionId: z.string().uuid().nullable(),
     classOptionId: z.string().uuid().nullable(),
-    matchedMappingIds: z.array(z.string().uuid()),
   })
   .strict();
 export type BibTestResponse = z.infer<typeof bibTestResponseSchema>;
@@ -554,163 +562,124 @@ export function evaluateBibNumber(
   return { valid: matchedPatternIndexes.length > 0, matchedPatternIndexes, patterns: results };
 }
 
-function mappingConstraint(mapping: BibAttributeMappingInput): CompiledConstraint {
-  return {
-    startPosition: mapping.startPosition,
-    width: mapping.width,
-    ranges: normalizeBibRanges(mapping.ranges, mapping.width),
-  };
+function attributeRuleIndex(number: string, rule: BibAttributeRuleInput): number | null {
+  const value = number.slice(rule.startPosition - 1, rule.startPosition - 1 + rule.width);
+  if (value.length !== rule.width || !/^\d+$/u.test(value)) return null;
+  const index = Number(value) - rule.firstValue;
+  return Number.isSafeInteger(index) && index >= 0 ? index : null;
 }
 
-export function validateBibMappings(
+function orderedEnabledAttributeOptions(
+  options: readonly BibAttributeOptionInput[],
+  dimension: BibAttributeDimension,
+  parentGradeOptionId?: string,
+): BibAttributeOptionInput[] {
+  return options
+    .filter(
+      (option) =>
+        option.enabled &&
+        option.dimension === dimension &&
+        (dimension === "grade" || option.parentGradeOptionId === parentGradeOptionId),
+    )
+    .toSorted(
+      (left, right) =>
+        left.sortOrder - right.sortOrder ||
+        left.displayName.localeCompare(right.displayName, "zh-CN") ||
+        left.id.localeCompare(right.id),
+    );
+}
+
+export function validateBibAttributeRules(
   patterns: readonly BibPatternInput[],
   options: readonly BibAttributeOptionInput[],
-  mappings: readonly BibAttributeMappingInput[],
+  rules: readonly BibAttributeRuleInput[],
 ): { readonly usable: boolean; readonly issues: readonly BibValidationIssue[] } {
   const issues: BibValidationIssue[] = [];
-  const optionById = new Map(options.map((option) => [option.id, option]));
-  if (optionById.size !== options.length) {
-    issues.push({
-      code: "DUPLICATE_ATTRIBUTE_OPTION",
-      path: "attributeOptions",
-      message: "属性选项 ID 不能重复",
-    });
-  }
-  mappings.forEach((mapping, mappingIndex) => {
-    const option = optionById.get(mapping.outputOptionId);
-    if (option === undefined || option.dimension !== mapping.dimension || !option.enabled) {
-      issues.push({
-        code: "INVALID_MAPPING_OPTION",
-        path: `mappings.${mappingIndex}.outputOptionId`,
-        message: "映射输出选项不存在、维度不符或已停用",
-      });
-    }
-    if (mapping.dimension === "class" && option?.dimension === "class") {
-      if (option.parentGradeOptionId == null) {
-        issues.push({
-          code: "CLASS_WITHOUT_PARENT_GRADE",
-          path: `mappings.${mappingIndex}.outputOptionId`,
-          message: "班级必须隶属于具体年级",
-        });
-      } else if (
-        !mappings.some(
-          (candidate) =>
-            candidate.dimension === "grade" &&
-            candidate.outputOptionId === option.parentGradeOptionId,
-        )
-      ) {
-        issues.push({
-          code: "CLASS_PARENT_GRADE_UNMAPPED",
-          path: `mappings.${mappingIndex}.outputOptionId`,
-          message: "班级所属年级尚未设置号码映射",
-        });
-      }
-    }
-    const normalizedRanges = normalizeBibRanges(mapping.ranges, mapping.width);
-    if (mapping.ranges.some((range) => !bibRangeValidForWidth(range, mapping.width))) {
-      issues.push({
-        code: "INVALID_MAPPING_RANGE_WIDTH",
-        path: `mappings.${mappingIndex}.ranges`,
-        message: "映射区间必须与映射宽度一致且起点不大于终点",
-      });
-    }
-    if (normalizedRanges.length === 0) {
-      issues.push({
-        code: "EMPTY_MAPPING",
-        path: `mappings.${mappingIndex}.ranges`,
-        message: "映射没有有效区间",
-      });
-    }
+  const dimensionCounts = new Map<BibAttributeDimension, number>();
+  rules.forEach((rule, ruleIndex) => {
+    dimensionCounts.set(rule.dimension, (dimensionCounts.get(rule.dimension) ?? 0) + 1);
     if (
       !patterns.some(
-        (pattern) =>
-          pattern.enabled && mapping.startPosition + mapping.width - 1 <= pattern.totalLength,
+        (pattern) => pattern.enabled && rule.startPosition + rule.width - 1 <= pattern.totalLength,
       )
     ) {
       issues.push({
-        code: "MAPPING_OUT_OF_BOUNDS",
-        path: `mappings.${mappingIndex}`,
-        message: "映射位置未落入任何已启用号码模式",
+        code: "ATTRIBUTE_RULE_OUT_OF_BOUNDS",
+        path: `attributeRules.${ruleIndex}`,
+        message: "属性解析位置未落入任何已启用号码模式",
+      });
+    }
+    if (rule.firstValue > 10 ** rule.width - 1) {
+      issues.push({
+        code: "ATTRIBUTE_RULE_FIRST_VALUE_OUT_OF_RANGE",
+        path: `attributeRules.${ruleIndex}.firstValue`,
+        message: "起始序号超出当前读取位数可表示的范围",
       });
     }
   });
-  for (let leftIndex = 0; leftIndex < mappings.length; leftIndex += 1) {
-    const left = mappings[leftIndex];
-    if (left === undefined) continue;
-    for (let rightIndex = leftIndex + 1; rightIndex < mappings.length; rightIndex += 1) {
-      const right = mappings[rightIndex];
-      if (
-        right === undefined ||
-        left.dimension !== right.dimension ||
-        left.outputOptionId === right.outputOptionId
-      ) {
-        continue;
-      }
-      if (left.dimension === "class") {
-        const leftParent = optionById.get(left.outputOptionId)?.parentGradeOptionId;
-        const rightParent = optionById.get(right.outputOptionId)?.parentGradeOptionId;
-        if (leftParent !== undefined && rightParent !== undefined && leftParent !== rightParent) {
-          continue;
-        }
-      }
-      const conflicts = patterns.some((pattern) => {
-        if (!pattern.enabled) return false;
-        if (
-          left.startPosition + left.width - 1 > pattern.totalLength ||
-          right.startPosition + right.width - 1 > pattern.totalLength
-        ) {
-          return false;
-        }
-        return hasSatisfyingNumber(pattern.totalLength, [
-          ...pattern.constraints.map(compiledConstraint),
-          mappingConstraint(left),
-          mappingConstraint(right),
-        ]);
+  for (const [dimension, count] of dimensionCounts) {
+    if (count > 1) {
+      issues.push({
+        code: "DUPLICATE_ATTRIBUTE_RULE",
+        path: "attributeRules",
+        message: `${dimension === "grade" ? "年级" : "班级"}只能配置一条解析规则`,
       });
-      if (conflicts) {
-        issues.push({
-          code: "MAPPING_CONFLICT",
-          path: `mappings.${leftIndex},mappings.${rightIndex}`,
-          message: "同一合法号码会映射到同一维度的不同选项",
-        });
-      }
     }
+  }
+
+  const gradeRule = rules.find((rule) => rule.dimension === "grade");
+  const classRule = rules.find((rule) => rule.dimension === "class");
+  if (classRule !== undefined && gradeRule === undefined) {
+    issues.push({
+      code: "CLASS_RULE_REQUIRES_GRADE_RULE",
+      path: "attributeRules",
+      message: "班级按年级分组，启用班级解析前必须先配置年级解析",
+    });
+  }
+  if (
+    gradeRule !== undefined &&
+    !options.some((option) => option.dimension === "grade" && option.enabled)
+  ) {
+    issues.push({
+      code: "ATTRIBUTE_RULE_WITHOUT_OPTIONS",
+      path: "attributeRules",
+      message: "已配置年级解析，但没有启用的年级",
+    });
+  }
+  if (
+    classRule !== undefined &&
+    !options.some((option) => option.dimension === "class" && option.enabled)
+  ) {
+    issues.push({
+      code: "ATTRIBUTE_RULE_WITHOUT_OPTIONS",
+      path: "attributeRules",
+      message: "已配置班级解析，但没有启用的班级",
+    });
   }
   return { usable: issues.length === 0, issues };
 }
 
 export function deriveBibAttributes(
   number: string,
-  mappings: readonly BibAttributeMappingInput[],
-  options: readonly BibAttributeOptionInput[] = [],
-): {
-  readonly gradeOptionId: string | null;
-  readonly classOptionId: string | null;
-  readonly matchedMappingIds: readonly string[];
-} {
-  const matching = mappings.filter((mapping) =>
-    constraintMatches(number, mappingConstraint(mapping)),
-  );
-  const gradeMapping = matching.find((mapping) => mapping.dimension === "grade");
-  const gradeOptionId = gradeMapping?.outputOptionId ?? null;
-  const classMappings = matching.filter((mapping) => mapping.dimension === "class");
-  const optionById = new Map(options.map((option) => [option.id, option]));
-  const classMapping =
-    options.length === 0
-      ? classMappings[0]
-      : classMappings.find((mapping) => {
-          const output = optionById.get(mapping.outputOptionId);
-          return output?.parentGradeOptionId === gradeOptionId;
-        });
-  const selectedMappings = [gradeMapping, classMapping].filter(
-    (mapping): mapping is BibAttributeMappingInput => mapping !== undefined,
-  );
+  rules: readonly BibAttributeRuleInput[],
+  options: readonly BibAttributeOptionInput[],
+): { readonly gradeOptionId: string | null; readonly classOptionId: string | null } {
+  const gradeRule = rules.find((rule) => rule.dimension === "grade");
+  const gradeIndex = gradeRule === undefined ? null : attributeRuleIndex(number, gradeRule);
+  const grades = orderedEnabledAttributeOptions(options, "grade");
+  const gradeOption =
+    gradeIndex === null || gradeIndex >= grades.length ? undefined : grades[gradeIndex];
+
+  const classRule = rules.find((rule) => rule.dimension === "class");
+  const classIndex = classRule === undefined ? null : attributeRuleIndex(number, classRule);
+  const classes =
+    gradeOption === undefined ? [] : orderedEnabledAttributeOptions(options, "class", gradeOption.id);
+  const classOption =
+    classIndex === null || classIndex >= classes.length ? undefined : classes[classIndex];
+
   return {
-    gradeOptionId,
-    classOptionId: classMapping?.outputOptionId ?? null,
-    matchedMappingIds: selectedMappings.flatMap((mapping) =>
-      mapping.id === undefined ? [] : [mapping.id],
-    ),
+    gradeOptionId: gradeOption?.id ?? null,
+    classOptionId: classOption?.id ?? null,
   };
 }
 

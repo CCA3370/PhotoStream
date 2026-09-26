@@ -274,6 +274,13 @@
       "when": 1790362800000,
       "tag": "0038_user_soft_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790366400000,
+      "tag": "0039_bib_attribute_rules",
+      "breakpoints": true
     }
   ]
 }

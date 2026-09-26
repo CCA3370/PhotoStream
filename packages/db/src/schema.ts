@@ -1005,49 +1005,19 @@ export const bibAttributeOptions = pgTable(
   ],
 );
 
-export const bibAttributeMappings = pgTable(
-  "bib_attribute_mappings",
+export const bibAttributeRules = pgTable(
+  "bib_attribute_rules",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    albumId: uuid("album_id")
-      .notNull()
-      .references(() => albums.id, { onDelete: "cascade" }),
+    albumId: uuid("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
     dimension: bibAttributeDimensionEnum("dimension").notNull(),
     startPosition: integer("start_position").notNull(),
     width: integer("width").notNull(),
-    outputOptionId: uuid("output_option_id")
-      .notNull()
-      .references(() => bibAttributeOptions.id, { onDelete: "restrict" }),
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    firstValue: integer("first_value").notNull().default(1),
+    ...timestampColumns(),
   },
   (table) => [
-    index("bib_attribute_mappings_album_dimension_sort_idx").on(
-      table.albumId,
-      table.dimension,
-      table.sortOrder,
-      table.id,
-    ),
-  ],
-);
-
-export const bibAttributeMappingRanges = pgTable(
-  "bib_attribute_mapping_ranges",
-  {
-    id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    mappingId: uuid("mapping_id")
-      .notNull()
-      .references(() => bibAttributeMappings.id, { onDelete: "cascade" }),
-    startValue: varchar("start_value", { length: 12 }).notNull(),
-    endValue: varchar("end_value", { length: 12 }).notNull(),
-    sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (table) => [
-    uniqueIndex("bib_attribute_mapping_ranges_values_unique").on(
-      table.mappingId,
-      table.startValue,
-      table.endValue,
-    ),
+    uniqueIndex("bib_attribute_rules_album_dimension_unique").on(table.albumId, table.dimension),
   ],
 );
 

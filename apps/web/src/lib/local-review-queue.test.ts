@@ -62,7 +62,7 @@ function config(recognitionEnabled: boolean, ruleVersion = 3): BibConfigView {
     modelVersion: "test-model",
     patterns: [],
     attributeOptions: [],
-    mappings: [],
+    attributeRules: [],
     automationStatus: "experimental",
     ruleVersion,
     mappingVersion: 0,

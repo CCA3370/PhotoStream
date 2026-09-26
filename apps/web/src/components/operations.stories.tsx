@@ -212,25 +212,9 @@ const bibConfig: BibConfigView = {
       parentGradeOptionId: gradeOptionId,
     },
   ],
-  mappings: [
-    {
-      id: "019d0000-0000-7000-8000-000000000133",
-      dimension: "grade",
-      startPosition: 1,
-      width: 1,
-      ranges: [{ start: "1", end: "1" }],
-      outputOptionId: gradeOptionId,
-      sortOrder: 0,
-    },
-    {
-      id: "019d0000-0000-7000-8000-000000000134",
-      dimension: "class",
-      startPosition: 2,
-      width: 2,
-      ranges: [{ start: "01", end: "01" }],
-      outputOptionId: classOptionId,
-      sortOrder: 0,
-    },
+  attributeRules: [
+    { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+    { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
   ],
   ruleVersion: 1,
   mappingVersion: 1,

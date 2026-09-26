@@ -206,7 +206,7 @@ OCR 无结果、失败或设备不支持时，不影响照片上传和发布；�
 - `BibConstraint`：模式、起始位、宽度和排序。
 - `BibAllowedRange`：约束、起点字符串、终点字符串。
 - `BibAttributeOption`：`grade`/`class` 维度、不可变 ID、显示名和排序。
-- `BibAttributeMapping`：维度、起始位、宽度、允许区间、输出选项和排序。
+- `BibAttributeRule`：每个维度最多一条，记录起始位、读取宽度和第 1 个选项对应的数字；年级/班级通过有序选项直接解析，不保存逐值映射。
 
 ### 7.2 标签与复核实体
 

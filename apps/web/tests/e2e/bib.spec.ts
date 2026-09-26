@@ -153,23 +153,9 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
           parentGradeOptionId: gradeId,
         },
       ],
-      mappings: [
-        {
-          dimension: "grade",
-          startPosition: 1,
-          width: 1,
-          ranges: [{ start: "1", end: "1" }],
-          outputOptionId: gradeId,
-          sortOrder: 0,
-        },
-        {
-          dimension: "class",
-          startPosition: 2,
-          width: 2,
-          ranges: [{ start: "01", end: "01" }],
-          outputOptionId: classId,
-          sortOrder: 0,
-        },
+      attributeRules: [
+        { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+        { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
       ],
     },
   });
@@ -382,7 +368,7 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
     await expect(page.getByText(/规则版本 \d+ · 映射版本 \d+/u)).toBeVisible();
     await expect(page.getByRole("heading", { name: "号码规则" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "号码规则预设" })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "号码映射预设" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "号码解析预设" })).toBeVisible();
     await expect(page.getByText("基础限制", { exact: true })).toBeVisible();
     await expect(page.getByText("条件限制", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "添加基础限制" })).toBeVisible();
@@ -453,7 +439,7 @@ test("ignored local photo fixtures complete an unlabeled OCR smoke run", async (
           constraints: [],
         })),
         attributeOptions: [],
-        mappings: [],
+        attributeRules: [],
       },
     },
   );

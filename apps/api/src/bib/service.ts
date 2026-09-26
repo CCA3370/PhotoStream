@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  type BibAttributeMappingInput,
+  type BibAttributeRuleInput,
   type BibAttributeOptionInput,
   type BibBatchResult,
   type BibCandidateInput,
@@ -17,7 +17,7 @@ import {
   normalizeBibNumber,
   normalizeBibRanges,
   type UserRole,
-  validateBibMappings,
+  validateBibAttributeRules,
   validateBibRuleSet,
 } from "@photostream/contracts";
 import type { Database } from "@photostream/db";
@@ -41,7 +41,7 @@ type DbExecutor = Database | Transaction;
 interface BibDocument {
   readonly patterns: readonly BibPatternInput[];
   readonly attributeOptions: readonly BibAttributeOptionInput[];
-  readonly mappings: readonly BibAttributeMappingInput[];
+  readonly attributeRules: readonly BibAttributeRuleInput[];
 }
 
 function requirePermission(role: UserRole, permission: Parameters<typeof hasPermission>[1]): void {
@@ -80,20 +80,16 @@ function canonicalPatterns(patterns: readonly BibPatternInput[]): string {
   );
 }
 
-function canonicalMappings(mappings: readonly BibAttributeMappingInput[]): string {
+function canonicalAttributeRules(rules: readonly BibAttributeRuleInput[]): string {
   return JSON.stringify(
-    mappings
-      .map((mapping) => ({
-        dimension: mapping.dimension,
-        startPosition: mapping.startPosition,
-        width: mapping.width,
-        outputOptionId: mapping.outputOptionId,
-        ranges: normalizeBibRanges(mapping.ranges, mapping.width).map((range) => ({
-          start: range.start,
-          end: range.end,
-        })),
+    rules
+      .map((rule) => ({
+        dimension: rule.dimension,
+        startPosition: rule.startPosition,
+        width: rule.width,
+        firstValue: rule.firstValue,
       }))
-      .toSorted((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+      .toSorted((left, right) => left.dimension.localeCompare(right.dimension)),
   );
 }
 
@@ -104,19 +100,15 @@ function canonicalAttributeHierarchy(options: readonly BibAttributeOptionInput[]
         id: option.id,
         dimension: option.dimension,
         parentGradeOptionId: option.parentGradeOptionId ?? null,
+        sortOrder: option.sortOrder,
+        enabled: option.enabled,
       }))
       .toSorted((left, right) => left.id.localeCompare(right.id)),
   );
 }
 
 function deriveHierarchicalBibAttributes(number: string, document: BibDocument) {
-  const derived = deriveBibAttributes(number, document.mappings, document.attributeOptions);
-  if (derived.classOptionId === null) return derived;
-  const classOption = document.attributeOptions.find(
-    (option) => option.id === derived.classOptionId && option.dimension === "class",
-  );
-  if (classOption?.parentGradeOptionId === derived.gradeOptionId) return derived;
-  return { ...derived, classOptionId: null };
+  return deriveBibAttributes(number, document.attributeRules, document.attributeOptions);
 }
 
 async function assertConfigIdsAvailable(
@@ -164,10 +156,10 @@ export class BibService {
     const album = await this.#album(this.#database, albumId);
     const document = await this.#loadDocument(this.#database, albumId);
     const rule = validateBibRuleSet(document.patterns);
-    const mapping = validateBibMappings(
+    const mapping = validateBibAttributeRules(
       document.patterns,
       document.attributeOptions,
-      document.mappings,
+      document.attributeRules,
     );
     const [activeTask] = await this.#database
       .select({ status: schema.bibRecalculationTasks.status })
@@ -188,7 +180,7 @@ export class BibService {
       modelVersion: album.bibModelVersion,
       patterns: [...document.patterns],
       attributeOptions: [...document.attributeOptions],
-      mappings: [...document.mappings],
+      attributeRules: [...document.attributeRules],
       ruleVersion: album.bibRuleVersion,
       mappingVersion: album.bibMappingVersion,
       ruleUsable: rule.usable,
@@ -216,16 +208,12 @@ export class BibService {
           ranges: normalizeBibRanges(constraint.ranges, constraint.width),
         })),
       })),
-      mappings: options.input.mappings.map((mapping) => ({
-        ...mapping,
-        ranges: normalizeBibRanges(mapping.ranges, mapping.width),
-      })),
     };
     const rule = validateBibRuleSet(normalized.patterns);
     const mapping = validateBibMappings(
       normalized.patterns,
       normalized.attributeOptions,
-      normalized.mappings,
+      normalized.attributeRules,
     );
     if ((normalized.recognitionEnabled || normalized.searchEnabled) && !rule.usable) {
       throw new AppError({
@@ -244,7 +232,7 @@ export class BibService {
     if ((normalized.recognitionEnabled || normalized.searchEnabled) && !mapping.usable) {
       throw new AppError({
         code: "BIB_CONFIG_INVALID",
-        message: "年级或班级映射存在冲突，不能开启号码功能",
+        message: "年级或班级解析规则不可用，不能开启号码功能",
         statusCode: 409,
       });
     }
@@ -323,42 +311,18 @@ export class BibService {
             .from(schema.bibAttributeOptions)
             .where(inArray(schema.bibAttributeOptions.id, [...ids])),
       );
-      await assertConfigIdsAvailable(
-        normalized.mappings.map((mapping) => mapping.id),
-        new Set(
-          current.mappings.flatMap((mapping) => (mapping.id === undefined ? [] : [mapping.id])),
-        ),
-        (ids) =>
-          transaction
-            .select({ id: schema.bibAttributeMappings.id })
-            .from(schema.bibAttributeMappings)
-            .where(inArray(schema.bibAttributeMappings.id, [...ids])),
-      );
-      await assertConfigIdsAvailable(
-        normalized.mappings.flatMap((mapping) => mapping.ranges.map((range) => range.id)),
-        new Set(
-          current.mappings.flatMap((mapping) =>
-            mapping.ranges.flatMap((range) => (range.id === undefined ? [] : [range.id])),
-          ),
-        ),
-        (ids) =>
-          transaction
-            .select({ id: schema.bibAttributeMappingRanges.id })
-            .from(schema.bibAttributeMappingRanges)
-            .where(inArray(schema.bibAttributeMappingRanges.id, [...ids])),
-      );
       const ruleChanged =
         canonicalPatterns(current.patterns) !== canonicalPatterns(normalized.patterns);
       const mappingChanged =
-        canonicalMappings(current.mappings) !== canonicalMappings(normalized.mappings) ||
+        canonicalAttributeRules(current.attributeRules) !== canonicalAttributeRules(normalized.attributeRules) ||
         canonicalAttributeHierarchy(current.attributeOptions) !==
           canonicalAttributeHierarchy(normalized.attributeOptions);
       const ruleVersion = album.bibRuleVersion + (ruleChanged ? 1 : 0);
       const mappingVersion = album.bibMappingVersion + (mappingChanged ? 1 : 0);
 
       await transaction
-        .delete(schema.bibAttributeMappings)
-        .where(eq(schema.bibAttributeMappings.albumId, options.albumId));
+        .delete(schema.bibAttributeRules)
+        .where(eq(schema.bibAttributeRules.albumId, options.albumId));
       await transaction
         .delete(schema.bibPatterns)
         .where(eq(schema.bibPatterns.albumId, options.albumId));
@@ -458,24 +422,14 @@ export class BibService {
         }
       }
 
-      for (const mappingInput of normalized.mappings) {
-        const mappingId = mappingInput.id ?? randomUUID();
-        await transaction.insert(schema.bibAttributeMappings).values({
-          id: mappingId,
-          albumId: options.albumId,
-          dimension: mappingInput.dimension,
-          startPosition: mappingInput.startPosition,
-          width: mappingInput.width,
-          outputOptionId: mappingInput.outputOptionId,
-          sortOrder: mappingInput.sortOrder,
-        });
-        await transaction.insert(schema.bibAttributeMappingRanges).values(
-          mappingInput.ranges.map((range, index) => ({
-            id: range.id ?? randomUUID(),
-            mappingId,
-            startValue: range.start,
-            endValue: range.end,
-            sortOrder: index,
+      if (normalized.attributeRules.length > 0) {
+        await transaction.insert(schema.bibAttributeRules).values(
+          normalized.attributeRules.map((rule) => ({
+            albumId: options.albumId,
+            dimension: rule.dimension,
+            startPosition: rule.startPosition,
+            width: rule.width,
+            firstValue: rule.firstValue,
           })),
         );
       }
@@ -544,12 +498,11 @@ export class BibService {
     const evaluation = evaluateBibNumber(number, document.patterns);
     const attributes = evaluation.valid
       ? deriveHierarchicalBibAttributes(number, document)
-      : { gradeOptionId: null, classOptionId: null, matchedMappingIds: [] };
+      : { gradeOptionId: null, classOptionId: null };
     return {
       normalizedNumber: number,
       ...evaluation,
       ...attributes,
-      matchedMappingIds: [...attributes.matchedMappingIds],
     };
   }
 
@@ -2131,23 +2084,11 @@ export class BibService {
         asc(schema.bibAttributeOptions.sortOrder),
         asc(schema.bibAttributeOptions.id),
       );
-    const mappings = await executor
+    const attributeRules = await executor
       .select()
-      .from(schema.bibAttributeMappings)
-      .where(eq(schema.bibAttributeMappings.albumId, albumId))
-      .orderBy(asc(schema.bibAttributeMappings.sortOrder), asc(schema.bibAttributeMappings.id));
-    const mappingIds = mappings.map((mapping) => mapping.id);
-    const mappingRanges =
-      mappingIds.length === 0
-        ? []
-        : await executor
-            .select()
-            .from(schema.bibAttributeMappingRanges)
-            .where(inArray(schema.bibAttributeMappingRanges.mappingId, mappingIds))
-            .orderBy(
-              asc(schema.bibAttributeMappingRanges.sortOrder),
-              asc(schema.bibAttributeMappingRanges.id),
-            );
+      .from(schema.bibAttributeRules)
+      .where(eq(schema.bibAttributeRules.albumId, albumId))
+      .orderBy(asc(schema.bibAttributeRules.dimension), asc(schema.bibAttributeRules.id));
     return {
       patterns: patterns.map((pattern) => ({
         id: pattern.id,
@@ -2178,20 +2119,11 @@ export class BibService {
         enabled: option.enabled,
         parentGradeOptionId: option.parentGradeOptionId,
       })),
-      mappings: mappings.map((mapping) => ({
-        id: mapping.id,
-        dimension: mapping.dimension,
-        startPosition: mapping.startPosition,
-        width: mapping.width,
-        outputOptionId: mapping.outputOptionId,
-        sortOrder: mapping.sortOrder,
-        ranges: mappingRanges
-          .filter((range) => range.mappingId === mapping.id)
-          .map((range) => ({
-            id: range.id,
-            start: range.startValue,
-            end: range.endValue,
-          })),
+      attributeRules: attributeRules.map((rule) => ({
+        dimension: rule.dimension,
+        startPosition: rule.startPosition,
+        width: rule.width,
+        firstValue: rule.firstValue,
       })),
     };
   }

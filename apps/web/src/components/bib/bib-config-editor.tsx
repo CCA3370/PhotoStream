@@ -2,7 +2,7 @@
 
 import {
   type BibAttributeDimension,
-  type BibAttributeMappingInput,
+  type BibAttributeRuleInput,
   type BibAttributeOptionInput,
   type BibConfigUpdate,
   type BibConfigView,
@@ -12,7 +12,7 @@ import {
   deriveBibAttributes,
   evaluateBibNumber,
   normalizeBibNumber,
-  validateBibMappings,
+  validateBibAttributeRules,
   validateBibRuleSet,
 } from "@photostream/contracts";
 import {
@@ -338,7 +338,6 @@ function requestFrom(config: BibConfigView): BibConfigUpdate {
   const attributeOptions = config.attributeOptions.filter(
     (option) => option.dimension === "grade" || option.parentGradeOptionId != null,
   );
-  const optionIds = new Set(attributeOptions.map((option) => option.id));
   return {
     recognitionEnabled: config.recognitionEnabled,
     searchEnabled: config.searchEnabled,
@@ -352,7 +351,7 @@ function requestFrom(config: BibConfigView): BibConfigUpdate {
       })),
     })),
     attributeOptions,
-    mappings: config.mappings.filter((mapping) => optionIds.has(mapping.outputOptionId)),
+    attributeRules: [...config.attributeRules],
   };
 }
 
@@ -396,117 +395,23 @@ function classesForGrade(
   return allClassesForGrade(options, gradeOptionId).filter((option) => option.enabled);
 }
 
-function mappingOptionLabel(
-  option: BibAttributeOptionInput,
-  options: readonly BibAttributeOptionInput[],
-): string {
-  if (option.dimension !== "class") {
-    return optionLabel(option);
-  }
-  const grade = options.find(
-    (candidate) => candidate.id === option.parentGradeOptionId && candidate.dimension === "grade",
-  );
-  return grade === undefined
-    ? optionLabel(option)
-    : `${optionLabel(grade)} · ${optionLabel(option)}`;
-}
-
 const schoolGradeNames = ["初一", "初二", "初三", "高一", "高二", "高三"] as const;
 
-function exactAttributeMapping(
-  dimension: BibAttributeDimension,
-  startPosition: number,
-  width: number,
-  value: string,
-  outputOptionId: string,
-  sortOrder: number,
-): BibAttributeMappingInput {
-  return {
-    dimension,
-    startPosition,
-    width,
-    ranges: [{ start: value, end: value }],
-    outputOptionId,
-    sortOrder,
-  };
-}
-
-function schoolGradeClassMappingPreset(options: readonly BibAttributeOptionInput[]): {
-  readonly mappings: readonly BibAttributeMappingInput[];
-  readonly missingGradeNames: readonly string[];
-} {
-  const grades = orderedOptions(options, "grade");
-  const resolvedGrades = schoolGradeNames.map((displayName) =>
-    grades.find((grade) => grade.enabled && grade.displayName.trim() === displayName),
-  );
-  const missingGradeNames = schoolGradeNames.filter(
-    (_, index) => resolvedGrades[index] === undefined,
-  );
-  if (missingGradeNames.length > 0) {
-    return { mappings: [], missingGradeNames };
-  }
-
-  const mappings: BibAttributeMappingInput[] = [];
-  let gradeSortOrder = 0;
-  let classSortOrder = 0;
-  resolvedGrades.forEach((grade, gradeIndex) => {
-    if (grade === undefined) return;
-    mappings.push(
-      exactAttributeMapping(
-        "grade",
-        1,
-        1,
-        String(gradeIndex + 1),
-        grade.id,
-        gradeSortOrder,
-      ),
-    );
-    gradeSortOrder += 1;
-
-    classesForGrade(options, grade.id)
-      .slice(0, 11)
-      .forEach((classOption, classIndex) => {
-        mappings.push(
-          exactAttributeMapping(
-            "class",
-            2,
-            2,
-            String(classIndex + 1).padStart(2, "0"),
-            classOption.id,
-            classSortOrder,
-          ),
-        );
-        classSortOrder += 1;
-      });
-  });
-  return { mappings, missingGradeNames: [] };
-}
-
-function mappingPresetSignature(mapping: BibAttributeMappingInput): string {
-  const ranges = mapping.ranges
-    .map((range) => `${range.start}:${range.end}`)
-    .toSorted()
-    .join(",");
+function schoolGradeClassAttributeRules(): BibAttributeRuleInput[] {
   return [
-    mapping.dimension,
-    mapping.startPosition,
-    mapping.width,
-    ranges,
-    mapping.outputOptionId,
-  ].join("|");
+    { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+    { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
+  ];
 }
 
-function isSchoolGradeClassMappingPreset(
-  options: readonly BibAttributeOptionInput[],
-  mappings: readonly BibAttributeMappingInput[],
-): boolean {
-  const preset = schoolGradeClassMappingPreset(options);
-  if (preset.missingGradeNames.length > 0 || preset.mappings.length !== mappings.length) {
-    return false;
-  }
-  const expected = preset.mappings.map(mappingPresetSignature).toSorted();
-  const actual = mappings.map(mappingPresetSignature).toSorted();
-  return actual.every((signature, index) => signature === expected[index]);
+function attributeRuleKey(rule: BibAttributeRuleInput): string {
+  return [rule.dimension, rule.startPosition, rule.width, rule.firstValue].join(":");
+}
+
+function isSchoolGradeClassAttributePreset(rules: readonly BibAttributeRuleInput[]): boolean {
+  const expected = schoolGradeClassAttributeRules().map(attributeRuleKey).toSorted();
+  const actual = rules.map(attributeRuleKey).toSorted();
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
@@ -565,9 +470,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       : null,
   );
   const [mappingPreset, setMappingPreset] = useState<"school-grade-class" | null>(() =>
-    isSchoolGradeClassMappingPreset(initial.attributeOptions, initial.mappings)
-      ? "school-grade-class"
-      : null,
+    isSchoolGradeClassAttributePreset(initial.attributeRules) ? "school-grade-class" : null,
   );
   const [saved, setSaved] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -580,10 +483,10 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   );
   const validation = useMemo(() => {
     const rule = validateBibRuleSet(effectivePatterns);
-    const mapping = validateBibMappings(
+    const mapping = validateBibAttributeRules(
       effectivePatterns,
       config.attributeOptions,
-      config.mappings,
+      config.attributeRules,
     );
     const optionIssues = config.attributeOptions.flatMap((option, index) => {
       const displayName = option.displayName.trim();
@@ -658,8 +561,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     if (normalizedNumber === null) return null;
     const evaluation = evaluateBibNumber(normalizedNumber, effectivePatterns);
     const derived = evaluation.valid
-      ? deriveBibAttributes(normalizedNumber, config.mappings, config.attributeOptions)
-      : { gradeOptionId: null, classOptionId: null, matchedMappingIds: [] };
+      ? deriveBibAttributes(normalizedNumber, config.attributeRules, config.attributeOptions)
+      : { gradeOptionId: null, classOptionId: null };
     const classOption =
       derived.classOptionId === null
         ? undefined
@@ -728,7 +631,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function moveOption(optionId: string, direction: -1 | 1): void {
-    setMappingPreset(null);
     setConfig((current) => {
       const option = current.attributeOptions.find((item) => item.id === optionId);
       if (option === undefined) return current;
@@ -753,7 +655,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function removeOption(optionId: string): void {
-    setMappingPreset(null);
     setConfig((current) => {
       const removed = current.attributeOptions.find((option) => option.id === optionId);
       if (removed === undefined) return current;
@@ -784,21 +685,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     });
   }
 
-  function updateMapping(
-    mappingIndex: number,
-    update: (mapping: BibAttributeMappingInput) => BibAttributeMappingInput,
-  ) {
-    setMappingPreset(null);
-    setConfig((current) => ({
-      ...current,
-      mappings: current.mappings.map((mapping, index) =>
-        index === mappingIndex ? update(mapping) : mapping,
-      ),
-    }));
-  }
-
   function addGrade(): void {
-    setMappingPreset(null);
     setConfig((current) => {
       const existing = orderedOptions(current.attributeOptions, "grade");
       const usedNames = new Set(existing.map((option) => option.displayName.trim()));
@@ -828,7 +715,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function setGradeClassCount(gradeOptionId: string, requestedCount: number): void {
-    setMappingPreset(null);
     setConfig((current) => {
       const grade = current.attributeOptions.find(
         (option) => option.id === gradeOptionId && option.dimension === "grade",
@@ -837,14 +723,11 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       const existing = allClassesForGrade(current.attributeOptions, gradeOptionId);
       const otherOptionCount = current.attributeOptions.length - existing.length;
       const classCount = Math.max(0, Math.min(requestedCount, 30, 100 - otherOptionCount));
-      const retainedIds = new Set(existing.slice(0, classCount).map((option) => option.id));
       const nextClasses = Array.from(
         { length: Math.max(classCount, existing.length) },
         (_, index) => {
           const currentClass = existing[index];
-          if (index >= classCount && currentClass !== undefined) {
-            return { ...currentClass, enabled: false };
-          }
+          if (index >= classCount && currentClass !== undefined) return { ...currentClass, enabled: false };
           return {
             id: currentClass?.id ?? crypto.randomUUID(),
             dimension: "class" as const,
@@ -855,19 +738,14 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           };
         },
       );
-      const retiredIds = new Set(
-        existing.filter((option) => !retainedIds.has(option.id)).map((option) => option.id),
-      );
       return {
         ...current,
         attributeOptions: [
           ...current.attributeOptions.filter(
-            (option) =>
-              !(option.dimension === "class" && option.parentGradeOptionId === gradeOptionId),
+            (option) => !(option.dimension === "class" && option.parentGradeOptionId === gradeOptionId),
           ),
           ...nextClasses,
         ],
-        mappings: current.mappings.filter((mapping) => !retiredIds.has(mapping.outputOptionId)),
       };
     });
   }
@@ -881,40 +759,45 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       setMappingPreset(null);
       return;
     }
-    const preset = schoolGradeClassMappingPreset(config.attributeOptions);
-    if (preset.missingGradeNames.length > 0) {
+    const gradeNames = orderedOptions(config.attributeOptions, "grade")
+      .filter((option) => option.enabled)
+      .slice(0, schoolGradeNames.length)
+      .map((option) => option.displayName.trim());
+    if (
+      gradeNames.length < schoolGradeNames.length ||
+      gradeNames.some((name, index) => name !== schoolGradeNames[index])
+    ) {
+      setError("请先将启用年级按“初一、初二、初三、高一、高二、高三”的顺序配置");
       setMappingPreset(null);
-      setError(`请先创建并启用以下年级：${preset.missingGradeNames.join("、")}`);
       return;
     }
     setError(null);
     setMappingPreset("school-grade-class");
-    setConfig((current) => ({ ...current, mappings: [...preset.mappings] }));
+    setConfig((current) => ({ ...current, attributeRules: schoolGradeClassAttributeRules() }));
   }
 
-  function addMapping(dimension: BibAttributeDimension): void {
+  function setAttributeRuleEnabled(dimension: BibAttributeDimension, enabled: boolean): void {
+    setConfig((current) => {
+      const remaining = current.attributeRules.filter((rule) => rule.dimension !== dimension);
+      if (!enabled) return { ...current, attributeRules: remaining };
+      const next: BibAttributeRuleInput =
+        dimension === "grade"
+          ? { dimension, startPosition: 1, width: 1, firstValue: 1 }
+          : { dimension, startPosition: 2, width: 2, firstValue: 1 };
+      return { ...current, attributeRules: [...remaining, next] };
+    });
+  }
+
+  function updateAttributeRule(
+    dimension: BibAttributeDimension,
+    update: (rule: BibAttributeRuleInput) => BibAttributeRuleInput,
+  ): void {
     setMappingPreset(null);
-    const output = orderedOptions(config.attributeOptions, dimension).find(
-      (option) => option.enabled,
-    );
-    if (output === undefined) {
-      setError(dimension === "grade" ? "请先创建启用的年级选项" : "请先创建启用的班级选项");
-      return;
-    }
     setConfig((current) => ({
       ...current,
-      mappings: [
-        ...current.mappings,
-        {
-          id: crypto.randomUUID(),
-          dimension,
-          startPosition: 1,
-          width: 1,
-          ranges: [{ id: crypto.randomUUID(), start: "0", end: "9" }],
-          outputOptionId: output.id,
-          sortOrder: current.mappings.filter((mapping) => mapping.dimension === dimension).length,
-        },
-      ],
+      attributeRules: current.attributeRules.map((rule) =>
+        rule.dimension === dimension ? update(rule) : rule,
+      ),
     }));
   }
 
@@ -951,9 +834,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       setRuleDraft(updatedRuleDraft);
       setRulePreset(isSchoolFiveDigitPreset(updatedRuleDraft) ? "school-five-digit" : null);
       setMappingPreset(
-        isSchoolGradeClassMappingPreset(updated.attributeOptions, updated.mappings)
-          ? "school-grade-class"
-          : null,
+        isSchoolGradeClassAttributePreset(updated.attributeRules) ? "school-grade-class" : null,
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "号码配置保存失败");
@@ -1386,11 +1267,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   0,
                   Math.min(30, 100 - (config.attributeOptions.length - allGradeClasses.length)),
                 );
-                const linkedMappingCount = config.mappings.filter(
-                  (mapping) =>
-                    mapping.outputOptionId === grade.id ||
-                    gradeClasses.some((classOption) => classOption.id === mapping.outputOptionId),
-                ).length;
 
                 return (
                   <Card key={grade.id} size="sm">
@@ -1398,10 +1274,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <CardTitle>{optionLabel(grade)}</CardTitle>
-                          <CardDescription>
-                            {gradeClasses.length} 个班
-                            {linkedMappingCount > 0 ? ` · ${linkedMappingCount} 条号码映射` : ""}
-                          </CardDescription>
+                          <CardDescription>{gradeClasses.length} 个班</CardDescription>
                         </div>
                         <div className="flex items-center gap-1">
                           <Button
@@ -1523,267 +1396,105 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
       <Card>
         <CardHeader>
-          <CardTitle>号码到年级/班级的映射</CardTitle>
+          <CardTitle>号码到年级/班级解析</CardTitle>
           <CardDescription>
-            指定号码中的哪几位对应哪个年级或班级。同一合法号码不能映射到同一类别的两个不同选项。
+            不再维护逐值映射。系统读取号码中的数字并把它当作顺序编号：年级按启用年级顺序，班级按当前年级下的启用班级顺序解析。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <Field>
-            <FieldLabel htmlFor="bib-mapping-preset">映射预设</FieldLabel>
+            <FieldLabel htmlFor="bib-mapping-preset">解析预设</FieldLabel>
             <FieldDescription>
-              选择预设会整体替换当前号码映射；年级与班级选项本身不会被修改。
+              学校预设：第 1 位 1–6 对应初一～高三；第 2–3 位从 01 开始对应该年级的 1班、2班……，自动以当前班级数量为上限。
             </FieldDescription>
             <Select
               items={[
                 { label: "选择内置预设", value: null },
-                {
-                  label: "1–6 → 初一～高三，01–11 → 班级",
-                  value: "school-grade-class",
-                },
+                { label: "1–6 → 初一～高三，01 起 → 班级顺序", value: "school-grade-class" },
               ]}
               onValueChange={applyMappingPreset}
               value={mappingPreset}
             >
-              <SelectTrigger aria-label="号码映射预设" id="bib-mapping-preset">
+              <SelectTrigger aria-label="号码解析预设" id="bib-mapping-preset">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectItem value="school-grade-class">
-                    1–6 → 初一～高三，01–11 → 班级
+                    1–6 → 初一～高三，01 起 → 班级顺序
                   </SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
 
-          {mappingPreset === "school-grade-class" ? (
-            <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-              <p className="font-medium">初一～高三号码映射</p>
-              <p className="mt-1 text-muted-foreground">
-                第 1 位 1–6 依次映射到初一、初二、初三、高一、高二、高三；第 2–3 位按每个年级当前已有班级生成 01 → 1班、02 → 2班……，最多到 11班。某年级少于 11
-                个班时，会自动截止到该年级当前最大班号。
-              </p>
-            </div>
-          ) : null}
-
-          {config.mappings.length === 0 ? (
-            <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-              尚未设置号码映射。添加后，系统可以根据号码中的指定位置自动派生年级或班级。
-            </div>
-          ) : null}
-          {config.mappings.map((mapping, mappingIndex) => {
-            const optionItems = orderedOptions(config.attributeOptions, mapping.dimension)
-              .filter((option) => option.enabled)
-              .map((option) => ({
-                value: option.id,
-                label: mappingOptionLabel(option, config.attributeOptions),
-              }));
+          {(["grade", "class"] as const).map((dimension) => {
+            const rule = config.attributeRules.find((candidate) => candidate.dimension === dimension);
+            const label = dimensionLabel(dimension);
             return (
-              <Card
-                key={
-                  mapping.id ??
-                  `${mapping.dimension}-${mapping.outputOptionId}-${mapping.sortOrder}`
-                }
-                size="sm"
-              >
+              <Card key={dimension} size="sm">
                 <CardHeader>
-                  <CardTitle>
-                    {dimensionLabel(mapping.dimension)}映射 ·{" "}
-                    {optionLabel(
-                      config.attributeOptions.find(
-                        (option) => option.id === mapping.outputOptionId,
-                      ) ?? {
-                        id: mapping.outputOptionId,
-                        dimension: mapping.dimension,
-                        displayName: "",
-                        sortOrder: 0,
-                        enabled: false,
-                        parentGradeOptionId: null,
-                      },
-                    )}
-                  </CardTitle>
-                  <CardDescription>
-                    读取第 {mapping.startPosition}–{mapping.startPosition + mapping.width - 1} 位
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  <FieldGroup className="md:grid md:grid-cols-3">
-                    <Field>
-                      <FieldLabel htmlFor={`mapping-start-${mappingIndex}`}>起始位置</FieldLabel>
-                      <DraftNumberInput
-                        id={`mapping-start-${mappingIndex}`}
-                        max={12}
-                        min={1}
-                        onValueChange={(value) =>
-                          updateMapping(mappingIndex, (current) => ({
-                            ...current,
-                            startPosition: value,
-                          }))
-                        }
-                        value={mapping.startPosition}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor={`mapping-width-${mappingIndex}`}>宽度</FieldLabel>
-                      <DraftNumberInput
-                        id={`mapping-width-${mappingIndex}`}
-                        max={12}
-                        min={1}
-                        onValueChange={(value) =>
-                          updateMapping(mappingIndex, (current) => ({
-                            ...current,
-                            width: value,
-                          }))
-                        }
-                        value={mapping.width}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor={`mapping-output-${mappingIndex}`}>
-                        对应{dimensionLabel(mapping.dimension)}
-                      </FieldLabel>
-                      <Select
-                        items={optionItems}
-                        onValueChange={(value) => {
-                          if (typeof value === "string") {
-                            updateMapping(mappingIndex, (current) => ({
-                              ...current,
-                              outputOptionId: value,
-                            }));
-                          }
-                        }}
-                        value={mapping.outputOptionId}
-                      >
-                        <SelectTrigger id={`mapping-output-${mappingIndex}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {optionItems.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  </FieldGroup>
-                  {mapping.ranges.map((range, rangeIndex) => (
-                    <FieldGroup
-                      className="grid grid-cols-[1fr_1fr_auto] items-end gap-2"
-                      key={range.id ?? `${range.start}-${range.end}`}
-                    >
-                      <Field>
-                        <FieldLabel htmlFor={`mapping-range-start-${mappingIndex}-${rangeIndex}`}>
-                          区间起点
-                        </FieldLabel>
-                        <Input
-                          id={`mapping-range-start-${mappingIndex}-${rangeIndex}`}
-                          inputMode="numeric"
-                          onChange={(event) => {
-                            const { value } = event.currentTarget;
-                            updateMapping(mappingIndex, (current) => ({
-                              ...current,
-                              ranges: current.ranges.map((currentRange, index) =>
-                                index === rangeIndex
-                                  ? { ...currentRange, start: value }
-                                  : currentRange,
-                              ),
-                            }));
-                          }}
-                          value={range.start}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor={`mapping-range-end-${mappingIndex}-${rangeIndex}`}>
-                          区间终点
-                        </FieldLabel>
-                        <Input
-                          id={`mapping-range-end-${mappingIndex}-${rangeIndex}`}
-                          inputMode="numeric"
-                          onChange={(event) => {
-                            const { value } = event.currentTarget;
-                            updateMapping(mappingIndex, (current) => ({
-                              ...current,
-                              ranges: current.ranges.map((currentRange, index) =>
-                                index === rangeIndex
-                                  ? { ...currentRange, end: value }
-                                  : currentRange,
-                              ),
-                            }));
-                          }}
-                          value={range.end}
-                        />
-                      </Field>
-                      <Button
-                        aria-label={`删除映射 ${mappingIndex + 1} 区间 ${rangeIndex + 1}`}
-                        onClick={() =>
-                          updateMapping(mappingIndex, (current) => ({
-                            ...current,
-                            ranges: current.ranges.filter((_, index) => index !== rangeIndex),
-                          }))
-                        }
-                        size="icon"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Trash2Icon />
-                      </Button>
-                    </FieldGroup>
-                  ))}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() =>
-                        updateMapping(mappingIndex, (current) => ({
-                          ...current,
-                          ranges: [
-                            ...current.ranges,
-                            {
-                              id: crypto.randomUUID(),
-                              start: "0".repeat(Math.max(1, current.width)),
-                              end: "9".repeat(Math.max(1, current.width)),
-                            },
-                          ],
-                        }))
-                      }
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      添加区间
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setMappingPreset(null);
-                        setConfig((current) => ({
-                          ...current,
-                          mappings: current.mappings.filter((_, index) => index !== mappingIndex),
-                        }));
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="destructive"
-                    >
-                      删除映射
-                    </Button>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <CardTitle>{label}解析</CardTitle>
+                      <CardDescription>
+                        {dimension === "grade"
+                          ? "解析出的数字 1 表示第 1 个启用年级，2 表示第 2 个，以此类推。"
+                          : "先确定年级，再在该年级自己的班级列表中按顺序解析。"}
+                      </CardDescription>
+                    </div>
+                    <Switch
+                      aria-label={`启用${label}解析`}
+                      checked={rule !== undefined}
+                      onCheckedChange={(checked) => setAttributeRuleEnabled(dimension, checked)}
+                    />
                   </div>
-                </CardContent>
+                </CardHeader>
+                {rule === undefined ? null : (
+                  <CardContent>
+                    <FieldGroup className="md:grid md:grid-cols-3">
+                      <Field>
+                        <FieldLabel htmlFor={`attribute-rule-${dimension}-start`}>起始位置</FieldLabel>
+                        <DraftNumberInput
+                          id={`attribute-rule-${dimension}-start`}
+                          max={12}
+                          min={1}
+                          onValueChange={(value) =>
+                            updateAttributeRule(dimension, (current) => ({ ...current, startPosition: value }))
+                          }
+                          value={rule.startPosition}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`attribute-rule-${dimension}-width`}>读取位数</FieldLabel>
+                        <DraftNumberInput
+                          id={`attribute-rule-${dimension}-width`}
+                          max={12}
+                          min={1}
+                          onValueChange={(value) =>
+                            updateAttributeRule(dimension, (current) => ({ ...current, width: value }))
+                          }
+                          value={rule.width}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`attribute-rule-${dimension}-first`}>第 1 项对应数字</FieldLabel>
+                        <DraftNumberInput
+                          id={`attribute-rule-${dimension}-first`}
+                          max={10 ** rule.width - 1}
+                          min={0}
+                          onValueChange={(value) =>
+                            updateAttributeRule(dimension, (current) => ({ ...current, firstValue: value }))
+                          }
+                          value={rule.firstValue}
+                        />
+                      </Field>
+                    </FieldGroup>
+                  </CardContent>
+                )}
               </Card>
             );
           })}
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => addMapping("grade")} type="button" variant="outline">
-              <PlusIcon data-icon="inline-start" />
-              添加年级映射
-            </Button>
-            <Button onClick={() => addMapping("class")} type="button" variant="outline">
-              <PlusIcon data-icon="inline-start" />
-              添加班级映射
-            </Button>
-          </div>
         </CardContent>
       </Card>
 

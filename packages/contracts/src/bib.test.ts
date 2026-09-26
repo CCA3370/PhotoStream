@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  type BibAttributeMappingInput,
+  type BibAttributeRuleInput,
   type BibAttributeOptionInput,
   type BibCandidateInput,
   type BibPatternInput,
@@ -12,7 +12,7 @@ import {
   normalizeBibNumber,
   normalizeBibRanges,
   submitBibCandidatesRequestSchema,
-  validateBibMappings,
+  validateBibAttributeRules,
   validateBibRuleSet,
 } from "./bib.js";
 
@@ -182,145 +182,49 @@ describe("bib rule engine", () => {
     ).toMatchObject({ usable: true, issues: [] });
   });
 
-  it("rejects conflicting attribute mappings and derives both dimensions from one number", () => {
+  it("derives ordered grade and class attributes without per-value mappings", () => {
     const gradeOne = "019d0000-0000-7000-8000-000000000001";
     const gradeTwo = "019d0000-0000-7000-8000-000000000002";
-    const classOne = "019d0000-0000-7000-8000-000000000003";
+    const gradeOneClassOne = "019d0000-0000-7000-8000-000000000003";
+    const gradeTwoClassOne = "019d0000-0000-7000-8000-000000000004";
     const options: BibAttributeOptionInput[] = [
       { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
       { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, enabled: true },
-      {
-        id: classOne,
-        dimension: "class",
-        displayName: "一班",
-        sortOrder: 0,
-        enabled: true,
-        parentGradeOptionId: gradeOne,
-      },
+      { id: gradeOneClassOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeOne },
+      { id: gradeTwoClassOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeTwo },
     ];
-    const mappings: BibAttributeMappingInput[] = [
-      {
-        id: "019d0000-0000-7000-8000-000000000011",
-        dimension: "grade",
-        startPosition: 1,
-        width: 1,
-        ranges: [{ start: "1", end: "1" }],
-        outputOptionId: gradeOne,
-        sortOrder: 0,
-      },
-      {
-        id: "019d0000-0000-7000-8000-000000000012",
-        dimension: "class",
-        startPosition: 2,
-        width: 2,
-        ranges: [{ start: "01", end: "01" }],
-        outputOptionId: classOne,
-        sortOrder: 0,
-      },
+    const rules: BibAttributeRuleInput[] = [
+      { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+      { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
     ];
-    expect(validateBibMappings(patterns, options, mappings)).toMatchObject({ usable: true });
-    expect(deriveBibAttributes("101999", mappings)).toMatchObject({
-      gradeOptionId: gradeOne,
-      classOptionId: classOne,
-    });
-    expect(
-      validateBibMappings(patterns, options, [
-        ...mappings,
-        {
-          dimension: "grade",
-          startPosition: 1,
-          width: 3,
-          ranges: [{ start: "101", end: "101" }],
-          outputOptionId: gradeTwo,
-          sortOrder: 2,
-        },
-      ]),
-    ).toMatchObject({ usable: false });
-    expect(
-      validateBibMappings(patterns, options, [
-        {
-          dimension: "grade",
-          startPosition: 7,
-          width: 1,
-          ranges: [{ start: "1", end: "1" }],
-          outputOptionId: gradeOne,
-          sortOrder: 0,
-        },
-      ]),
-    ).toMatchObject({ usable: false });
-  });
-
-  it("scopes identical class numbers to their parent grade", () => {
-    const gradeOne = "019d0000-0000-7000-8000-000000000101";
-    const gradeTwo = "019d0000-0000-7000-8000-000000000102";
-    const gradeOneClassOne = "019d0000-0000-7000-8000-000000000111";
-    const gradeTwoClassOne = "019d0000-0000-7000-8000-000000000112";
-    const options: BibAttributeOptionInput[] = [
-      { id: gradeOne, dimension: "grade", displayName: "高一", sortOrder: 0, enabled: true },
-      { id: gradeTwo, dimension: "grade", displayName: "高二", sortOrder: 1, enabled: true },
-      {
-        id: gradeOneClassOne,
-        dimension: "class",
-        displayName: "1班",
-        sortOrder: 0,
-        enabled: true,
-        parentGradeOptionId: gradeOne,
-      },
-      {
-        id: gradeTwoClassOne,
-        dimension: "class",
-        displayName: "1班",
-        sortOrder: 0,
-        enabled: true,
-        parentGradeOptionId: gradeTwo,
-      },
-    ];
-    const mappings: BibAttributeMappingInput[] = [
-      {
-        dimension: "grade",
-        startPosition: 1,
-        width: 1,
-        ranges: [{ start: "1", end: "1" }],
-        outputOptionId: gradeOne,
-        sortOrder: 0,
-      },
-      {
-        dimension: "grade",
-        startPosition: 1,
-        width: 1,
-        ranges: [{ start: "2", end: "2" }],
-        outputOptionId: gradeTwo,
-        sortOrder: 1,
-      },
-      {
-        dimension: "class",
-        startPosition: 2,
-        width: 2,
-        ranges: [{ start: "01", end: "01" }],
-        outputOptionId: gradeOneClassOne,
-        sortOrder: 0,
-      },
-      {
-        dimension: "class",
-        startPosition: 2,
-        width: 2,
-        ranges: [{ start: "01", end: "01" }],
-        outputOptionId: gradeTwoClassOne,
-        sortOrder: 1,
-      },
-    ];
-    expect(validateBibMappings(patterns, options, mappings)).toMatchObject({
-      usable: true,
-      issues: [],
-    });
-    expect(deriveBibAttributes("101999", mappings, options)).toMatchObject({
+    expect(validateBibAttributeRules(patterns, options, rules)).toMatchObject({ usable: true, issues: [] });
+    expect(deriveBibAttributes("101999", rules, options)).toEqual({
       gradeOptionId: gradeOne,
       classOptionId: gradeOneClassOne,
     });
-    expect(deriveBibAttributes("201999", mappings, options)).toMatchObject({
+    expect(deriveBibAttributes("201999", rules, options)).toEqual({
       gradeOptionId: gradeTwo,
       classOptionId: gradeTwoClassOne,
     });
+  });
+
+  it("validates compact attribute rules", () => {
+    const gradeOne = "019d0000-0000-7000-8000-000000000101";
+    const classOne = "019d0000-0000-7000-8000-000000000102";
+    const options: BibAttributeOptionInput[] = [
+      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
+      { id: classOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeOne },
+    ];
+    expect(validateBibAttributeRules(patterns, options, [
+      { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
+    ])).toMatchObject({ usable: false });
+    expect(validateBibAttributeRules(patterns, options, [
+      { dimension: "grade", startPosition: 7, width: 1, firstValue: 1 },
+    ])).toMatchObject({ usable: false });
+    expect(validateBibAttributeRules(patterns, options, [
+      { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+      { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
+    ])).toMatchObject({ usable: false });
   });
 
   it("filters invalid OCR text and merges overlapping duplicate boxes by confidence", () => {
