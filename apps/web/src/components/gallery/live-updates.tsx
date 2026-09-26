@@ -42,6 +42,7 @@ export function LiveUpdates({
   const knownIds = useRef(new Set(knownMediaIds));
   const currentSlug = useRef(slug);
   const pendingMediaIdsRef = useRef(new Set<string>());
+  const unpairedPublishedIdsRef = useRef<string[]>([]);
   const [pendingMediaCount, setPendingMediaCount] = useState(0);
   const [connectionInterrupted, setConnectionInterrupted] = useState(false);
 
@@ -51,6 +52,7 @@ export function LiveUpdates({
       lastEventId.current = initialEventId;
       knownIds.current = new Set(knownMediaIds);
       pendingMediaIdsRef.current.clear();
+      unpairedPublishedIdsRef.current = [];
       setPendingMediaCount(0);
       setConnectionInterrupted(false);
     }
@@ -111,10 +113,23 @@ export function LiveUpdates({
       }, connectionNoticeDelayMs);
     };
 
-    const registerPublishedMedia = (mediaId: string) => {
-      if (viewerNearLatest()) return;
-      pendingMediaIdsRef.current.add(mediaId);
-      setPendingMediaCount(pendingMediaIdsRef.current.size);
+    const flushPublishedMediaPairs = () => {
+      while (unpairedPublishedIdsRef.current.length >= 2) {
+        const firstMediaId = unpairedPublishedIdsRef.current.shift();
+        const secondMediaId = unpairedPublishedIdsRef.current.shift();
+        if (firstMediaId === undefined || secondMediaId === undefined) return;
+
+        const nearLatest = viewerNearLatest();
+        for (const mediaId of [firstMediaId, secondMediaId]) {
+          if (!nearLatest) pendingMediaIdsRef.current.add(mediaId);
+          window.dispatchEvent(
+            new CustomEvent("photostream:media-published", {
+              detail: { mediaId },
+            }),
+          );
+        }
+        if (!nearLatest) setPendingMediaCount(pendingMediaIdsRef.current.size);
+      }
     };
 
     const applyChange = (event: PublicChange) => {
@@ -124,12 +139,8 @@ export function LiveUpdates({
       if (event.type === "media.published") {
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
-          registerPublishedMedia(event.mediaId);
-          window.dispatchEvent(
-            new CustomEvent("photostream:media-published", {
-              detail: { mediaId: event.mediaId },
-            }),
-          );
+          unpairedPublishedIdsRef.current.push(event.mediaId);
+          flushPublishedMediaPairs();
         }
         return;
       }
@@ -163,6 +174,9 @@ export function LiveUpdates({
           new CustomEvent("photostream:media-removed", { detail: { mediaId: event.mediaId } }),
         );
         knownIds.current.delete(event.mediaId);
+        unpairedPublishedIdsRef.current = unpairedPublishedIdsRef.current.filter(
+          (mediaId) => mediaId !== event.mediaId,
+        );
         pendingMediaIdsRef.current.delete(event.mediaId);
         setPendingMediaCount(pendingMediaIdsRef.current.size);
         return;
