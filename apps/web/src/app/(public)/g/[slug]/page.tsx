@@ -15,7 +15,6 @@ import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
 import { ApiRequestError, serverApi } from "@/lib/api";
 import { orderFeaturedMedia } from "@/lib/featured-order";
 
-import styles from "./gallery-toolbar.module.css";
 
 interface MediaList {
   readonly items: readonly PublicMediaView[];
@@ -98,11 +97,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
             timeZone: "Asia/Shanghai",
           }).format(new Date(album.scheduledStartAt));
     return (
-      <PublicGalleryShell
-        albumDescription={album.description}
-        albumTitle={album.title}
-        status="未开始"
-      >
+      <PublicGalleryShell albumDescription={album.description} albumTitle={album.title}>
         <ScheduledAlbumAutoRefresh scheduledStartAt={album.scheduledStartAt} slug={slug} />
         <div className="mx-auto flex min-h-[55dvh] max-w-xl items-center justify-center py-8 sm:py-14">
           <div className="w-full rounded-2xl border bg-card px-5 py-7 text-center shadow-sm sm:px-8 sm:py-10">
@@ -124,11 +119,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
 
   if (album.accessRequired) {
     return (
-      <PublicGalleryShell
-        albumDescription={album.description}
-        albumTitle={album.title}
-        status={album.state === "live" ? "直播中" : "已结束"}
-      >
+      <PublicGalleryShell albumDescription={album.description} albumTitle={album.title}>
         <div className="mx-auto max-w-sm py-4 sm:py-7">
           <UnlockAlbumForm slug={slug} />
         </div>
@@ -142,9 +133,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   const initialMediaPageSize = dataSaver.enabled
     ? dataSaverInitialMediaPageSize
     : standardInitialMediaPageSize;
-  const category = featuredOnly
-    ? undefined
-    : album.categories.find((candidate) => candidate.id === requestedCategory);
+  const category = album.categories.find((candidate) => candidate.id === requestedCategory);
   const mediaPath = new URLSearchParams({ limit: String(initialMediaPageSize) });
   if (category !== undefined) mediaPath.set("categoryId", category.id);
   const [media, featured, faceState] = await Promise.all([
@@ -158,7 +147,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   let nextCursor = media.nextCursor;
   let eventCursor = media.eventCursor;
 
-  if (!dataSaver.enabled && !featuredOnly && category === undefined) {
+  if (!dataSaver.enabled && category === undefined) {
     let fetchedPages = 1;
     let featuredCount = prefetchedItems.filter((item) => featuredIdSet.has(item.id)).length;
     while (
@@ -192,7 +181,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
       // Ignore stale or invalid deep links and keep the album usable.
     }
   }
-  if (!featuredOnly) initialItems = [...orderFeaturedMedia(initialItems, featuredIdSet)];
+  initialItems = [...orderFeaturedMedia(initialItems, featuredIdSet)];
 
   const initialPage: MediaList = {
     ...media,
@@ -213,15 +202,13 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
       }
     : undefined;
   const searchAvailable = album.bibSearchEnabled || faceSearch !== undefined;
-  const inlineSearch = searchAvailable && !featuredOnly;
-  const selectedFilterKey = featuredOnly ? "featured" : (category?.id ?? "all");
+  const selectedFilterKey = category?.id ?? "all";
 
   return (
     <PublicGalleryShell
       albumDescription={album.description}
       albumTitle={album.title}
-      reserveSearchAction={searchAvailable}
-      status={album.state === "live" ? "直播中" : "已结束"}
+      searchAvailable={searchAvailable}
     >
       <div data-photostream-data-saver={dataSaver.enabled ? "true" : "false"} hidden />
       <AlbumOpenTracker slug={slug} />
@@ -232,7 +219,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
         faceSearchEnabled={faceSearch !== undefined}
         hasPhotos={initialItems.length > 0}
         live={album.state === "live"}
-        searchAvailable={inlineSearch}
+        searchAvailable={searchAvailable}
       />
       <ViewerHelpFeedback slug={slug} />
 
@@ -245,15 +232,13 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
         dataSaverEnabled={dataSaver.enabled}
         {...(faceSearch === undefined ? {} : { faceSearch })}
         initialFeaturedIds={featured.mediaIds}
+        initialFeaturedOnly={featuredOnly}
         initialFilterKey={selectedFilterKey}
         initialPage={initialPage}
         {...(initialSelectedId === undefined ? {} : { initialSelectedId })}
         initialVisibilityNow={initialVisibilityNow}
         numberLengths={album.bibNumberLengths}
         searchAvailable={searchAvailable}
-        {...(styles.searchToolbar === undefined
-          ? {}
-          : { searchToolbarClassName: styles.searchToolbar })}
         slug={slug}
       />
 
