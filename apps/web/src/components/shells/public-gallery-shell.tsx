@@ -90,12 +90,10 @@ export function PublicGalleryShell({
               </div>
 
               {searchAvailable ? (
-                <div
-                  className="flex shrink-0 items-center gap-0.5"
-                  data-viewer-onboarding-target="search"
-                >
+                <div className="flex shrink-0 items-center gap-0.5">
                   <button
                     className="flex h-8 min-w-0 max-w-[8.5rem] items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 text-xs font-semibold text-foreground shadow-xs transition-[background-color,border-color] hover:border-primary/40 hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 sm:max-w-[10rem] sm:text-sm lg:h-9 lg:max-w-[13rem] lg:px-3"
+                    data-viewer-onboarding-target="search"
                     onClick={openSearch}
                     type="button"
                   >
