@@ -371,7 +371,8 @@ export function ViewerOnboarding({
         return;
       }
       const bounds = targetBounds(targetKind, current);
-      const padding = targetKind.startsWith("lightbox") ? 10 : 8;
+      const padding =
+        targetKind === "search" ? 4 : targetKind.startsWith("lightbox") ? 10 : 8;
       const left = Math.max(8, bounds.left - padding);
       const top = Math.max(8, bounds.top - padding);
       const right = Math.min(window.innerWidth - 8, bounds.right + padding);
