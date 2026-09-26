@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  type BibAttributeRuleInput,
   type BibAttributeOptionInput,
+  type BibAttributeRuleInput,
   type BibBatchResult,
   type BibCandidateInput,
   type BibConfigUpdate,

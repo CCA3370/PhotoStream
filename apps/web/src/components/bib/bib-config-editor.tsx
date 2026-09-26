@@ -2,8 +2,8 @@
 
 import {
   type BibAttributeDimension,
-  type BibAttributeRuleInput,
   type BibAttributeOptionInput,
+  type BibAttributeRuleInput,
   type BibConfigUpdate,
   type BibConfigView,
   type BibConstraintInput,
@@ -60,7 +60,7 @@ interface SimpleConstraintDraft {
 interface SimpleConditionalRuleDraft {
   readonly id: string;
   readonly when: SimpleConstraintDraft;
-  readonly then: SimpleConstraintDraft;
+  readonly require: SimpleConstraintDraft;
 }
 
 interface SimpleBibRuleDraft {
@@ -193,11 +193,11 @@ function simpleRuleDraftFromPatterns(patterns: readonly BibPatternInput[]): Simp
       return { totalLength, baseRules, conditionalRules: [], compatible: false, dirty: false };
     }
     const when = simpleConstraintFromBib(remaining[0] as BibConstraintInput);
-    const then = simpleConstraintFromBib(remaining[1] as BibConstraintInput);
-    if (when === null || then === null) {
+    const require = simpleConstraintFromBib(remaining[1] as BibConstraintInput);
+    if (when === null || require === null) {
       return { totalLength, baseRules, conditionalRules: [], compatible: false, dirty: false };
     }
-    conditionalRules.push({ id: crypto.randomUUID(), when, then });
+    conditionalRules.push({ id: crypto.randomUUID(), when, require });
   }
 
   return { totalLength, baseRules, conditionalRules, compatible: true, dirty: false };
@@ -241,7 +241,7 @@ function compileSimpleRuleDraft(draft: SimpleBibRuleDraft): BibPatternInput[] {
       constraints: [
         ...base,
         compiledConstraint(rule.when, base.length),
-        compiledConstraint(rule.then, base.length + 1),
+        compiledConstraint(rule.require, base.length + 1),
       ],
     };
   });
@@ -266,7 +266,7 @@ function simpleRuleSummary(draft: SimpleBibRuleDraft): string {
   parts.push(
     ...draft.conditionalRules.map(
       (rule) =>
-        `当${simpleConstraintSummary(rule.when)}时，${simpleConstraintSummary(rule.then)}`,
+        `当${simpleConstraintSummary(rule.when)}时，${simpleConstraintSummary(rule.require)}`,
     ),
   );
   return parts.join("；");
@@ -289,7 +289,7 @@ function schoolFiveDigitPresetDraft(): SimpleBibRuleDraft {
   ): SimpleConditionalRuleDraft => ({
     id: crypto.randomUUID(),
     when: simpleConstraint(1, 1, whenStart, whenEnd),
-    then: simpleConstraint(2, 2, "01", thenEnd),
+    require: simpleConstraint(2, 2, "01", thenEnd),
   });
   return {
     totalLength: 5,
@@ -320,7 +320,7 @@ function isSchoolFiveDigitPreset(draft: SimpleBibRuleDraft): boolean {
   if (base === undefined || simpleConstraintKey(base) !== "1:1:1:6") return false;
 
   const actual = draft.conditionalRules
-    .map((rule) => `${simpleConstraintKey(rule.when)}>${simpleConstraintKey(rule.then)}`)
+    .map((rule) => `${simpleConstraintKey(rule.when)}>${simpleConstraintKey(rule.require)}`)
     .toSorted();
   const expected = [
     "1:1:1:2>2:2:01:10",
@@ -653,7 +653,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
 
   function updateConditionalRule(
     ruleIndex: number,
-    side: "when" | "then",
+    side: "when" | "require",
     update: (rule: SimpleConstraintDraft) => SimpleConstraintDraft,
   ): void {
     editRuleDraft((current) => ({
@@ -1097,11 +1097,12 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <Input
                     id={`base-range-start-${ruleIndex}`}
                     inputMode="numeric"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
                       updateBaseRule(ruleIndex, (current) => ({
                         ...current,
-                        start: event.currentTarget.value,
-                      }))
+                        start: value,
+                      }));
                     }
                     value={rule.start}
                   />
@@ -1111,11 +1112,12 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   <Input
                     id={`base-range-end-${ruleIndex}`}
                     inputMode="numeric"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
                       updateBaseRule(ruleIndex, (current) => ({
                         ...current,
-                        end: event.currentTarget.value,
-                      }))
+                        end: value,
+                      }));
                     }
                     value={rule.end}
                   />
@@ -1156,7 +1158,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       {
                         id: crypto.randomUUID(),
                         when: newSimpleConstraint(),
-                        then: newSimpleConstraint(2, 2),
+                        require: newSimpleConstraint(2, 2),
                       },
                     ],
                   }))
@@ -1185,7 +1187,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                     <div>
                       <CardTitle>条件 {ruleIndex + 1}</CardTitle>
                       <CardDescription>
-                        当{simpleConstraintSummary(rule.when)}时，{simpleConstraintSummary(rule.then)}
+                        当{simpleConstraintSummary(rule.when)}时，{simpleConstraintSummary(rule.require)}
                       </CardDescription>
                     </div>
                     <Button
@@ -1207,7 +1209,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  {(["when", "then"] as const).map((side) => {
+                  {(["when", "require"] as const).map((side) => {
                     const segment = rule[side];
                     const prefix = side === "when" ? "当" : "则必须";
                     return (
@@ -1254,11 +1256,12 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             <Input
                               id={`conditional-${ruleIndex}-${side}-range-start`}
                               inputMode="numeric"
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const { value } = event.currentTarget;
                                 updateConditionalRule(ruleIndex, side, (current) => ({
                                   ...current,
-                                  start: event.currentTarget.value,
-                                }))
+                                  start: value,
+                                }));
                               }
                               value={segment.start}
                             />
@@ -1270,11 +1273,12 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                             <Input
                               id={`conditional-${ruleIndex}-${side}-range-end`}
                               inputMode="numeric"
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const { value } = event.currentTarget;
                                 updateConditionalRule(ruleIndex, side, (current) => ({
                                   ...current,
-                                  end: event.currentTarget.value,
-                                }))
+                                  end: value,
+                                }));
                               }
                               value={segment.end}
                             />

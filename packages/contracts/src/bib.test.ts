@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  type BibAttributeRuleInput,
   type BibAttributeOptionInput,
+  type BibAttributeRuleInput,
   type BibCandidateInput,
   type BibPatternInput,
   bibConfigUpdateSchema,
@@ -278,10 +278,12 @@ describe("bib rule engine", () => {
         [{ dimension: "grade", startPosition: 1, width: 1, firstValue: 1 }],
       ),
     ).toMatchObject({ usable: false });
+    const firstOption = options[0];
+    if (firstOption === undefined) throw new Error("Expected grade option fixture");
     expect(
       validateBibAttributeRules(
         patterns,
-        [{ ...options[0]!, ordinal: 9 }],
+        [{ ...firstOption, ordinal: 9 }],
         [{ dimension: "grade", startPosition: 1, width: 1, firstValue: 1 }],
       ),
     ).toMatchObject({
