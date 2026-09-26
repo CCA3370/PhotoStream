@@ -1,6 +1,10 @@
-DROP TABLE IF EXISTS "bib_attribute_mapping_ranges";
+ALTER TABLE "bib_attribute_options" ADD COLUMN "ordinal" integer;
 --> statement-breakpoint
-DROP TABLE IF EXISTS "bib_attribute_mappings";
+UPDATE "bib_attribute_options" SET "ordinal" = "sort_order" WHERE "ordinal" IS NULL;
+--> statement-breakpoint
+CREATE INDEX "bib_attribute_options_album_dimension_ordinal_idx" ON "bib_attribute_options" USING btree ("album_id","dimension","ordinal","id");
+--> statement-breakpoint
+CREATE INDEX "bib_attribute_options_parent_grade_ordinal_idx" ON "bib_attribute_options" USING btree ("album_id","parent_grade_option_id","ordinal","id");
 --> statement-breakpoint
 CREATE TABLE "bib_attribute_rules" (
   "id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
@@ -8,7 +12,7 @@ CREATE TABLE "bib_attribute_rules" (
   "dimension" "bib_attribute_dimension" NOT NULL,
   "start_position" integer NOT NULL,
   "width" integer NOT NULL,
-  "first_value" integer DEFAULT 1 NOT NULL,
+  "first_value" bigint DEFAULT 1 NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

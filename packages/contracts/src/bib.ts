@@ -45,6 +45,7 @@ export const bibAttributeOptionInputSchema = z
     dimension: bibAttributeDimensionSchema,
     displayName: z.string().trim().min(1).max(60),
     sortOrder: z.number().int().min(0).max(10_000).default(0),
+    ordinal: z.number().int().min(0).max(10_000),
     enabled: z.boolean().default(true),
     parentGradeOptionId: z.string().uuid().nullable().optional(),
   })
@@ -580,7 +581,7 @@ function attributeOptionAtOrdinal(
     (option) =>
       option.enabled &&
       option.dimension === dimension &&
-      option.sortOrder === ordinal &&
+      option.ordinal === ordinal &&
       (dimension === "grade" || option.parentGradeOptionId === parentGradeOptionId),
   );
 }
@@ -634,7 +635,7 @@ export function validateBibAttributeRules(
         ? "grade"
         : `class:${option.parentGradeOptionId ?? "missing"}`;
     const used = sortOrderScopes.get(scope) ?? new Set<number>();
-    if (used.has(option.sortOrder)) {
+    if (used.has(option.ordinal)) {
       issues.push({
         code: "DUPLICATE_ATTRIBUTE_ORDINAL",
         path: "attributeOptions",
@@ -644,7 +645,7 @@ export function validateBibAttributeRules(
             : "同一年级下启用班级的顺序位不能重复",
       });
     }
-    used.add(option.sortOrder);
+    used.add(option.ordinal);
     sortOrderScopes.set(scope, used);
   }
   if (classRule !== undefined && gradeRule === undefined) {
@@ -674,6 +675,20 @@ export function validateBibAttributeRules(
       message: "已配置班级解析，但没有启用的班级",
     });
   }
+
+  const ruleByDimension = new Map(rules.map((rule) => [rule.dimension, rule]));
+  options.forEach((option, optionIndex) => {
+    if (!option.enabled) return;
+    const rule = ruleByDimension.get(option.dimension);
+    if (rule === undefined) return;
+    if (rule.firstValue + option.ordinal > 10 ** rule.width - 1) {
+      issues.push({
+        code: "ATTRIBUTE_ORDINAL_OUT_OF_RANGE",
+        path: `attributeOptions.${optionIndex}.ordinal`,
+        message: `${option.dimension === "grade" ? "年级" : "班级"}编码槽位超出当前读取位数可表示的范围`,
+      });
+    }
+  });
   return { usable: issues.length === 0, issues };
 }
 

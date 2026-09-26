@@ -143,12 +143,13 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
         },
       ],
       attributeOptions: [
-        { id: gradeId, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
+        { id: gradeId, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
         {
           id: classId,
           dimension: "class",
           displayName: "一班",
           sortOrder: 0,
+          ordinal: 0,
           enabled: true,
           parentGradeOptionId: gradeId,
         },

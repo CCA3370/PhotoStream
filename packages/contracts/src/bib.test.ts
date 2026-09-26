@@ -189,11 +189,11 @@ describe("bib rule engine", () => {
     const gradeTwoClassOne = "019d0000-0000-7000-8000-000000000004";
     const gradeOneClassTwo = "019d0000-0000-7000-8000-000000000005";
     const options: BibAttributeOptionInput[] = [
-      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
-      { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, enabled: true },
-      { id: gradeOneClassOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeOne },
-      { id: gradeTwoClassOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeTwo },
-      { id: gradeOneClassTwo, dimension: "class", displayName: "2班", sortOrder: 1, enabled: true, parentGradeOptionId: gradeOne },
+      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
+      { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, ordinal: 1, enabled: true },
+      { id: gradeOneClassOne, dimension: "class", displayName: "1班", sortOrder: 0, ordinal: 0, enabled: true, parentGradeOptionId: gradeOne },
+      { id: gradeTwoClassOne, dimension: "class", displayName: "1班", sortOrder: 0, ordinal: 0, enabled: true, parentGradeOptionId: gradeTwo },
+      { id: gradeOneClassTwo, dimension: "class", displayName: "2班", sortOrder: 1, ordinal: 1, enabled: true, parentGradeOptionId: gradeOne },
     ];
     const rules: BibAttributeRuleInput[] = [
       { dimension: "grade", startPosition: 1, width: 1, firstValue: 1 },
@@ -218,6 +218,22 @@ describe("bib rule engine", () => {
     });
     expect(
       deriveBibAttributes(
+        "101999",
+        rules,
+        options.map((option) =>
+          option.id === gradeOne
+            ? { ...option, sortOrder: 99 }
+            : option.id === gradeTwo
+              ? { ...option, sortOrder: 0 }
+              : option,
+        ),
+      ),
+    ).toEqual({
+      gradeOptionId: gradeOne,
+      classOptionId: gradeOneClassOne,
+    });
+    expect(
+      deriveBibAttributes(
         "201999",
         rules,
         options.map((option) => (option.id === gradeOne ? { ...option, enabled: false } : option)),
@@ -232,8 +248,8 @@ describe("bib rule engine", () => {
     const gradeOne = "019d0000-0000-7000-8000-000000000101";
     const classOne = "019d0000-0000-7000-8000-000000000102";
     const options: BibAttributeOptionInput[] = [
-      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
-      { id: classOne, dimension: "class", displayName: "1班", sortOrder: 0, enabled: true, parentGradeOptionId: gradeOne },
+      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
+      { id: classOne, dimension: "class", displayName: "1班", sortOrder: 0, ordinal: 0, enabled: true, parentGradeOptionId: gradeOne },
     ];
     expect(validateBibAttributeRules(patterns, options, [
       { dimension: "class", startPosition: 2, width: 2, firstValue: 1 },
@@ -253,14 +269,27 @@ describe("bib rule engine", () => {
           {
             id: "019d0000-0000-7000-8000-000000000103",
             dimension: "grade",
-            displayName: "重复顺序位",
-            sortOrder: 0,
+            displayName: "重复编码槽位",
+            sortOrder: 5,
+            ordinal: 0,
             enabled: true,
           },
         ],
         [{ dimension: "grade", startPosition: 1, width: 1, firstValue: 1 }],
       ),
     ).toMatchObject({ usable: false });
+    expect(
+      validateBibAttributeRules(
+        patterns,
+        [{ ...options[0]!, ordinal: 9 }],
+        [{ dimension: "grade", startPosition: 1, width: 1, firstValue: 1 }],
+      ),
+    ).toMatchObject({
+      usable: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "ATTRIBUTE_ORDINAL_OUT_OF_RANGE" }),
+      ]),
+    });
   });
 
   it("filters invalid OCR text and merges overlapping duplicate boxes by confidence", () => {
@@ -291,12 +320,13 @@ describe("bib rule engine", () => {
         modelVersion: "test",
         patterns: [],
         attributeOptions: [
-          { id: optionId, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
+          { id: optionId, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
           {
             id: optionId,
             dimension: "grade",
             displayName: "初一重复",
             sortOrder: 1,
+            ordinal: 1,
             enabled: true,
           },
         ],

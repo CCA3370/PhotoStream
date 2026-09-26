@@ -96,13 +96,14 @@ function validConfig(overrides: Partial<BibConfigUpdate> = {}): BibConfigUpdate 
       },
     ],
     attributeOptions: [
-      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
-      { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, enabled: true },
+      { id: gradeOne, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
+      { id: gradeTwo, dimension: "grade", displayName: "初二", sortOrder: 1, ordinal: 1, enabled: true },
       {
         id: classOne,
         dimension: "class",
         displayName: "一班",
         sortOrder: 0,
+        ordinal: 0,
         enabled: true,
         parentGradeOptionId: gradeOne,
       },
@@ -111,6 +112,7 @@ function validConfig(overrides: Partial<BibConfigUpdate> = {}): BibConfigUpdate 
         dimension: "class",
         displayName: "二班",
         sortOrder: 1,
+        ordinal: 1,
         enabled: true,
         parentGradeOptionId: gradeOne,
       },
@@ -341,7 +343,11 @@ maybeDescribe("bib configuration, privacy and search", () => {
       input: {
         ...updateFromView(saved),
         attributeOptions: saved.attributeOptions.map((option) =>
-          option.id === gradeOne ? { ...option, displayName: "七年级" } : option,
+          option.id === gradeOne
+            ? { ...option, displayName: "七年级", sortOrder: 10 }
+            : option.id === gradeTwo
+              ? { ...option, sortOrder: 0 }
+              : option,
         ),
         patterns: saved.patterns.map((pattern) => ({
           ...pattern,
@@ -356,6 +362,13 @@ maybeDescribe("bib configuration, privacy and search", () => {
     expect(renamed).toMatchObject({
       ruleVersion: saved.ruleVersion,
       mappingVersion: saved.mappingVersion,
+    });
+    await expect(
+      service.testNumber({ id: reviewerId, role: "reviewer" }, albumId, "101999"),
+    ).resolves.toMatchObject({
+      valid: true,
+      gradeOptionId: gradeOne,
+      classOptionId: classOne,
     });
     await expect(
       service.updateConfig({

@@ -978,6 +978,7 @@ export const bibAttributeOptions = pgTable(
     dimension: bibAttributeDimensionEnum("dimension").notNull(),
     displayName: varchar("display_name", { length: 60 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
+    ordinal: integer("ordinal"),
     enabled: boolean("enabled").notNull().default(true),
     parentGradeOptionId: uuid("parent_grade_option_id").references(
       (): AnyPgColumn => bibAttributeOptions.id,
@@ -998,6 +999,18 @@ export const bibAttributeOptions = pgTable(
       table.sortOrder,
       table.id,
     ),
+    index("bib_attribute_options_album_dimension_ordinal_idx").on(
+      table.albumId,
+      table.dimension,
+      table.ordinal,
+      table.id,
+    ),
+    index("bib_attribute_options_parent_grade_ordinal_idx").on(
+      table.albumId,
+      table.parentGradeOptionId,
+      table.ordinal,
+      table.id,
+    ),
     check(
       "bib_attribute_options_hierarchy_check",
       sql`(${table.dimension} = 'grade' and ${table.parentGradeOptionId} is null) or (${table.dimension} = 'class' and ${table.parentGradeOptionId} is not null)`,
@@ -1013,7 +1026,7 @@ export const bibAttributeRules = pgTable(
     dimension: bibAttributeDimensionEnum("dimension").notNull(),
     startPosition: integer("start_position").notNull(),
     width: integer("width").notNull(),
-    firstValue: integer("first_value").notNull().default(1),
+    firstValue: bigint("first_value", { mode: "number" }).notNull().default(1),
     ...timestampColumns(),
   },
   (table) => [

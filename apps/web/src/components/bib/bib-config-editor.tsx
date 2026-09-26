@@ -408,18 +408,45 @@ function attributeRuleKey(rule: BibAttributeRuleInput): string {
   return [rule.dimension, rule.startPosition, rule.width, rule.firstValue].join(":");
 }
 
+function schoolGradeOptions(
+  options: readonly BibAttributeOptionInput[],
+): Array<BibAttributeOptionInput | undefined> {
+  const grades = options.filter((option) => option.dimension === "grade" && option.enabled);
+  return schoolGradeNames.map((displayName) =>
+    grades.find((grade) => grade.displayName.trim() === displayName),
+  );
+}
+
+function applySchoolGradeClassOrdinals(
+  options: readonly BibAttributeOptionInput[],
+): BibAttributeOptionInput[] {
+  const resolvedGrades = schoolGradeOptions(options);
+  const gradeOrdinalById = new Map<string, number>();
+  resolvedGrades.forEach((grade, ordinal) => {
+    if (grade !== undefined) gradeOrdinalById.set(grade.id, ordinal);
+  });
+  return options.map((option) => {
+    if (option.dimension === "grade") {
+      const ordinal = gradeOrdinalById.get(option.id);
+      return ordinal === undefined ? option : { ...option, ordinal };
+    }
+    if (option.parentGradeOptionId == null || !gradeOrdinalById.has(option.parentGradeOptionId)) {
+      return option;
+    }
+    const match = /^(\d{1,2})班$/u.exec(option.displayName.trim());
+    const classNumber = match === null ? null : Number(match[1]);
+    return classNumber !== null && classNumber >= 1 && classNumber <= 30
+      ? { ...option, ordinal: classNumber - 1 }
+      : option;
+  });
+}
+
 function isSchoolGradeClassAttributePreset(
   options: readonly BibAttributeOptionInput[],
   rules: readonly BibAttributeRuleInput[],
 ): boolean {
-  const gradeNames = orderedOptions(options, "grade")
-    .filter((option) => option.enabled)
-    .slice(0, schoolGradeNames.length)
-    .map((option) => option.displayName.trim());
-  if (
-    gradeNames.length < schoolGradeNames.length ||
-    gradeNames.some((name, index) => name !== schoolGradeNames[index])
-  ) {
+  const resolvedGrades = schoolGradeOptions(options);
+  if (resolvedGrades.some((grade, ordinal) => grade === undefined || grade.ordinal !== ordinal)) {
     return false;
   }
   const expected = schoolGradeClassAttributeRules().map(attributeRuleKey).toSorted();
@@ -649,7 +676,6 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function moveOption(optionId: string, direction: -1 | 1): void {
-    setMappingPreset(null);
     setConfig((current) => {
       const option = current.attributeOptions.find((item) => item.id === optionId);
       if (option === undefined) return current;
@@ -705,6 +731,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function addGrade(): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const existing = orderedOptions(current.attributeOptions, "grade");
       const usedNames = new Set(existing.map((option) => option.displayName.trim()));
@@ -725,6 +752,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             displayName,
             sortOrder:
               existing.reduce((maximum, option) => Math.max(maximum, option.sortOrder), -1) + 1,
+            ordinal:
+              existing.reduce((maximum, option) => Math.max(maximum, option.ordinal), -1) + 1,
             enabled: true,
             parentGradeOptionId: null,
           },
@@ -751,7 +780,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
             id: currentClass?.id ?? crypto.randomUUID(),
             dimension: "class" as const,
             displayName: `${index + 1}班`,
-            sortOrder: index,
+            sortOrder: currentClass?.sortOrder ?? index,
+            ordinal: currentClass?.ordinal ?? index,
             enabled: true,
             parentGradeOptionId: gradeOptionId,
           };
@@ -778,21 +808,22 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       setMappingPreset(null);
       return;
     }
-    const gradeNames = orderedOptions(config.attributeOptions, "grade")
-      .filter((option) => option.enabled)
-      .slice(0, schoolGradeNames.length)
-      .map((option) => option.displayName.trim());
-    if (
-      gradeNames.length < schoolGradeNames.length ||
-      gradeNames.some((name, index) => name !== schoolGradeNames[index])
-    ) {
-      setError("请先将启用年级按“初一、初二、初三、高一、高二、高三”的顺序配置");
+    const resolvedGrades = schoolGradeOptions(config.attributeOptions);
+    const missingGradeNames = schoolGradeNames.filter(
+      (_, index) => resolvedGrades[index] === undefined,
+    );
+    if (missingGradeNames.length > 0) {
+      setError(`请先创建并启用以下年级：${missingGradeNames.join("、")}`);
       setMappingPreset(null);
       return;
     }
     setError(null);
     setMappingPreset("school-grade-class");
-    setConfig((current) => ({ ...current, attributeRules: schoolGradeClassAttributeRules() }));
+    setConfig((current) => ({
+      ...current,
+      attributeOptions: applySchoolGradeClassOrdinals(current.attributeOptions),
+      attributeRules: schoolGradeClassAttributeRules(),
+    }));
   }
 
   function setAttributeRuleEnabled(dimension: BibAttributeDimension, enabled: boolean): void {
@@ -1420,7 +1451,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         <CardHeader>
           <CardTitle>号码到年级/班级解析</CardTitle>
           <CardDescription>
-            不再维护逐值映射。系统读取号码中的数字并直接对应年级/班级的顺序位；停用某一项只会留下空位，不会让后续号码整体前移。
+            不再维护逐值映射。号码只对应稳定的编码槽位；年级在界面中的上移、下移只改变显示顺序，不会改变号码含义。停用或删除会留下编码空位。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -1461,8 +1492,8 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       <CardTitle>{label}解析</CardTitle>
                       <CardDescription>
                         {dimension === "grade"
-                          ? "解析出的数字 1 对应顺序位 0（第 1 个年级），2 对应顺序位 1；停用中间年级不会改变其他号码。"
-                          : "先确定年级，再按该年级班级的顺序位解析；不存在或停用的顺序位不会匹配。"}
+                          ? "数字减去起始值后匹配稳定编码槽位；显示排序不会改变槽位。"
+                          : "先确定年级，再匹配该年级自己的稳定班级编码槽位；不存在或停用的槽位不会匹配。"}
                       </CardDescription>
                     </div>
                     <Switch

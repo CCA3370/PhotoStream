@@ -202,12 +202,13 @@ const bibConfig: BibConfigView = {
     },
   ],
   attributeOptions: [
-    { id: gradeOptionId, dimension: "grade", displayName: "初一", sortOrder: 0, enabled: true },
+    { id: gradeOptionId, dimension: "grade", displayName: "初一", sortOrder: 0, ordinal: 0, enabled: true },
     {
       id: classOptionId,
       dimension: "class",
       displayName: "一班",
       sortOrder: 0,
+      ordinal: 0,
       enabled: true,
       parentGradeOptionId: gradeOptionId,
     },
