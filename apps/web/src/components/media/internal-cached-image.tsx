@@ -71,7 +71,7 @@ export function InternalCachedImage({
   readonly src: string | null;
   readonly mediaId?: string | null;
   readonly localPhotoId?: string | null;
-  readonly localPhoto?: LocalReviewPhoto | null;
+  readonly localPhoto?: LocalReviewPhoto | null | undefined;
   readonly variantKind?: string | undefined;
   readonly remoteVariants?: readonly RemoteVariantSource[] | undefined;
   readonly localVariantOrder?: readonly InternalPreviewVariantKind[] | undefined;
