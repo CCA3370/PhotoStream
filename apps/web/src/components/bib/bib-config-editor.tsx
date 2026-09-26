@@ -411,6 +411,104 @@ function mappingOptionLabel(
     : `${optionLabel(grade)} · ${optionLabel(option)}`;
 }
 
+const schoolGradeNames = ["初一", "初二", "初三", "高一", "高二", "高三"] as const;
+
+function exactAttributeMapping(
+  dimension: BibAttributeDimension,
+  startPosition: number,
+  width: number,
+  value: string,
+  outputOptionId: string,
+  sortOrder: number,
+): BibAttributeMappingInput {
+  return {
+    dimension,
+    startPosition,
+    width,
+    ranges: [{ start: value, end: value }],
+    outputOptionId,
+    sortOrder,
+  };
+}
+
+function schoolGradeClassMappingPreset(options: readonly BibAttributeOptionInput[]): {
+  readonly mappings: readonly BibAttributeMappingInput[];
+  readonly missingGradeNames: readonly string[];
+} {
+  const grades = orderedOptions(options, "grade");
+  const resolvedGrades = schoolGradeNames.map((displayName) =>
+    grades.find((grade) => grade.enabled && grade.displayName.trim() === displayName),
+  );
+  const missingGradeNames = schoolGradeNames.filter(
+    (_, index) => resolvedGrades[index] === undefined,
+  );
+  if (missingGradeNames.length > 0) {
+    return { mappings: [], missingGradeNames };
+  }
+
+  const mappings: BibAttributeMappingInput[] = [];
+  let gradeSortOrder = 0;
+  let classSortOrder = 0;
+  resolvedGrades.forEach((grade, gradeIndex) => {
+    if (grade === undefined) return;
+    mappings.push(
+      exactAttributeMapping(
+        "grade",
+        1,
+        1,
+        String(gradeIndex + 1),
+        grade.id,
+        gradeSortOrder,
+      ),
+    );
+    gradeSortOrder += 1;
+
+    classesForGrade(options, grade.id)
+      .slice(0, 11)
+      .forEach((classOption, classIndex) => {
+        mappings.push(
+          exactAttributeMapping(
+            "class",
+            2,
+            2,
+            String(classIndex + 1).padStart(2, "0"),
+            classOption.id,
+            classSortOrder,
+          ),
+        );
+        classSortOrder += 1;
+      });
+  });
+  return { mappings, missingGradeNames: [] };
+}
+
+function mappingPresetSignature(mapping: BibAttributeMappingInput): string {
+  const ranges = mapping.ranges
+    .map((range) => `${range.start}:${range.end}`)
+    .toSorted()
+    .join(",");
+  return [
+    mapping.dimension,
+    mapping.startPosition,
+    mapping.width,
+    ranges,
+    mapping.outputOptionId,
+  ].join("|");
+}
+
+function isSchoolGradeClassMappingPreset(
+  options: readonly BibAttributeOptionInput[],
+  mappings: readonly BibAttributeMappingInput[],
+): boolean {
+  const preset = schoolGradeClassMappingPreset(options);
+  if (preset.missingGradeNames.length > 0 || preset.mappings.length !== mappings.length) {
+    return false;
+  }
+  const expected = preset.mappings.map(mappingPresetSignature).toSorted();
+  const actual = mappings.map(mappingPresetSignature).toSorted();
+  return actual.every((signature, index) => signature === expected[index]);
+}
+
 function numberDraftIsValid(value: string, min: number, max?: number): boolean {
   if (value.trim().length === 0) return false;
   const parsed = Number(value);
@@ -464,6 +562,11 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   const [rulePreset, setRulePreset] = useState<"school-five-digit" | null>(() =>
     isSchoolFiveDigitPreset(simpleRuleDraftFromPatterns(initial.patterns))
       ? "school-five-digit"
+      : null,
+  );
+  const [mappingPreset, setMappingPreset] = useState<"school-grade-class" | null>(() =>
+    isSchoolGradeClassMappingPreset(initial.attributeOptions, initial.mappings)
+      ? "school-grade-class"
       : null,
   );
   const [saved, setSaved] = useState(initial);
@@ -615,6 +718,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     optionId: string,
     update: (option: BibAttributeOptionInput) => BibAttributeOptionInput,
   ) {
+    setMappingPreset(null);
     setConfig((current) => ({
       ...current,
       attributeOptions: current.attributeOptions.map((option) =>
@@ -624,6 +728,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function moveOption(optionId: string, direction: -1 | 1): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const option = current.attributeOptions.find((item) => item.id === optionId);
       if (option === undefined) return current;
@@ -648,6 +753,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function removeOption(optionId: string): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const removed = current.attributeOptions.find((option) => option.id === optionId);
       if (removed === undefined) return current;
@@ -682,6 +788,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     mappingIndex: number,
     update: (mapping: BibAttributeMappingInput) => BibAttributeMappingInput,
   ) {
+    setMappingPreset(null);
     setConfig((current) => ({
       ...current,
       mappings: current.mappings.map((mapping, index) =>
@@ -691,6 +798,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function addGrade(): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const existing = orderedOptions(current.attributeOptions, "grade");
       const usedNames = new Set(existing.map((option) => option.displayName.trim()));
@@ -720,6 +828,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   }
 
   function setGradeClassCount(gradeOptionId: string, requestedCount: number): void {
+    setMappingPreset(null);
     setConfig((current) => {
       const grade = current.attributeOptions.find(
         (option) => option.id === gradeOptionId && option.dimension === "grade",
@@ -767,7 +876,24 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     updateOption(gradeOptionId, (grade) => ({ ...grade, enabled }));
   }
 
+  function applyMappingPreset(value: string | null): void {
+    if (value !== "school-grade-class") {
+      setMappingPreset(null);
+      return;
+    }
+    const preset = schoolGradeClassMappingPreset(config.attributeOptions);
+    if (preset.missingGradeNames.length > 0) {
+      setMappingPreset(null);
+      setError(`请先创建并启用以下年级：${preset.missingGradeNames.join("、")}`);
+      return;
+    }
+    setError(null);
+    setMappingPreset("school-grade-class");
+    setConfig((current) => ({ ...current, mappings: [...preset.mappings] }));
+  }
+
   function addMapping(dimension: BibAttributeDimension): void {
+    setMappingPreset(null);
     const output = orderedOptions(config.attributeOptions, dimension).find(
       (option) => option.enabled,
     );
@@ -820,9 +946,15 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       );
       const updatedRuleDraft = simpleRuleDraftFromPatterns(updated.patterns);
       setSaved(updated);
-      setConfig(requestFrom(updated));
+      const updatedConfig = requestFrom(updated);
+      setConfig(updatedConfig);
       setRuleDraft(updatedRuleDraft);
       setRulePreset(isSchoolFiveDigitPreset(updatedRuleDraft) ? "school-five-digit" : null);
+      setMappingPreset(
+        isSchoolGradeClassMappingPreset(updated.attributeOptions, updated.mappings)
+          ? "school-grade-class"
+          : null,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "号码配置保存失败");
     } finally {
@@ -1397,6 +1529,45 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor="bib-mapping-preset">映射预设</FieldLabel>
+            <FieldDescription>
+              选择预设会整体替换当前号码映射；年级与班级选项本身不会被修改。
+            </FieldDescription>
+            <Select
+              items={[
+                { label: "选择内置预设", value: null },
+                {
+                  label: "1–6 → 初一～高三，01–11 → 班级",
+                  value: "school-grade-class",
+                },
+              ]}
+              onValueChange={applyMappingPreset}
+              value={mappingPreset}
+            >
+              <SelectTrigger aria-label="号码映射预设" id="bib-mapping-preset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="school-grade-class">
+                    1–6 → 初一～高三，01–11 → 班级
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {mappingPreset === "school-grade-class" ? (
+            <div className="rounded-xl border bg-muted/20 p-4 text-sm">
+              <p className="font-medium">初一～高三号码映射</p>
+              <p className="mt-1 text-muted-foreground">
+                第 1 位 1–6 依次映射到初一、初二、初三、高一、高二、高三；第 2–3 位按每个年级当前已有班级生成 01 → 1班、02 → 2班……，最多到 11班。某年级少于 11
+                个班时，会自动截止到该年级当前最大班号。
+              </p>
+            </div>
+          ) : null}
+
           {config.mappings.length === 0 ? (
             <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
               尚未设置号码映射。添加后，系统可以根据号码中的指定位置自动派生年级或班级。
@@ -1585,12 +1756,13 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                       添加区间
                     </Button>
                     <Button
-                      onClick={() =>
+                      onClick={() => {
+                        setMappingPreset(null);
                         setConfig((current) => ({
                           ...current,
                           mappings: current.mappings.filter((_, index) => index !== mappingIndex),
-                        }))
-                      }
+                        }));
+                      }}
                       size="sm"
                       type="button"
                       variant="destructive"
