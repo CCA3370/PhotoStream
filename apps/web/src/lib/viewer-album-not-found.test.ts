@@ -28,6 +28,7 @@ describe("public gallery not-found handling", () => {
     expect(source).toContain('status="未开始"');
     expect(source).toContain("开始时间（北京时间）");
     expect(source).toContain("ScheduledAlbumAutoRefresh");
+    expect(source).toContain("scheduledStartAt={album.scheduledStartAt} slug={slug}");
     expect(source).toContain("活动开始后，此页面会自动更新并显示直播照片。");
   });
 
