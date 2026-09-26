@@ -1,3 +1,9 @@
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM "bib_attribute_mappings" LIMIT 1) THEN
+    RAISE EXCEPTION 'bib attribute rule migration requires empty legacy mappings; migrate or clear the legacy configuration before deploying';
+  END IF;
+END $$;
+--> statement-breakpoint
 ALTER TABLE "bib_attribute_options" ADD COLUMN "ordinal" integer;
 --> statement-breakpoint
 UPDATE "bib_attribute_options" SET "ordinal" = "sort_order" WHERE "ordinal" IS NULL;

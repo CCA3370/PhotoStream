@@ -1018,6 +1018,54 @@ export const bibAttributeOptions = pgTable(
   ],
 );
 
+// Transitional rollback compatibility. Remove these tables only after the old blue/green slot
+// is no longer a supported rollback target.
+export const bibAttributeMappingsLegacy = pgTable(
+  "bib_attribute_mappings",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    dimension: bibAttributeDimensionEnum("dimension").notNull(),
+    startPosition: integer("start_position").notNull(),
+    width: integer("width").notNull(),
+    outputOptionId: uuid("output_option_id")
+      .notNull()
+      .references(() => bibAttributeOptions.id, { onDelete: "restrict" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bib_attribute_mappings_album_dimension_sort_idx").on(
+      table.albumId,
+      table.dimension,
+      table.sortOrder,
+      table.id,
+    ),
+  ],
+);
+
+export const bibAttributeMappingRangesLegacy = pgTable(
+  "bib_attribute_mapping_ranges",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    mappingId: uuid("mapping_id")
+      .notNull()
+      .references(() => bibAttributeMappingsLegacy.id, { onDelete: "cascade" }),
+    startValue: varchar("start_value", { length: 12 }).notNull(),
+    endValue: varchar("end_value", { length: 12 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("bib_attribute_mapping_ranges_values_unique").on(
+      table.mappingId,
+      table.startValue,
+      table.endValue,
+    ),
+  ],
+);
+
 export const bibAttributeRules = pgTable(
   "bib_attribute_rules",
   {

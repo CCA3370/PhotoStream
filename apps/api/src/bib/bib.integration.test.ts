@@ -172,6 +172,7 @@ maybeDescribe("bib configuration, privacy and search", () => {
     await database.delete(schema.mediaBibTags);
     await database.delete(schema.mediaBibReviews);
     await database.delete(schema.bibAttributeRules);
+    await database.delete(schema.bibAttributeMappingsLegacy);
     await database.delete(schema.bibAttributeOptions);
     await database.delete(schema.bibAllowedRanges);
     await database.delete(schema.bibConstraints);
@@ -337,6 +338,23 @@ maybeDescribe("bib configuration, privacy and search", () => {
     expect(
       await service.testNumber({ id: reviewerId, role: "reviewer" }, albumId, "101999"),
     ).toMatchObject({ valid: true, gradeOptionId: gradeOne, classOptionId: classOne });
+    const legacyMappings = await database
+      .select()
+      .from(schema.bibAttributeMappingsLegacy)
+      .where(eq(schema.bibAttributeMappingsLegacy.albumId, albumId))
+      .orderBy(
+        asc(schema.bibAttributeMappingsLegacy.dimension),
+        asc(schema.bibAttributeMappingsLegacy.sortOrder),
+      );
+    expect(legacyMappings).toHaveLength(4);
+    expect(legacyMappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ dimension: "grade", outputOptionId: gradeOne }),
+        expect.objectContaining({ dimension: "grade", outputOptionId: gradeTwo }),
+        expect.objectContaining({ dimension: "class", outputOptionId: classOne }),
+        expect.objectContaining({ dimension: "class", outputOptionId: classTwo }),
+      ]),
+    );
     const renamed = await service.updateConfig({
       actor: { id: adminId, role: "admin" },
       albumId,

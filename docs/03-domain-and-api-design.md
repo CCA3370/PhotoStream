@@ -100,7 +100,7 @@
 
 `BibPattern` 保存相册、规则版本、总位数、排序和启用状态；`BibConstraint` 保存起始位、宽度和排序；`BibAllowedRange` 保存固定宽度的起止字符串。模式之间为 OR、约束之间为 AND，未约束位置匹配任意数字。
 
-`BibAttributeOption` 保存 `grade`/`class`、不可变 ID、显示名和排序；`BibAttributeMapping` 保存维度、位置、宽度、允许区间、输出选项和映射版本。相同号码同一维度不得确定性地映射到不同输出。
+`BibAttributeOption` 保存 `grade`/`class`、不可变 ID、显示名、纯展示用 `sortOrder` 和稳定编码槽位 `ordinal`；`BibAttributeRule` 每个维度最多一条，保存读取位置、宽度和槽位 0 对应的 `firstValue`。号码派生只依赖 `ordinal`，不依赖界面排序。
 
 `MediaBibTag` 保存相册/媒体、号码密文、相册作用域 blind index、`BibTagStatus`、`BibTagSource`、置信度、0–1 归一化四边形、规则/模型版本、派生 `gradeOptionId`/`classOptionId`、映射版本、创建与确认审计。数据库不保存号码明文，审计日志也不保存号码值。
 
@@ -172,7 +172,7 @@ stateDiagram-v2
 | `POST /api/v1/albums/{id}/start` | 管理员 | 草稿进入直播 |
 | `POST /api/v1/albums/{id}/end` | 管理员 | 结束直播 |
 | `GET/POST/PATCH /api/v1/albums/{id}/categories` | 内部；写需管理员/审核员 | 一级分类管理 |
-| `GET/PUT /api/v1/albums/{id}/bib-config` | 内部；写仅管理员 | 号码规则、年级/班级映射、识别/搜索开关和模型状态 |
+| `GET/PUT /api/v1/albums/{id}/bib-config` | 内部；写仅管理员 | 号码规则、年级/班级解析规则、识别/搜索开关和模型状态 |
 | `GET/PUT /api/v1/albums/{id}/face-config` | 管理员 | 人脸开关、授权确认、告知版本、索引/保留状态 |
 | `POST /api/v1/albums/{id}/face-index/retry` | 管理员 | 重试人脸索引/删除失败任务 |
 | `POST /api/v1/albums/{id}/face-index/exclusions` | 管理员 | 让选定照片退出人脸索引但保留普通浏览 |
@@ -204,7 +204,7 @@ stateDiagram-v2
 
 确认或修正号码时在同一事务中派生年级/班级并更新照片级结论。确认无号码只允许没有确认标签的照片；迟到 OCR 候选不能覆盖人工无号码结论；添加号码会自动清除无号码结论；删除最后一个确认号码恢复 `pending`。
 
-修改合法性规则递增版本并建立持久重校验任务：仍合法标签升级版本；不合法确认标签进入 `needs_review` 并从公共索引移除。修改属性映射递增 `mappingVersion`，从已确认号码重算年级/班级，不读取 OSS 图片，也不自动重新 OCR。
+修改合法性规则递增版本并建立持久重校验任务：仍合法标签升级版本；不合法确认标签进入 `needs_review` 并从公共索引移除。修改属性解析规则、`ordinal` 或启用状态会递增 `mappingVersion`，从已确认号码重算年级/班级；只修改显示名称或 `sortOrder` 不重算。重算不读取 OSS 图片，也不自动重新 OCR。过渡发布期间新 API 同步展开写入旧映射表，确保上一蓝/绿槽可回滚读取；旧表在后续确认不再需要回滚后再删除。
 
 详细契约见[号码牌识别与筛选](12-bib-recognition.md)。
 

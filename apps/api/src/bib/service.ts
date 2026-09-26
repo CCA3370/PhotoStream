@@ -324,6 +324,9 @@ export class BibService {
         .delete(schema.bibAttributeRules)
         .where(eq(schema.bibAttributeRules.albumId, options.albumId));
       await transaction
+        .delete(schema.bibAttributeMappingsLegacy)
+        .where(eq(schema.bibAttributeMappingsLegacy.albumId, options.albumId));
+      await transaction
         .delete(schema.bibPatterns)
         .where(eq(schema.bibPatterns.albumId, options.albumId));
 
@@ -433,6 +436,48 @@ export class BibService {
             firstValue: rule.firstValue,
           })),
         );
+      }
+
+      // Keep the retired explicit-mapping tables synchronized for one rolling-release
+      // compatibility window so the previous blue/green slot remains a valid rollback target.
+      const legacyRuleByDimension = new Map(
+        normalized.attributeRules.map((rule) => [rule.dimension, rule]),
+      );
+      const enabledGradeIds = new Set(
+        normalized.attributeOptions
+          .filter((option) => option.dimension === "grade" && option.enabled)
+          .map((option) => option.id),
+      );
+      for (const option of normalized.attributeOptions) {
+        if (!option.enabled) continue;
+        if (
+          option.dimension === "class" &&
+          (option.parentGradeOptionId == null || !enabledGradeIds.has(option.parentGradeOptionId))
+        ) {
+          continue;
+        }
+        const attributeRule = legacyRuleByDimension.get(option.dimension);
+        if (attributeRule === undefined) continue;
+        const encodedValue = attributeRule.firstValue + option.ordinal;
+        if (encodedValue > 10 ** attributeRule.width - 1) continue;
+        const encodedText = String(encodedValue).padStart(attributeRule.width, "0");
+        const legacyMappingId = randomUUID();
+        await transaction.insert(schema.bibAttributeMappingsLegacy).values({
+          id: legacyMappingId,
+          albumId: options.albumId,
+          dimension: option.dimension,
+          startPosition: attributeRule.startPosition,
+          width: attributeRule.width,
+          outputOptionId: option.id,
+          sortOrder: option.ordinal,
+        });
+        await transaction.insert(schema.bibAttributeMappingRangesLegacy).values({
+          id: randomUUID(),
+          mappingId: legacyMappingId,
+          startValue: encodedText,
+          endValue: encodedText,
+          sortOrder: 0,
+        });
       }
 
       await transaction

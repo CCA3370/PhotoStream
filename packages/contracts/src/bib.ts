@@ -628,25 +628,25 @@ export function validateBibAttributeRules(
   const classRule = rules.find((rule) => rule.dimension === "class");
 
   const enabledOptions = options.filter((option) => option.enabled);
-  const sortOrderScopes = new Map<string, Set<number>>();
+  const ordinalScopes = new Map<string, Set<number>>();
   for (const option of enabledOptions) {
     const scope =
       option.dimension === "grade"
         ? "grade"
         : `class:${option.parentGradeOptionId ?? "missing"}`;
-    const used = sortOrderScopes.get(scope) ?? new Set<number>();
+    const used = ordinalScopes.get(scope) ?? new Set<number>();
     if (used.has(option.ordinal)) {
       issues.push({
         code: "DUPLICATE_ATTRIBUTE_ORDINAL",
         path: "attributeOptions",
         message:
           option.dimension === "grade"
-            ? "启用年级的顺序位不能重复"
-            : "同一年级下启用班级的顺序位不能重复",
+            ? "启用年级的编码槽位不能重复"
+            : "同一年级下启用班级的编码槽位不能重复",
       });
     }
     used.add(option.ordinal);
-    sortOrderScopes.set(scope, used);
+    ordinalScopes.set(scope, used);
   }
   if (classRule !== undefined && gradeRule === undefined) {
     issues.push({
@@ -685,7 +685,10 @@ export function validateBibAttributeRules(
       issues.push({
         code: "ATTRIBUTE_ORDINAL_OUT_OF_RANGE",
         path: `attributeOptions.${optionIndex}.ordinal`,
-        message: `${option.dimension === "grade" ? "年级" : "班级"}编码槽位超出当前读取位数可表示的范围`,
+        message:
+          option.dimension === "grade"
+            ? "年级编码槽位超出当前读取位数可表示的范围"
+            : "班级编码槽位超出当前读取位数可表示的范围",
       });
     }
   });
