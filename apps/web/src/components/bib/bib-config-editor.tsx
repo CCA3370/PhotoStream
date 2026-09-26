@@ -1103,7 +1103,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                         ...current,
                         start: value,
                       }));
-                    }
+                    }}
                     value={rule.start}
                   />
                 </Field>
@@ -1118,7 +1118,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                         ...current,
                         end: value,
                       }));
-                    }
+                    }}
                     value={rule.end}
                   />
                 </Field>
@@ -1262,7 +1262,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                                   ...current,
                                   start: value,
                                 }));
-                              }
+                              }}
                               value={segment.start}
                             />
                           </Field>
@@ -1279,7 +1279,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
                                   ...current,
                                   end: value,
                                 }));
-                              }
+                              }}
                               value={segment.end}
                             />
                           </Field>
