@@ -2,7 +2,7 @@
 
 import type { PublicMediaView } from "@photostream/contracts";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { CachedPhotoImage } from "@/components/gallery/cached-photo-image";
@@ -21,6 +21,14 @@ interface LikeListResponse {
 
 interface NativeViewTransition {
   readonly finished: Promise<void>;
+}
+
+interface GridLayoutSnapshot {
+  readonly ids: ReadonlySet<string>;
+  readonly positions: ReadonlyMap<string, { readonly left: number; readonly top: number }>;
+  readonly scrollY: number;
+  readonly viewportWidth: number;
+  readonly virtualized: boolean;
 }
 
 type ViewTransitionDocument = Document & {
@@ -65,6 +73,7 @@ function MediaTile({
       <div
         aria-hidden="true"
         className="aspect-[4/3] rounded-[10px] bg-muted sm:rounded-xl"
+        data-media-grid-tile="true"
         data-media-id={media.id}
       />
     );
@@ -76,7 +85,8 @@ function MediaTile({
         animateIn &&
           "animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none",
       )}
-      data-media-id={media.id}
+      data-media-grid-tile="true"
+        data-media-id={media.id}
       style={
         animateIn && animationIndex !== undefined
           ? { animationDelay: `${animationIndex * 30}ms` }
@@ -324,6 +334,7 @@ export function MediaGrid({
   const freshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRevealIdsRef = useRef(new Set<string>());
   const transitionActiveRef = useRef(false);
+  const gridLayoutSnapshotRef = useRef<GridLayoutSnapshot | null>(null);
   const mediaIds = useMemo(() => items.map((item) => item.id), [items]);
   const likesEnabled = shareId === undefined;
 
@@ -470,6 +481,63 @@ export function MediaGrid({
       current === null || items.some((item) => item.id === current) ? current : null,
     );
   }, [items]);
+
+  useLayoutEffect(() => {
+    const ids = new Set(mediaIds);
+    const positions = new Map<string, { readonly left: number; readonly top: number }>();
+    const tiles = document.querySelectorAll<HTMLElement>(
+      '[data-media-grid-tile="true"][data-media-id]',
+    );
+    for (const tile of tiles) {
+      const mediaId = tile.dataset.mediaId;
+      if (mediaId === undefined || !ids.has(mediaId)) continue;
+      const rect = tile.getBoundingClientRect();
+      positions.set(mediaId, { left: rect.left, top: rect.top });
+    }
+
+    const snapshot: GridLayoutSnapshot = {
+      ids,
+      positions,
+      scrollY: window.scrollY,
+      viewportWidth: window.innerWidth,
+      virtualized: mediaIds.length > 200,
+    };
+    const previous = gridLayoutSnapshotRef.current;
+    gridLayoutSnapshotRef.current = snapshot;
+    if (
+      previous === null ||
+      previous.virtualized !== snapshot.virtualized ||
+      Math.abs(previous.viewportWidth - snapshot.viewportWidth) > 1 ||
+      window.scrollY > 220 ||
+      prefersReducedMotion() ||
+      !mediaIds.some((id) => !previous.ids.has(id))
+    ) {
+      return;
+    }
+
+    const scrollDelta = snapshot.scrollY - previous.scrollY;
+    for (const tile of tiles) {
+      const mediaId = tile.dataset.mediaId;
+      if (mediaId === undefined || !ids.has(mediaId)) continue;
+      const before = previous.positions.get(mediaId);
+      if (before === undefined) continue;
+      const after = tile.getBoundingClientRect();
+      const deltaX = before.left - after.left;
+      const deltaY = before.top - scrollDelta - after.top;
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
+      if (typeof tile.animate !== "function") continue;
+      tile.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: "translate(0, 0)" },
+        ],
+        {
+          duration: 360,
+          easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        },
+      );
+    }
+  }, [mediaIds]);
 
   useEffect(() => {
     const nextIds = new Set(mediaIds);
