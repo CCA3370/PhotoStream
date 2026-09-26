@@ -90,6 +90,7 @@ export function InternalCachedImage({
   };
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
   const resolvedRef = useRef<ResolvedImage | null>(null);
+  const retiredObjectUrlsRef = useRef(new Set<string>());
   const requestRef = useRef({
     src,
     mediaId,
@@ -158,6 +159,8 @@ export function InternalCachedImage({
     () => () => {
       const current = resolvedRef.current;
       if (current?.ownedObjectUrl) URL.revokeObjectURL(current.url);
+      for (const url of retiredObjectUrlsRef.current) URL.revokeObjectURL(url);
+      retiredObjectUrlsRef.current.clear();
       resolvedRef.current = null;
     },
     [],
@@ -197,7 +200,7 @@ export function InternalCachedImage({
       resolvedRef.current = next;
       setResolved(next);
       if (previous?.ownedObjectUrl && previous.url !== next.url) {
-        URL.revokeObjectURL(previous.url);
+        retiredObjectUrlsRef.current.add(previous.url);
       }
     };
 
@@ -342,6 +345,11 @@ export function InternalCachedImage({
           {...props}
           src={display}
           unoptimized
+          onLoad={(event) => {
+            for (const url of retiredObjectUrlsRef.current) URL.revokeObjectURL(url);
+            retiredObjectUrlsRef.current.clear();
+            props.onLoad?.(event);
+          }}
           onError={() => {
             const candidateId = resolved?.strategy === strategy ? resolved.candidateId : undefined;
             if (candidateId === undefined) {

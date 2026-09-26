@@ -1214,7 +1214,7 @@ export function ReviewWorkspace({
       if (mediaId === null) return;
 
       await clientMutation(`/api/v1/media/${mediaId}/direct`, { method: "DELETE" });
-      const linkedLocal = item.source === "local" ? item.local : item.local;
+      const linkedLocal = item.local;
       if (linkedLocal !== null) {
         await deleteLocalReviewState(linkedLocal.photo.id).catch(() => undefined);
         await refreshLocal().catch(() => undefined);
