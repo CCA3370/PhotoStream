@@ -193,7 +193,15 @@ export function SharedPhotoViewer({
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
     },
-    [media.id, preparedImage?.kind, preview, replacePreparedImage, showSaveHint, slug],
+    [
+      media.contentRevision,
+      media.id,
+      preparedImage?.kind,
+      preview,
+      replacePreparedImage,
+      showSaveHint,
+      slug,
+    ],
   );
 
   const prepareOriginalForWeChat = useCallback(
@@ -236,7 +244,14 @@ export function SharedPhotoViewer({
         setWeChatDownload((current) => (current?.kind === "original" ? null : current));
       }
     },
-    [media.id, preparedImage?.kind, replacePreparedImage, showSaveHint, slug],
+    [
+      media.contentRevision,
+      media.id,
+      preparedImage?.kind,
+      replacePreparedImage,
+      showSaveHint,
+      slug,
+    ],
   );
 
   if (preview === null) return null;
