@@ -762,6 +762,7 @@ export const publicAlbumNotificationStateSchema = z
   .object({
     items: z.array(albumNotificationViewSchema),
     nextChangeAt: z.string().datetime().nullable(),
+    serverNow: z.string().datetime(),
   })
   .strict();
 export type PublicAlbumNotificationState = z.infer<typeof publicAlbumNotificationStateSchema>;
