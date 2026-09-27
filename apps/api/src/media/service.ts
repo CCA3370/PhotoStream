@@ -506,11 +506,7 @@ export class PhotoService {
     requirePermission(options.actor.role, "album:configure");
     const startsAt = new Date(options.input.startsAt);
     const endsAt = new Date(options.input.endsAt);
-    if (
-      Number.isNaN(startsAt.getTime()) ||
-      Number.isNaN(endsAt.getTime()) ||
-      endsAt <= startsAt
-    ) {
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
       throw new AppError({
         code: "BAD_REQUEST",
         message: "通知结束时间必须晚于开始时间",
