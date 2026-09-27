@@ -645,14 +645,18 @@ export class PhotoService {
     requirePermission(actor.role, "album:read");
     const [row] = await this.#database
       .select({
-        reviewRevision: schema.albums.reviewRevision,
+        reviewRevision: schema.albumReviewRevisions.revision,
         albumUpdatedAt: schema.albums.updatedAt,
       })
       .from(schema.albums)
+      .leftJoin(
+        schema.albumReviewRevisions,
+        eq(schema.albumReviewRevisions.albumId, schema.albums.id),
+      )
       .where(eq(schema.albums.id, albumId))
       .limit(1);
     if (row === undefined) throw this.#albumNotFound();
-    return `${row.reviewRevision}:${row.albumUpdatedAt.getTime()}`;
+    return `${row.reviewRevision ?? 0}:${row.albumUpdatedAt.getTime()}`;
   }
 
   async getReviewCollaboration(
