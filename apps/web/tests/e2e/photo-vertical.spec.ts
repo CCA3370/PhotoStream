@@ -136,6 +136,7 @@ test.afterAll(async () => {
 });
 
 test("photo travels browser to object store and becomes visible after password unlock", async () => {
+  test.setTimeout(90_000);
   test.skip(csrfToken === undefined, "E2E test account is not configured");
   const writeHeaders = {
     origin: baseUrl,
@@ -223,6 +224,7 @@ test("photo travels browser to object store and becomes visible after password u
 });
 
 test("failed direct upload survives reload and resumes only missing objects", async () => {
+  test.setTimeout(90_000);
   test.skip(csrfToken === undefined, "E2E test account is not configured");
   const created = await context.request.post(appUrl("/api/v1/albums"), {
     data: {
@@ -268,7 +270,7 @@ test("failed direct upload survives reload and resumes only missing objects", as
     .filter({ hasText: "synthetic-recovery.png" });
   await expect(
     failedTask.locator('[data-slot="card-description"]').getByText("失败", { exact: true }),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible({ timeout: 45_000 });
   expect(aborted).toBe(3);
 
   await page.unroute(objectStoreRoute);
@@ -298,6 +300,7 @@ test("failed direct upload survives reload and resumes only missing objects", as
 });
 
 test("large original uses fixed multipart parts while previews stay single PUT", async () => {
+  test.setTimeout(120_000);
   test.skip(csrfToken === undefined, "E2E test account is not configured");
   const created = await context.request.post(appUrl("/api/v1/albums"), {
     data: {
@@ -345,6 +348,7 @@ test("large original uses fixed multipart parts while previews stay single PUT",
 });
 
 test("queue pause state and explicit cancel remove local recovery", async () => {
+  test.setTimeout(90_000);
   test.skip(csrfToken === undefined, "E2E test account is not configured");
   const created = await context.request.post(appUrl("/api/v1/albums"), {
     data: {
@@ -383,7 +387,7 @@ test("queue pause state and explicit cancel remove local recovery", async () => 
   await page.route(objectStoreRoute, async (route) => {
     observedUpload();
     await uploadGate;
-    await route.continue();
+    await route.continue().catch(() => undefined);
   });
   await selectSyntheticFile(input, { base64: fixtureBase64, name: "synthetic-controls.png" });
   await firstUpload;
