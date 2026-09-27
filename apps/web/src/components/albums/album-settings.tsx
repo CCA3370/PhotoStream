@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { AlbumDataSaverSetting } from "@/components/albums/album-data-saver-setting";
+import { AlbumNotificationManager } from "@/components/albums/album-notification-manager";
 import { CategoryForm } from "@/components/albums/category-form";
 import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 import { BibConfigEditor } from "@/components/bib/bib-config-editor";
@@ -96,7 +97,7 @@ type PendingAction =
   | "previewDownload"
   | "privacy"
   | "schedule";
-type SettingsTab = "access" | "basic" | "categories" | "features" | "traffic";
+type SettingsTab = "access" | "basic" | "categories" | "features" | "notifications" | "traffic";
 type FeatureTab = "bib" | "face";
 
 function mergeAlbumUpdate(
@@ -418,6 +419,7 @@ export function AlbumSettings({
             value === "access" ||
             value === "categories" ||
             value === "features" ||
+            value === "notifications" ||
             value === "traffic"
           ) {
             setActiveTab(value);
@@ -437,6 +439,9 @@ export function AlbumSettings({
           </TabsTrigger>
           <TabsTrigger className="px-3" value="features">
             查找功能
+          </TabsTrigger>
+          <TabsTrigger className="px-3" value="notifications">
+            通知
           </TabsTrigger>
           <TabsTrigger className="px-3" value="traffic">
             流量
@@ -851,6 +856,10 @@ export function AlbumSettings({
               )}
             </TabsContent>
           </Tabs>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <AlbumNotificationManager albumId={album.id} />
         </TabsContent>
 
         <TabsContent value="traffic">
