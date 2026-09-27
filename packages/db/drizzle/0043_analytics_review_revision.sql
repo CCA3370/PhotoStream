@@ -1,4 +1,12 @@
-ALTER TABLE "albums" ADD COLUMN "review_revision" bigint DEFAULT 0 NOT NULL;
+CREATE TABLE "album_review_revisions" (
+  "album_id" uuid PRIMARY KEY NOT NULL,
+  "revision" bigint DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "album_review_revisions"
+  ADD CONSTRAINT "album_review_revisions_album_id_albums_id_fk"
+  FOREIGN KEY ("album_id") REFERENCES "public"."albums"("id")
+  ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "albums" ALTER COLUMN "preview_download_enabled" SET DEFAULT true;
 --> statement-breakpoint
@@ -57,9 +65,10 @@ BEGIN
   ELSE
     target_album_id := NEW.album_id;
   END IF;
-  UPDATE albums
-  SET review_revision = review_revision + 1
-  WHERE id = target_album_id;
+  INSERT INTO album_review_revisions (album_id, revision)
+  VALUES (target_album_id, 1)
+  ON CONFLICT (album_id) DO UPDATE
+  SET revision = album_review_revisions.revision + 1;
   RETURN NULL;
 END;
 $$;
@@ -76,11 +85,12 @@ BEGIN
   ELSE
     target_media_id := NEW.media_id;
   END IF;
-  UPDATE albums AS a
-  SET review_revision = a.review_revision + 1
+  INSERT INTO album_review_revisions (album_id, revision)
+  SELECT m.album_id, 1
   FROM media AS m
   WHERE m.id = target_media_id
-    AND a.id = m.album_id;
+  ON CONFLICT (album_id) DO UPDATE
+  SET revision = album_review_revisions.revision + 1;
   RETURN NULL;
 END;
 $$;
@@ -90,20 +100,20 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  UPDATE albums AS a
-  SET review_revision = a.review_revision + 1
-  WHERE EXISTS (
-    SELECT 1
+  INSERT INTO album_review_revisions (album_id, revision)
+  SELECT affected.album_id, 1
+  FROM (
+    SELECT c.album_id
     FROM album_review_collaborators AS c
-    WHERE c.album_id = a.id
-      AND c.user_id = NEW.id
-  )
-  OR EXISTS (
-    SELECT 1
+    WHERE c.user_id = NEW.id
+    UNION
+    SELECT m.album_id
     FROM media AS m
-    WHERE m.album_id = a.id
-      AND m.uploader_id = NEW.id
-  );
+    WHERE m.uploader_id = NEW.id
+  ) AS affected
+  ORDER BY affected.album_id
+  ON CONFLICT (album_id) DO UPDATE
+  SET revision = album_review_revisions.revision + 1;
   RETURN NULL;
 END;
 $$;
