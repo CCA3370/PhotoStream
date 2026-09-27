@@ -31,12 +31,10 @@ function viewerNearLatest(): boolean {
 }
 
 export function LiveUpdates({
-  albumId,
   initialEventId,
   knownMediaIds,
   slug,
 }: Readonly<{
-  albumId: string;
   initialEventId: number;
   knownMediaIds: readonly string[];
   slug: string;
@@ -252,9 +250,9 @@ export function LiveUpdates({
             eventSource?.close();
             stopFallbackPolling();
             clearConnectionNoticeTimer();
-            broadcastAlbumPurge({ albumId, slug });
+            broadcastAlbumPurge({ albumId: null, slug });
             purgeWarmDerivedImages(slug);
-            await purgeAlbumMediaBlobCache(albumId, slug).catch(() => undefined);
+            await purgeAlbumMediaBlobCache(null, slug).catch(() => undefined);
             startTransition(() => router.refresh());
             return;
           }
@@ -371,7 +369,7 @@ export function LiveUpdates({
       window.removeEventListener("pageshow", recoverAfterPause);
       closeEventSource();
     };
-  }, [albumId, router, slug]);
+  }, [router, slug]);
 
   if (!connectionInterrupted && pendingMediaCount === 0) return null;
 
