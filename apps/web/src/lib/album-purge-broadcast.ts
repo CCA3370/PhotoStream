@@ -1,5 +1,5 @@
 export interface AlbumPurgeNotice {
-  readonly albumId: string;
+  readonly albumId: string | null;
   readonly slug: string;
 }
 
@@ -13,13 +13,18 @@ function parsedNotice(value: unknown): AlbumPurgeNotice | null {
   if (
     typeof value !== "object" ||
     value === null ||
-    typeof (value as { albumId?: unknown }).albumId !== "string" ||
+    !(
+      (value as { albumId?: unknown }).albumId === null ||
+      typeof (value as { albumId?: unknown }).albumId === "string"
+    ) ||
     typeof (value as { slug?: unknown }).slug !== "string"
   ) {
     return null;
   }
-  const notice = value as { albumId: string; slug: string };
-  if (notice.albumId.length === 0 || notice.slug.length === 0) return null;
+  const notice = value as { albumId: string | null; slug: string };
+  if ((notice.albumId !== null && notice.albumId.length === 0) || notice.slug.length === 0) {
+    return null;
+  }
   return { albumId: notice.albumId, slug: notice.slug };
 }
 
