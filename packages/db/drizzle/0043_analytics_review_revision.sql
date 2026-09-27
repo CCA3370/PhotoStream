@@ -122,46 +122,57 @@ BEGIN
 END;
 $$;
 --> statement-breakpoint
-CREATE TRIGGER album_review_collaborators_review_revision
+CREATE CONSTRAINT TRIGGER album_review_collaborators_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "album_review_collaborators"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_direct();
 --> statement-breakpoint
-CREATE TRIGGER media_review_revision
+CREATE CONSTRAINT TRIGGER media_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "media"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_direct();
 --> statement-breakpoint
-CREATE TRIGGER categories_review_revision
+CREATE CONSTRAINT TRIGGER categories_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "categories"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_direct();
 --> statement-breakpoint
-CREATE TRIGGER media_bib_tags_review_revision
+CREATE CONSTRAINT TRIGGER media_bib_tags_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "media_bib_tags"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_direct();
 --> statement-breakpoint
-CREATE TRIGGER media_variants_review_revision
+CREATE CONSTRAINT TRIGGER media_variants_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "media_variants"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_via_media();
 --> statement-breakpoint
-CREATE TRIGGER featured_media_review_revision
+CREATE CONSTRAINT TRIGGER featured_media_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "featured_media"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_via_media();
 --> statement-breakpoint
-CREATE TRIGGER media_bib_reviews_review_revision
+CREATE CONSTRAINT TRIGGER media_bib_reviews_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "media_bib_reviews"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_via_media();
 --> statement-breakpoint
-CREATE TRIGGER media_edit_states_review_revision
+CREATE CONSTRAINT TRIGGER media_edit_states_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "media_edit_states"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_via_media();
 --> statement-breakpoint
-CREATE TRIGGER media_edit_revisions_review_revision
+CREATE CONSTRAINT TRIGGER media_edit_revisions_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "media_edit_revisions"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_via_media();
 --> statement-breakpoint
-CREATE TRIGGER deletion_tasks_review_revision
+CREATE CONSTRAINT TRIGGER deletion_tasks_review_revision
 AFTER INSERT OR UPDATE OR DELETE ON "deletion_tasks"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_via_media();
 --> statement-breakpoint
-CREATE TRIGGER users_review_revision
+CREATE CONSTRAINT TRIGGER users_review_revision
 AFTER UPDATE ON "users"
+DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION photostream_bump_review_revision_for_user();
