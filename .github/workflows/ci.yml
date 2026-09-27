@@ -177,6 +177,8 @@ jobs:
         run: pnpm test:db
       - name: API integration tests
         run: pnpm --filter @photostream/api test:integration
+      - name: API capacity tests
+        run: pnpm --filter @photostream/api test:capacity
 
   deploy-contract:
     name: Deployment contract
@@ -191,7 +193,7 @@ jobs:
         run: bash deploy/deploy.test.sh
 
   browser-smoke:
-    name: Browser smoke
+    name: Browser E2E
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -217,11 +219,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --filter @photostream/web exec playwright install --with-deps chromium
-      - name: Run deterministic browser smoke tests
+      - name: Run browser E2E suite
         env:
           API_INTERNAL_URL: http://127.0.0.1:3001
           MEDIA_BASE_URL: https://cdn.example.invalid
-        run: >-
-          pnpm --filter @photostream/web exec playwright test
-          tests/e2e/foundation.spec.ts
-          --grep "Tailwind compatibility|document responses|Base UI dialog|5000 item gallery"
+        run: pnpm --filter @photostream/web test:e2e
