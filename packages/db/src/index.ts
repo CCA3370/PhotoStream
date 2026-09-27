@@ -3,6 +3,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
 import * as albumDeletionSchema from "./album-deletion-schema.js";
+import * as albumNotificationSchema from "./album-notification-schema.js";
 import * as dataSaverSchema from "./data-saver-schema.js";
 import * as faceDiagnosticsSchema from "./face-diagnostics-schema.js";
 import * as featuredSchema from "./featured-schema.js";
@@ -16,6 +17,7 @@ import * as viewerFeedbackSchema from "./viewer-feedback-schema.js";
 export const schema = {
   ...coreSchema,
   ...albumDeletionSchema,
+  ...albumNotificationSchema,
   ...likesSchema,
   ...featuredSchema,
   ...faceDiagnosticsSchema,
