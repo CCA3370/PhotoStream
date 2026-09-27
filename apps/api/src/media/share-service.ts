@@ -219,7 +219,7 @@ export class PhotoShareService {
   }) {
     const context = await this.#sharedContextById(options.shareId);
     const variantKind = options.kind === "preview" ? "photo_1920" : "photo_original";
-    const activeRevisionId = await this.#activeRevisionId(context.media.id);
+    const { activeRevisionId } = await this.#editState(context.media.id);
     let selected:
       | { readonly objectKey: string; readonly format: string; readonly bytes: number }
       | undefined;
