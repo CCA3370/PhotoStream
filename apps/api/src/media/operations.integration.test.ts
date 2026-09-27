@@ -1138,6 +1138,32 @@ maybeDescribe("stage 3 operations", () => {
     expect(new Set(analytics.map((event) => event.visitorDigest)).size).toBe(1);
     const statistics = await service.albumStatistics({ id: reviewerId, role: "reviewer" }, albumId);
     expect(statistics).toMatchObject({ downloads: 1, opens: 1, uniqueVisitors: 1 });
+
+    await service.recordAnalytics({
+      albumId,
+      visitorId: "cross-day-visitor",
+      eventType: "open",
+      now: new Date("2026-09-27T15:59:00.000Z"),
+    });
+    await service.recordAnalytics({
+      albumId,
+      visitorId: "cross-day-visitor",
+      eventType: "open",
+      now: new Date("2026-09-27T16:01:00.000Z"),
+    });
+    const crossDayEvents = (await database.select().from(schema.analyticsEvents)).filter(
+      (event) =>
+        event.createdAt.getTime() === new Date("2026-09-27T15:59:00.000Z").getTime() ||
+        event.createdAt.getTime() === new Date("2026-09-27T16:01:00.000Z").getTime(),
+    );
+    expect(crossDayEvents.map((event) => event.day).sort()).toEqual(["2026-09-27", "2026-09-28"]);
+    expect(new Set(crossDayEvents.map((event) => event.visitorDigest)).size).toBe(1);
+    const crossDayStatistics = await service.albumStatistics(
+      { id: reviewerId, role: "reviewer" },
+      albumId,
+    );
+    expect(crossDayStatistics.uniqueVisitors).toBe(2);
+
     await service.recordAnalytics({
       albumId,
       visitorId: "old-visitor",
