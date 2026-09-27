@@ -120,6 +120,7 @@ export function AlbumNotificationManager({ albumId }: Readonly<{ albumId: string
             startsAt: startIso,
             endsAt: endIso,
           },
+          idempotencyKey: crypto.randomUUID(),
         },
       );
       setItems((current) => [created, ...current]);
