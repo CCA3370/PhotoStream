@@ -92,7 +92,7 @@ const albumMediaCacheNames = [
 function albumMediaCacheKeyMatches(
   cacheName: string,
   key: string,
-  albumId: string,
+  albumId: string | null,
   slug: string,
 ): boolean {
   let url: URL;
@@ -112,7 +112,7 @@ function albumMediaCacheKeyMatches(
     return url.pathname.startsWith(`/__photostream/cache/original/${encodedSlug}/`);
   }
   if (cacheName === "photostream-internal-images-v1") {
-    return url.pathname.startsWith(`/media/albums/${albumId}/`);
+    return albumId !== null && url.pathname.startsWith(`/media/albums/${albumId}/`);
   }
   return false;
 }
@@ -408,7 +408,10 @@ function waitForMediaRetry(delay: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-export async function purgeAlbumMediaBlobCache(albumId: string, slug: string): Promise<void> {
+export async function purgeAlbumMediaBlobCache(
+  albumId: string | null,
+  slug: string,
+): Promise<void> {
   if (typeof window === "undefined") return;
 
   for (const [key, entry] of inFlight) {
