@@ -97,6 +97,7 @@ function MediaTile({
       <CachedPhotoImage
         alt="活动照片"
         bytes={preview.bytes}
+        contentRevision={media.contentRevision}
         className="object-cover transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] sm:group-hover:scale-[1.025] motion-reduce:transform-none motion-reduce:transition-none"
         kind={preview.kind === "photo_480" ? "photo_480" : "photo_960"}
         mediaId={media.id}
