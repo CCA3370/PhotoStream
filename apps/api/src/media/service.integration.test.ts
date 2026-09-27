@@ -439,6 +439,19 @@ maybeDescribe("photo vertical slice transactions", () => {
     });
 
     expect(retried).toEqual(first);
+    await database.insert(schema.liveEvents).values({
+      albumId: created.album.id,
+      mediaId: null,
+      type: "media.updated",
+      payload: {},
+    });
+    const draftEvents = await service.listLiveEvents({
+      slug: created.album.slug,
+      visitorToken: undefined,
+      afterId: 0,
+    });
+    expect(draftEvents.events.map((event) => event.type)).toEqual(["album.notification.updated"]);
+
     await expect(
       service.listAlbumNotifications({ id: operatorId, role: "operator" }, created.album.id),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
