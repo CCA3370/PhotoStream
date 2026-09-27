@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { clientGet } from "@/lib/client-api";
+import { broadcastAlbumPurge } from "@/lib/album-purge-broadcast";
+import { ClientApiError, clientGet } from "@/lib/client-api";
+import { purgeWarmDerivedImages } from "@/lib/derived-image-cache";
+import { purgeAlbumMediaBlobCache } from "@/lib/media-blob-cache";
 
 interface PublicChange {
   readonly id: number;
@@ -28,10 +31,12 @@ function viewerNearLatest(): boolean {
 }
 
 export function LiveUpdates({
+  albumId,
   initialEventId,
   knownMediaIds,
   slug,
 }: Readonly<{
+  albumId: string;
   initialEventId: number;
   knownMediaIds: readonly string[];
   slug: string;
@@ -238,7 +243,21 @@ export function LiveUpdates({
           if (disposed) return;
           reconciliationRequired = false;
           flushPendingSse();
-        } catch {
+        } catch (caught) {
+          if (
+            caught instanceof ClientApiError &&
+            caught.response?.code === "ALBUM_PASSWORD_INVALID"
+          ) {
+            disposed = true;
+            eventSource?.close();
+            stopFallbackPolling();
+            clearConnectionNoticeTimer();
+            broadcastAlbumPurge({ albumId, slug });
+            purgeWarmDerivedImages(slug);
+            await purgeAlbumMediaBlobCache(albumId, slug).catch(() => undefined);
+            startTransition(() => router.refresh());
+            return;
+          }
           markConnectionInterruptedSoon();
           if (disposed || fallbackPolling !== null) return;
           fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
@@ -352,7 +371,7 @@ export function LiveUpdates({
       window.removeEventListener("pageshow", recoverAfterPause);
       closeEventSource();
     };
-  }, [router, slug]);
+  }, [albumId, router, slug]);
 
   if (!connectionInterrupted && pendingMediaCount === 0) return null;
 
