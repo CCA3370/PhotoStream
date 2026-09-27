@@ -178,7 +178,10 @@ export function AlbumNotificationManager({ albumId }: Readonly<{ albumId: string
                 <Input
                   id="album-notification-title"
                   maxLength={120}
-                  onChange={(event) => setTitle(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setTitle(value);
+                  }}
                   placeholder="例如：操场东侧机位调整"
                   required
                   value={title}
@@ -190,7 +193,10 @@ export function AlbumNotificationManager({ albumId }: Readonly<{ albumId: string
                   className="min-h-32 resize-y"
                   id="album-notification-content"
                   maxLength={4_000}
-                  onChange={(event) => setContent(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setContent(value);
+                  }}
                   placeholder="填写需要向当前活动观众显示的内容。"
                   required
                   value={content}
@@ -201,7 +207,10 @@ export function AlbumNotificationManager({ albumId }: Readonly<{ albumId: string
                   <FieldLabel htmlFor="album-notification-start">生效时间（北京时间）</FieldLabel>
                   <Input
                     id="album-notification-start"
-                    onChange={(event) => setStartsAt(event.currentTarget.value)}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setStartsAt(value);
+                    }}
                     required
                     type="datetime-local"
                     value={startsAt}
@@ -211,7 +220,10 @@ export function AlbumNotificationManager({ albumId }: Readonly<{ albumId: string
                   <FieldLabel htmlFor="album-notification-end">结束时间（北京时间）</FieldLabel>
                   <Input
                     id="album-notification-end"
-                    onChange={(event) => setEndsAt(event.currentTarget.value)}
+                    onChange={(event) => {
+                      const { value } = event.currentTarget;
+                      setEndsAt(value);
+                    }}
                     required
                     type="datetime-local"
                     value={endsAt}
@@ -275,7 +287,8 @@ export function AlbumNotificationManager({ albumId }: Readonly<{ albumId: string
                         {notification.content}
                       </p>
                       <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        {formatBeijing(notification.startsAt)} — {formatBeijing(notification.endsAt)}
+                        {formatBeijing(notification.startsAt)} —{" "}
+                        {formatBeijing(notification.endsAt)}
                       </p>
                     </div>
                     <Button
