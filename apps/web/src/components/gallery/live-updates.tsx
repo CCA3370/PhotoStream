@@ -294,8 +294,7 @@ export function LiveUpdates({
       const deleted = (event: Event) => receiveSse("media.deleted", event);
       const restored = (event: Event) => receiveSse("media.restored", event);
       const bibUpdated = (event: Event) => receiveSse("media.bib.updated", event);
-      const notificationUpdated = (event: Event) =>
-        receiveSse("album.notification.updated", event);
+      const notificationUpdated = (event: Event) => receiveSse("album.notification.updated", event);
 
       source.addEventListener("media.published", published);
       source.addEventListener("media.updated", updated);
