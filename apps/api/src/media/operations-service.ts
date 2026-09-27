@@ -82,6 +82,13 @@ function numberField(value: unknown): number | null {
 
 const recentAuthenticationMs = 15 * 60 * 1_000;
 const analyticsRetentionMs = 30 * 24 * 60 * 60 * 1_000;
+const analyticsTimeZone = "Asia/Shanghai";
+const analyticsDayFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: analyticsTimeZone,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 const operationRetentionMs = 30 * 24 * 60 * 60 * 1_000;
 const presignedUploadDeletionGraceMs = 20 * 60 * 1_000;
 const presignedFaceReferenceDeletionGraceMs = 20 * 60 * 1_000;
@@ -97,6 +104,22 @@ function requireIdempotency(value: string | undefined): string {
     throw new AppError({ code: "BAD_REQUEST", message: "缺少有效幂等键", statusCode: 400 });
   }
   return value;
+}
+
+function analyticsDay(value: Date): string {
+  const parts = Object.fromEntries(
+    analyticsDayFormatter
+      .formatToParts(value)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  const year = parts.year;
+  const month = parts.month;
+  const day = parts.day;
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new Error("Unable to format analytics day");
+  }
+  return `${year}-${month}-${day}`;
 }
 
 function assertRecentAuthentication(authenticatedAt: Date, now: Date): void {
@@ -1207,9 +1230,9 @@ export class OperationsService {
     readonly now?: Date;
   }): Promise<void> {
     const now = options.now ?? new Date();
-    const day = now.toISOString().slice(0, 10);
+    const day = analyticsDay(now);
     const visitorDigest = createHmac("sha256", this.#config.ANALYTICS_HMAC_SECRET)
-      .update(`${day}\n${options.visitorId}`, "utf8")
+      .update(options.visitorId, "utf8")
       .digest("hex");
     await this.#database.transaction(async (transaction) => {
       await transaction.insert(schema.analyticsEvents).values({
@@ -1221,33 +1244,28 @@ export class OperationsService {
         ...(options.variantKind === undefined ? {} : { variantKind: options.variantKind }),
         createdAt: now,
       });
+      const firstVisit = await transaction
+        .insert(schema.analyticsVisitorDays)
+        .values({ albumId: options.albumId, day, visitorDigest, createdAt: now })
+        .onConflictDoNothing()
+        .returning({ visitorDigest: schema.analyticsVisitorDays.visitorDigest });
       const opens = options.eventType === "open" ? 1 : 0;
       const sessions = options.eventType === "session" ? 1 : 0;
       const downloads = options.eventType === "download" ? 1 : 0;
+      const uniqueVisitors = firstVisit.length === 0 ? 0 : 1;
       await transaction
         .insert(schema.analyticsDaily)
-        .values({ albumId: options.albumId, day, opens, sessions, downloads, uniqueVisitors: 0 })
+        .values({ albumId: options.albumId, day, opens, sessions, downloads, uniqueVisitors })
         .onConflictDoUpdate({
           target: [schema.analyticsDaily.albumId, schema.analyticsDaily.day],
           set: {
             opens: sql`${schema.analyticsDaily.opens} + ${opens}`,
             sessions: sql`${schema.analyticsDaily.sessions} + ${sessions}`,
             downloads: sql`${schema.analyticsDaily.downloads} + ${downloads}`,
+            uniqueVisitors: sql`${schema.analyticsDaily.uniqueVisitors} + ${uniqueVisitors}`,
             updatedAt: now,
           },
         });
-      await transaction
-        .update(schema.analyticsDaily)
-        .set({
-          uniqueVisitors: sql`(select count(distinct ${schema.analyticsEvents.visitorDigest})::int from ${schema.analyticsEvents} where ${schema.analyticsEvents.albumId} = ${options.albumId} and ${schema.analyticsEvents.day} = ${day})`,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(schema.analyticsDaily.albumId, options.albumId),
-            eq(schema.analyticsDaily.day, day),
-          ),
-        );
     });
   }
 
@@ -1331,18 +1349,26 @@ export class OperationsService {
           sql`${schema.media.publicationStatus} <> 'deleted'`,
         ),
       );
-    const daily = await this.#database
-      .select()
-      .from(schema.analyticsDaily)
-      .where(eq(schema.analyticsDaily.albumId, albumId))
-      .orderBy(asc(schema.analyticsDaily.day));
+    const [daily, [uniqueVisitorAggregate]] = await Promise.all([
+      this.#database
+        .select()
+        .from(schema.analyticsDaily)
+        .where(eq(schema.analyticsDaily.albumId, albumId))
+        .orderBy(asc(schema.analyticsDaily.day)),
+      this.#database
+        .select({
+          count: sql<number>`count(distinct ${schema.analyticsVisitorDays.visitorDigest})::int`,
+        })
+        .from(schema.analyticsVisitorDays)
+        .where(eq(schema.analyticsVisitorDays.albumId, albumId)),
+    ]);
     return {
       mediaCount: media?.mediaCount ?? 0,
       logicalBytes: Number(storage?.logicalBytes ?? 0),
       opens: daily.reduce((sum, row) => sum + row.opens, 0),
       sessions: daily.reduce((sum, row) => sum + row.sessions, 0),
       downloads: daily.reduce((sum, row) => sum + row.downloads, 0),
-      uniqueVisitors: daily.reduce((sum, row) => sum + row.uniqueVisitors, 0),
+      uniqueVisitors: uniqueVisitorAggregate?.count ?? 0,
       daily: daily.map((row) => ({
         day: row.day,
         opens: row.opens,
