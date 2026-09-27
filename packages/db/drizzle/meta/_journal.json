@@ -295,6 +295,13 @@
       "when": 1790373600000,
       "tag": "0041_compact_legacy_bib_mappings",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790495700000,
+      "tag": "0042_album_notifications",
+      "breakpoints": true
     }
   ]
 }

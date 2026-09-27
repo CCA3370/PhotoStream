@@ -1,7 +1,9 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   type AlbumDeletionProgress,
+  type AlbumNotificationView,
   type AlbumView,
+  type CreateAlbumNotificationRequest,
   type CreateAlbumRequest,
   type CreatePhotoUploadRequest,
   type DerivedPhotoVariantKind,
@@ -90,6 +92,21 @@ function albumView(row: typeof schema.albums.$inferSelect): AlbumView {
     previewDownloadEnabled: true,
     originalDownloadEnabled: true,
     privacyNotice: row.privacyNotice,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+  };
+}
+
+function albumNotificationView(
+  row: typeof schema.albumNotifications.$inferSelect,
+): AlbumNotificationView {
+  return {
+    id: row.id,
+    albumId: row.albumId,
+    title: row.title,
+    content: row.content,
+    startsAt: iso(row.startsAt),
+    endsAt: iso(row.endsAt),
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -463,6 +480,120 @@ export class PhotoService {
     const row = await this.#albumById(this.#database, albumId);
     if (row === null) throw this.#albumNotFound();
     return albumView(row);
+  }
+
+  async listAlbumNotifications(
+    actor: InternalActor,
+    albumId: string,
+  ): Promise<AlbumNotificationView[]> {
+    requirePermission(actor.role, "album:read");
+    const album = await this.#albumById(this.#database, albumId);
+    if (album === null) throw this.#albumNotFound();
+    const rows = await this.#database
+      .select()
+      .from(schema.albumNotifications)
+      .where(eq(schema.albumNotifications.albumId, albumId))
+      .orderBy(desc(schema.albumNotifications.createdAt), desc(schema.albumNotifications.id));
+    return rows.map(albumNotificationView);
+  }
+
+  async createAlbumNotification(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly input: CreateAlbumNotificationRequest;
+    readonly requestId: string;
+  }): Promise<AlbumNotificationView> {
+    requirePermission(options.actor.role, "album:configure");
+    const startsAt = new Date(options.input.startsAt);
+    const endsAt = new Date(options.input.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      throw new AppError({
+        code: "BAD_REQUEST",
+        message: "通知结束时间必须晚于开始时间",
+        statusCode: 400,
+      });
+    }
+
+    return this.#database.transaction(async (transaction) => {
+      const album = await this.#albumById(transaction, options.albumId);
+      if (album === null) throw this.#albumNotFound();
+      const [created] = await transaction
+        .insert(schema.albumNotifications)
+        .values({
+          albumId: options.albumId,
+          title: options.input.title,
+          content: options.input.content,
+          startsAt,
+          endsAt,
+          createdBy: options.actor.id,
+        })
+        .returning();
+      if (created === undefined) throw new Error("Notification insert returned no row");
+
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "album.notification.created",
+        targetType: "album_notification",
+        targetId: created.id,
+        result: "success",
+        changedFields: ["title", "content", "startsAt", "endsAt"],
+        requestId: options.requestId,
+      });
+      await transaction.insert(schema.liveEvents).values({
+        albumId: options.albumId,
+        mediaId: null,
+        type: "album.notification.updated",
+        payload: { notificationId: created.id, action: "created" },
+      });
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${options.albumId})`);
+      return albumNotificationView(created);
+    });
+  }
+
+  async deleteAlbumNotification(options: {
+    readonly actor: InternalActor;
+    readonly albumId: string;
+    readonly notificationId: string;
+    readonly requestId: string;
+  }): Promise<void> {
+    requirePermission(options.actor.role, "album:configure");
+    await this.#database.transaction(async (transaction) => {
+      const album = await this.#albumById(transaction, options.albumId);
+      if (album === null) throw this.#albumNotFound();
+      const [deleted] = await transaction
+        .delete(schema.albumNotifications)
+        .where(
+          and(
+            eq(schema.albumNotifications.id, options.notificationId),
+            eq(schema.albumNotifications.albumId, options.albumId),
+          ),
+        )
+        .returning({ id: schema.albumNotifications.id });
+      if (deleted === undefined) {
+        throw new AppError({
+          code: "NOT_FOUND",
+          message: "通知不存在",
+          statusCode: 404,
+        });
+      }
+
+      await transaction.insert(schema.auditLogs).values({
+        actorUserId: options.actor.id,
+        action: "album.notification.deleted",
+        targetType: "album_notification",
+        targetId: options.notificationId,
+        result: "success",
+        changedFields: [],
+        requestId: options.requestId,
+      });
+      await transaction.insert(schema.liveEvents).values({
+        albumId: options.albumId,
+        mediaId: null,
+        type: "album.notification.updated",
+        payload: { notificationId: options.notificationId, action: "deleted" },
+      });
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${options.albumId})`);
+    });
   }
 
   async reviewRevision(actor: InternalActor, albumId: string): Promise<string> {
@@ -3149,6 +3280,47 @@ export class PhotoService {
       });
     }
     return album;
+  }
+
+  async getPublicNotificationState(
+    slug: string,
+    visitorToken: string | undefined,
+    now = new Date(),
+  ) {
+    const album = await this.#publicAlbumBySlug(slug);
+    if (!(await this.#isVisitorAuthorized(album, visitorToken))) {
+      throw new AppError({
+        code: "ALBUM_PASSWORD_INVALID",
+        message: "相册不可用或口令错误",
+        statusCode: 404,
+      });
+    }
+
+    const rows = await this.#database
+      .select()
+      .from(schema.albumNotifications)
+      .where(
+        and(
+          eq(schema.albumNotifications.albumId, album.id),
+          gt(schema.albumNotifications.endsAt, now),
+        ),
+      )
+      .orderBy(asc(schema.albumNotifications.startsAt), asc(schema.albumNotifications.id));
+
+    const items = rows.filter(
+      (notification) => notification.startsAt <= now && notification.endsAt > now,
+    );
+    let nextChangeAt: Date | null = null;
+    for (const notification of rows) {
+      const candidate = notification.startsAt > now ? notification.startsAt : notification.endsAt;
+      if (candidate <= now) continue;
+      if (nextChangeAt === null || candidate < nextChangeAt) nextChangeAt = candidate;
+    }
+
+    return {
+      items: items.map(albumNotificationView),
+      nextChangeAt: nextChangeAt === null ? null : iso(nextChangeAt),
+    };
   }
 
   async listLiveEvents(options: {

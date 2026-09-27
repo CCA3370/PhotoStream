@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   viewerLightboxOnboardingStorageKey,
+  viewerOnboardingDismissedEvent,
   viewerOnboardingReplayEvent,
   viewerOnboardingStorageKey,
   viewerServiceNoticeDismissedEvent,
@@ -488,6 +489,7 @@ export function ViewerOnboarding({
     setSpotlightRect(null);
     setPointerPath(null);
     setFlow(null);
+    window.dispatchEvent(new Event(viewerOnboardingDismissedEvent));
   }, []);
 
   const finishLightbox = useCallback(() => {

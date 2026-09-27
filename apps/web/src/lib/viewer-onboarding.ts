@@ -3,4 +3,5 @@ export const viewerServiceNoticeDismissedEvent = "photostream:viewer-service-not
 
 export const viewerOnboardingStorageKey = "photostream:viewer-onboarding:v1";
 export const viewerOnboardingReplayEvent = "photostream:viewer-onboarding-replay";
+export const viewerOnboardingDismissedEvent = "photostream:viewer-onboarding-dismissed";
 export const viewerLightboxOnboardingStorageKey = "photostream:viewer-lightbox-onboarding:v1";

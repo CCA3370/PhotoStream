@@ -726,6 +726,46 @@ export const liveEventViewSchema = z
   })
   .strict();
 
+export const albumNotificationViewSchema = z
+  .object({
+    id: z.string().uuid(),
+    albumId: z.string().uuid(),
+    title: z.string().min(1).max(120),
+    content: z.string().min(1).max(4_000),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+export type AlbumNotificationView = z.infer<typeof albumNotificationViewSchema>;
+
+export const albumNotificationListSchema = z
+  .object({ items: z.array(albumNotificationViewSchema) })
+  .strict();
+
+export const createAlbumNotificationRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    content: z.string().trim().min(1).max(4_000),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime(),
+  })
+  .strict()
+  .refine((value) => new Date(value.endsAt).getTime() > new Date(value.startsAt).getTime(), {
+    message: "通知结束时间必须晚于开始时间",
+    path: ["endsAt"],
+  });
+export type CreateAlbumNotificationRequest = z.infer<typeof createAlbumNotificationRequestSchema>;
+
+export const publicAlbumNotificationStateSchema = z
+  .object({
+    items: z.array(albumNotificationViewSchema),
+    nextChangeAt: z.string().datetime().nullable(),
+  })
+  .strict();
+export type PublicAlbumNotificationState = z.infer<typeof publicAlbumNotificationStateSchema>;
+
 export const adminUserViewSchema = userViewSchema
   .extend({
     isActive: z.boolean(),

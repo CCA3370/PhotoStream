@@ -131,6 +131,10 @@ export function LiveUpdates({
       if (event.id <= lastEventId.current) return;
       lastEventId.current = event.id;
 
+      if (event.type === "album.notification.updated") {
+        window.dispatchEvent(new Event("photostream:notifications-updated"));
+        return;
+      }
       if (event.type === "media.published") {
         if (event.mediaId !== null && !knownIds.current.has(event.mediaId)) {
           knownIds.current.add(event.mediaId);
@@ -290,6 +294,7 @@ export function LiveUpdates({
       const deleted = (event: Event) => receiveSse("media.deleted", event);
       const restored = (event: Event) => receiveSse("media.restored", event);
       const bibUpdated = (event: Event) => receiveSse("media.bib.updated", event);
+      const notificationUpdated = (event: Event) => receiveSse("album.notification.updated", event);
 
       source.addEventListener("media.published", published);
       source.addEventListener("media.updated", updated);
@@ -299,6 +304,7 @@ export function LiveUpdates({
       source.addEventListener("media.deleted", deleted);
       source.addEventListener("media.restored", restored);
       source.addEventListener("media.bib.updated", bibUpdated);
+      source.addEventListener("album.notification.updated", notificationUpdated);
       source.addEventListener("open", () => {
         clearConnectionNoticeTimer();
         setConnectionInterrupted(false);
