@@ -2206,7 +2206,11 @@ export class PhotoService {
       )
       .limit(1);
     if (media === undefined) throw this.#albumNotFound();
-    return this.#refreshVariant(media.id, options.kind, 2 * 60 * 60 * 1_000);
+    return this.#refreshVariant(
+      media.id,
+      options.kind,
+      album.access === "password" ? 15 * 60 * 1_000 : 2 * 60 * 60 * 1_000,
+    );
   }
 
   async refreshInternalVariant(
@@ -3086,7 +3090,9 @@ export class PhotoService {
       current.push(variant);
       byMedia.set(variant.mediaId, current);
     }
-    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+    const expiresAt = previewExpiresAt(
+      album.access === "password" ? 15 * 60 * 1_000 : 2 * 60 * 60 * 1_000,
+    );
     const items: PublicMediaView[] = page.map((media) => {
       if (media.publishSequence === null || media.publishedAt === null) {
         throw new Error("Published media lacks publication metadata");
@@ -3119,6 +3125,7 @@ export class PhotoService {
         height: media.height,
         publishSequence: media.publishSequence,
         publishedAt: iso(media.publishedAt),
+        contentRevision: editState?.generation ?? 0,
         variants: browserVariants.map((variant) => {
           if (variant.bytes === null) throw new Error("Verified variant lacks size");
           return {
