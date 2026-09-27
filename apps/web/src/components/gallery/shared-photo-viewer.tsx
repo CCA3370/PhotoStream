@@ -227,13 +227,7 @@ export function SharedPhotoViewer({
                 current?.kind === "original" ? { ...current, progress } : current,
               ),
           });
-          await writeCachedOriginalImage(
-            slug,
-            media.id,
-            source.bytes,
-            blob,
-            media.contentRevision,
-          );
+          await writeCachedOriginalImage(slug, media.id, source.bytes, blob, media.contentRevision);
         } else {
           setWeChatDownload((current) =>
             current?.kind === "original" ? { ...current, progress: 1 } : current,
