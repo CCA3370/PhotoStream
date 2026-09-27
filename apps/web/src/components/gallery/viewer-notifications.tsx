@@ -24,6 +24,7 @@ import {
 
 const notificationUpdatedEvent = "photostream:notifications-updated";
 const maxTimerDelayMs = 2_000_000_000;
+const retryDelayMs = 3_000;
 
 function dismissalKey(notificationId: string): string {
   return `photostream:album-notification-dismissed:${notificationId}`;
@@ -53,10 +54,6 @@ function markNotificationDismissed(notificationId: string): void {
   }
 }
 
-function priorityReady(): boolean {
-  return storageSeen(viewerServiceNoticeStorageKey) && storageSeen(viewerOnboardingStorageKey);
-}
-
 function formatEndTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
@@ -65,24 +62,29 @@ function formatEndTime(value: string): string {
   }).format(new Date(value));
 }
 
-export function ViewerNotifications({ slug }: Readonly<{ slug: string }>) {
-  const [notificationState, setNotificationState] = useState<PublicAlbumNotificationState>({
-    items: [],
-    nextChangeAt: null,
-  });
-  const [ready, setReady] = useState(false);
+export function ViewerNotifications({
+  onboardingRequired = true,
+  slug,
+}: Readonly<{ onboardingRequired?: boolean; slug: string }>) {
+  const [notificationState, setNotificationState] = useState<PublicAlbumNotificationState | null>(
+    null,
+  );
+  const [serviceNoticeReady, setServiceNoticeReady] = useState(false);
+  const [onboardingReady, setOnboardingReady] = useState(!onboardingRequired);
   const [current, setCurrent] = useState<AlbumNotificationView | null>(null);
   const [neverShowAgain, setNeverShowAgain] = useState(false);
   const shownThisVisitRef = useRef(new Set<string>());
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     try {
       const next = await clientGet<PublicAlbumNotificationState>(
         `/api/v1/public/albums/${encodeURIComponent(slug)}/notifications`,
       );
       setNotificationState(next);
+      return true;
     } catch {
       // Notifications are supplementary; gallery browsing must remain available if this request fails.
+      return false;
     }
   }, [slug]);
 
@@ -90,26 +92,47 @@ export function ViewerNotifications({ slug }: Readonly<{ slug: string }>) {
     shownThisVisitRef.current.clear();
     setCurrent(null);
     setNeverShowAgain(false);
-    setReady(priorityReady());
-    void refresh();
-  }, [refresh]);
+    setNotificationState(null);
+    setServiceNoticeReady(storageSeen(viewerServiceNoticeStorageKey));
+    setOnboardingReady(!onboardingRequired || storageSeen(viewerOnboardingStorageKey));
+
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    const load = async () => {
+      const succeeded = await refresh();
+      if (!succeeded && !cancelled) {
+        retryTimer = window.setTimeout(() => void load(), retryDelayMs);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [onboardingRequired, refresh]);
 
   useEffect(() => {
-    const updatePriority = () => setReady(priorityReady());
-    window.addEventListener(viewerServiceNoticeDismissedEvent, updatePriority);
-    window.addEventListener(viewerOnboardingDismissedEvent, updatePriority);
+    const serviceNoticeDismissed = () => setServiceNoticeReady(true);
+    const onboardingDismissed = () => setOnboardingReady(true);
+    window.addEventListener(viewerServiceNoticeDismissedEvent, serviceNoticeDismissed);
+    window.addEventListener(viewerOnboardingDismissedEvent, onboardingDismissed);
     return () => {
-      window.removeEventListener(viewerServiceNoticeDismissedEvent, updatePriority);
-      window.removeEventListener(viewerOnboardingDismissedEvent, updatePriority);
+      window.removeEventListener(viewerServiceNoticeDismissedEvent, serviceNoticeDismissed);
+      window.removeEventListener(viewerOnboardingDismissedEvent, onboardingDismissed);
     };
   }, []);
 
   useEffect(() => {
-    const changed = () => void refresh();
+    let refreshTimer: number | undefined;
+    const changed = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void refresh(), Math.floor(Math.random() * 250));
+    };
     window.addEventListener(notificationUpdatedEvent, changed);
     window.addEventListener("focus", changed);
     window.addEventListener("pageshow", changed);
     return () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       window.removeEventListener(notificationUpdatedEvent, changed);
       window.removeEventListener("focus", changed);
       window.removeEventListener("pageshow", changed);
@@ -117,28 +140,42 @@ export function ViewerNotifications({ slug }: Readonly<{ slug: string }>) {
   }, [refresh]);
 
   useEffect(() => {
-    if (notificationState.nextChangeAt === null) return;
-    const delay = Math.max(
-      0,
-      Math.min(
-        maxTimerDelayMs,
-        new Date(notificationState.nextChangeAt).getTime() - Date.now() + 150,
-      ),
-    );
-    const timer = window.setTimeout(() => void refresh(), delay);
-    return () => window.clearTimeout(timer);
-  }, [notificationState.nextChangeAt, refresh]);
+    if (notificationState?.nextChangeAt === null || notificationState === null) return;
+
+    const serverNow = new Date(notificationState.serverNow).getTime();
+    const nextChangeAt = new Date(notificationState.nextChangeAt).getTime();
+    const delay = Math.max(0, Math.min(maxTimerDelayMs, nextChangeAt - serverNow + 150));
+    let cancelled = false;
+    let timer: number | undefined;
+    let retryTimer: number | undefined;
+
+    const refreshAtBoundary = async () => {
+      const succeeded = await refresh();
+      if (!succeeded && !cancelled) {
+        retryTimer = window.setTimeout(() => void refreshAtBoundary(), retryDelayMs);
+      }
+    };
+    timer = window.setTimeout(() => void refreshAtBoundary(), delay);
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [notificationState, refresh]);
+
+  const ready = serviceNoticeReady && (!onboardingRequired || onboardingReady);
 
   useEffect(() => {
     if (current !== null) {
-      if (!notificationState.items.some((item) => item.id === current.id)) {
+      if (!notificationState?.items.some((item) => item.id === current.id)) {
         shownThisVisitRef.current.add(current.id);
         setCurrent(null);
         setNeverShowAgain(false);
       }
       return;
     }
-    if (!ready) return;
+    if (!ready || notificationState === null) return;
 
     const next = notificationState.items.find(
       (item) => !shownThisVisitRef.current.has(item.id) && !notificationDismissed(item.id),
@@ -146,7 +183,7 @@ export function ViewerNotifications({ slug }: Readonly<{ slug: string }>) {
     if (next === undefined) return;
     setNeverShowAgain(false);
     setCurrent(next);
-  }, [current, notificationState.items, ready]);
+  }, [current, notificationState, ready]);
 
   function closeCurrent(): void {
     if (current === null) return;
