@@ -60,11 +60,11 @@ export async function loadOriginalImage(request: {
 }): Promise<Blob> {
   return loadMediaBlob({
     ...identity(
-    request.slug,
-    request.mediaId,
-    request.expectedBytes,
-    request.contentRevision ?? 0,
-  ),
+      request.slug,
+      request.mediaId,
+      request.expectedBytes,
+      request.contentRevision ?? 0,
+    ),
     sourceUrl: request.sourceUrl,
   });
 }
