@@ -1083,6 +1083,9 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
+      if (accessChanged) {
+        await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${album.id})`);
+      }
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.settings.updated",
@@ -1143,6 +1146,7 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${album.id})`);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.password.rotated",
