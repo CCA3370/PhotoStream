@@ -267,7 +267,6 @@ export const albums = pgTable(
     scheduledStartAt: timestamp("scheduled_start_at", { withTimezone: true }),
     passwordHash: text("password_hash"),
     accessVersion: integer("access_version").notNull().default(1),
-    reviewRevision: bigint("review_revision", { mode: "number" }).notNull().default(0),
     previewDownloadEnabled: boolean("preview_download_enabled").notNull().default(true),
     originalDownloadEnabled: boolean("original_download_enabled").notNull().default(true),
     bibRecognitionEnabled: boolean("bib_recognition_enabled").notNull().default(false),
@@ -294,6 +293,13 @@ export const albums = pgTable(
     index("albums_scheduled_start_idx").on(table.state, table.scheduledStartAt),
   ],
 );
+
+export const albumReviewRevisions = pgTable("album_review_revisions", {
+  albumId: uuid("album_id")
+    .primaryKey()
+    .references(() => albums.id, { onDelete: "cascade" }),
+  revision: bigint("revision", { mode: "number" }).notNull().default(0),
+});
 
 export const albumObjectDeletionSweeps = pgTable(
   "album_object_deletion_sweeps",
