@@ -53,6 +53,7 @@ function triggerDownload(blob: Blob, filename: string): void {
 export function DownloadButton({
   bytes,
   className,
+  contentRevision = 0,
   kind,
   label,
   mediaId,
@@ -66,6 +67,7 @@ export function DownloadButton({
 }: Readonly<{
   bytes: number;
   className?: string;
+  contentRevision?: number;
   kind: DownloadKind;
   label: string;
   mediaId: string;
@@ -107,12 +109,14 @@ export function DownloadButton({
               mediaId,
               kind: "photo_1920",
               bytes: signed.bytes,
+              contentRevision,
               sourceUrl: signed.url,
             })
           : await loadOriginalImage({
               slug,
               mediaId,
               expectedBytes: signed.bytes,
+              contentRevision,
               sourceUrl: signed.url,
             });
       let downloadBlob = sourceBlob;
