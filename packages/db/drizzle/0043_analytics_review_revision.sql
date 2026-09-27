@@ -66,7 +66,10 @@ BEGIN
     target_album_id := NEW.album_id;
   END IF;
   INSERT INTO album_review_revisions (album_id, revision)
-  VALUES (target_album_id, 1)
+  SELECT target_album_id, 1
+  WHERE EXISTS (
+    SELECT 1 FROM albums AS a WHERE a.id = target_album_id
+  )
   ON CONFLICT (album_id) DO UPDATE
   SET revision = album_review_revisions.revision + 1;
   RETURN NULL;
@@ -88,6 +91,7 @@ BEGIN
   INSERT INTO album_review_revisions (album_id, revision)
   SELECT m.album_id, 1
   FROM media AS m
+  INNER JOIN albums AS a ON a.id = m.album_id
   WHERE m.id = target_media_id
   ON CONFLICT (album_id) DO UPDATE
   SET revision = album_review_revisions.revision + 1;
