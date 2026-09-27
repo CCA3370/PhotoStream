@@ -1,4 +1,6 @@
 import {
+  albumNotificationListSchema,
+  albumNotificationViewSchema,
   albumSummaryViewSchema,
   albumUploaderViewSchema,
   albumViewSchema,
@@ -7,6 +9,7 @@ import {
   bibReviewDecisionSchema,
   categoryViewSchema,
   completeUploadPartRequestSchema,
+  createAlbumNotificationRequestSchema,
   createAlbumRequestSchema,
   createAlbumResponseSchema,
   createCategoryRequestSchema,
@@ -17,6 +20,7 @@ import {
   liveEventViewSchema,
   okResponseSchema,
   photoVariantKindSchema,
+  publicAlbumNotificationStateSchema,
   publicAlbumViewSchema,
   publicationStatusSchema,
   publicMediaListSchema,
@@ -47,6 +51,9 @@ import {
 
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const albumIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const albumNotificationParamsSchema = z
+  .object({ id: z.string().uuid(), notificationId: z.string().uuid() })
+  .strict();
 const uploadVariantParamsSchema = z
   .object({ id: z.string().uuid(), variant: photoVariantKindSchema })
   .strict();
@@ -720,6 +727,73 @@ export async function registerPhotoRoutes(
   );
 
   typed.get(
+    "/api/v1/albums/:id/notifications",
+    {
+      schema: {
+        operationId: "listAlbumNotifications",
+        tags: ["albums"],
+        params: albumIdParamsSchema,
+        response: { 200: albumNotificationListSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      const session = await requireInternalSession(request, options.authService, options.config);
+      return {
+        items: await options.photoService.listAlbumNotifications(
+          actorFrom(session),
+          request.params.id,
+        ),
+      };
+    },
+  );
+
+  typed.post(
+    "/api/v1/albums/:id/notifications",
+    {
+      schema: {
+        operationId: "createAlbumNotification",
+        tags: ["albums"],
+        params: albumIdParamsSchema,
+        body: createAlbumNotificationRequestSchema,
+        response: { 201: albumNotificationViewSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      const notification = await options.photoService.createAlbumNotification({
+        actor: actorFrom(session),
+        albumId: request.params.id,
+        input: request.body,
+        requestId: request.id,
+      });
+      return reply.status(201).send(notification);
+    },
+  );
+
+  typed.delete(
+    "/api/v1/albums/:id/notifications/:notificationId",
+    {
+      schema: {
+        operationId: "deleteAlbumNotification",
+        tags: ["albums"],
+        params: albumNotificationParamsSchema,
+        response: { 200: okResponseSchema, ...commonErrors },
+      },
+    },
+    async (request) => {
+      const session = await requireInternalCsrf(request, options.authService, options.config);
+      await options.photoService.deleteAlbumNotification({
+        actor: actorFrom(session),
+        albumId: request.params.id,
+        notificationId: request.params.notificationId,
+        requestId: request.id,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  typed.get(
     "/api/v1/public/albums/:slug",
     {
       schema: {
@@ -775,6 +849,25 @@ export async function registerPhotoRoutes(
       }
       void reply.header("cache-control", "no-store");
       return { unlocked: true as const };
+    },
+  );
+
+  typed.get(
+    "/api/v1/public/albums/:slug/notifications",
+    {
+      schema: {
+        operationId: "getPublicAlbumNotifications",
+        tags: ["public"],
+        params: slugParamsSchema,
+        response: { 200: publicAlbumNotificationStateSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      void reply.header("cache-control", "no-store");
+      return options.photoService.getPublicNotificationState(
+        request.params.slug,
+        visitorSessionToken(request, options.config, request.params.slug),
+      );
     },
   );
 
