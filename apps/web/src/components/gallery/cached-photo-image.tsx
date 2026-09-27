@@ -55,6 +55,7 @@ export function CachedPhotoImage({
   alt,
   bytes,
   className,
+  contentRevision = 0,
   cacheOnly = false,
   draggable,
   kind,
@@ -69,6 +70,7 @@ export function CachedPhotoImage({
   alt: string;
   bytes: number;
   className?: string;
+  contentRevision?: number;
   cacheOnly?: boolean;
   draggable?: boolean;
   kind: DerivedPhotoVariantKind;
@@ -90,8 +92,8 @@ export function CachedPhotoImage({
     null,
   );
   const [painted, setPainted] = useState<PaintedImage | null>(null);
-  const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}`;
-  const cacheRequest = { scope, mediaId, kind, bytes };
+  const identity = `${scope}\u0000${mediaId}\u0000${kind}\u0000${bytes}\u0000${contentRevision}`;
+  const cacheRequest = { scope, mediaId, kind, bytes, contentRevision };
   const telemetryScope = scope === "public-media" ? undefined : scope;
   const warmUrl = getWarmDerivedImageUrl(cacheRequest);
   const warmDecoded = warmUrl !== null && isWarmDerivedImageDecoded(cacheRequest);
@@ -172,13 +174,14 @@ export function CachedPhotoImage({
         mediaId,
         kind,
         bytes,
+        contentRevision,
       }),
-    [scope, mediaId, kind, bytes],
+    [scope, mediaId, kind, bytes, contentRevision],
   );
 
   useEffect(
-    () => retainDerivedImage({ scope, mediaId, kind, bytes }),
-    [scope, mediaId, kind, bytes],
+    () => retainDerivedImage({ scope, mediaId, kind, bytes, contentRevision }),
+    [scope, mediaId, kind, bytes, contentRevision],
   );
 
   useEffect(() => {
@@ -189,7 +192,7 @@ export function CachedPhotoImage({
         ? new AbortController()
         : null;
     setResolved((current) => (current?.identity === identity ? current : null));
-    const request = { scope, mediaId, kind, bytes };
+    const request = { scope, mediaId, kind, bytes, contentRevision };
     const work = cacheOnly
       ? readCachedDerivedImage(request)
       : loadDerivedImage({
