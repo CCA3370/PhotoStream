@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  AlbumNotificationView,
-  PublicAlbumNotificationState,
-} from "@photostream/contracts";
+import type { AlbumNotificationView, PublicAlbumNotificationState } from "@photostream/contracts";
 import { BellIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
