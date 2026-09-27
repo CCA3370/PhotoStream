@@ -267,8 +267,9 @@ export const albums = pgTable(
     scheduledStartAt: timestamp("scheduled_start_at", { withTimezone: true }),
     passwordHash: text("password_hash"),
     accessVersion: integer("access_version").notNull().default(1),
-    previewDownloadEnabled: boolean("preview_download_enabled").notNull().default(false),
-    originalDownloadEnabled: boolean("original_download_enabled").notNull().default(false),
+    reviewRevision: bigint("review_revision", { mode: "number" }).notNull().default(0),
+    previewDownloadEnabled: boolean("preview_download_enabled").notNull().default(true),
+    originalDownloadEnabled: boolean("original_download_enabled").notNull().default(true),
     bibRecognitionEnabled: boolean("bib_recognition_enabled").notNull().default(false),
     bibSearchEnabled: boolean("bib_search_enabled").notNull().default(false),
     bibRuleVersion: integer("bib_rule_version").notNull().default(0),
@@ -896,6 +897,31 @@ export const analyticsEvents = pgTable(
   (table) => [
     index("analytics_events_album_day_idx").on(table.albumId, table.day),
     index("analytics_events_retention_idx").on(table.createdAt),
+  ],
+);
+
+export const analyticsVisitorDays = pgTable(
+  "analytics_visitor_days",
+  {
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    visitorDigest: varchar("visitor_digest", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("analytics_visitor_days_album_day_visitor_unique").on(
+      table.albumId,
+      table.day,
+      table.visitorDigest,
+    ),
+    index("analytics_visitor_days_album_visitor_day_idx").on(
+      table.albumId,
+      table.visitorDigest,
+      table.day,
+    ),
+    index("analytics_visitor_days_retention_idx").on(table.createdAt),
   ],
 );
 
