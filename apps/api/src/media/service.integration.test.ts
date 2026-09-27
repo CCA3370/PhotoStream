@@ -445,9 +445,18 @@ maybeDescribe("photo vertical slice transactions", () => {
       type: "media.updated",
       payload: {},
     });
+    await expect(
+      service.listLiveEvents({
+        slug: created.album.slug,
+        visitorToken: undefined,
+        afterId: 0,
+      }),
+    ).rejects.toMatchObject({ code: "ALBUM_ACCESS_REQUIRED" });
+
+    const draftVisitor = await service.unlockAlbum(created.album.slug, "school-2026");
     const draftEvents = await service.listLiveEvents({
       slug: created.album.slug,
-      visitorToken: undefined,
+      visitorToken: draftVisitor.rawToken,
       afterId: 0,
     });
     expect(draftEvents.events.map((event) => event.type)).toEqual(["album.notification.updated"]);
@@ -459,9 +468,17 @@ maybeDescribe("photo vertical slice transactions", () => {
       service.listAlbumNotifications({ id: adminId, role: "admin" }, created.album.id),
     ).resolves.toHaveLength(1);
 
+    await expect(
+      service.getPublicNotificationState(
+        created.album.slug,
+        undefined,
+        new Date("2026-09-27T10:00:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ code: "ALBUM_ACCESS_REQUIRED" });
+
     const beforeStart = await service.getPublicNotificationState(
       created.album.slug,
-      undefined,
+      draftVisitor.rawToken,
       new Date("2026-09-27T08:59:00.000Z"),
     );
     expect(beforeStart).toMatchObject({
@@ -472,7 +489,7 @@ maybeDescribe("photo vertical slice transactions", () => {
 
     const active = await service.getPublicNotificationState(
       created.album.slug,
-      undefined,
+      draftVisitor.rawToken,
       new Date("2026-09-27T10:00:00.000Z"),
     );
     expect(active).toMatchObject({
