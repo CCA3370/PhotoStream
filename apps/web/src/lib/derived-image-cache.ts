@@ -12,6 +12,7 @@ interface DerivedImageRequest {
   readonly mediaId: string;
   readonly kind: DerivedPhotoVariantKind;
   readonly bytes: number;
+  readonly contentRevision?: number;
   readonly sourceUrl: string;
   readonly refreshUrl?: () => Promise<string>;
   readonly signal?: AbortSignal;
@@ -62,7 +63,7 @@ subscribeAlbumPurge(({ slug }) => {
 });
 
 function imageIdentity(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
-  return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}`;
+  return `${request.scope}\u0000${request.mediaId}\u0000${request.kind}\u0000${request.bytes}\u0000${request.contentRevision ?? 0}`;
 }
 
 function cacheUrl(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): string {
@@ -71,6 +72,7 @@ function cacheUrl(request: Omit<DerivedImageRequest, "sourceUrl" | "signal">): s
     window.location.origin,
   );
   url.searchParams.set("bytes", String(request.bytes));
+  url.searchParams.set("revision", String(request.contentRevision ?? 0));
   return url.toString();
 }
 
