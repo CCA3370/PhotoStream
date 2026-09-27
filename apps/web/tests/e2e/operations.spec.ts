@@ -287,7 +287,13 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await expect(deleteTrigger).toBeFocused();
     await deleteTrigger.click();
     await page.getByLabel(/输入相册标题/u).fill(title);
-    await page.getByRole("button", { name: "确认永久删除" }).click();
+    await page.getByRole("button", { name: "继续", exact: true }).click();
+    const passwordDialog = page.getByRole("dialog").filter({ hasText: "确认永久删除" });
+    await expect(passwordDialog).toBeVisible();
+    const e2ePassword = process.env.E2E_PASSWORD;
+    if (e2ePassword === undefined) throw new Error("E2E_PASSWORD is not configured");
+    await passwordDialog.getByLabel("当前密码").fill(e2ePassword);
+    await passwordDialog.getByRole("button", { name: "永久删除", exact: true }).click();
     await expect(publishedCard.getByText("已删除", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
@@ -423,7 +429,7 @@ test("member routes enforce roles and administration remains accessible", async 
       reviewerPage.getByRole("heading", { name: restrictedAlbum.album.title }),
     ).toBeVisible();
     await expect(reviewerPage.getByRole("link", { name: "审核", exact: true })).toBeVisible();
-    await expect(reviewerPage.getByRole("link", { name: "上传" })).toHaveCount(0);
+    await expect(reviewerPage.getByRole("link", { name: "上传", exact: true })).toHaveCount(0);
     await expect(reviewerPage.getByRole("link", { name: "设置/统计" })).toHaveCount(0);
     await expect(reviewerPage.getByLabel("新增一级分类")).toHaveCount(0);
     await expect(reviewerPage.getByRole("button", { name: /开始直播|结束直播|归档/u })).toHaveCount(
