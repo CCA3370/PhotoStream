@@ -765,6 +765,7 @@ export async function registerPhotoRoutes(
         actor: actorFrom(session),
         albumId: request.params.id,
         input: request.body,
+        idempotencyKey: idempotencyKey(request),
         requestId: request.id,
       });
       return reply.status(201).send(notification);

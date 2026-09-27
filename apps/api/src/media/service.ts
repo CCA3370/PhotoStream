@@ -486,7 +486,7 @@ export class PhotoService {
     actor: InternalActor,
     albumId: string,
   ): Promise<AlbumNotificationView[]> {
-    requirePermission(actor.role, "album:read");
+    requirePermission(actor.role, "album:configure");
     const album = await this.#albumById(this.#database, albumId);
     if (album === null) throw this.#albumNotFound();
     const rows = await this.#database
@@ -501,9 +501,11 @@ export class PhotoService {
     readonly actor: InternalActor;
     readonly albumId: string;
     readonly input: CreateAlbumNotificationRequest;
+    readonly idempotencyKey: string | undefined;
     readonly requestId: string;
   }): Promise<AlbumNotificationView> {
     requirePermission(options.actor.role, "album:configure");
+    const idempotencyKey = requireHeaderIdempotency(options.idempotencyKey);
     const startsAt = new Date(options.input.startsAt);
     const endsAt = new Date(options.input.endsAt);
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
@@ -515,8 +517,30 @@ export class PhotoService {
     }
 
     return this.#database.transaction(async (transaction) => {
+      const actorScope = `user:${options.actor.id}`;
+      const operation = `album.notification.create:${options.albumId}`;
+      const requestHash = operationRequestHash({
+        albumId: options.albumId,
+        input: options.input,
+      });
+      await lockOperationRequest(transaction, { actorScope, operation, idempotencyKey });
+      const retried = await findOperationRequest(transaction, {
+        actorScope,
+        operation,
+        idempotencyKey,
+        requestHash,
+      });
+      if (retried !== null) return retried.notification as AlbumNotificationView;
+
       const album = await this.#albumById(transaction, options.albumId);
       if (album === null) throw this.#albumNotFound();
+      if (album.state === "deleting") {
+        throw new AppError({
+          code: "STATE_CONFLICT",
+          message: "活动正在删除，不能发布通知",
+          statusCode: 409,
+        });
+      }
       const [created] = await transaction
         .insert(schema.albumNotifications)
         .values({
@@ -546,7 +570,15 @@ export class PhotoService {
         payload: { notificationId: created.id, action: "created" },
       });
       await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${options.albumId})`);
-      return albumNotificationView(created);
+      const view = albumNotificationView(created);
+      await saveOperationRequest(transaction, {
+        actorScope,
+        operation,
+        idempotencyKey,
+        requestHash,
+        result: { notification: view },
+      });
+      return view;
     });
   }
 
@@ -3287,8 +3319,8 @@ export class PhotoService {
     visitorToken: string | undefined,
     now = new Date(),
   ) {
-    const album = await this.#publicAlbumBySlug(slug);
-    if (!(await this.#isVisitorAuthorized(album, visitorToken))) {
+    const album = await this.#viewerAlbumBySlug(slug);
+    if (album.state !== "draft" && !(await this.#isVisitorAuthorized(album, visitorToken))) {
       throw new AppError({
         code: "ALBUM_PASSWORD_INVALID",
         message: "相册不可用或口令错误",
@@ -3320,6 +3352,7 @@ export class PhotoService {
     return {
       items: items.map(albumNotificationView),
       nextChangeAt: nextChangeAt === null ? null : iso(nextChangeAt),
+      serverNow: iso(now),
     };
   }
 
@@ -3329,8 +3362,11 @@ export class PhotoService {
     readonly afterId: number;
     readonly limit?: number;
   }) {
-    const album = await this.#publicAlbumBySlug(options.slug);
-    if (!(await this.#isVisitorAuthorized(album, options.visitorToken))) {
+    const album = await this.#viewerAlbumBySlug(options.slug);
+    if (
+      album.state !== "draft" &&
+      !(await this.#isVisitorAuthorized(album, options.visitorToken))
+    ) {
       throw new AppError({
         code: "ALBUM_PASSWORD_INVALID",
         message: "相册不可用或口令错误",
@@ -3341,7 +3377,13 @@ export class PhotoService {
       .select()
       .from(schema.liveEvents)
       .where(
-        and(eq(schema.liveEvents.albumId, album.id), gt(schema.liveEvents.id, options.afterId)),
+        and(
+          eq(schema.liveEvents.albumId, album.id),
+          gt(schema.liveEvents.id, options.afterId),
+          ...(album.state === "draft"
+            ? [eq(schema.liveEvents.type, "album.notification.updated")]
+            : []),
+        ),
       )
       .orderBy(asc(schema.liveEvents.id))
       .limit(options.limit ?? 100);
