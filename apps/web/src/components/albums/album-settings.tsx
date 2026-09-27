@@ -710,7 +710,6 @@ export function AlbumSettings({
                 </SettingRow>
               </CardContent>
             </Card>
-
           </div>
         </TabsContent>
 
