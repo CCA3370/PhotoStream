@@ -59,12 +59,7 @@ export async function loadOriginalImage(request: {
   readonly sourceUrl: string;
 }): Promise<Blob> {
   return loadMediaBlob({
-    ...identity(
-      request.slug,
-      request.mediaId,
-      request.expectedBytes,
-      request.contentRevision ?? 0,
-    ),
+    ...identity(request.slug, request.mediaId, request.expectedBytes, request.contentRevision ?? 0),
     sourceUrl: request.sourceUrl,
   });
 }
