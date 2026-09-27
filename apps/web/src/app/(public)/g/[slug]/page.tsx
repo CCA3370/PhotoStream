@@ -99,7 +99,6 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
     return (
       <PublicGalleryShell albumDescription={album.description} albumTitle={album.title}>
         <ScheduledAlbumAutoRefresh scheduledStartAt={album.scheduledStartAt} slug={slug} />
-        <ViewerServiceNotice />
         <ViewerNotifications onboardingRequired={false} slug={slug} />
         <LiveUpdates initialEventId={0} knownMediaIds={[]} slug={slug} />
         <div className="mx-auto flex min-h-[55dvh] max-w-xl items-center justify-center py-8 sm:py-14">
