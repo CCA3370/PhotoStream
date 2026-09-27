@@ -353,7 +353,10 @@ maybeDescribe("phase 2 local capacity", () => {
         input: quotaRequest,
         idempotencyKey: "capacity-after-tombstone",
       }),
-    ).resolves.toMatchObject({ albumId: album.id });
+    ).resolves.toMatchObject({
+      mediaId: expect.any(String),
+      status: "active",
+    });
 
     const broker = new LiveEventBroker();
     await broker.start(pool);
