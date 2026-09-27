@@ -101,6 +101,7 @@ export function LightboxNeighborSlide({
           <CachedPhotoImage
             alt=""
             bytes={thumbnail.bytes}
+            contentRevision={media.contentRevision}
             className="object-contain"
             cacheOnly
             kind="photo_480"
@@ -114,6 +115,7 @@ export function LightboxNeighborSlide({
           <CachedPhotoImage
             alt=""
             bytes={intermediate.bytes}
+            contentRevision={media.contentRevision}
             cacheOnly
             className="object-contain"
             draggable={false}
@@ -128,6 +130,7 @@ export function LightboxNeighborSlide({
           cacheOnly
           alt=""
           bytes={source.bytes}
+          contentRevision={media.contentRevision}
           className="object-contain"
           draggable={false}
           kind={source.kind === "photo_1920" ? "photo_1920" : "photo_960"}
