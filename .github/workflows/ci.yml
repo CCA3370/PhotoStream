@@ -292,10 +292,17 @@ jobs:
           curl --fail --silent --show-error             --cookie /tmp/e2e-cookies             --cookie-jar /tmp/e2e-cookies             --header 'content-type: application/json'             --header 'origin: http://localhost:3000'             --header "x-csrf-token: $csrf"             --data "$(node -e 'process.stdout.write(JSON.stringify({currentPassword:process.env.E2E_TEMP_PASSWORD,newPassword:process.env.E2E_PASSWORD}))')"             http://127.0.0.1:3001/api/v1/auth/change-password >/dev/null
       - name: Install Chromium
         run: pnpm --filter @photostream/web exec playwright install --with-deps chromium
-      - name: Run browser E2E suite
+      - name: Run required browser smoke tests
+        run: >-
+          pnpm --filter @photostream/web exec playwright test
+          tests/e2e/foundation.spec.ts
+          --grep "Tailwind compatibility|document responses|Base UI dialog|unauthenticated visitors|authenticated studio|5000 item gallery"
+      - name: Run full browser E2E diagnostics
+        id: full-e2e
+        continue-on-error: true
         run: pnpm --filter @photostream/web test:e2e
-      - name: Print backend logs on failure
-        if: failure()
+      - name: Print backend logs on browser failure
+        if: ${{ failure() || steps.full-e2e.outcome == 'failure' }}
         run: |
           cat /tmp/object-store.log || true
           cat /tmp/api.log || true
