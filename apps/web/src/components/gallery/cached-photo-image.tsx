@@ -232,6 +232,7 @@ export function CachedPhotoImage({
     priority,
     cacheOnly,
     bytes,
+    contentRevision,
     deferredGridThumbnail,
     identity,
     kind,
