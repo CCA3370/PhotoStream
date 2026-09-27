@@ -2,6 +2,7 @@ import { get } from "node:http";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
+import type { CreatePhotoUploadRequest } from "@photostream/contracts";
 import { createDatabase, createPool, migrateDatabase, schema } from "@photostream/db";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -285,7 +286,7 @@ maybeDescribe("phase 2 local capacity", () => {
     const paginationP95 = percentile(pageDurations, 0.95);
     expect(paginationP95).toBeLessThan(300);
 
-    const quotaRequest = {
+    const quotaRequest: CreatePhotoUploadRequest = {
       albumId: album.id,
       categoryId: null,
       width: 1_920,
