@@ -453,14 +453,6 @@ maybeDescribe("photo vertical slice transactions", () => {
       }),
     ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
-    const draftVisitor = await service.unlockAlbum(created.album.slug, "school-2026");
-    const draftEvents = await service.listLiveEvents({
-      slug: created.album.slug,
-      visitorToken: draftVisitor.rawToken,
-      afterId: 0,
-    });
-    expect(draftEvents.events.map((event) => event.type)).toEqual(["album.notification.updated"]);
-
     await expect(
       service.listAlbumNotifications({ id: operatorId, role: "operator" }, created.album.id),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -476,9 +468,22 @@ maybeDescribe("photo vertical slice transactions", () => {
       ),
     ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      requestId: "notification-test-start",
+    });
+    const visitor = await service.unlockAlbum(created.album.slug, "school-2026");
+    const liveEvents = await service.listLiveEvents({
+      slug: created.album.slug,
+      visitorToken: visitor.rawToken,
+      afterId: 0,
+    });
+    expect(liveEvents.events.map((event) => event.type)).toContain("album.notification.updated");
+
     const beforeStart = await service.getPublicNotificationState(
       created.album.slug,
-      draftVisitor.rawToken,
+      visitor.rawToken,
       new Date("2026-09-27T08:59:00.000Z"),
     );
     expect(beforeStart).toMatchObject({
@@ -489,7 +494,7 @@ maybeDescribe("photo vertical slice transactions", () => {
 
     const active = await service.getPublicNotificationState(
       created.album.slug,
-      draftVisitor.rawToken,
+      visitor.rawToken,
       new Date("2026-09-27T10:00:00.000Z"),
     );
     expect(active).toMatchObject({
