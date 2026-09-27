@@ -451,7 +451,7 @@ maybeDescribe("photo vertical slice transactions", () => {
         visitorToken: undefined,
         afterId: 0,
       }),
-    ).rejects.toMatchObject({ code: "ALBUM_ACCESS_REQUIRED" });
+    ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
     const draftVisitor = await service.unlockAlbum(created.album.slug, "school-2026");
     const draftEvents = await service.listLiveEvents({
@@ -474,7 +474,7 @@ maybeDescribe("photo vertical slice transactions", () => {
         undefined,
         new Date("2026-09-27T10:00:00.000Z"),
       ),
-    ).rejects.toMatchObject({ code: "ALBUM_ACCESS_REQUIRED" });
+    ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
     const beforeStart = await service.getPublicNotificationState(
       created.album.slug,
