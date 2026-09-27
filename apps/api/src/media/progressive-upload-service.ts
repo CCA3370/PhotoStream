@@ -195,7 +195,12 @@ export class ProgressiveUploadService {
       const [mediaCount] = await transaction
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.media)
-        .where(eq(schema.media.albumId, album.id));
+        .where(
+          and(
+            eq(schema.media.albumId, album.id),
+            sql`${schema.media.publicationStatus} <> 'deleted'`,
+          ),
+        );
       if ((mediaCount?.count ?? 0) >= 5_000) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
