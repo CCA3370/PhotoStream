@@ -1808,6 +1808,7 @@ export class FaceService {
       .where(
         and(
           ne(schema.mediaFaceIndexTasks.status, "excluded"),
+          ne(schema.mediaFaceIndexTasks.status, "deleting"),
           inArray(
             schema.mediaFaceIndexTasks.mediaId,
             this.#database
