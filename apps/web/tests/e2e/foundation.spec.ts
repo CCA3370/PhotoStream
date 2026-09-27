@@ -207,8 +207,8 @@ test("authenticated studio and upload shells expose their primary landmarks", as
 
   const album = await ensureLiveAlbum();
   await page.goto(appUrl(`/studio/albums/${album.id}/upload`));
-  await expect(page.getByRole("heading", { level: 1, name: album.title })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "上传队列" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: album.title })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "上传队列" })).toBeVisible();
   await expectNoAxeViolations(page);
 });
 
