@@ -9,6 +9,7 @@ import { LiveUpdates } from "@/components/gallery/live-updates";
 import { ScheduledAlbumAutoRefresh } from "@/components/gallery/scheduled-album-auto-refresh";
 import { UnlockAlbumForm } from "@/components/gallery/unlock-album-form";
 import { ViewerHelpFeedback } from "@/components/gallery/viewer-help-feedback";
+import { ViewerNotifications } from "@/components/gallery/viewer-notifications";
 import { ViewerOnboarding } from "@/components/gallery/viewer-onboarding";
 import { ViewerServiceNotice } from "@/components/gallery/viewer-service-notice";
 import { PublicGalleryShell } from "@/components/shells/public-gallery-shell";
@@ -220,6 +221,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
         live={album.state === "live"}
         searchAvailable={searchAvailable}
       />
+      <ViewerNotifications slug={slug} />
       <ViewerHelpFeedback slug={slug} />
 
       <GalleryBrowser
