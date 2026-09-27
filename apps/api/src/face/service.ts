@@ -1780,29 +1780,23 @@ export class FaceService {
   }
 
   async #reconcileMediaTasks() {
-    const eligible = await this.#database
-      .select({ albumId: schema.media.albumId, mediaId: schema.media.id })
-      .from(schema.media)
-      .innerJoin(schema.albumFaceIndexes, eq(schema.albumFaceIndexes.albumId, schema.media.albumId))
-      .innerJoin(
-        schema.mediaVariants,
-        and(
-          eq(schema.mediaVariants.mediaId, schema.media.id),
-          eq(schema.mediaVariants.kind, "photo_1920"),
-          eq(schema.mediaVariants.verified, true),
-        ),
-      )
-      .where(
-        and(
-          eq(schema.albumFaceIndexes.enabled, true),
-          eq(schema.media.publicationStatus, "published"),
-        ),
-      );
-    for (const row of eligible)
-      await this.#database
-        .insert(schema.mediaFaceIndexTasks)
-        .values({ albumId: row.albumId, mediaId: row.mediaId })
-        .onConflictDoNothing();
+    await this.#database.execute(sql`
+      insert into ${schema.mediaFaceIndexTasks} (album_id, media_id)
+      select ${schema.media.albumId}, ${schema.media.id}
+      from ${schema.media}
+      inner join ${schema.albumFaceIndexes}
+        on ${schema.albumFaceIndexes.albumId} = ${schema.media.albumId}
+      where ${schema.albumFaceIndexes.enabled} = true
+        and ${schema.media.publicationStatus} = 'published'
+        and exists (
+          select 1
+          from ${schema.mediaVariants}
+          where ${schema.mediaVariants.mediaId} = ${schema.media.id}
+            and ${schema.mediaVariants.kind} = 'photo_1920'
+            and ${schema.mediaVariants.verified} = true
+        )
+      on conflict (media_id) do nothing
+    `);
     await this.#database
       .update(schema.mediaFaceIndexTasks)
       .set({
