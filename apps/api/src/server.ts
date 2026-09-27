@@ -162,6 +162,29 @@ const app = await buildApp({
   facePublicStateService,
   eventBridgeVerifier,
   runtimeMetrics,
+  dependencyHealth: async () => {
+    let objectStorage: "ok" | "degraded" = "ok";
+    try {
+      await storage.head("__photostream_health__/probe");
+    } catch {
+      objectStorage = "degraded";
+    }
+
+    const snapshot = runtimeMetrics.snapshot();
+    const backgroundJobs = Object.values(snapshot.jobs).some((job) => {
+      if (job.lastErrorAt === null) return false;
+      if (job.lastCompletedAt === null) return true;
+      return Date.parse(job.lastErrorAt) > Date.parse(job.lastCompletedAt);
+    })
+      ? ("degraded" as const)
+      : ("ok" as const);
+
+    return {
+      objectStorage,
+      faceInfrastructure: hasFaceInfrastructure ? ("configured" as const) : ("disabled" as const),
+      backgroundJobs,
+    };
+  },
 });
 const deletionPoll = setInterval(() => {
   void runtimeMetrics
