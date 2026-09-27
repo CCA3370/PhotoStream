@@ -403,6 +403,72 @@ maybeDescribe("photo vertical slice transactions", () => {
     });
   });
 
+  it("serves draft notifications on server time and deduplicates publish retries", async () => {
+    const created = await service.createAlbum({
+      actor: { id: adminId, role: "admin" },
+      input: {
+        title: "通知测试活动",
+        description: "",
+        publishMode: "review",
+        scheduledStartAt: "2099-06-01T01:30:00.000Z",
+        password: "school-2026",
+      },
+      idempotencyKey: "notification-test-album-0001",
+      requestId: "notification-test-album",
+    });
+    const input = {
+      title: "集合时间调整",
+      content: "请于 17:30 前到达操场。",
+      startsAt: "2026-09-27T09:00:00.000Z",
+      endsAt: "2026-09-27T11:00:00.000Z",
+    };
+
+    const first = await service.createAlbumNotification({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      input,
+      idempotencyKey: "notification-publish-0001",
+      requestId: "notification-publish-first",
+    });
+    const retried = await service.createAlbumNotification({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      input,
+      idempotencyKey: "notification-publish-0001",
+      requestId: "notification-publish-retry",
+    });
+
+    expect(retried).toEqual(first);
+    await expect(
+      service.listAlbumNotifications({ id: operatorId, role: "operator" }, created.album.id),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      service.listAlbumNotifications({ id: adminId, role: "admin" }, created.album.id),
+    ).resolves.toHaveLength(1);
+
+    const beforeStart = await service.getPublicNotificationState(
+      created.album.slug,
+      undefined,
+      new Date("2026-09-27T08:59:00.000Z"),
+    );
+    expect(beforeStart).toMatchObject({
+      items: [],
+      nextChangeAt: input.startsAt,
+      serverNow: "2026-09-27T08:59:00.000Z",
+    });
+
+    const active = await service.getPublicNotificationState(
+      created.album.slug,
+      undefined,
+      new Date("2026-09-27T10:00:00.000Z"),
+    );
+    expect(active).toMatchObject({
+      items: [{ id: first.id, title: input.title, content: input.content }],
+      nextChangeAt: input.endsAt,
+      serverNow: "2026-09-27T10:00:00.000Z",
+    });
+  });
+
   it("lets operators upload and fully review media while denying album settings", async () => {
     const created = await service.createAlbum({
       actor: { id: adminId, role: "admin" },
