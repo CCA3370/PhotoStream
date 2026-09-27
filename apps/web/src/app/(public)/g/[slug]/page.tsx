@@ -103,7 +103,6 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
           <>
             <ViewerNotifications onboardingRequired={false} slug={slug} />
             <LiveUpdates
-              albumId={album.id}
               initialEventId={0}
               knownMediaIds={[]}
               slug={slug}
@@ -255,7 +254,6 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
       />
 
       <LiveUpdates
-        albumId={album.id}
         initialEventId={initialPage.eventCursor}
         knownMediaIds={initialItems.map((item) => item.id)}
         slug={slug}
