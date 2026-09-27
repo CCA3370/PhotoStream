@@ -25,11 +25,33 @@ describe("public gallery not-found handling", () => {
 
     expect(draftBranch).toBeGreaterThan(-1);
     expect(accessBranch).toBeGreaterThan(draftBranch);
-    expect(source).toContain('status="未开始"');
+    expect(source).toContain(">未开始</p>");
     expect(source).toContain("开始时间（北京时间）");
     expect(source).toContain("ScheduledAlbumAutoRefresh");
     expect(source).toContain("scheduledStartAt={album.scheduledStartAt} slug={slug}");
     expect(source).toContain("活动开始后，此页面会自动更新并显示直播照片。");
+  });
+
+  it("defers the service notice until after pre-start and password gates", () => {
+    const source = readFileSync(galleryPagePath, "utf8");
+    const draftBranch = source.indexOf('if (album.state === "draft")');
+    const accessBranch = source.indexOf("if (album.accessRequired)");
+    const galleryBranch = source.indexOf("const dataSaver =");
+
+    expect(draftBranch).toBeGreaterThan(-1);
+    expect(accessBranch).toBeGreaterThan(draftBranch);
+    expect(galleryBranch).toBeGreaterThan(accessBranch);
+
+    const preStartSource = source.slice(draftBranch, accessBranch);
+    const passwordGateSource = source.slice(accessBranch, galleryBranch);
+    const enteredGallerySource = source.slice(galleryBranch);
+
+    expect(preStartSource).not.toContain("<ViewerServiceNotice");
+    expect(preStartSource).not.toContain("<ViewerOnboarding");
+    expect(passwordGateSource).not.toContain("<ViewerServiceNotice");
+    expect(passwordGateSource).not.toContain("<ViewerOnboarding");
+    expect(enteredGallerySource).toContain("<ViewerServiceNotice");
+    expect(enteredGallerySource).toContain("<ViewerOnboarding");
   });
 
   it("renders an audience-facing activity-not-found page", () => {
