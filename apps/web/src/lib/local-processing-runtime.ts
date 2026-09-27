@@ -852,5 +852,6 @@ export async function purgeLocalProcessingAlbum(albumId: string): Promise<void> 
 }
 
 subscribeAlbumPurge(({ albumId }) => {
+  if (albumId === null) return;
   void purgeLocalProcessingAlbum(albumId).catch(() => undefined);
 });
