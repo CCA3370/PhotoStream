@@ -168,6 +168,7 @@ export function PhotoLightbox({
         mediaId: item.id,
         kind: source.kind === "photo_1920" ? "photo_1920" : "photo_960",
         bytes: source.bytes,
+        contentRevision: item.contentRevision,
         sourceUrl: source.url,
         signal: controller.signal,
         refreshUrl: async () =>
@@ -217,7 +218,7 @@ export function PhotoLightbox({
   const largeIdentity =
     selected === null || large === null
       ? null
-      : `${selected.id}\u0000${large.kind}\u0000${large.bytes}`;
+      : `${selected.id}\u0000${large.kind}\u0000${large.bytes}\u0000${selected.contentRevision}`;
   const loaded = largeIdentity !== null && loadedDerivedIdentity === largeIdentity;
 
   useLayoutEffect(() => {
@@ -231,6 +232,7 @@ export function PhotoLightbox({
         mediaId: selected.id,
         kind: large.kind === "photo_1920" ? "photo_1920" : "photo_960",
         bytes: large.bytes,
+        contentRevision: selected.contentRevision,
       })
         ? largeIdentity
         : null,
@@ -422,6 +424,7 @@ export function PhotoLightbox({
           mediaId: selected.id,
           kind: "photo_1920",
           bytes: source.bytes,
+          contentRevision: selected.contentRevision,
         });
         if (blob === null) {
           blob = await fetchImageWithProgress({
@@ -461,7 +464,12 @@ export function PhotoLightbox({
       }
       setWeChatDownload({ kind: "original", progress: 0 });
       try {
-        let blob = await readCachedOriginalImage(slug, selected.id, source.bytes);
+        let blob = await readCachedOriginalImage(
+          slug,
+          selected.id,
+          source.bytes,
+          selected.contentRevision,
+        );
         if (blob === null) {
           blob = await fetchImageWithProgress({
             url: source.url,
@@ -471,7 +479,13 @@ export function PhotoLightbox({
                 current?.kind === "original" ? { ...current, progress } : current,
               ),
           });
-          await writeCachedOriginalImage(slug, selected.id, source.bytes, blob);
+          await writeCachedOriginalImage(
+            slug,
+            selected.id,
+            source.bytes,
+            blob,
+            selected.contentRevision,
+          );
         } else {
           setWeChatDownload((current) =>
             current?.kind === "original" ? { ...current, progress: 1 } : current,
@@ -606,6 +620,7 @@ export function PhotoLightbox({
                     <CachedPhotoImage
                       alt="活动照片"
                       bytes={large.bytes}
+                      contentRevision={selected.contentRevision}
                       cacheOnly={stageWidth <= 0 || stageHeight <= 0}
                       className={cn(
                         "object-contain transition-[opacity,filter] duration-160 ease-out motion-reduce:transition-none",
@@ -842,6 +857,7 @@ export function PhotoLightbox({
                       {canDownloadPreview && slug !== undefined && preview1920 !== null ? (
                         <DownloadButton
                           bytes={preview1920.bytes}
+                          contentRevision={selected.contentRevision}
                           className={cn(
                             toolbarButtonClass,
                             "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
@@ -862,6 +878,7 @@ export function PhotoLightbox({
                       selected.downloads.originalBytes !== null ? (
                         <DownloadButton
                           bytes={selected.downloads.originalBytes}
+                          contentRevision={selected.contentRevision}
                           className={cn(
                             toolbarButtonClass,
                             "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:shrink-0 sm:px-2.5 sm:text-xs",
