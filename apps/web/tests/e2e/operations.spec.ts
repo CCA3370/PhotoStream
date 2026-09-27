@@ -197,29 +197,16 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     expect(publicObjectRequests.some((path) => /\/original\./u.test(path))).toBe(false);
 
     for (const kind of ["preview", "original"] as const) {
-      const disabledDownload = await viewer.request.post(
+      const defaultDownload = await viewer.request.post(
         appUrl(`/api/v1/public/albums/${album.album.slug}/downloads/${mediaId}/${kind}`),
         { headers: publicWriteHeaders(crypto.randomUUID()) },
       );
-      expect(disabledDownload.status()).toBe(403);
-      expect((await disabledDownload.json()) as { code: string }).toMatchObject({
-        code: "DOWNLOAD_DISABLED",
-      });
+      expect(defaultDownload.status()).toBe(200);
     }
 
     await page.goto(appUrl(`/studio/albums/${album.album.id}/settings`));
-    const downloadsTab = page.getByRole("tab", { name: "下载" });
-    await expectReactHydrated(downloadsTab);
-    await downloadsTab.click();
-    for (const [name, confirmation] of [
-      ["普通图下载", "普通图下载已更新"],
-      ["照片原图下载", "照片原图下载已更新"],
-    ] as const) {
-      const toggle = page.getByRole("switch", { name });
-      await expectReactHydrated(toggle);
-      await toggle.click();
-      await expect(page.getByText(confirmation)).toBeVisible();
-    }
+    await expect(page.getByRole("switch", { name: "普通图下载" })).toHaveCount(0);
+    await expect(page.getByRole("switch", { name: "照片原图下载" })).toHaveCount(0);
     await page.getByRole("tab", { name: "隐私与投诉" }).click();
     await page.getByLabel("隐私说明").fill("仅用于本次校内活动记录，请勿转发。");
     await page.getByLabel("删除/投诉联系方式").fill("校内影像管理员");
@@ -417,7 +404,11 @@ test("member routes enforce roles and administration remains accessible", async 
       appUrl(`/api/v1/media/${crypto.randomUUID()}`),
       {
         data: { confirmation: "不应执行" },
-        headers: { origin: baseUrl, "x-csrf-token": currentReviewerCsrf },
+        headers: {
+          origin: baseUrl,
+          "x-csrf-token": currentReviewerCsrf,
+          "x-confirm-password": `Reviewer-${unique}!Pass`,
+        },
       },
     );
     expect(forbiddenDelete.status()).toBe(403);
