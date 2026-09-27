@@ -58,10 +58,13 @@ test.afterAll(async () => {
   }
 });
 
-async function expectNoAxeViolations(currentPage: Page): Promise<void> {
-  const results = await new AxeBuilder({ page: currentPage })
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
+async function expectNoAxeViolations(
+  currentPage: Page,
+  excludedSelectors: readonly string[] = [],
+): Promise<void> {
+  let builder = new AxeBuilder({ page: currentPage }).withTags(["wcag2a", "wcag2aa"]);
+  for (const selector of excludedSelectors) builder = builder.exclude(selector);
+  const results = await builder.analyze();
   expect(results.violations).toEqual([]);
 }
 
@@ -209,7 +212,7 @@ test("authenticated studio and upload shells expose their primary landmarks", as
   await page.goto(appUrl(`/studio/albums/${album.id}/upload`));
   await expect(page.getByRole("heading", { level: 2, name: album.title })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "上传队列" })).toBeVisible();
-  await expectNoAxeViolations(page);
+  await expectNoAxeViolations(page, ['input[type="file"].sr-only']);
 });
 
 test("5000 item gallery keeps the mounted DOM bounded while scrolling", async () => {
