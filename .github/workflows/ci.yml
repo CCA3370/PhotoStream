@@ -177,6 +177,8 @@ jobs:
         run: pnpm test:db
       - name: API integration tests
         run: pnpm --filter @photostream/api test:integration
+      - name: API capacity tests
+        run: pnpm --filter @photostream/api test:capacity
 
   deploy-contract:
     name: Deployment contract
@@ -191,9 +193,50 @@ jobs:
         run: bash deploy/deploy.test.sh
 
   browser-smoke:
-    name: Browser smoke
+    name: Browser E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+        env:
+          POSTGRES_DB: photostream_e2e
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d photostream_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      HOST: 127.0.0.1
+      PORT: 3001
+      APP_ORIGIN: http://localhost:3000
+      MEDIA_BASE_URL: http://127.0.0.1:3002
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/photostream_e2e
+      SESSION_SECRET_CURRENT: e2e-session-secret-current-0000001
+      CSRF_SECRET: e2e-csrf-secret-current-0000000001
+      CURSOR_SIGNING_SECRET: e2e-cursor-signing-secret-0000001
+      VISITOR_SESSION_SECRET: e2e-visitor-session-secret-0000001
+      ALBUM_PASSWORD_GENERATION_SECRET: e2e-album-password-secret-00000001
+      USER_PASSWORD_GENERATION_SECRET: e2e-user-password-secret-0000000001
+      ANALYTICS_HMAC_SECRET: e2e-analytics-hmac-secret-000000001
+      BIB_DATA_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      BIB_SEARCH_KEY: e2e-bib-search-key-0000000000000001
+      BIB_KEY_VERSION: e2e-v1
+      LOCAL_OBJECT_SECRET: e2e-local-object-secret-00000000001
+      LOCAL_OBJECT_BASE_URL: http://127.0.0.1:3002
+      OBJECT_STORE_HOST: 127.0.0.1
+      OBJECT_STORE_PORT: 3002
+      OBJECT_STORE_ROOT: /tmp/photostream-e2e-objects
+      BOOTSTRAP_ADMIN_TOKEN: e2e-bootstrap-admin-token-00000001
+      API_INTERNAL_URL: http://127.0.0.1:3001
+      E2E_APP_ORIGIN: http://localhost:3000
+      E2E_USERNAME: e2e-admin
+      E2E_PASSWORD: E2e-browser-password-2026!
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -215,13 +258,51 @@ jobs:
             ${{ runner.os }}-pnpm-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Migrate E2E database
+        run: pnpm --filter @photostream/db db:migrate
+      - name: Bootstrap E2E administrator
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(pnpm --filter @photostream/api bootstrap-admin e2e-admin "E2E Administrator")"
+          temporary_password="$(printf '%s\n' "$output" | sed -n 's/^Temporary password (shown once): //p')"
+          test -n "$temporary_password"
+          printf 'E2E_TEMP_PASSWORD=%s\n' "$temporary_password" >> "$GITHUB_ENV"
+      - name: Start E2E backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @photostream/object-store exec tsx src/server.ts >/tmp/object-store.log 2>&1 &
+          pnpm --filter @photostream/api exec tsx src/server.ts >/tmp/api.log 2>&1 &
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3001/api/v1/health/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/object-store.log
+          cat /tmp/api.log
+          exit 1
+      - name: Set permanent E2E password
+        shell: bash
+        run: |
+          set -euo pipefail
+          login_json="$(curl --fail --silent --show-error             --cookie-jar /tmp/e2e-cookies             --header 'content-type: application/json'             --header 'origin: http://localhost:3000'             --data "$(node -e 'process.stdout.write(JSON.stringify({username:"e2e-admin",password:process.env.E2E_TEMP_PASSWORD}))')"             http://127.0.0.1:3001/api/v1/auth/login)"
+          csrf="$(LOGIN_JSON="$login_json" node -e 'process.stdout.write(JSON.parse(process.env.LOGIN_JSON).csrfToken)')"
+          curl --fail --silent --show-error             --cookie /tmp/e2e-cookies             --cookie-jar /tmp/e2e-cookies             --header 'content-type: application/json'             --header 'origin: http://localhost:3000'             --header "x-csrf-token: $csrf"             --data "$(node -e 'process.stdout.write(JSON.stringify({currentPassword:process.env.E2E_TEMP_PASSWORD,newPassword:process.env.E2E_PASSWORD}))')"             http://127.0.0.1:3001/api/v1/auth/change-password >/dev/null
       - name: Install Chromium
         run: pnpm --filter @photostream/web exec playwright install --with-deps chromium
-      - name: Run deterministic browser smoke tests
-        env:
-          API_INTERNAL_URL: http://127.0.0.1:3001
-          MEDIA_BASE_URL: https://cdn.example.invalid
+      - name: Run required browser smoke tests
         run: >-
           pnpm --filter @photostream/web exec playwright test
           tests/e2e/foundation.spec.ts
-          --grep "Tailwind compatibility|document responses|Base UI dialog|5000 item gallery"
+          --grep "Tailwind compatibility|document responses|Base UI dialog|unauthenticated visitors|authenticated studio|5000 item gallery"
+      - name: Run full browser E2E diagnostics
+        id: full-e2e
+        continue-on-error: true
+        run: pnpm --filter @photostream/web test:e2e
+      - name: Print backend logs on browser failure
+        if: ${{ failure() || steps.full-e2e.outcome == 'failure' }}
+        run: |
+          cat /tmp/object-store.log || true
+          cat /tmp/api.log || true

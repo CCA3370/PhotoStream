@@ -643,12 +643,29 @@ export async function registerPhotoRoutes(
         "x-accel-buffering": "no",
       });
       reply.raw.flushHeaders();
-      reply.raw.write(": connected\n\n");
-      reply.raw.write(`event: review.changed\ndata: ${JSON.stringify({ revision })}\n\n`);
+      let backpressured = false;
+      let safeFlush = () => {};
+      const onDrain = () => {
+        backpressured = false;
+        safeFlush();
+      };
+      const writeChunk = (chunk: string): boolean => {
+        if (reply.raw.destroyed || reply.raw.writableEnded || backpressured) return false;
+        const accepted = reply.raw.write(chunk);
+        if (!accepted) {
+          backpressured = true;
+          reply.raw.once("drain", onDrain);
+        }
+        return accepted;
+      };
+      writeChunk(": connected\n\n");
+      if (!backpressured) {
+        writeChunk(`event: review.changed\ndata: ${JSON.stringify({ revision })}\n\n`);
+      }
 
       let running = false;
       const flush = async () => {
-        if (running || reply.raw.destroyed) return;
+        if (running || backpressured || reply.raw.destroyed) return;
         running = true;
         try {
           const nextRevision = await options.photoService.reviewRevision(
@@ -656,15 +673,20 @@ export async function registerPhotoRoutes(
             request.params.id,
           );
           if (nextRevision === revision || reply.raw.destroyed) return;
-          revision = nextRevision;
-          reply.raw.write(
-            `event: review.changed\ndata: ${JSON.stringify({ revision: nextRevision })}\n\n`,
-          );
+          if (
+            writeChunk(
+              `event: review.changed\ndata: ${JSON.stringify({ revision: nextRevision })}\n\n`,
+            )
+          ) {
+            revision = nextRevision;
+          } else if (backpressured) {
+            revision = nextRevision;
+          }
         } finally {
           running = false;
         }
       };
-      const safeFlush = () => {
+      safeFlush = () => {
         void flush().catch((error: unknown) => {
           request.log.error({ err: error }, "Review SSE refresh failed");
           reply.raw.end();
@@ -673,7 +695,7 @@ export async function registerPhotoRoutes(
       const unsubscribe = options.broker.subscribe(request.params.id, safeFlush);
       const poll = setInterval(safeFlush, 60_000);
       const heartbeat = setInterval(() => {
-        if (!reply.raw.destroyed) reply.raw.write(": heartbeat\n\n");
+        if (!backpressured) writeChunk(": heartbeat\n\n");
       }, 20_000);
       let closed = false;
       const close = () => {
@@ -682,6 +704,7 @@ export async function registerPhotoRoutes(
         unsubscribe();
         clearInterval(poll);
         clearInterval(heartbeat);
+        reply.raw.removeListener("drain", onDrain);
       };
       request.raw.once("close", close);
       reply.raw.once("error", close);
@@ -949,20 +972,37 @@ export async function registerPhotoRoutes(
         "x-accel-buffering": "no",
       });
       reply.raw.flushHeaders();
-      reply.raw.write(": connected\n\n");
+      let backpressured = false;
+      let safeFlush = () => {};
+      const onDrain = () => {
+        backpressured = false;
+        safeFlush();
+      };
+      const writeChunk = (chunk: string): boolean => {
+        if (reply.raw.destroyed || reply.raw.writableEnded || backpressured) return false;
+        const accepted = reply.raw.write(chunk);
+        if (!accepted) {
+          backpressured = true;
+          reply.raw.once("drain", onDrain);
+        }
+        return accepted;
+      };
+      writeChunk(": connected\n\n");
       const send = (events: typeof initial.events) => {
         for (const event of events) {
-          lastEventId = event.id;
-          reply.raw.write(`id: ${event.id}\n`);
-          reply.raw.write(`event: ${event.type}\n`);
-          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          if (backpressured) break;
+          const accepted = writeChunk(
+            `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          );
+          if (accepted || backpressured) lastEventId = event.id;
+          if (!accepted) break;
         }
       };
-      send(initial.events);
+      if (!backpressured) send(initial.events);
 
       let running = false;
       const flush = async () => {
-        if (running || reply.raw.destroyed) return;
+        if (running || backpressured || reply.raw.destroyed) return;
         running = true;
         try {
           const next = await options.photoService.listLiveEvents({
@@ -975,16 +1015,16 @@ export async function registerPhotoRoutes(
           running = false;
         }
       };
-      const safeFlush = () => {
+      safeFlush = () => {
         void flush().catch((error: unknown) => {
           request.log.error({ err: error }, "SSE replay failed");
           reply.raw.end();
         });
       };
       const unsubscribe = options.broker.subscribe(initial.album.id, safeFlush);
-      const poll = setInterval(safeFlush, 15_000);
+      const poll = setInterval(safeFlush, 60_000);
       const heartbeat = setInterval(() => {
-        if (!reply.raw.destroyed) reply.raw.write(": heartbeat\n\n");
+        if (!backpressured) writeChunk(": heartbeat\n\n");
       }, 20_000);
       let closed = false;
       const close = () => {
@@ -993,6 +1033,7 @@ export async function registerPhotoRoutes(
         unsubscribe();
         clearInterval(poll);
         clearInterval(heartbeat);
+        reply.raw.removeListener("drain", onDrain);
       };
       request.raw.once("close", close);
       reply.raw.once("error", close);

@@ -10,6 +10,7 @@ const items: readonly PublicMediaView[] = Array.from({ length: 5_000 }, (_, inde
     height: 1_280,
     publishSequence: sequence,
     publishedAt: "2026-08-28T00:00:00.000Z",
+    contentRevision: 0,
     variants: [],
     downloads: {
       preview: false,

@@ -197,29 +197,16 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     expect(publicObjectRequests.some((path) => /\/original\./u.test(path))).toBe(false);
 
     for (const kind of ["preview", "original"] as const) {
-      const disabledDownload = await viewer.request.post(
+      const defaultDownload = await viewer.request.post(
         appUrl(`/api/v1/public/albums/${album.album.slug}/downloads/${mediaId}/${kind}`),
         { headers: publicWriteHeaders(crypto.randomUUID()) },
       );
-      expect(disabledDownload.status()).toBe(403);
-      expect((await disabledDownload.json()) as { code: string }).toMatchObject({
-        code: "DOWNLOAD_DISABLED",
-      });
+      expect(defaultDownload.status()).toBe(200);
     }
 
     await page.goto(appUrl(`/studio/albums/${album.album.id}/settings`));
-    const downloadsTab = page.getByRole("tab", { name: "下载" });
-    await expectReactHydrated(downloadsTab);
-    await downloadsTab.click();
-    for (const [name, confirmation] of [
-      ["普通图下载", "普通图下载已更新"],
-      ["照片原图下载", "照片原图下载已更新"],
-    ] as const) {
-      const toggle = page.getByRole("switch", { name });
-      await expectReactHydrated(toggle);
-      await toggle.click();
-      await expect(page.getByText(confirmation)).toBeVisible();
-    }
+    await expect(page.getByRole("switch", { name: "普通图下载" })).toHaveCount(0);
+    await expect(page.getByRole("switch", { name: "照片原图下载" })).toHaveCount(0);
     await page.getByRole("tab", { name: "隐私与投诉" }).click();
     await page.getByLabel("隐私说明").fill("仅用于本次校内活动记录，请勿转发。");
     await page.getByLabel("删除/投诉联系方式").fill("校内影像管理员");
@@ -300,7 +287,13 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await expect(deleteTrigger).toBeFocused();
     await deleteTrigger.click();
     await page.getByLabel(/输入相册标题/u).fill(title);
-    await page.getByRole("button", { name: "确认永久删除" }).click();
+    await page.getByRole("button", { name: "继续", exact: true }).click();
+    const passwordDialog = page.getByRole("dialog").filter({ hasText: "确认永久删除" });
+    await expect(passwordDialog).toBeVisible();
+    const e2ePassword = process.env.E2E_PASSWORD;
+    if (e2ePassword === undefined) throw new Error("E2E_PASSWORD is not configured");
+    await passwordDialog.getByLabel("当前密码").fill(e2ePassword);
+    await passwordDialog.getByRole("button", { name: "永久删除", exact: true }).click();
     await expect(publishedCard.getByText("已删除", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
@@ -417,7 +410,11 @@ test("member routes enforce roles and administration remains accessible", async 
       appUrl(`/api/v1/media/${crypto.randomUUID()}`),
       {
         data: { confirmation: "不应执行" },
-        headers: { origin: baseUrl, "x-csrf-token": currentReviewerCsrf },
+        headers: {
+          origin: baseUrl,
+          "x-csrf-token": currentReviewerCsrf,
+          "x-confirm-password": `Reviewer-${unique}!Pass`,
+        },
       },
     );
     expect(forbiddenDelete.status()).toBe(403);
@@ -432,7 +429,7 @@ test("member routes enforce roles and administration remains accessible", async 
       reviewerPage.getByRole("heading", { name: restrictedAlbum.album.title }),
     ).toBeVisible();
     await expect(reviewerPage.getByRole("link", { name: "审核", exact: true })).toBeVisible();
-    await expect(reviewerPage.getByRole("link", { name: "上传" })).toHaveCount(0);
+    await expect(reviewerPage.getByRole("link", { name: "上传", exact: true })).toHaveCount(0);
     await expect(reviewerPage.getByRole("link", { name: "设置/统计" })).toHaveCount(0);
     await expect(reviewerPage.getByLabel("新增一级分类")).toHaveCount(0);
     await expect(reviewerPage.getByRole("button", { name: /开始直播|结束直播|归档/u })).toHaveCount(

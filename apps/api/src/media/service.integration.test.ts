@@ -445,12 +445,13 @@ maybeDescribe("photo vertical slice transactions", () => {
       type: "media.updated",
       payload: {},
     });
-    const draftEvents = await service.listLiveEvents({
-      slug: created.album.slug,
-      visitorToken: undefined,
-      afterId: 0,
-    });
-    expect(draftEvents.events.map((event) => event.type)).toEqual(["album.notification.updated"]);
+    await expect(
+      service.listLiveEvents({
+        slug: created.album.slug,
+        visitorToken: undefined,
+        afterId: 0,
+      }),
+    ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
 
     await expect(
       service.listAlbumNotifications({ id: operatorId, role: "operator" }, created.album.id),
@@ -459,9 +460,30 @@ maybeDescribe("photo vertical slice transactions", () => {
       service.listAlbumNotifications({ id: adminId, role: "admin" }, created.album.id),
     ).resolves.toHaveLength(1);
 
+    await expect(
+      service.getPublicNotificationState(
+        created.album.slug,
+        undefined,
+        new Date("2026-09-27T10:00:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ code: "ALBUM_PASSWORD_INVALID" });
+
+    await service.startAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId: created.album.id,
+      requestId: "notification-test-start",
+    });
+    const visitor = await service.unlockAlbum(created.album.slug, "school-2026");
+    const liveEvents = await service.listLiveEvents({
+      slug: created.album.slug,
+      visitorToken: visitor.rawToken,
+      afterId: 0,
+    });
+    expect(liveEvents.events.map((event) => event.type)).toContain("album.notification.updated");
+
     const beforeStart = await service.getPublicNotificationState(
       created.album.slug,
-      undefined,
+      visitor.rawToken,
       new Date("2026-09-27T08:59:00.000Z"),
     );
     expect(beforeStart).toMatchObject({
@@ -472,7 +494,7 @@ maybeDescribe("photo vertical slice transactions", () => {
 
     const active = await service.getPublicNotificationState(
       created.album.slug,
-      undefined,
+      visitor.rawToken,
       new Date("2026-09-27T10:00:00.000Z"),
     );
     expect(active).toMatchObject({

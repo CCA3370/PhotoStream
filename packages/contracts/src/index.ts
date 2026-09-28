@@ -613,6 +613,7 @@ export const publicMediaViewSchema = z
     height: z.number().int().positive(),
     publishSequence: z.number().int().positive(),
     publishedAt: z.string().datetime(),
+    contentRevision: z.number().int().min(0),
     variants: z.array(mediaVariantViewSchema),
     downloads: z
       .object({

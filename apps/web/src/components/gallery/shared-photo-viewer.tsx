@@ -164,6 +164,7 @@ export function SharedPhotoViewer({
                 mediaId: media.id,
                 kind: previewKind,
                 bytes: preview.bytes,
+                contentRevision: media.contentRevision,
               })
             : null;
         if (blob === null) {
@@ -192,7 +193,15 @@ export function SharedPhotoViewer({
         setWeChatDownload((current) => (current?.kind === "preview" ? null : current));
       }
     },
-    [media.id, preparedImage?.kind, preview, replacePreparedImage, showSaveHint, slug],
+    [
+      media.contentRevision,
+      media.id,
+      preparedImage?.kind,
+      preview,
+      replacePreparedImage,
+      showSaveHint,
+      slug,
+    ],
   );
 
   const prepareOriginalForWeChat = useCallback(
@@ -203,7 +212,12 @@ export function SharedPhotoViewer({
       }
       setWeChatDownload({ kind: "original", progress: 0 });
       try {
-        let blob = await readCachedOriginalImage(slug, media.id, source.bytes);
+        let blob = await readCachedOriginalImage(
+          slug,
+          media.id,
+          source.bytes,
+          media.contentRevision,
+        );
         if (blob === null) {
           blob = await fetchImageWithProgress({
             url: source.url,
@@ -213,7 +227,7 @@ export function SharedPhotoViewer({
                 current?.kind === "original" ? { ...current, progress } : current,
               ),
           });
-          await writeCachedOriginalImage(slug, media.id, source.bytes, blob);
+          await writeCachedOriginalImage(slug, media.id, source.bytes, blob, media.contentRevision);
         } else {
           setWeChatDownload((current) =>
             current?.kind === "original" ? { ...current, progress: 1 } : current,
@@ -224,7 +238,14 @@ export function SharedPhotoViewer({
         setWeChatDownload((current) => (current?.kind === "original" ? null : current));
       }
     },
-    [media.id, preparedImage?.kind, replacePreparedImage, showSaveHint, slug],
+    [
+      media.contentRevision,
+      media.id,
+      preparedImage?.kind,
+      replacePreparedImage,
+      showSaveHint,
+      slug,
+    ],
   );
 
   if (preview === null) return null;
@@ -269,6 +290,7 @@ export function SharedPhotoViewer({
               <CachedPhotoImage
                 alt="活动照片"
                 bytes={preview.bytes}
+                contentRevision={media.contentRevision}
                 className="object-contain"
                 draggable={false}
                 kind={
@@ -382,6 +404,7 @@ export function SharedPhotoViewer({
                   {canDownloadPreview ? (
                     <DownloadButton
                       bytes={preview.bytes}
+                      contentRevision={media.contentRevision}
                       className={cn(
                         toolbarButtonClass,
                         "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs",
@@ -401,6 +424,7 @@ export function SharedPhotoViewer({
                   {canDownloadOriginal && media.downloads.originalBytes !== null ? (
                     <DownloadButton
                       bytes={media.downloads.originalBytes}
+                      contentRevision={media.contentRevision}
                       className={cn(
                         toolbarButtonClass,
                         "w-full min-w-0 px-2 text-[11px] sm:w-auto sm:px-2.5 sm:text-xs",

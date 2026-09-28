@@ -167,7 +167,7 @@ export class PhotoShareService {
   }) {
     if (!publicVariantKinds.has(options.kind)) throw this.#notFound();
     const context = await this.#sharedContextById(options.shareId);
-    const activeRevisionId = await this.#activeRevisionId(context.media.id);
+    const { activeRevisionId } = await this.#editState(context.media.id);
     if (activeRevisionId !== null) {
       const [editVariant] = await this.#database
         .select()
@@ -182,7 +182,7 @@ export class PhotoShareService {
         )
         .limit(1);
       if (editVariant !== undefined && editVariant.bytes !== null) {
-        const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+        const expiresAt = previewExpiresAt(15 * 60 * 1_000);
         return {
           url: this.#storage.signRead({ key: editVariant.objectKey, expiresAt, stable: true }),
           expiresAt: expiresAt.toISOString(),
@@ -203,7 +203,7 @@ export class PhotoShareService {
       )
       .limit(1);
     if (variant === undefined || variant.bytes === null) throw this.#notFound();
-    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+    const expiresAt = previewExpiresAt(15 * 60 * 1_000);
     return {
       url: this.#storage.signRead({ key: variant.objectKey, expiresAt, stable: true }),
       expiresAt: expiresAt.toISOString(),
@@ -219,7 +219,7 @@ export class PhotoShareService {
   }) {
     const context = await this.#sharedContextById(options.shareId);
     const variantKind = options.kind === "preview" ? "photo_1920" : "photo_original";
-    const activeRevisionId = await this.#activeRevisionId(context.media.id);
+    const { activeRevisionId } = await this.#editState(context.media.id);
     let selected:
       | { readonly objectKey: string; readonly format: string; readonly bytes: number }
       | undefined;
@@ -330,8 +330,9 @@ export class PhotoShareService {
   async #mediaView(albumId: string, mediaId: string): Promise<PublicMediaView> {
     const media = await this.#publishedMedia(albumId, mediaId);
     if (media.publishSequence === null || media.publishedAt === null) throw this.#notFound();
-    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
-    const activeRevisionId = await this.#activeRevisionId(media.id);
+    const expiresAt = previewExpiresAt(15 * 60 * 1_000);
+    const editState = await this.#editState(media.id);
+    const activeRevisionId = editState.activeRevisionId;
 
     if (activeRevisionId !== null) {
       const variants = await this.#database
@@ -361,6 +362,7 @@ export class PhotoShareService {
           height: media.height,
           publishSequence: media.publishSequence,
           publishedAt: iso(media.publishedAt),
+          contentRevision: editState.generation,
           variants: browserVariants.map((variant) => ({
             kind: variant.kind as PhotoVariantKind,
             url: this.#storage.signRead({ key: variant.objectKey, expiresAt, stable: true }),
@@ -396,6 +398,7 @@ export class PhotoShareService {
       height: media.height,
       publishSequence: media.publishSequence,
       publishedAt: iso(media.publishedAt),
+      contentRevision: editState.generation,
       variants: variants
         .filter(
           (variant) =>
@@ -417,13 +420,22 @@ export class PhotoShareService {
     };
   }
 
-  async #activeRevisionId(mediaId: string): Promise<string | null> {
+  async #editState(mediaId: string): Promise<{
+    readonly activeRevisionId: string | null;
+    readonly generation: number;
+  }> {
     const [state] = await this.#database
-      .select({ activeRevisionId: schema.mediaEditStates.activeRevisionId })
+      .select({
+        activeRevisionId: schema.mediaEditStates.activeRevisionId,
+        generation: schema.mediaEditStates.generation,
+      })
       .from(schema.mediaEditStates)
       .where(eq(schema.mediaEditStates.mediaId, mediaId))
       .limit(1);
-    return state?.activeRevisionId ?? null;
+    return {
+      activeRevisionId: state?.activeRevisionId ?? null,
+      generation: state?.generation ?? 0,
+    };
   }
 
   async #publishedMedia(albumId: string, mediaId: string) {

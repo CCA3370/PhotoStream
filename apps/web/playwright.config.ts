@@ -6,6 +6,7 @@ const appOrigin = process.env.E2E_APP_ORIGIN ?? "http://localhost:3000";
 const config = {
   testDir: "./tests/e2e",
   fullyParallel: false,
+  ...(process.env.CI ? { workers: 1 } : {}),
   forbidOnly: true,
   retries: 0,
   reporter: "list" as const,

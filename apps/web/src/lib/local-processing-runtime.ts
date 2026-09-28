@@ -214,6 +214,21 @@ async function listPersistedTasks(albumId: string): Promise<PersistedProcessingT
   }
 }
 
+async function getPersistedTask(id: string): Promise<PersistedProcessingTask | undefined> {
+  if (!processingQueueSupported()) return undefined;
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(storeName, "readonly");
+    const row = await requestResult(
+      transaction.objectStore(storeName).get(id) as IDBRequest<PersistedProcessingTask | undefined>,
+    );
+    await complete(transaction);
+    return row;
+  } finally {
+    database.close();
+  }
+}
+
 async function putPersistedTasks(tasks: readonly PersistedProcessingTask[]): Promise<void> {
   if (tasks.length === 0) return;
   if (!processingQueueSupported()) throw new Error("当前浏览器不支持本地处理队列");
@@ -271,6 +286,7 @@ class LocalProcessingRuntime {
   readonly #abortControllers = new Map<string, AbortController>();
   readonly #intentPromises = new Map<string, Promise<UploadIntentView>>();
   readonly #uploadProgress = new Map<string, Map<string, number>>();
+  readonly #claimingTasks = new Set<string>();
   #bibConfig: BibConfigView | null = null;
   #initialized: Promise<void> | null = null;
   #paused = false;
@@ -455,6 +471,7 @@ class LocalProcessingRuntime {
     ]);
 
     this.#tasks.clear();
+    this.#claimingTasks.clear();
     this.#intentPromises.clear();
     this.#uploadProgress.clear();
     this.#emit();
@@ -512,8 +529,10 @@ class LocalProcessingRuntime {
 
   #pump(): void {
     if (this.#paused || this.#bibConfig === null) return;
-    while (this.#runningTasks < this.#processingLimit) {
-      const queued = [...this.#tasks.values()].filter((task) => task.status === "queued");
+    while (this.#runningTasks + this.#claimingTasks.size < this.#processingLimit) {
+      const queued = [...this.#tasks.values()].filter(
+        (task) => task.status === "queued" && !this.#claimingTasks.has(task.id),
+      );
       if (queued.length === 0) break;
       const next =
         queued.find(
@@ -525,6 +544,42 @@ class LocalProcessingRuntime {
   }
 
   async #runTask(task: ProcessingTask): Promise<void> {
+    if (task.status !== "queued" || this.#claimingTasks.has(task.id)) return;
+    const lockManager =
+      typeof navigator !== "undefined" && "locks" in navigator ? navigator.locks : undefined;
+    if (lockManager === undefined) {
+      await this.#runTaskExclusive(task);
+      return;
+    }
+
+    this.#claimingTasks.add(task.id);
+    let acquired = false;
+    try {
+      await lockManager.request(
+        `photostream-local-processing:${task.id}`,
+        { mode: "exclusive", ifAvailable: true },
+        async (lock) => {
+          if (lock === null) return;
+          acquired = true;
+          const persisted = await getPersistedTask(task.id);
+          if (persisted === undefined) {
+            this.#tasks.delete(task.id);
+            this.#emit();
+            return;
+          }
+          await this.#runTaskExclusive(task);
+        },
+      );
+    } finally {
+      this.#claimingTasks.delete(task.id);
+    }
+    if (!acquired && task.status === "queued" && !this.#purged) {
+      window.setTimeout(() => this.#pump(), 750);
+    }
+    this.#pump();
+  }
+
+  async #runTaskExclusive(task: ProcessingTask): Promise<void> {
     const bibConfig = this.#bibConfig;
     if (bibConfig === null || task.status !== "queued") return;
     task.status = "processing";
@@ -797,5 +852,6 @@ export async function purgeLocalProcessingAlbum(albumId: string): Promise<void> 
 }
 
 subscribeAlbumPurge(({ albumId }) => {
+  if (albumId === null) return;
   void purgeLocalProcessingAlbum(albumId).catch(() => undefined);
 });

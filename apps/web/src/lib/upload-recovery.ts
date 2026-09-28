@@ -99,5 +99,6 @@ export async function deleteUploadRecoveriesForAlbum(albumId: string): Promise<v
 }
 
 subscribeAlbumPurge(({ albumId }) => {
+  if (albumId === null) return;
   void deleteUploadRecoveriesForAlbum(albumId).catch(() => undefined);
 });

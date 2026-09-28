@@ -11,6 +11,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { z } from "zod";
+
 import type { DashboardService } from "./analytics/dashboard-service.js";
 import { argon2PasswordHasher } from "./auth/password.js";
 import { AuthService } from "./auth/service.js";
@@ -74,6 +76,11 @@ export interface BuildAppOptions {
   readonly facePublicStateService?: FacePublicStateService;
   readonly eventBridgeVerifier?: EventBridgeVerifier;
   readonly runtimeMetrics?: RuntimeMetrics;
+  readonly dependencyHealth?: () => Promise<{
+    readonly objectStorage: "ok" | "degraded";
+    readonly faceInfrastructure: "configured" | "disabled";
+    readonly backgroundJobs: "ok" | "degraded";
+  }>;
   readonly logger?: NonNullable<FastifyServerOptions["logger"]>;
 }
 
@@ -215,6 +222,20 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     });
   });
 
+  const dependencyHealthResponseSchema = z
+    .object({
+      status: z.enum(["ok", "degraded"]),
+      core: z.object({ database: z.enum(["ok", "degraded"]) }).strict(),
+      dependencies: z
+        .object({
+          objectStorage: z.enum(["ok", "degraded", "unknown"]),
+          faceInfrastructure: z.enum(["configured", "disabled", "unknown"]),
+          backgroundJobs: z.enum(["ok", "degraded", "unknown"]),
+        })
+        .strict(),
+    })
+    .strict();
+
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.get(
     "/api/v1/health/live",
@@ -251,6 +272,55 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
           retryable: true,
         });
       }
+    },
+  );
+  typed.get(
+    "/api/v1/health/dependencies",
+    {
+      schema: {
+        operationId: "dependencyHealth",
+        tags: ["health"],
+        response: { 200: dependencyHealthResponseSchema },
+      },
+    },
+    async () => {
+      let database: "ok" | "degraded" = "ok";
+      try {
+        await options.authStore.ping();
+      } catch {
+        database = "degraded";
+      }
+
+      let dependencies: {
+        objectStorage: "ok" | "degraded" | "unknown";
+        faceInfrastructure: "configured" | "disabled" | "unknown";
+        backgroundJobs: "ok" | "degraded" | "unknown";
+      } = {
+        objectStorage: "unknown",
+        faceInfrastructure: "unknown",
+        backgroundJobs: "unknown",
+      };
+      if (options.dependencyHealth !== undefined) {
+        try {
+          dependencies = await options.dependencyHealth();
+        } catch {
+          dependencies = {
+            objectStorage: "degraded",
+            faceInfrastructure: "unknown",
+            backgroundJobs: "degraded",
+          };
+        }
+      }
+      return {
+        status:
+          database === "ok" &&
+          dependencies.objectStorage !== "degraded" &&
+          dependencies.backgroundJobs !== "degraded"
+            ? ("ok" as const)
+            : ("degraded" as const),
+        core: { database },
+        dependencies,
+      };
     },
   );
   typed.get(

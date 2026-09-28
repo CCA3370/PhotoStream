@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import {
   type AlbumDeletionProgress,
   type AlbumNotificationView,
@@ -194,42 +194,55 @@ export class PhotoService {
 
   async listAlbumSummaries(actor: InternalActor) {
     const albums = await this.listAlbums(actor);
+    if (albums.length === 0) return [];
+    const albumIds = albums.map((album) => album.id);
+    const [countRows, storageRows] = await Promise.all([
+      this.#database
+        .select({
+          albumId: schema.media.albumId,
+          mediaCount: sql<number>`count(*)::int`,
+          pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.publicationStatus} = 'pending_review')::int`,
+          incompleteCount: sql<number>`count(*) filter (where ${schema.media.ingestStatus} not in ('ready', 'failed', 'cancelled'))::int`,
+        })
+        .from(schema.media)
+        .where(
+          and(
+            inArray(schema.media.albumId, albumIds),
+            sql`${schema.media.publicationStatus} <> 'deleted'`,
+          ),
+        )
+        .groupBy(schema.media.albumId),
+      this.#database
+        .select({
+          albumId: schema.media.albumId,
+          logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint`,
+        })
+        .from(schema.mediaVariants)
+        .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
+        .where(
+          and(inArray(schema.media.albumId, albumIds), eq(schema.mediaVariants.verified, true)),
+        )
+        .groupBy(schema.media.albumId),
+    ]);
+    const countsByAlbum = new Map(countRows.map((row) => [row.albumId, row]));
+    const storageByAlbum = new Map(storageRows.map((row) => [row.albumId, row]));
     return Promise.all(
       albums.map(async (album) => {
-        const [[counts], [storage], deletionProgress] = await Promise.all([
-          this.#database
-            .select({
-              mediaCount: sql<number>`count(*)::int`,
-              pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.publicationStatus} = 'pending_review')::int`,
-              incompleteCount: sql<number>`count(*) filter (where ${schema.media.ingestStatus} not in ('ready', 'failed', 'cancelled'))::int`,
-            })
-            .from(schema.media)
-            .where(
-              and(
-                eq(schema.media.albumId, album.id),
-                sql`${schema.media.publicationStatus} <> 'deleted'`,
-              ),
-            ),
-          this.#database
-            .select({
-              logicalBytes: sql<number>`coalesce(sum(${schema.mediaVariants.bytes}), 0)::bigint`,
-            })
-            .from(schema.mediaVariants)
-            .innerJoin(schema.media, eq(schema.mediaVariants.mediaId, schema.media.id))
-            .where(
-              and(eq(schema.media.albumId, album.id), eq(schema.mediaVariants.verified, true)),
-            ),
-          album.state === "deleting"
-            ? this.#albumDeletionProgress(album, hasPermission(actor.role, "album:configure"))
-            : Promise.resolve(null),
-        ]);
+        const counts = countsByAlbum.get(album.id);
+        const storage = storageByAlbum.get(album.id);
         return {
           ...album,
           mediaCount: counts?.mediaCount ?? 0,
           pendingReviewCount: counts?.pendingReviewCount ?? 0,
           incompleteCount: counts?.incompleteCount ?? 0,
           logicalBytes: Number(storage?.logicalBytes ?? 0),
-          deletionProgress,
+          deletionProgress:
+            album.state === "deleting"
+              ? await this.#albumDeletionProgress(
+                  album,
+                  hasPermission(actor.role, "album:configure"),
+                )
+              : null,
         };
       }),
     );
@@ -632,175 +645,18 @@ export class PhotoService {
     requirePermission(actor.role, "album:read");
     const [row] = await this.#database
       .select({
+        reviewRevision: schema.albumReviewRevisions.revision,
         albumUpdatedAt: schema.albums.updatedAt,
-        reviewCollaborationState: sql<string>`(
-          select coalesce(
-            string_agg(
-              ${schema.albumReviewCollaborators.userId}::text || ':' ||
-              ${schema.users.isActive}::text || ':' ||
-              ${schema.users.role}::text,
-              ',' order by ${schema.albumReviewCollaborators.userId}
-            ),
-            ''
-          )
-          from ${schema.albumReviewCollaborators}
-          inner join ${schema.users}
-            on ${schema.users.id} = ${schema.albumReviewCollaborators.userId}
-          where ${schema.albumReviewCollaborators.albumId} = ${albumId}
-        )`,
-        mediaCount: sql<number>`(
-          select count(*)::int
-          from ${schema.media}
-          where ${schema.media.albumId} = ${albumId}
-        )`,
-        mediaUpdatedAt: sql<Date | null>`(
-          select max(${schema.media.updatedAt})
-          from ${schema.media}
-          where ${schema.media.albumId} = ${albumId}
-        )`,
-        variantCount: sql<number>`(
-          select count(*)::int
-          from ${schema.mediaVariants}
-          where ${schema.mediaVariants.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        variantCompletedAt: sql<Date | null>`(
-          select max(${schema.mediaVariants.completedAt})
-          from ${schema.mediaVariants}
-          where ${schema.mediaVariants.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        featuredCount: sql<number>`(
-          select count(*)::int
-          from ${schema.featuredMedia}
-          where ${schema.featuredMedia.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        featuredAt: sql<Date | null>`(
-          select max(${schema.featuredMedia.featuredAt})
-          from ${schema.featuredMedia}
-          where ${schema.featuredMedia.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        categoryCount: sql<number>`(
-          select count(*)::int
-          from ${schema.categories}
-          where ${schema.categories.albumId} = ${albumId}
-        )`,
-        categoryUpdatedAt: sql<Date | null>`(
-          select max(${schema.categories.updatedAt})
-          from ${schema.categories}
-          where ${schema.categories.albumId} = ${albumId}
-        )`,
-        uploaderUpdatedAt: sql<Date | null>`(
-          select max(${schema.users.updatedAt})
-          from ${schema.users}
-          where ${schema.users.id} in (
-            select distinct ${schema.media.uploaderId}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        bibReviewCount: sql<number>`(
-          select count(*)::int
-          from ${schema.mediaBibReviews}
-          where ${schema.mediaBibReviews.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        bibReviewUpdatedAt: sql<Date | null>`(
-          select max(${schema.mediaBibReviews.updatedAt})
-          from ${schema.mediaBibReviews}
-          where ${schema.mediaBibReviews.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        bibTagCount: sql<number>`(
-          select count(*)::int
-          from ${schema.mediaBibTags}
-          where ${schema.mediaBibTags.albumId} = ${albumId}
-        )`,
-        bibTagUpdatedAt: sql<Date | null>`(
-          select max(${schema.mediaBibTags.updatedAt})
-          from ${schema.mediaBibTags}
-          where ${schema.mediaBibTags.albumId} = ${albumId}
-        )`,
-        editStateCount: sql<number>`(
-          select count(*)::int
-          from ${schema.mediaEditStates}
-          where ${schema.mediaEditStates.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        editStateUpdatedAt: sql<Date | null>`(
-          select max(${schema.mediaEditStates.updatedAt})
-          from ${schema.mediaEditStates}
-          where ${schema.mediaEditStates.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        editRevisionCount: sql<number>`(
-          select count(*)::int
-          from ${schema.mediaEditRevisions}
-          where ${schema.mediaEditRevisions.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        editRevisionUpdatedAt: sql<Date | null>`(
-          select max(${schema.mediaEditRevisions.updatedAt})
-          from ${schema.mediaEditRevisions}
-          where ${schema.mediaEditRevisions.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        deletionCount: sql<number>`(
-          select count(*)::int
-          from ${schema.deletionTasks}
-          where ${schema.deletionTasks.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
-        deletionUpdatedAt: sql<Date | null>`(
-          select max(${schema.deletionTasks.updatedAt})
-          from ${schema.deletionTasks}
-          where ${schema.deletionTasks.mediaId} in (
-            select ${schema.media.id}
-            from ${schema.media}
-            where ${schema.media.albumId} = ${albumId}
-          )
-        )`,
       })
       .from(schema.albums)
+      .leftJoin(
+        schema.albumReviewRevisions,
+        eq(schema.albumReviewRevisions.albumId, schema.albums.id),
+      )
       .where(eq(schema.albums.id, albumId))
       .limit(1);
     if (row === undefined) throw this.#albumNotFound();
-    return createHash("sha256").update(JSON.stringify(row), "utf8").digest("base64url");
+    return `${row.reviewRevision ?? 0}:${row.albumUpdatedAt.getTime()}`;
   }
 
   async getReviewCollaboration(
@@ -1231,6 +1087,9 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
+      if (accessChanged) {
+        await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${album.id})`);
+      }
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.settings.updated",
@@ -1291,6 +1150,7 @@ export class PhotoService {
         .where(eq(schema.albums.id, album.id))
         .returning();
       if (updated === undefined) throw this.#albumNotFound();
+      await transaction.execute(sql`select pg_notify(${liveEventChannel}, ${album.id})`);
       await transaction.insert(schema.auditLogs).values({
         actorUserId: options.actor.id,
         action: "album.password.rotated",
@@ -1479,7 +1339,12 @@ export class PhotoService {
       const countRows = await transaction
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.media)
-        .where(eq(schema.media.albumId, album.id));
+        .where(
+          and(
+            eq(schema.media.albumId, album.id),
+            sql`${schema.media.publicationStatus} <> 'deleted'`,
+          ),
+        );
       if ((countRows[0]?.count ?? 0) >= 5_000) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
@@ -2349,7 +2214,11 @@ export class PhotoService {
       )
       .limit(1);
     if (media === undefined) throw this.#albumNotFound();
-    return this.#refreshVariant(media.id, options.kind, 2 * 60 * 60 * 1_000);
+    return this.#refreshVariant(
+      media.id,
+      options.kind,
+      album.access === "password" ? 15 * 60 * 1_000 : 2 * 60 * 60 * 1_000,
+    );
   }
 
   async refreshInternalVariant(
@@ -3229,7 +3098,9 @@ export class PhotoService {
       current.push(variant);
       byMedia.set(variant.mediaId, current);
     }
-    const expiresAt = previewExpiresAt(2 * 60 * 60 * 1_000);
+    const expiresAt = previewExpiresAt(
+      album.access === "password" ? 15 * 60 * 1_000 : 2 * 60 * 60 * 1_000,
+    );
     const items: PublicMediaView[] = page.map((media) => {
       if (media.publishSequence === null || media.publishedAt === null) {
         throw new Error("Published media lacks publication metadata");
@@ -3262,6 +3133,7 @@ export class PhotoService {
         height: media.height,
         publishSequence: media.publishSequence,
         publishedAt: iso(media.publishedAt),
+        contentRevision: editState?.generation ?? 0,
         variants: browserVariants.map((variant) => {
           if (variant.bytes === null) throw new Error("Verified variant lacks size");
           return {
@@ -3320,7 +3192,7 @@ export class PhotoService {
     now = new Date(),
   ) {
     const album = await this.#viewerAlbumBySlug(slug);
-    if (album.state !== "draft" && !(await this.#isVisitorAuthorized(album, visitorToken))) {
+    if (!(await this.#isVisitorAuthorized(album, visitorToken))) {
       throw new AppError({
         code: "ALBUM_PASSWORD_INVALID",
         message: "相册不可用或口令错误",
@@ -3363,10 +3235,7 @@ export class PhotoService {
     readonly limit?: number;
   }) {
     const album = await this.#viewerAlbumBySlug(options.slug);
-    if (
-      album.state !== "draft" &&
-      !(await this.#isVisitorAuthorized(album, options.visitorToken))
-    ) {
+    if (!(await this.#isVisitorAuthorized(album, options.visitorToken))) {
       throw new AppError({
         code: "ALBUM_PASSWORD_INVALID",
         message: "相册不可用或口令错误",

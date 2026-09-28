@@ -100,6 +100,7 @@ async function prepareGridPreview(media: PublicMediaView, slug: string): Promise
     mediaId: media.id,
     kind: preview.kind,
     bytes: preview.bytes,
+    contentRevision: media.contentRevision,
   };
   await loadDerivedImage({
     ...request,

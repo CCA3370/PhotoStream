@@ -111,12 +111,6 @@ function mergeAlbumUpdate(
     ...(input.description === undefined ? {} : { description: updated.description }),
     ...(input.access === undefined ? {} : { access: updated.access }),
     ...(input.scheduledStartAt === undefined ? {} : { scheduledStartAt: updated.scheduledStartAt }),
-    ...(input.previewDownloadEnabled === undefined
-      ? {}
-      : { previewDownloadEnabled: updated.previewDownloadEnabled }),
-    ...(input.originalDownloadEnabled === undefined
-      ? {}
-      : { originalDownloadEnabled: updated.originalDownloadEnabled }),
     ...(input.privacyNotice === undefined ? {} : { privacyNotice: updated.privacyNotice }),
     updatedAt: updated.updatedAt,
   };
@@ -713,51 +707,6 @@ export function AlbumSettings({
                     )}
                     {isPending("password") ? "更换中" : "设置口令"}
                   </Button>
-                </SettingRow>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden shadow-none">
-              <CardHeader className="border-b py-3.5">
-                <CardTitle>下载权限</CardTitle>
-              </CardHeader>
-              <CardContent className="divide-y p-0">
-                <SettingRow description="允许观众下载普通尺寸图片" title="普通图下载">
-                  {isPending("previewDownload") ? (
-                    <Spinner className="size-4 animate-spin text-muted-foreground" />
-                  ) : (
-                    <Switch
-                      aria-label="普通图下载"
-                      checked={album.previewDownloadEnabled}
-                      onCheckedChange={(checked) =>
-                        void update(
-                          { previewDownloadEnabled: checked },
-                          "普通图下载设置已更新",
-                          "previewDownload",
-                        )
-                      }
-                    />
-                  )}
-                </SettingRow>
-                <SettingRow
-                  description="允许观众下载原始尺寸图片，流量消耗通常更高"
-                  title="原图下载"
-                >
-                  {isPending("originalDownload") ? (
-                    <Spinner className="size-4 animate-spin text-muted-foreground" />
-                  ) : (
-                    <Switch
-                      aria-label="原图下载"
-                      checked={album.originalDownloadEnabled}
-                      onCheckedChange={(checked) =>
-                        void update(
-                          { originalDownloadEnabled: checked },
-                          "原图下载设置已更新",
-                          "originalDownload",
-                        )
-                      }
-                    />
-                  )}
                 </SettingRow>
               </CardContent>
             </Card>

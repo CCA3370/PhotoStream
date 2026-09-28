@@ -2,7 +2,9 @@ import { get } from "node:http";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
+import type { CreatePhotoUploadRequest } from "@photostream/contracts";
 import { createDatabase, createPool, migrateDatabase, schema } from "@photostream/db";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../app.js";
@@ -175,6 +177,9 @@ maybeDescribe("phase 2 local capacity", () => {
     await database.delete(schema.mediaBatchRequests);
     await database.delete(schema.operationRequests);
     await database.delete(schema.uploadParts);
+    await database.delete(schema.mediaEditStates);
+    await database.delete(schema.mediaEditVariants);
+    await database.delete(schema.mediaEditRevisions);
     await database.delete(schema.mediaVariants);
     await database.delete(schema.uploadIntents);
     await database.delete(schema.media);
@@ -283,6 +288,78 @@ maybeDescribe("phase 2 local capacity", () => {
     expect(sequences.at(-1)).toBe(1);
     const paginationP95 = percentile(pageDurations, 0.95);
     expect(paginationP95).toBeLessThan(300);
+
+    const quotaRequest: CreatePhotoUploadRequest = {
+      albumId: album.id,
+      categoryId: null,
+      width: 1_920,
+      height: 1_280,
+      totalBytes: 1_000,
+      capturedAt: null,
+      variants: [
+        {
+          kind: "photo_480" as const,
+          format: "webp",
+          contentType: "image/webp",
+          width: 480,
+          height: 320,
+          bytes: 100,
+        },
+        {
+          kind: "photo_960" as const,
+          format: "webp",
+          contentType: "image/webp",
+          width: 960,
+          height: 640,
+          bytes: 200,
+        },
+        {
+          kind: "photo_1920" as const,
+          format: "webp",
+          contentType: "image/webp",
+          width: 1_920,
+          height: 1_280,
+          bytes: 300,
+        },
+        {
+          kind: "photo_original" as const,
+          format: "jpeg",
+          contentType: "image/jpeg",
+          width: 1_920,
+          height: 1_280,
+          bytes: 400,
+        },
+      ],
+    };
+    await expect(
+      service.createPhotoUpload({
+        actor: { id: user.id, role: "admin" },
+        input: quotaRequest,
+        idempotencyKey: "capacity-full-rejected",
+      }),
+    ).rejects.toMatchObject({ code: "MEDIA_LIMIT_EXCEEDED" });
+
+    const [tombstone] = await database
+      .select({ id: schema.media.id })
+      .from(schema.media)
+      .where(eq(schema.media.albumId, album.id))
+      .limit(1);
+    if (tombstone === undefined) throw new Error("Capacity tombstone fixture missing");
+    await database
+      .update(schema.media)
+      .set({ publicationStatus: "deleted" })
+      .where(eq(schema.media.id, tombstone.id));
+
+    await expect(
+      service.createPhotoUpload({
+        actor: { id: user.id, role: "admin" },
+        input: quotaRequest,
+        idempotencyKey: "capacity-after-tombstone",
+      }),
+    ).resolves.toMatchObject({
+      mediaId: expect.any(String),
+      status: "active",
+    });
 
     const broker = new LiveEventBroker();
     await broker.start(pool);

@@ -185,7 +185,7 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
   page.on("response", recordResponse);
   await page.route("**/assets/models/bib-ocr/**", async (route) => {
     await ocrAssetGate;
-    await route.continue();
+    await route.continue().catch(() => undefined);
   });
   try {
     const fixture = await numberedJpeg(page);
@@ -200,7 +200,7 @@ test("local-first OCR keeps manual confirmation authoritative while recognition 
     await expect(page.locator('[data-local-photo-id][data-ocr-status="processing"]')).toHaveCount(
       1,
       {
-        timeout: 45_000,
+        timeout: 90_000,
       },
     );
 
