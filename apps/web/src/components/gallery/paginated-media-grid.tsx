@@ -511,6 +511,38 @@ export function PaginatedMediaGrid({
         : eligiblePages.flatMap((page) => orderFeaturedMedia(page, featuredIds)),
     [eligiblePages, featuredIds, renderFeaturedOnly],
   );
+  const lockEmptyViewport = cursor === null && visibleItems.length === 0;
+
+  useEffect(() => {
+    if (!lockEmptyViewport) return;
+
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflowY = root.style.overflowY;
+    const previousBodyOverflowY = body.style.overflowY;
+    const previousRootOverscrollY = root.style.overscrollBehaviorY;
+    const previousBodyOverscrollY = body.style.overscrollBehaviorY;
+    const previousScrollbarGutter = root.style.getPropertyValue("scrollbar-gutter");
+
+    window.scrollTo({ top: 0, left: window.scrollX, behavior: "auto" });
+    root.style.overflowY = "hidden";
+    body.style.overflowY = "hidden";
+    root.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+    root.style.setProperty("scrollbar-gutter", "stable");
+
+    return () => {
+      root.style.overflowY = previousRootOverflowY;
+      body.style.overflowY = previousBodyOverflowY;
+      root.style.overscrollBehaviorY = previousRootOverscrollY;
+      body.style.overscrollBehaviorY = previousBodyOverscrollY;
+      if (previousScrollbarGutter.length > 0) {
+        root.style.setProperty("scrollbar-gutter", previousScrollbarGutter);
+      } else {
+        root.style.removeProperty("scrollbar-gutter");
+      }
+    };
+  }, [lockEmptyViewport]);
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
