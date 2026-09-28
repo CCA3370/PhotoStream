@@ -440,7 +440,9 @@ maybeDescribe("PostgreSQL identity schema", () => {
         outputOptionId: gradeA,
         sortOrder: 0,
       }),
-    ).rejects.toThrow(/legacy bib mapping output option must belong to the same album and dimension/u);
+    ).rejects.toThrow(
+      /legacy bib mapping output option must belong to the same album and dimension/u,
+    );
 
     await expect(
       database.insert(schema.mediaBibTags).values({
