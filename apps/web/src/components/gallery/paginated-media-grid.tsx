@@ -185,6 +185,7 @@ export function PaginatedMediaGrid({
     () => new Set(initialFeaturedIds),
   );
   const featuredIdsRef = useRef<ReadonlySet<string>>(new Set(initialFeaturedIds));
+  const featuredOnlyRef = useRef(featuredOnly);
   const [preparedLiveIds, setPreparedLiveIds] = useState<ReadonlySet<string>>(() => new Set());
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loading, setLoading] = useState(false);
@@ -202,6 +203,11 @@ export function PaginatedMediaGrid({
   const pageSize = dataSaverEnabled ? dataSaverMediaPageSize : publicMediaPageSize;
 
   const allItems = useMemo(() => pages.flat(), [pages]);
+
+  useEffect(() => {
+    featuredOnlyRef.current = featuredOnly;
+    if (!featuredOnly) pendingFeaturedIdsRef.current = [];
+  }, [featuredOnly]);
 
   useEffect(() => {
     if (renderFeaturedOnly === featuredOnly) {
@@ -226,7 +232,7 @@ export function PaginatedMediaGrid({
     (mediaIds: readonly string[]) => {
       const next = new Set(mediaIds);
       const current = featuredIdsRef.current;
-      if (!featuredOnly) {
+      if (!featuredOnlyRef.current) {
         pendingFeaturedIdsRef.current = [];
         featuredIdsRef.current = next;
         setFeaturedIds((rendered) => (sameStringSet(rendered, next) ? rendered : next));
@@ -259,7 +265,7 @@ export function PaginatedMediaGrid({
       setFeaturedIds(visible);
       restoreViewportAnchor(viewportAnchor);
     },
-    [featuredOnly],
+    [],
   );
 
   const refreshFeatured = useCallback(async () => {
