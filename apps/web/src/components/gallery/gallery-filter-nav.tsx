@@ -43,6 +43,7 @@ export function GalleryFilterNav({
     [categories],
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -55,6 +56,34 @@ export function GalleryFilterNav({
     if (selectedRect.left >= containerRect.left && selectedRect.right <= containerRect.right) return;
     selected.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [selectedKey]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    const indicator = indicatorRef.current;
+    if (container === null || indicator === null) return;
+
+    const updateIndicator = () => {
+      const selected = container.querySelector<HTMLElement>(
+        `[data-gallery-filter-key="${CSS.escape(selectedKey)}"]`,
+      );
+      if (selected === null) {
+        indicator.style.opacity = "0";
+        return;
+      }
+
+      const inset = window.matchMedia("(min-width: 1024px)").matches ? 12 : 8;
+      indicator.style.width = `${Math.max(0, selected.offsetWidth - inset * 2)}px`;
+      indicator.style.transform = `translate3d(${selected.offsetLeft + inset}px, 0, 0)`;
+      indicator.style.opacity = "1";
+    };
+
+    updateIndicator();
+
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, [items, selectedKey]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -107,15 +136,20 @@ export function GalleryFilterNav({
         className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         ref={scrollRef}
       >
-        <div className="flex h-full w-max items-stretch pr-2 sm:pr-3">
+        <div className="relative flex h-full w-max items-stretch pr-2 sm:pr-3">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-primary opacity-0 transition-[transform,width,opacity] duration-300 ease-out motion-reduce:transition-none"
+            ref={indicatorRef}
+          />
           {items.map((item) => {
             const active = selectedKey === item.key;
             return (
               <button
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex h-full shrink-0 touch-manipulation items-center justify-center bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-wait disabled:opacity-70 sm:px-3.5 lg:px-5 lg:text-[15px] lg:after:inset-x-3",
-                  active && "text-foreground after:bg-primary",
+                  "relative flex h-full shrink-0 touch-manipulation items-center justify-center bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-wait disabled:opacity-70 sm:px-3.5 lg:px-5 lg:text-[15px]",
+                  active && "text-foreground",
                 )}
                 data-gallery-filter-key={item.key}
                 disabled={pendingKey !== null}
