@@ -15,6 +15,22 @@ if (databaseUrl !== undefined && new URL(databaseUrl).pathname !== "/photostream
 }
 const maybeDescribe = databaseUrl === undefined ? describe.skip : describe;
 
+async function expectDatabaseRejection(operation: Promise<unknown>, pattern: RegExp): Promise<void> {
+  try {
+    await operation;
+  } catch (error) {
+    const messages: string[] = [];
+    let current: unknown = error;
+    for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+      messages.push(current.message);
+      current = current.cause;
+    }
+    expect(messages.join("\n")).toMatch(pattern);
+    return;
+  }
+  throw new Error("Expected database operation to be rejected");
+}
+
 maybeDescribe("PostgreSQL identity schema", () => {
   const pool = createPool(databaseUrl ?? "");
   const database = createDatabase(pool);
@@ -294,7 +310,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       throw new Error("Expected inserted invariant categories");
     }
 
-    await expect(
+    await expectDatabaseRejection(
       database.insert(schema.media).values({
         albumId: albumA.id,
         categoryId: categoryB.id,
@@ -304,7 +320,8 @@ maybeDescribe("PostgreSQL identity schema", () => {
         mediaType: "image/jpeg",
         totalBytes: 100,
       }),
-    ).rejects.toThrow(/media category must belong to the same album/u);
+      /media category must belong to the same album/u,
+    );
 
     const [mediaA] = await database
       .insert(schema.media)
@@ -375,7 +392,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       },
     ]);
 
-    await expect(
+    await expectDatabaseRejection(
       database.insert(schema.bibAttributeOptions).values({
         id: "019d2000-0000-7000-8000-000000000006",
         albumId: albumA.id,
@@ -386,7 +403,8 @@ maybeDescribe("PostgreSQL identity schema", () => {
         enabled: true,
         parentGradeOptionId: gradeB,
       }),
-    ).rejects.toThrow(/class option parent must be a grade option in the same album/u);
+      /class option parent must be a grade option in the same album/u,
+    );
 
     const tagBase = {
       mediaId: mediaA.id,
@@ -401,7 +419,7 @@ maybeDescribe("PostgreSQL identity schema", () => {
       createdBy: admin.id,
     };
 
-    await expect(
+    await expectDatabaseRejection(
       database.insert(schema.mediaBibTags).values({
         ...tagBase,
         albumId: albumB.id,
@@ -409,9 +427,10 @@ maybeDescribe("PostgreSQL identity schema", () => {
         gradeOptionId: gradeB,
         classOptionId: null,
       }),
-    ).rejects.toThrow(/bib tag media must belong to the same album/u);
+      /bib tag media must belong to the same album/u,
+    );
 
-    await expect(
+    await expectDatabaseRejection(
       database.insert(schema.mediaBibTags).values({
         ...tagBase,
         albumId: albumA.id,
@@ -419,9 +438,10 @@ maybeDescribe("PostgreSQL identity schema", () => {
         gradeOptionId: gradeB,
         classOptionId: null,
       }),
-    ).rejects.toThrow(/bib tag grade option must belong to the same album and grade dimension/u);
+      /bib tag grade option must belong to the same album and grade dimension/u,
+    );
 
-    await expect(
+    await expectDatabaseRejection(
       database.insert(schema.mediaBibTags).values({
         ...tagBase,
         albumId: albumA.id,
@@ -429,9 +449,10 @@ maybeDescribe("PostgreSQL identity schema", () => {
         gradeOptionId: gradeA,
         classOptionId: classA2,
       }),
-    ).rejects.toThrow(/bib tag class option must belong to the selected grade option/u);
+      /bib tag class option must belong to the selected grade option/u,
+    );
 
-    await expect(
+    await expectDatabaseRejection(
       database.insert(schema.bibAttributeMappingsLegacy).values({
         albumId: albumA.id,
         dimension: "class",
@@ -440,7 +461,6 @@ maybeDescribe("PostgreSQL identity schema", () => {
         outputOptionId: gradeA,
         sortOrder: 0,
       }),
-    ).rejects.toThrow(
       /legacy bib mapping output option must belong to the same album and dimension/u,
     );
 
