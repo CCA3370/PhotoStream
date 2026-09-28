@@ -21,14 +21,12 @@ export function GalleryFilterNav({
   featuredOnly,
   onFeaturedChange,
   onSelect,
-  pendingKey = null,
   selectedKey,
 }: Readonly<{
   categories: readonly GalleryCategory[];
   featuredOnly: boolean;
   onFeaturedChange: (featuredOnly: boolean) => void;
   onSelect: (selection: GalleryFilterSelection) => void;
-  pendingKey?: string | null;
   selectedKey: string;
 }>) {
   const items = useMemo<readonly GalleryFilterSelection[]>(
@@ -51,10 +49,32 @@ export function GalleryFilterNav({
       `[data-gallery-filter-key="${CSS.escape(selectedKey)}"]`,
     );
     if (container === null || selected === undefined || selected === null) return;
-    const containerRect = container.getBoundingClientRect();
-    const selectedRect = selected.getBoundingClientRect();
-    if (selectedRect.left >= containerRect.left && selectedRect.right <= containerRect.right) return;
-    selected.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+
+    const frame = window.requestAnimationFrame(() => {
+      const containerRect = container.getBoundingClientRect();
+      const selectedRect = selected.getBoundingClientRect();
+      const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+      const currentScrollLeft = container.scrollLeft;
+      const edgeInset = Math.min(
+        window.matchMedia("(min-width: 1024px)").matches ? 88 : 64,
+        container.clientWidth * 0.24,
+      );
+      const canRevealLeft = currentScrollLeft > 1;
+      const canRevealRight = currentScrollLeft < maxScrollLeft - 1;
+      let targetScrollLeft = currentScrollLeft;
+
+      if (canRevealRight && selectedRect.right > containerRect.right - edgeInset) {
+        targetScrollLeft += selectedRect.right - (containerRect.right - edgeInset);
+      } else if (canRevealLeft && selectedRect.left < containerRect.left + edgeInset) {
+        targetScrollLeft += selectedRect.left - (containerRect.left + edgeInset);
+      }
+
+      targetScrollLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
+      if (Math.abs(targetScrollLeft - currentScrollLeft) < 1) return;
+      container.scrollTo({ left: targetScrollLeft, behavior: "smooth" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [selectedKey]);
 
   useEffect(() => {
@@ -148,11 +168,10 @@ export function GalleryFilterNav({
               <button
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex h-full shrink-0 touch-manipulation items-center justify-center bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] disabled:cursor-wait disabled:opacity-70 sm:px-3.5 lg:px-5 lg:text-[15px]",
+                  "relative flex h-full shrink-0 touch-manipulation items-center justify-center bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px] sm:px-3.5 lg:px-5 lg:text-[15px]",
                   active && "text-foreground",
                 )}
                 data-gallery-filter-key={item.key}
-                disabled={pendingKey !== null}
                 key={item.key}
                 onClick={() => onSelect(item)}
                 type="button"
@@ -168,10 +187,9 @@ export function GalleryFilterNav({
         <button
           aria-pressed={featuredOnly}
           className={cn(
-            "flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-border/80 bg-muted/25 px-2.5 text-sm font-medium text-foreground shadow-xs transition-[background-color,border-color,color] duration-150 hover:border-border hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70 lg:h-9 lg:px-3 lg:text-[15px]",
+            "flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-border/80 bg-muted/25 px-2.5 text-sm font-medium text-foreground shadow-xs transition-[background-color,border-color,color] duration-150 hover:border-border hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 lg:h-9 lg:px-3 lg:text-[15px]",
             featuredOnly && "border-primary/35 bg-primary/10 text-primary hover:border-primary/45 hover:bg-primary/15",
           )}
-          disabled={pendingKey !== null}
           onClick={() => onFeaturedChange(!featuredOnly)}
           type="button"
         >
