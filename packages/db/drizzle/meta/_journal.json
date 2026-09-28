@@ -309,6 +309,13 @@
       "when": 1790582100000,
       "tag": "0043_analytics_review_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790586000000,
+      "tag": "0044_db_business_invariants",
+      "breakpoints": true
     }
   ]
 }
