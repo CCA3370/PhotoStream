@@ -56,6 +56,47 @@ export function GalleryFilterNav({
     selected.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [selectedKey]);
 
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (container === null) return;
+
+    let animationFrame: number | null = null;
+
+    const updateLabelFades = () => {
+      animationFrame = null;
+      const rightEdge = container.getBoundingClientRect().right;
+
+      for (const label of container.querySelectorAll<HTMLElement>("[data-gallery-filter-label]")) {
+        const rect = label.getBoundingClientRect();
+        if (rect.width <= 0) {
+          label.style.opacity = "1";
+          continue;
+        }
+
+        const visibleWidth = Math.max(0, Math.min(rect.width, rightEdge - rect.left));
+        const visibleRatio = visibleWidth / rect.width;
+        label.style.opacity = visibleRatio >= 0.999 ? "1" : String(visibleRatio * visibleRatio);
+      }
+    };
+
+    const scheduleLabelFadeUpdate = () => {
+      if (animationFrame !== null) return;
+      animationFrame = window.requestAnimationFrame(updateLabelFades);
+    };
+
+    updateLabelFades();
+    container.addEventListener("scroll", scheduleLabelFadeUpdate, { passive: true });
+
+    const resizeObserver = new ResizeObserver(scheduleLabelFadeUpdate);
+    resizeObserver.observe(container);
+
+    return () => {
+      container.removeEventListener("scroll", scheduleLabelFadeUpdate);
+      resizeObserver.disconnect();
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [items]);
+
   return (
     <nav
       aria-label="相册筛选"
@@ -82,7 +123,7 @@ export function GalleryFilterNav({
                 onClick={() => onSelect(item)}
                 type="button"
               >
-                {item.label}
+                <span data-gallery-filter-label>{item.label}</span>
               </button>
             );
           })}
@@ -90,10 +131,6 @@ export function GalleryFilterNav({
       </div>
 
       <div className="relative flex shrink-0 items-center border-l-2 border-foreground/30 bg-transparent px-2.5 sm:px-3.5 lg:px-4">
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 -left-4 w-4 bg-gradient-to-r from-transparent to-background/82 supports-[backdrop-filter]:to-background/70"
-        />
         <button
           aria-pressed={featuredOnly}
           className={cn(
