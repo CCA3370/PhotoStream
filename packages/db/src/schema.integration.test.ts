@@ -15,7 +15,10 @@ if (databaseUrl !== undefined && new URL(databaseUrl).pathname !== "/photostream
 }
 const maybeDescribe = databaseUrl === undefined ? describe.skip : describe;
 
-async function expectDatabaseRejection(operation: Promise<unknown>, pattern: RegExp): Promise<void> {
+async function expectDatabaseRejection(
+  operation: Promise<unknown>,
+  pattern: RegExp,
+): Promise<void> {
   try {
     await operation;
   } catch (error) {
