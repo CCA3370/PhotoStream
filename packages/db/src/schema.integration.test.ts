@@ -246,6 +246,213 @@ maybeDescribe("PostgreSQL identity schema", () => {
     expect(forbiddenColumns.rows).toEqual([]);
   });
 
+  it("enforces cross-album media and bib invariants in PostgreSQL", async () => {
+    const admin = await insertAdmin();
+    const [albumA, albumB] = await database
+      .insert(schema.albums)
+      .values([
+        {
+          slug: "db-invariant-a",
+          title: "DB invariant A",
+          access: "password",
+          passwordHash: "hash:a",
+          idempotencyKey: "db-invariant-a",
+          createdBy: admin.id,
+        },
+        {
+          slug: "db-invariant-b",
+          title: "DB invariant B",
+          access: "password",
+          passwordHash: "hash:b",
+          idempotencyKey: "db-invariant-b",
+          createdBy: admin.id,
+        },
+      ])
+      .returning();
+    if (albumA === undefined || albumB === undefined) {
+      throw new Error("Expected inserted invariant albums");
+    }
+
+    const [categoryA, categoryB] = await database
+      .insert(schema.categories)
+      .values([
+        {
+          albumId: albumA.id,
+          name: "A",
+          idempotencyKey: "db-invariant-category-a",
+          createdBy: admin.id,
+        },
+        {
+          albumId: albumB.id,
+          name: "B",
+          idempotencyKey: "db-invariant-category-b",
+          createdBy: admin.id,
+        },
+      ])
+      .returning();
+    if (categoryA === undefined || categoryB === undefined) {
+      throw new Error("Expected inserted invariant categories");
+    }
+
+    await expect(
+      database.insert(schema.media).values({
+        albumId: albumA.id,
+        categoryId: categoryB.id,
+        uploaderId: admin.id,
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      }),
+    ).rejects.toThrow(/media category must belong to the same album/u);
+
+    const [mediaA] = await database
+      .insert(schema.media)
+      .values({
+        albumId: albumA.id,
+        categoryId: categoryA.id,
+        uploaderId: admin.id,
+        width: 100,
+        height: 100,
+        mediaType: "image/jpeg",
+        totalBytes: 100,
+      })
+      .returning();
+    if (mediaA === undefined) throw new Error("Expected inserted invariant media");
+
+    const gradeA = "019d2000-0000-7000-8000-000000000001";
+    const gradeB = "019d2000-0000-7000-8000-000000000002";
+    const gradeA2 = "019d2000-0000-7000-8000-000000000003";
+    const classA = "019d2000-0000-7000-8000-000000000004";
+    const classA2 = "019d2000-0000-7000-8000-000000000005";
+    await database.insert(schema.bibAttributeOptions).values([
+      {
+        id: gradeA,
+        albumId: albumA.id,
+        dimension: "grade",
+        displayName: "A 年级 1",
+        sortOrder: 0,
+        ordinal: 0,
+        enabled: true,
+      },
+      {
+        id: gradeA2,
+        albumId: albumA.id,
+        dimension: "grade",
+        displayName: "A 年级 2",
+        sortOrder: 1,
+        ordinal: 1,
+        enabled: true,
+      },
+      {
+        id: gradeB,
+        albumId: albumB.id,
+        dimension: "grade",
+        displayName: "B 年级",
+        sortOrder: 0,
+        ordinal: 0,
+        enabled: true,
+      },
+      {
+        id: classA,
+        albumId: albumA.id,
+        dimension: "class",
+        displayName: "A 1班",
+        sortOrder: 0,
+        ordinal: 0,
+        enabled: true,
+        parentGradeOptionId: gradeA,
+      },
+      {
+        id: classA2,
+        albumId: albumA.id,
+        dimension: "class",
+        displayName: "A 2班",
+        sortOrder: 1,
+        ordinal: 0,
+        enabled: true,
+        parentGradeOptionId: gradeA2,
+      },
+    ]);
+
+    await expect(
+      database.insert(schema.bibAttributeOptions).values({
+        id: "019d2000-0000-7000-8000-000000000006",
+        albumId: albumA.id,
+        dimension: "class",
+        displayName: "跨活动班级",
+        sortOrder: 2,
+        ordinal: 1,
+        enabled: true,
+        parentGradeOptionId: gradeB,
+      }),
+    ).rejects.toThrow(/class option parent must be a grade option in the same album/u);
+
+    const tagBase = {
+      mediaId: mediaA.id,
+      numberCiphertext: "ciphertext",
+      numberIv: "0".repeat(24),
+      numberAuthTag: "1".repeat(24),
+      keyVersion: "test-v1",
+      status: "confirmed" as const,
+      source: "manual" as const,
+      ruleVersion: 1,
+      mappingVersion: 1,
+      createdBy: admin.id,
+    };
+
+    await expect(
+      database.insert(schema.mediaBibTags).values({
+        ...tagBase,
+        albumId: albumB.id,
+        blindIndex: "a".repeat(64),
+        gradeOptionId: gradeB,
+        classOptionId: null,
+      }),
+    ).rejects.toThrow(/bib tag media must belong to the same album/u);
+
+    await expect(
+      database.insert(schema.mediaBibTags).values({
+        ...tagBase,
+        albumId: albumA.id,
+        blindIndex: "b".repeat(64),
+        gradeOptionId: gradeB,
+        classOptionId: null,
+      }),
+    ).rejects.toThrow(/bib tag grade option must belong to the same album and grade dimension/u);
+
+    await expect(
+      database.insert(schema.mediaBibTags).values({
+        ...tagBase,
+        albumId: albumA.id,
+        blindIndex: "c".repeat(64),
+        gradeOptionId: gradeA,
+        classOptionId: classA2,
+      }),
+    ).rejects.toThrow(/bib tag class option must belong to the selected grade option/u);
+
+    await expect(
+      database.insert(schema.bibAttributeMappingsLegacy).values({
+        albumId: albumA.id,
+        dimension: "class",
+        startPosition: 1,
+        width: 1,
+        outputOptionId: gradeA,
+        sortOrder: 0,
+      }),
+    ).rejects.toThrow(/legacy bib mapping output option must belong to the same album and dimension/u);
+
+    await expect(
+      database.insert(schema.mediaBibTags).values({
+        ...tagBase,
+        albumId: albumA.id,
+        blindIndex: "d".repeat(64),
+        gradeOptionId: gradeA,
+        classOptionId: classA,
+      }),
+    ).resolves.toBeDefined();
+  });
+
   it("compacts legacy exact bib mappings without deleting rollback data", async () => {
     const admin = await insertAdmin();
     const [album] = await database
