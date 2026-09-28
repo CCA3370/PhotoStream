@@ -10,7 +10,6 @@ import {
 } from "@/components/gallery/gallery-filter-nav";
 import { PaginatedMediaGrid } from "@/components/gallery/paginated-media-grid";
 import { ErrorDialog } from "@/components/ui/error-dialog";
-import { Spinner } from "@/components/ui/spinner";
 import { clientGet } from "@/lib/client-api";
 import { userFacingErrorMessage } from "@/lib/user-facing-error";
 
@@ -52,6 +51,12 @@ interface BrowserState {
   readonly visibilityNow: number;
 }
 
+interface LoadedFilter {
+  readonly categoryId?: string;
+  readonly filterKey: string;
+  readonly label: string;
+}
+
 export function GalleryBrowser({
   attributeFilterEnabled,
   attributeOptions,
@@ -88,18 +93,26 @@ export function GalleryBrowser({
   slug: string;
 }>) {
   const initialCategory = categories.find((category) => category.id === initialFilterKey);
-  const [state, setState] = useState<BrowserState>(() => ({
+  const initialLoadedFilter: LoadedFilter = {
     ...(initialCategory === undefined ? {} : { categoryId: initialCategory.id }),
-    featuredOnly: initialFeaturedOnly,
     filterKey: initialCategory?.id ?? "all",
     label: initialCategory?.name ?? "全部",
+  };
+  const [state, setState] = useState<BrowserState>(() => ({
+    ...(initialLoadedFilter.categoryId === undefined
+      ? {}
+      : { categoryId: initialLoadedFilter.categoryId }),
+    featuredOnly: initialFeaturedOnly,
+    filterKey: initialLoadedFilter.filterKey,
+    label: initialLoadedFilter.label,
     page: initialPage,
     revision: 0,
     visibilityNow: initialVisibilityNow,
   }));
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const selectedFilterKeyRef = useRef(initialLoadedFilter.filterKey);
+  const loadedFilterRef = useRef<LoadedFilter>(initialLoadedFilter);
   const pageSize = dataSaverEnabled ? 30 : 60;
   const sectionTitle = state.featuredOnly
     ? state.filterKey === "all"
@@ -109,13 +122,24 @@ export function GalleryBrowser({
 
   const selectFilter = useCallback(
     async (selection: GalleryFilterSelection): Promise<void> => {
-      if (selection.key === state.filterKey || pendingKey !== null) return;
+      if (selection.key === selectedFilterKeyRef.current) return;
 
       requestRef.current?.abort();
+      requestRef.current = null;
+      selectedFilterKeyRef.current = selection.key;
+      setError(null);
+
+      setState((current) => ({
+        ...current,
+        filterKey: selection.key,
+        label: selection.label,
+      }));
+
+      const loadedFilter = loadedFilterRef.current;
+      if (selection.key === loadedFilter.filterKey) return;
+
       const controller = new AbortController();
       requestRef.current = controller;
-      setPendingKey(selection.key);
-      setError(null);
 
       try {
         const query = new URLSearchParams({ limit: String(pageSize) });
@@ -124,27 +148,48 @@ export function GalleryBrowser({
           `/api/v1/public/albums/${slug}/media?${query.toString()}`,
           controller.signal,
         );
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestRef.current !== controller) return;
 
-        const visibilityNow = Date.now();
-        setState((current) => ({
+        const nextLoadedFilter: LoadedFilter = {
           ...(selection.categoryId === undefined ? {} : { categoryId: selection.categoryId }),
-          featuredOnly: current.featuredOnly,
           filterKey: selection.key,
           label: selection.label,
-          page,
-          revision: current.revision + 1,
-          visibilityNow,
-        }));
+        };
+        loadedFilterRef.current = nextLoadedFilter;
+
+        const visibilityNow = Date.now();
+        setState((current) => {
+          if (selectedFilterKeyRef.current !== selection.key) return current;
+          return {
+            ...(selection.categoryId === undefined ? {} : { categoryId: selection.categoryId }),
+            featuredOnly: current.featuredOnly,
+            filterKey: selection.key,
+            label: selection.label,
+            page,
+            revision: current.revision + 1,
+            visibilityNow,
+          };
+        });
       } catch (caught) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestRef.current !== controller) return;
+
+        const fallback = loadedFilterRef.current;
+        selectedFilterKeyRef.current = fallback.filterKey;
+        setState((current) => ({
+          ...(fallback.categoryId === undefined ? {} : { categoryId: fallback.categoryId }),
+          featuredOnly: current.featuredOnly,
+          filterKey: fallback.filterKey,
+          label: fallback.label,
+          page: current.page,
+          revision: current.revision,
+          visibilityNow: current.visibilityNow,
+        }));
         setError(userFacingErrorMessage(caught, "切换照片筛选失败，请稍后重试。"));
       } finally {
         if (requestRef.current === controller) requestRef.current = null;
-        if (!controller.signal.aborted) setPendingKey(null);
       }
     },
-    [pageSize, pendingKey, slug, state.filterKey],
+    [pageSize, slug],
   );
 
   const setFeaturedOnly = useCallback((featuredOnly: boolean) => {
@@ -167,7 +212,7 @@ export function GalleryBrowser({
       initialPage={state.page}
       {...(state.revision === 0 && initialSelectedId !== undefined ? { initialSelectedId } : {})}
       initialVisibilityNow={state.visibilityNow}
-      key={`${state.filterKey}:${state.revision}`}
+      key={`${state.categoryId ?? "all"}:${state.revision}`}
       slug={slug}
     />
   );
@@ -195,22 +240,8 @@ export function GalleryBrowser({
         featuredOnly={state.featuredOnly}
         onFeaturedChange={setFeaturedOnly}
         onSelect={(selection) => void selectFilter(selection)}
-        pendingKey={pendingKey}
         selectedKey={state.filterKey}
       />
-
-      {pendingKey !== null ? (
-        <div
-          aria-live="polite"
-          className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
-          role="status"
-        >
-          <div className="flex size-11 items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur">
-            <Spinner aria-hidden="true" className="size-5 animate-spin text-foreground/80" />
-            <span className="sr-only">正在加载照片</span>
-          </div>
-        </div>
-      ) : null}
 
       <section aria-label={sectionTitle} className="flex flex-col gap-2.5 sm:gap-3">
         {content}
