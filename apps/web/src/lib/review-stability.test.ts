@@ -114,6 +114,24 @@ describe("management review stability guards", () => {
     expect(lightbox).toContain("localPhotoId={selected.localPhotoId}");
   });
 
+  it("keeps the docked inspector compact and free of redundant media labels", () => {
+    const source = readFileSync(inspectorPath, "utf8");
+
+    expect(source).toContain('>图片属性</p>');
+    expect(source).not.toContain("{item.title}</p>");
+    expect(source).not.toContain("statusLabel(item.publicationStatus)");
+    expect(source).not.toContain("{item.sourceLabel}");
+    expect(source).toContain('{item.featured ? "取消精选" : "精选"}');
+    expect(source).toContain('className="grid grid-cols-2 gap-2"');
+    expect(source).toContain(">图片信息</h3>");
+    expect(source).toContain('>尺寸</dt>');
+    expect(source).toContain('>大小</dt>');
+    expect(source).not.toContain(">只读信息</h3>");
+    expect(source).not.toContain(">上传者</dt>");
+    expect(source).not.toContain(">处理状态</dt>");
+    expect(source).not.toContain(">媒体 ID</dt>");
+  });
+
   it("docks the management inspector beside the image and opens it by default", () => {
     const lightbox = readFileSync(lightboxPath, "utf8");
     const inspector = readFileSync(inspectorPath, "utf8");
