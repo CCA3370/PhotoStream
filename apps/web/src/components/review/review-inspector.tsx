@@ -137,7 +137,12 @@ export function ReviewInspector({
           : "sticky top-20 max-h-[calc(100dvh-6rem)] rounded-xl border shadow-sm",
       )}
     >
-      <div className="flex items-start gap-3 border-b p-4">
+      <div
+        className={cn(
+          "flex items-start border-b",
+          docked ? "gap-2 px-3 py-3" : "gap-3 p-4",
+        )}
+      >
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.title}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -159,8 +164,8 @@ export function ReviewInspector({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="flex flex-col gap-5">
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", docked ? "p-3" : "p-4")}>
+        <div className={cn("flex flex-col", docked ? "gap-4" : "gap-5")}>
           <section className="flex flex-col gap-2.5">
             <h3 className="text-xs font-semibold text-muted-foreground">照片属性</h3>
             <div className="flex flex-col gap-1.5 text-xs font-medium">
@@ -191,7 +196,7 @@ export function ReviewInspector({
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className={cn("grid gap-2", docked ? "grid-cols-1" : "grid-cols-2")}>
               <Button disabled={busy} onClick={onToggleFeatured} type="button" variant="outline">
                 <StarIcon
                   className={item.featured ? "fill-current" : undefined}
@@ -262,7 +267,14 @@ export function ReviewInspector({
 
           <section className="border-t pt-4">
             <h3 className="mb-2.5 text-xs font-semibold text-muted-foreground">只读信息</h3>
-            <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
+            <dl
+              className={cn(
+                "grid gap-y-2 text-xs",
+                docked
+                  ? "grid-cols-[4rem_minmax(0,1fr)] gap-x-2"
+                  : "grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3",
+              )}
+            >
               <dt className="text-muted-foreground">上传者</dt>
               <dd className="truncate text-right">{item.uploaderName ?? "本机"}</dd>
               <dt className="text-muted-foreground">尺寸</dt>
