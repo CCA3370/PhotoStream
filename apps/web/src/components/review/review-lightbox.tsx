@@ -43,6 +43,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { categoryShortcutMatches } from "@/lib/category-shortcut";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import {
   type MediaEditSourceOrigin,
@@ -337,6 +338,21 @@ export function ReviewLightbox({
         }
         return;
       }
+      const shortcutCategory =
+        !readOnly && !event.repeat && selected.pendingAction === null
+          ? categories.find(
+              (category) =>
+                category.shortcut != null && categoryShortcutMatches(event, category.shortcut),
+            )
+          : undefined;
+      if (shortcutCategory !== undefined) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCategoryChange(selected.key, shortcutCategory.id);
+        focusViewer();
+        return;
+      }
+
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         event.stopPropagation();
@@ -391,10 +407,12 @@ export function ReviewLightbox({
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
+    categories,
     changeZoom,
     editMode,
     focusViewer,
     fullscreenSupported,
+    onCategoryChange,
     onClose,
     onDelete,
     onToggleFeatured,

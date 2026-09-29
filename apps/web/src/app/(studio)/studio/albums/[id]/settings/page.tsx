@@ -11,6 +11,7 @@ interface CategoryDetails {
   readonly id: string;
   readonly name: string;
   readonly enabled: boolean;
+  readonly shortcut: string | null;
 }
 
 export default async function AlbumSettingsPage({ params }: { params: Promise<{ id: string }> }) {

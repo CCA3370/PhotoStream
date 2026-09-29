@@ -252,6 +252,16 @@ export const createAlbumResponseSchema = z
   })
   .strict();
 
+export const categoryShortcutSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(32)
+  .regex(
+    /^(?:(?:Ctrl|Alt|Shift|Meta)\+)+(?:[A-Z0-9]|F(?:[1-9]|1[0-2]))$/u,
+    "快捷键必须由修饰键和一个字母、数字或 F1-F12 组成",
+  );
+
 export const categoryViewSchema = z
   .object({
     id: z.string().uuid(),
@@ -259,8 +269,10 @@ export const categoryViewSchema = z
     name: z.string().min(1).max(60),
     sortOrder: z.number().int(),
     enabled: z.boolean(),
+    shortcut: categoryShortcutSchema.nullable(),
   })
   .strict();
+export type CategoryView = z.infer<typeof categoryViewSchema>;
 
 export const createCategoryRequestSchema = z
   .object({
@@ -912,6 +924,7 @@ export const updateCategoryRequestSchema = z
     name: z.string().trim().min(1).max(60).optional(),
     sortOrder: z.number().int().min(0).max(10_000).optional(),
     enabled: z.boolean().optional(),
+    shortcut: categoryShortcutSchema.nullable().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "至少提供一个修改字段" });

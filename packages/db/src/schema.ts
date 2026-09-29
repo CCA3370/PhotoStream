@@ -336,6 +336,7 @@ export const categories = pgTable(
     name: varchar("name", { length: 60 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     enabled: boolean("enabled").notNull().default(true),
+    shortcut: varchar("shortcut", { length: 32 }),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     createdBy: uuid("created_by")
       .notNull()
@@ -349,6 +350,7 @@ export const categories = pgTable(
       table.createdBy,
       table.idempotencyKey,
     ),
+    uniqueIndex("categories_album_shortcut_unique").on(table.albumId, table.shortcut),
     index("categories_album_sort_idx").on(table.albumId, table.enabled, table.sortOrder),
   ],
 );
