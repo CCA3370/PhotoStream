@@ -124,8 +124,8 @@ function categoryView(row: typeof schema.categories.$inferSelect) {
 }
 
 function defaultCategoryShortcut(ordinal: number): string | null {
-  if (ordinal >= 1 && ordinal <= 9) return `Ctrl+${ordinal}`;
-  if (ordinal === 10) return "Ctrl+0";
+  if (ordinal >= 1 && ordinal <= 9) return `Alt+${ordinal}`;
+  if (ordinal === 10) return "Alt+0";
   return null;
 }
 

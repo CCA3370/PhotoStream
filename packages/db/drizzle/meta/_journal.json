@@ -323,6 +323,13 @@
       "when": 1790672400000,
       "tag": "0045_category_shortcuts",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790675100000,
+      "tag": "0046_alt_category_shortcuts",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,18 @@ describe("management review stability guards", () => {
     expect(source).toContain('selected.visualRevision ?? "base"');
   });
 
+  it("keeps management lightbox keyboard focus on the image canvas", () => {
+    const source = readFileSync(lightboxPath, "utf8");
+
+    expect(source).toContain("initialFocus={readOnly ? undefined : stageRef}");
+    expect(source).toContain('event.key === "Tab"');
+    expect(source).toContain("isTextEntryKeyboardTarget(event.target)");
+    expect(source).not.toContain("isInteractiveKeyboardTarget");
+    expect(source.indexOf("const shortcutCategory")).toBeLessThan(
+      source.indexOf("isTextEntryKeyboardTarget(event.target)"),
+    );
+  });
+
   it("keeps polling updates client-side instead of refreshing the RSC page", () => {
     const source = readFileSync(remoteSyncPath, "utf8");
 

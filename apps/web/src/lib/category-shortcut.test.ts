@@ -23,8 +23,8 @@ function keyboard(
 
 describe("category shortcuts", () => {
   it("captures canonical modifier shortcuts from physical key codes", () => {
-    expect(categoryShortcutFromKeyboardEvent(keyboard("Digit3", { ctrlKey: true }))).toBe("Ctrl+3");
-    expect(categoryShortcutFromKeyboardEvent(keyboard("Numpad3", { ctrlKey: true }))).toBe("Ctrl+3");
+    expect(categoryShortcutFromKeyboardEvent(keyboard("Digit3", { altKey: true }))).toBe("Alt+3");
+    expect(categoryShortcutFromKeyboardEvent(keyboard("Numpad3", { altKey: true }))).toBe("Alt+3");
     expect(
       categoryShortcutFromKeyboardEvent(keyboard("KeyK", { ctrlKey: true, shiftKey: true })),
     ).toBe("Ctrl+Shift+K");
@@ -36,9 +36,9 @@ describe("category shortcuts", () => {
   });
 
   it("matches exact modifier combinations", () => {
-    expect(categoryShortcutMatches(keyboard("Digit1", { ctrlKey: true }), "Ctrl+1")).toBe(true);
+    expect(categoryShortcutMatches(keyboard("Digit1", { altKey: true }), "Alt+1")).toBe(true);
     expect(
-      categoryShortcutMatches(keyboard("Digit1", { ctrlKey: true, shiftKey: true }), "Ctrl+1"),
+      categoryShortcutMatches(keyboard("Digit1", { altKey: true, shiftKey: true }), "Alt+1"),
     ).toBe(false);
   });
 });

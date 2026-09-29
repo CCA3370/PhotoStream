@@ -1641,6 +1641,7 @@ maybeDescribe("photo vertical slice transactions", () => {
       sortOrder: 0,
       idempotencyKey: "category-delete-category-0001",
     });
+    expect(category.shortcut).toBe("Alt+1");
     const [insertedMedia] = await database
       .insert(schema.media)
       .values({
