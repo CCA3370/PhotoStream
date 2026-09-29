@@ -69,26 +69,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-function dateTime(value: string | null): string {
-  if (value === null) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "medium",
-    timeStyle: "medium",
-    timeZone: "Asia/Shanghai",
-  }).format(date);
-}
-
-function statusLabel(status: string): string {
-  if (status === "published") return "显示中";
-  if (status === "hidden") return "已隐藏";
-  if (status === "local") return "本机处理中";
-  if (status === "draft") return "上传处理中";
-  if (status === "pending_review") return "待审核";
-  return status;
-}
-
 function stateActionLabel(status: string): string {
   return status === "published" ? "隐藏" : "显示";
 }
@@ -140,13 +120,6 @@ export function ReviewInspector({
       <div className={cn("flex items-start border-b", docked ? "gap-2 px-3 py-3" : "gap-3 p-4")}>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.title}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary">{statusLabel(item.publicationStatus)}</Badge>
-            {item.featured ? <Badge variant="secondary">精选</Badge> : null}
-            {item.editActive ? <Badge variant="secondary">已修图</Badge> : null}
-            {item.editPending ? <Badge variant="outline">修图处理中</Badge> : null}
-            <Badge variant="outline">{item.sourceLabel}</Badge>
-          </div>
         </div>
         <Button
           aria-label="关闭属性面板"
@@ -191,13 +164,13 @@ export function ReviewInspector({
               </Select>
             </div>
 
-            <div className={cn("grid gap-2", docked ? "grid-cols-1" : "grid-cols-2")}>
+            <div className="grid grid-cols-2 gap-2">
               <Button disabled={busy} onClick={onToggleFeatured} type="button" variant="outline">
                 <StarIcon
                   className={item.featured ? "fill-current" : undefined}
                   data-icon="inline-start"
                 />
-                {item.featured ? "取消精选" : "设为精选"}
+                {item.featured ? "取消精选" : "精选"}
               </Button>
               <Button
                 disabled={busy || !canToggleVisibility}
@@ -261,31 +234,14 @@ export function ReviewInspector({
           </section>
 
           <section className="border-t pt-4">
-            <h3 className="mb-2.5 text-xs font-semibold text-muted-foreground">只读信息</h3>
-            <dl
-              className={cn(
-                "grid gap-y-2 text-xs",
-                docked
-                  ? "grid-cols-[4rem_minmax(0,1fr)] gap-x-2"
-                  : "grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3",
-              )}
-            >
-              <dt className="text-muted-foreground">上传者</dt>
-              <dd className="truncate text-right">{item.uploaderName ?? "本机"}</dd>
+            <h3 className="mb-2.5 text-xs font-semibold text-muted-foreground">图片信息</h3>
+            <dl className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
               <dt className="text-muted-foreground">尺寸</dt>
               <dd className="text-right tabular-nums">
                 {item.width} × {item.height}
               </dd>
-              <dt className="text-muted-foreground">文件大小</dt>
+              <dt className="text-muted-foreground">大小</dt>
               <dd className="text-right tabular-nums">{formatBytes(item.totalBytes)}</dd>
-              <dt className="text-muted-foreground">处理状态</dt>
-              <dd className="truncate text-right">{item.ingestStatus}</dd>
-              <dt className="text-muted-foreground">加入时间</dt>
-              <dd className="text-right">{dateTime(item.createdAt)}</dd>
-              <dt className="text-muted-foreground">拍摄时间</dt>
-              <dd className="text-right">{dateTime(item.capturedAt)}</dd>
-              <dt className="text-muted-foreground">媒体 ID</dt>
-              <dd className="truncate text-right font-mono text-[10px]">{item.mediaId ?? "—"}</dd>
             </dl>
           </section>
 
