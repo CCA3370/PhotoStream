@@ -151,6 +151,7 @@ export function ReviewLightbox({
   const selectedIndex =
     selectedKey === null ? -1 : items.findIndex((item) => item.key === selectedKey);
   const selected = selectedIndex < 0 ? null : (items[selectedIndex] ?? null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, Point>());
@@ -658,6 +659,7 @@ export function ReviewLightbox({
           className="inset-0 left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
           initialFocus={readOnly ? undefined : stageRef}
           padding="none"
+          ref={dialogContentRef}
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
@@ -1031,6 +1033,7 @@ export function ReviewLightbox({
                     categories={categories}
                     docked
                     item={selected.inspector}
+                    selectPortalContainer={dialogContentRef}
                     onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
                     onClose={() => setInspectorOpen(false)}
                     onDelete={() => {
