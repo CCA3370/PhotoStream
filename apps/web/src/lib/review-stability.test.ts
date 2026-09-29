@@ -54,6 +54,7 @@ describe("management review stability guards", () => {
 
     expect(source).toContain("initialFocus={readOnly ? undefined : stageRef}");
     expect(source).toContain('event.key === "Tab"');
+    expect(source).toContain("isCategorySelectMenuTarget(event.target)");
     expect(source).toContain("isTextEntryKeyboardTarget(event.target)");
     expect(source).not.toContain("isInteractiveKeyboardTarget");
     expect(source.indexOf("const shortcutCategory")).toBeLessThan(
@@ -124,8 +125,10 @@ describe("management review stability guards", () => {
     expect(source).toContain('{item.featured ? "取消精选" : "精选"}');
     expect(source).toContain('className="grid grid-cols-2 gap-2"');
     expect(source).toContain(">图片信息</h3>");
-    expect(source).toContain('>尺寸</dt>');
-    expect(source).toContain('>大小</dt>');
+    expect(source).toContain(">尺寸</dt>");
+    expect(source).toContain(">大小</dt>");
+    expect(source).toContain(">拍摄时间</dt>");
+    expect(source).toContain("dateTime(item.capturedAt)");
     expect(source).not.toContain(">只读信息</h3>");
     expect(source).not.toContain(">上传者</dt>");
     expect(source).not.toContain(">处理状态</dt>");
@@ -143,6 +146,9 @@ describe("management review stability guards", () => {
     expect(lightbox).toContain("w-[clamp(11.5rem,19vw,16rem)] shrink-0");
     expect(lightbox).not.toContain("absolute inset-y-0 right-0 z-40");
     expect(lightbox).toContain("<ReviewInspector");
+    expect(lightbox).toContain("selectPortalContainer={dialogContentRef}");
+    expect(lightbox).toContain("ref={dialogContentRef}");
+    expect(inspector).toContain('data-review-category-menu="true"');
     expect(lightbox).toContain("                    docked");
     expect(lightbox).toContain("<PhotoEditorPanel");
     expect(inspector).toContain('"h-full min-h-0 border-l"');

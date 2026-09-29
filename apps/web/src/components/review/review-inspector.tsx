@@ -11,6 +11,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
+import type { RefObject } from "react";
 
 import { isBibReviewConfirmed } from "@/components/bib/bib-review-editor";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,17 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
+function dateTime(value: string | null): string {
+  if (value === null) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Shanghai",
+  }).format(date);
+}
+
 function stateActionLabel(status: string): string {
   return status === "published" ? "隐藏" : "显示";
 }
@@ -84,6 +96,7 @@ export function ReviewInspector({
   onEdit,
   onStateAction,
   onToggleFeatured,
+  selectPortalContainer,
   docked = false,
 }: Readonly<{
   item: ReviewInspectorItem;
@@ -96,6 +109,7 @@ export function ReviewInspector({
   onEdit?: () => void;
   onStateAction: () => void;
   onToggleFeatured: () => void;
+  selectPortalContainer?: RefObject<HTMLDivElement | null>;
   docked?: boolean;
 }>) {
   const bibConfirmed = isBibReviewConfirmed(item.bib);
@@ -150,7 +164,15 @@ export function ReviewInspector({
                 <SelectTrigger aria-label="修改照片分类" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent {...(docked ? { positionerClassName: "layer-nested-popover" } : {})}>
+                <SelectContent
+                  data-review-category-menu="true"
+                  {...(docked
+                    ? {
+                        portalContainer: selectPortalContainer,
+                        positionerClassName: "layer-nested-popover",
+                      }
+                    : {})}
+                >
                   <SelectGroup>
                     <SelectItem value="uncategorized">未分类</SelectItem>
                     {categories.map((category) => (
@@ -241,6 +263,8 @@ export function ReviewInspector({
               </dd>
               <dt className="text-muted-foreground">大小</dt>
               <dd className="text-right tabular-nums">{formatBytes(item.totalBytes)}</dd>
+              <dt className="text-muted-foreground">拍摄时间</dt>
+              <dd className="text-right">{dateTime(item.capturedAt)}</dd>
             </dl>
           </section>
 

@@ -54,14 +54,6 @@ function markNotificationDismissed(notificationId: string): void {
   }
 }
 
-function formatEndTime(value: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Shanghai",
-  }).format(new Date(value));
-}
-
 export function ViewerNotifications({
   onboardingRequired = true,
   slug,
@@ -220,13 +212,7 @@ export function ViewerNotifications({
           {current?.content ?? ""}
         </DialogDescription>
 
-        {current === null ? null : (
-          <p className="text-xs text-muted-foreground">
-            本通知生效至 {formatEndTime(current.endsAt)}（北京时间）
-          </p>
-        )}
-
-        <DialogFooter className="gap-3 sm:flex-col sm:items-stretch">
+        <DialogFooter className="flex-col items-stretch gap-3 sm:flex-col sm:items-stretch">
           <label
             className="flex cursor-pointer items-center gap-2.5 text-sm text-foreground"
             htmlFor="viewer-notification-never-show-again"
