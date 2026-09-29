@@ -49,6 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { broadcastAlbumPurge } from "@/lib/album-purge-broadcast";
+import { categoryShortcutFromKeyboardEvent } from "@/lib/category-shortcut";
 import { clientGet, clientMutation } from "@/lib/client-api";
 import { purgeWarmDerivedImages } from "@/lib/derived-image-cache";
 import { purgeLocalProcessingAlbum } from "@/lib/local-processing-runtime";
@@ -64,6 +65,7 @@ interface CategoryOption {
   readonly id: string;
   readonly name: string;
   readonly enabled: boolean;
+  readonly shortcut: string | null;
 }
 
 function isoToBeijingLocalDateTime(value: string | null): string {
@@ -185,6 +187,12 @@ export function AlbumSettings({
   const [removedCategoryIds, setRemovedCategoryIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [categoryShortcutValues, setCategoryShortcutValues] = useState<
+    Readonly<Record<string, string | null>>
+  >(() => Object.fromEntries(categories.map((category) => [category.id, category.shortcut])));
+  const [savingCategoryShortcutIds, setSavingCategoryShortcutIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
   function isPending(action: PendingAction): boolean {
     return pendingActions.has(action);
@@ -315,6 +323,42 @@ export function AlbumSettings({
     }
   }
 
+  async function updateCategoryShortcut(
+    category: CategoryOption,
+    shortcut: string | null,
+  ): Promise<void> {
+    if (savingCategoryShortcutIds.has(category.id)) return;
+    setSavingCategoryShortcutIds((current) => new Set(current).add(category.id));
+    setError(null);
+    try {
+      const updated = await clientMutation<CategoryOption>(
+        `/api/v1/albums/${album.id}/categories/${category.id}`,
+        {
+          method: "PATCH",
+          body: { shortcut },
+        },
+      );
+      setCategoryShortcutValues((current) => ({
+        ...current,
+        [category.id]: updated.shortcut,
+      }));
+      showNotice(
+        updated.shortcut === null
+          ? `“${category.name}”快捷键已清空`
+          : `“${category.name}”快捷键已设为 ${updated.shortcut}`,
+      );
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "快捷键保存失败");
+    } finally {
+      setSavingCategoryShortcutIds((current) => {
+        const next = new Set(current);
+        next.delete(category.id);
+        return next;
+      });
+    }
+  }
+
   async function copyText(value: string, success: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(value);
@@ -333,6 +377,12 @@ export function AlbumSettings({
   const dirty = basicDirty || privacyDirty || scheduleDirty;
   const galleryPath = `/g/${album.slug}`;
   const visibleCategories = categories.filter((category) => !removedCategoryIds.has(category.id));
+
+  useEffect(() => {
+    setCategoryShortcutValues(
+      Object.fromEntries(categories.map((category) => [category.id, category.shortcut])),
+    );
+  }, [categories]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -720,7 +770,7 @@ export function AlbumSettings({
                 <div>
                   <CardTitle>分类</CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    管理上传和观众页使用的活动分类。
+                    管理上传和观众页使用的活动分类。快捷键用于审核大图快速分类；点击快捷键框后直接按新组合键，Backspace/Delete 可清空。
                   </p>
                 </div>
                 <Badge variant="outline">{visibleCategories.length} 个</Badge>
@@ -735,13 +785,40 @@ export function AlbumSettings({
                 <div className="divide-y rounded-lg border">
                   {visibleCategories.map((category) => {
                     const deleting = deletingCategoryIds.has(category.id);
+                    const savingShortcut = savingCategoryShortcutIds.has(category.id);
+                    const shortcut = categoryShortcutValues[category.id] ?? null;
                     return (
                       <div
                         className="flex items-center justify-between gap-3 px-3 py-2.5"
                         key={category.id}
                       >
-                        <span className="text-sm font-medium">{category.name}</span>
-                        <div className="flex items-center gap-1.5">
+                        <span className="min-w-0 truncate text-sm font-medium">{category.name}</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <Input
+                            aria-label={`设置分类 ${category.name} 快捷键`}
+                            className="h-8 w-28 text-center font-mono text-xs"
+                            disabled={savingShortcut}
+                            onKeyDown={(event) => {
+                              if (event.key === "Backspace" || event.key === "Delete") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void updateCategoryShortcut(category, null);
+                                return;
+                              }
+                              const nextShortcut = categoryShortcutFromKeyboardEvent(
+                                event.nativeEvent,
+                              );
+                              if (nextShortcut === null) return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void updateCategoryShortcut(category, nextShortcut);
+                            }}
+                            placeholder="未设置"
+                            readOnly
+                            title="点击后按下新快捷键；Backspace/Delete 清空"
+                            value={shortcut ?? ""}
+                          />
+                          {savingShortcut ? <Spinner className="size-4 animate-spin" /> : null}
                           <Badge variant={category.enabled ? "secondary" : "outline"}>
                             {category.enabled ? "启用" : "停用"}
                           </Badge>
