@@ -1,7 +1,7 @@
 "use client";
 
 import Image, { type ImageProps } from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { clientGet } from "@/lib/client-api";
 import { internalImageKey, internalImageSourceIdentity } from "@/lib/internal-media-url";
@@ -30,6 +30,40 @@ const previewKinds = new Set<InternalPreviewVariantKind>([
   "photo_1920",
 ]);
 
+type VisibilityCallback = () => void;
+
+const visibilityCallbacks = new Map<Element, VisibilityCallback>();
+let visibilityObserver: IntersectionObserver | null = null;
+
+function observeNearViewport(element: Element, callback: VisibilityCallback): () => void {
+  if (typeof IntersectionObserver === "undefined") {
+    callback();
+    return () => {};
+  }
+  if (visibilityObserver === null) {
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const pending = visibilityCallbacks.get(entry.target);
+          if (pending === undefined) continue;
+          visibilityCallbacks.delete(entry.target);
+          visibilityObserver?.unobserve(entry.target);
+          pending();
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+  }
+  visibilityCallbacks.set(element, callback);
+  visibilityObserver.observe(element);
+  return () => {
+    if (visibilityCallbacks.get(element) !== callback) return;
+    visibilityCallbacks.delete(element);
+    visibilityObserver?.unobserve(element);
+  };
+}
+
 function previewKind(value: string | undefined): InternalPreviewVariantKind | null {
   return value !== undefined && previewKinds.has(value as InternalPreviewVariantKind)
     ? (value as InternalPreviewVariantKind)
@@ -56,7 +90,7 @@ async function freshRemoteVariantUrl(
   return result.url;
 }
 
-export function InternalCachedImage({
+function InternalCachedImageComponent({
   src,
   mediaId,
   localPhotoId,
@@ -170,21 +204,7 @@ export function InternalCachedImage({
     if (eager || visible) return;
     const element = host.current;
     if (element === null) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "200px 0px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
+    return observeNearViewport(element, () => setVisible(true));
   }, [eager, visible]);
 
   useEffect(() => {
@@ -364,3 +384,5 @@ export function InternalCachedImage({
     </span>
   );
 }
+
+export const InternalCachedImage = memo(InternalCachedImageComponent);
