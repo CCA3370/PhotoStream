@@ -967,7 +967,7 @@ export function ReviewLightbox({
             </div>
 
             {!readOnly && inspectorOpen ? (
-              <div className="h-full w-[clamp(17rem,32vw,24rem)] shrink-0 overflow-hidden bg-card text-card-foreground">
+              <div className="h-full w-[clamp(11.5rem,19vw,16rem)] shrink-0 overflow-hidden bg-card text-card-foreground">
                 {editMode ? (
                   <PhotoEditorPanel
                     docked
