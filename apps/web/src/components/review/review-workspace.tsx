@@ -99,6 +99,7 @@ async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
 interface CategoryOption {
   readonly id: string;
   readonly name: string;
+  readonly shortcut: string | null;
 }
 
 type FilterMode = "all" | "featured" | "hidden" | "local" | "published";
