@@ -72,7 +72,7 @@ describe("UI governance", () => {
     expect(bibSearch).toContain("<ErrorDialog message={error} nested");
     expect(reviewLightbox).toContain("<BibReviewDialog");
     expect(reviewLightbox).toContain("          nested");
-    expect(reviewInspector).toContain('portalContainer: selectPortalContainer');
+    expect(reviewInspector).toContain("portalContainer: selectPortalContainer");
     expect(reviewInspector).toContain('positionerClassName: "layer-nested-popover"');
     const select = source("components/ui/select.tsx");
     expect(select).toContain("portalContainer?: SelectPrimitive.Portal.Props");
@@ -87,9 +87,7 @@ describe("UI governance", () => {
     expect(notifications).toContain(
       '<DialogFooter className="flex-col items-stretch gap-3 sm:flex-col sm:items-stretch">',
     );
-    expect(notifications.indexOf("不再提示此通知")).toBeLessThan(
-      notifications.indexOf("我知道了"),
-    );
+    expect(notifications.indexOf("不再提示此通知")).toBeLessThan(notifications.indexOf("我知道了"));
   });
 
   it("does not use user-facing labels or icon implementation classes as component APIs", () => {
