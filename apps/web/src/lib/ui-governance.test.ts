@@ -72,8 +72,23 @@ describe("UI governance", () => {
     expect(bibSearch).toContain("<ErrorDialog message={error} nested");
     expect(reviewLightbox).toContain("<BibReviewDialog");
     expect(reviewLightbox).toContain("          nested");
-    expect(reviewInspector).toContain(
-      '<SelectContent {...(docked ? { positionerClassName: "layer-nested-popover" } : {})}>',
+    expect(reviewInspector).toContain('portalContainer: selectPortalContainer');
+    expect(reviewInspector).toContain('positionerClassName: "layer-nested-popover"');
+    const select = source("components/ui/select.tsx");
+    expect(select).toContain("portalContainer?: SelectPrimitive.Portal.Props");
+    expect(select).toContain("<SelectPrimitive.Portal container={portalContainer}>");
+  });
+
+  it("keeps viewer notifications compact and orders dismissal before acknowledgement", () => {
+    const notifications = source("components/gallery/viewer-notifications.tsx");
+
+    expect(notifications).not.toContain("本通知生效至");
+    expect(notifications).not.toContain("formatEndTime");
+    expect(notifications).toContain(
+      '<DialogFooter className="flex-col items-stretch gap-3 sm:flex-col sm:items-stretch">',
+    );
+    expect(notifications.indexOf("不再提示此通知")).toBeLessThan(
+      notifications.indexOf("我知道了"),
     );
   });
 
