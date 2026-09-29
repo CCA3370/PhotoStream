@@ -117,9 +117,9 @@ export function ReviewInspector({
           : "sticky top-20 max-h-[calc(100dvh-6rem)] rounded-xl border shadow-sm",
       )}
     >
-      <div className={cn("flex items-start border-b", docked ? "gap-2 px-3 py-3" : "gap-3 p-4")}>
+      <div className={cn("flex items-center border-b", docked ? "gap-2 px-3 py-3" : "gap-3 p-4")}>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{item.title}</p>
+          <p className="text-sm font-semibold">照片属性</p>
         </div>
         <Button
           aria-label="关闭属性面板"
@@ -135,7 +135,6 @@ export function ReviewInspector({
       <div className={cn("min-h-0 flex-1 overflow-y-auto", docked ? "p-3" : "p-4")}>
         <div className={cn("flex flex-col", docked ? "gap-4" : "gap-5")}>
           <section className="flex flex-col gap-2.5">
-            <h3 className="text-xs font-semibold text-muted-foreground">照片属性</h3>
             <div className="flex flex-col gap-1.5 text-xs font-medium">
               <span>分类</span>
               <Select
