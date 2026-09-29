@@ -159,6 +159,7 @@ export function ReviewLightbox({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  const [hoverNavigationSide, setHoverNavigationSide] = useState<"left" | "right" | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
@@ -296,6 +297,38 @@ export function ReviewLightbox({
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
+
+  useEffect(() => {
+    if (readOnly) return;
+
+    const handleMouseMove = (event: MouseEvent): void => {
+      const stage = stageRef.current;
+      if (stage === null) return;
+      const rect = stage.getBoundingClientRect();
+      if (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      ) {
+        setHoverNavigationSide(null);
+        return;
+      }
+
+      const offsetX = event.clientX - rect.left;
+      const edgeThreshold = Math.min(180, rect.width * 0.18);
+      let nextSide: "left" | "right" | null = null;
+      if (offsetX <= edgeThreshold) nextSide = "left";
+      else if (offsetX >= rect.width - edgeThreshold) nextSide = "right";
+      setHoverNavigationSide((current) => (current === nextSide ? current : nextSide));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      setHoverNavigationSide(null);
+    };
+  }, [readOnly]);
 
   useEffect(() => {
     if (editMode || selectedKey === null) return;
@@ -802,7 +835,12 @@ export function ReviewLightbox({
                 <>
                   <Button
                     aria-label="上一张照片"
-                    className="absolute left-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:left-4 sm:size-11"
+                    className={cn(
+                      "absolute left-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md transition-opacity duration-150 hover:bg-white/15 hover:text-white sm:left-4 sm:size-11",
+                      !readOnly &&
+                        hoverNavigationSide !== "left" &&
+                        "pointer-events-none opacity-0",
+                    )}
                     onClick={() => selectOffset(-1)}
                     size="icon-lg"
                     title="上一张 (←)"
@@ -813,7 +851,12 @@ export function ReviewLightbox({
                   </Button>
                   <Button
                     aria-label="下一张照片"
-                    className="absolute right-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:right-4 sm:size-11"
+                    className={cn(
+                      "absolute right-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md transition-opacity duration-150 hover:bg-white/15 hover:text-white sm:right-4 sm:size-11",
+                      !readOnly &&
+                        hoverNavigationSide !== "right" &&
+                        "pointer-events-none opacity-0",
+                    )}
                     onClick={() => selectOffset(1)}
                     size="icon-lg"
                     title="下一张 (→)"
