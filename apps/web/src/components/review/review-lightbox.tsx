@@ -102,30 +102,12 @@ function stateLabel(status: string): string {
   return "等待上传";
 }
 
-function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
+function isTextEntryKeyboardTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  if (
+  return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
     target.isContentEditable
-  ) {
-    return true;
-  }
-  if (
-    target instanceof HTMLButtonElement &&
-    target.closest('[data-lightbox-toolbar="true"]') === null
-  ) {
-    return true;
-  }
-  const role = target.getAttribute("role");
-  return (
-    role === "combobox" ||
-    role === "listbox" ||
-    role === "menuitem" ||
-    role === "option" ||
-    role === "slider" ||
-    target.closest('[data-slot="select-content"]') !== null
   );
 }
 
@@ -329,15 +311,23 @@ export function ReviewLightbox({
   useEffect(() => {
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isInteractiveKeyboardTarget(event.target)) return;
+      if (bibDialogOpen) return;
+      if (!readOnly && event.key === "Tab") {
+        event.preventDefault();
+        event.stopPropagation();
+        focusViewer();
+        return;
+      }
       if (editMode) {
         if (event.key === "Escape") {
           event.preventDefault();
           setEditMode(false);
           setEditPreview({ beforeUrl: null, afterUrl: null, loading: false });
+          focusViewer();
         }
         return;
       }
+
       const shortcutCategory =
         !readOnly && !event.repeat && selected.pendingAction === null
           ? categories.find(
@@ -353,60 +343,77 @@ export function ReviewLightbox({
         return;
       }
 
+      if (isTextEntryKeyboardTarget(event.target)) return;
+
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         event.stopPropagation();
         selectOffset(-1);
+        focusViewer();
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         event.stopPropagation();
         selectOffset(1);
+        focusViewer();
       } else if (event.key === "+" || event.key === "=") {
         event.preventDefault();
         changeZoom(zoom + 0.5);
+        focusViewer();
       } else if (event.key === "-" || event.key === "_") {
         event.preventDefault();
         changeZoom(zoom - 0.5);
+        focusViewer();
       } else if (event.key === "0") {
         event.preventDefault();
         resetView();
+        focusViewer();
       } else if (event.key.toLowerCase() === "f" && fullscreenSupported) {
         event.preventDefault();
         void toggleFullscreen();
+        focusViewer();
       } else if (!readOnly && event.code === "Space") {
         event.preventDefault();
         event.stopPropagation();
         if (event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
           onToggleVisibility(selected.key);
-          focusViewer();
         }
+        focusViewer();
       } else if (!readOnly && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        if (selected.pendingAction === null) {
-          onToggleFeatured(selected.key);
-          focusViewer();
-        }
+        if (selected.pendingAction === null) onToggleFeatured(selected.key);
+        focusViewer();
       } else if (!readOnly && event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
+        event.stopPropagation();
         if (selected.pendingAction !== null) return;
         const now = Date.now();
         if (deleteTapRef.current?.key === selected.key && now - deleteTapRef.current.at <= 900) {
           deleteTapRef.current = null;
           onDelete(selected.key);
-          focusViewer();
         } else {
           deleteTapRef.current = { key: selected.key, at: now };
         }
+        focusViewer();
       } else if (event.key === "Escape") {
         event.preventDefault();
         onClose();
+      } else if (
+        !readOnly &&
+        event.target instanceof HTMLElement &&
+        viewerRef.current?.contains(event.target) === true &&
+        event.target !== stageRef.current
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusViewer();
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
+    bibDialogOpen,
     categories,
     changeZoom,
     editMode,
@@ -614,12 +621,13 @@ export function ReviewLightbox({
       <Dialog open onOpenChange={(open) => !open && onClose()}>
         <DialogContent
           className="inset-0 left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-black p-0 text-white ring-0 sm:max-w-none"
+          initialFocus={readOnly ? undefined : stageRef}
           padding="none"
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
           <DialogDescription className="sr-only">
-            左右键切换，滚轮、双击或加减键缩放，拖动查看；空格切换显示状态，回车切换精选，连续两次
+            左右键切换，滚轮、双击或加减键缩放，拖动查看；分类快捷键快速设置分类，空格切换显示状态，回车切换精选，连续两次
             Delete 删除。
           </DialogDescription>
 
