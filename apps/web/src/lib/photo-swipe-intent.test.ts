@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { swipeIntentDirection } from "./photo-swipe-intent";
+import { allowsPhotoSwipePointer, swipeIntentDirection } from "./photo-swipe-intent";
 
 describe("swipe intent", () => {
+  it("allows touch and pen swipes but not mouse drags", () => {
+    expect(allowsPhotoSwipePointer("touch")).toBe(true);
+    expect(allowsPhotoSwipePointer("pen")).toBe(true);
+    expect(allowsPhotoSwipePointer("mouse")).toBe(false);
+  });
+
   it("ignores touch jitter and vertical or diagonal gestures", () => {
     for (const [x, y] of [
       [0, 0],
