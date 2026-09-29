@@ -38,7 +38,7 @@ describe("management review stability guards", () => {
     expect(source).toContain('hoverNavigationSide !== "left"');
     expect(source).toContain('hoverNavigationSide !== "right"');
     expect(source).toContain('"pointer-events-none opacity-0"');
-    expect(source).toContain("onMouseMove={onViewerMouseMove}");
+    expect(source).toContain('window.addEventListener("mousemove", handleMouseMove)');
   });
 
   it("keeps mouse drags from paging while preserving touch swipe handling", () => {
