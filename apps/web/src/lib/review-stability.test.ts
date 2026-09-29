@@ -30,6 +30,17 @@ describe("management review stability guards", () => {
     expect(source).toContain('selected.visualRevision ?? "base"');
   });
 
+  it("reveals management paging buttons only near the matching canvas edge", () => {
+    const source = readFileSync(lightboxPath, "utf8");
+
+    expect(source).toContain('useState<"left" | "right" | null>(null)');
+    expect(source).toContain("const edgeThreshold = Math.min(180, rect.width * 0.18)");
+    expect(source).toContain('hoverNavigationSide !== "left"');
+    expect(source).toContain('hoverNavigationSide !== "right"');
+    expect(source).toContain('"pointer-events-none opacity-0"');
+    expect(source).toContain("onMouseMove={onViewerMouseMove}");
+  });
+
   it("keeps mouse drags from paging while preserving touch swipe handling", () => {
     const source = readFileSync(lightboxPath, "utf8");
 
