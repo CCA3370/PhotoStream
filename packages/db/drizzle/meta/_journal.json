@@ -316,6 +316,13 @@
       "when": 1790586000000,
       "tag": "0044_db_business_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1790672400000,
+      "tag": "0045_category_shortcuts",
+      "breakpoints": true
     }
   ]
 }
