@@ -103,6 +103,13 @@ function stateLabel(status: string): string {
   return "等待上传";
 }
 
+function isCategorySelectMenuTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    target.closest('[data-review-category-menu="true"]') !== null
+  );
+}
+
 function isTextEntryKeyboardTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (
@@ -378,7 +385,9 @@ export function ReviewLightbox({
         return;
       }
 
-      if (isTextEntryKeyboardTarget(event.target)) return;
+      if (isCategorySelectMenuTarget(event.target) || isTextEntryKeyboardTarget(event.target)) {
+        return;
+      }
 
       if (event.key === "ArrowLeft") {
         event.preventDefault();
