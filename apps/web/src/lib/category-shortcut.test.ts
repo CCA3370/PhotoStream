@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  categoryShortcutFromKeyboardEvent,
-  categoryShortcutMatches,
-} from "./category-shortcut";
+import { categoryShortcutFromKeyboardEvent, categoryShortcutMatches } from "./category-shortcut";
 
 function keyboard(
   code: string,
@@ -26,13 +23,9 @@ function keyboard(
 
 describe("category shortcuts", () => {
   it("captures canonical modifier shortcuts from physical key codes", () => {
-    expect(categoryShortcutFromKeyboardEvent(keyboard("Digit3", { ctrlKey: true }))).toBe(
-      "Ctrl+3",
-    );
+    expect(categoryShortcutFromKeyboardEvent(keyboard("Digit3", { ctrlKey: true }))).toBe("Ctrl+3");
     expect(
-      categoryShortcutFromKeyboardEvent(
-        keyboard("KeyK", { ctrlKey: true, shiftKey: true }),
-      ),
+      categoryShortcutFromKeyboardEvent(keyboard("KeyK", { ctrlKey: true, shiftKey: true })),
     ).toBe("Ctrl+Shift+K");
   });
 
@@ -44,10 +37,7 @@ describe("category shortcuts", () => {
   it("matches exact modifier combinations", () => {
     expect(categoryShortcutMatches(keyboard("Digit1", { ctrlKey: true }), "Ctrl+1")).toBe(true);
     expect(
-      categoryShortcutMatches(
-        keyboard("Digit1", { ctrlKey: true, shiftKey: true }),
-        "Ctrl+1",
-      ),
+      categoryShortcutMatches(keyboard("Digit1", { ctrlKey: true, shiftKey: true }), "Ctrl+1"),
     ).toBe(false);
   });
 });
