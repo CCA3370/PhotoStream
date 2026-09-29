@@ -190,9 +190,9 @@ export function AlbumSettings({
   const [categoryShortcutValues, setCategoryShortcutValues] = useState<
     Readonly<Record<string, string | null>>
   >(() => Object.fromEntries(categories.map((category) => [category.id, category.shortcut])));
-  const [savingCategoryShortcutIds, setSavingCategoryShortcutIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
+  const [savingCategoryShortcutIds, setSavingCategoryShortcutIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   function isPending(action: PendingAction): boolean {
     return pendingActions.has(action);
@@ -770,7 +770,8 @@ export function AlbumSettings({
                 <div>
                   <CardTitle>分类</CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    管理上传和观众页使用的活动分类。快捷键用于审核大图快速分类；点击快捷键框后直接按新组合键，Backspace/Delete 可清空。
+                    管理上传和观众页使用的活动分类。快捷键用于审核大图快速分类；点击快捷键框后直接按新组合键，Backspace/Delete
+                    可清空。
                   </p>
                 </div>
                 <Badge variant="outline">{visibleCategories.length} 个</Badge>
@@ -792,7 +793,9 @@ export function AlbumSettings({
                         className="flex items-center justify-between gap-3 px-3 py-2.5"
                         key={category.id}
                       >
-                        <span className="min-w-0 truncate text-sm font-medium">{category.name}</span>
+                        <span className="min-w-0 truncate text-sm font-medium">
+                          {category.name}
+                        </span>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <Input
                             aria-label={`设置分类 ${category.name} 快捷键`}
