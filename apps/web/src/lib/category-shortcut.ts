@@ -8,6 +8,7 @@ export interface CategoryShortcutKeyboardEvent {
 
 function keyForCode(code: string): string | null {
   if (/^Digit[0-9]$/u.test(code)) return code.slice("Digit".length);
+  if (/^Numpad[0-9]$/u.test(code)) return code.slice("Numpad".length);
   if (/^Key[A-Z]$/u.test(code)) return code.slice("Key".length);
   if (/^F(?:[1-9]|1[0-2])$/u.test(code)) return code;
   return null;
