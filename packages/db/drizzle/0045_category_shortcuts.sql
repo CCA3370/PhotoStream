@@ -1,5 +1,7 @@
 ALTER TABLE "categories" ADD COLUMN "shortcut" varchar(32);
 --> statement-breakpoint
+CREATE UNIQUE INDEX "categories_album_shortcut_unique" ON "categories" USING btree ("album_id", "shortcut");
+--> statement-breakpoint
 WITH ranked AS (
   SELECT
     id,
@@ -14,5 +16,3 @@ SET shortcut = CASE
 END
 FROM ranked
 WHERE category.id = ranked.id;
---> statement-breakpoint
-CREATE UNIQUE INDEX "categories_album_shortcut_unique" ON "categories" USING btree ("album_id", "shortcut");
