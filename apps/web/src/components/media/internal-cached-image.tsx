@@ -38,7 +38,7 @@ let visibilityObserver: IntersectionObserver | null = null;
 function observeNearViewport(element: Element, callback: VisibilityCallback): () => void {
   if (typeof IntersectionObserver === "undefined") {
     callback();
-    return () => {};
+    return () => undefined;
   }
   if (visibilityObserver === null) {
     visibilityObserver = new IntersectionObserver(
