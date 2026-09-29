@@ -119,7 +119,7 @@ export function ReviewInspector({
     >
       <div className={cn("flex items-center border-b", docked ? "gap-2 px-3 py-3" : "gap-3 p-4")}>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">照片属性</p>
+          <p className="text-sm font-semibold">图片属性</p>
         </div>
         <Button
           aria-label="关闭属性面板"
