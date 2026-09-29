@@ -104,10 +104,7 @@ function stateLabel(status: string): string {
 }
 
 function isCategorySelectMenuTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    target.closest('[data-review-category-menu="true"]') !== null
-  );
+  return target instanceof HTMLElement && target.closest('[data-review-category-menu="true"]') !== null;
 }
 
 function isTextEntryKeyboardTarget(target: EventTarget | null): boolean {
