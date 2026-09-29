@@ -42,8 +42,8 @@ import {
 } from "@/components/review/review-inspector";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { categoryShortcutMatches } from "@/lib/category-shortcut";
 import { Spinner } from "@/components/ui/spinner";
+import { categoryShortcutMatches } from "@/lib/category-shortcut";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import {
   type MediaEditSourceOrigin,
@@ -342,8 +342,7 @@ export function ReviewLightbox({
         !readOnly && !event.repeat && selected.pendingAction === null
           ? categories.find(
               (category) =>
-                category.shortcut != null &&
-                categoryShortcutMatches(event, category.shortcut),
+                category.shortcut != null && categoryShortcutMatches(event, category.shortcut),
             )
           : undefined;
       if (shortcutCategory !== undefined) {
