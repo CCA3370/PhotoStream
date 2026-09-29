@@ -165,6 +165,7 @@ export function ReviewInspector({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent
+                  data-review-category-menu="true"
                   {...(docked
                     ? {
                         portalContainer: selectPortalContainer,
