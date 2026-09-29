@@ -61,6 +61,7 @@ function SelectContent({
   align = "center",
   alignOffset = 0,
   alignItemWithTrigger = true,
+  portalContainer,
   positionerClassName,
   ...props
 }: SelectPrimitive.Popup.Props &
@@ -68,10 +69,11 @@ function SelectContent({
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   > & {
+    portalContainer?: SelectPrimitive.Portal.Props["container"];
     positionerClassName?: string;
   }) {
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={portalContainer}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
