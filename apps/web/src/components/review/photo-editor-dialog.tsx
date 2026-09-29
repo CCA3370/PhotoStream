@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 type EditorStage = "loading" | "ready" | "analyzing" | "applying" | "error";
 
 interface RangeControlProps {
+  readonly compact?: boolean;
   readonly label: string;
   readonly value: number;
   readonly minimum: number;
@@ -51,6 +52,7 @@ interface RangeControlProps {
 }
 
 function RangeControl({
+  compact = false,
   label,
   value,
   minimum,
@@ -61,11 +63,21 @@ function RangeControl({
   onChange,
 }: RangeControlProps) {
   return (
-    <label className="grid grid-cols-[5.5rem_minmax(0,1fr)_3.75rem] items-center gap-3 text-xs">
+    <label
+      className={cn(
+        "grid items-center text-xs",
+        compact
+          ? "grid-cols-[1fr_auto] gap-x-2 gap-y-1.5"
+          : "grid-cols-[5.5rem_minmax(0,1fr)_3.75rem] gap-3",
+      )}
+    >
       <span className="font-medium">{label}</span>
       <input
         aria-label={label}
-        className="h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(
+          "h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50",
+          compact && "col-span-2 row-start-2",
+        )}
         disabled={disabled}
         max={maximum}
         min={minimum}
@@ -77,7 +89,14 @@ function RangeControl({
         type="range"
         value={value}
       />
-      <span className="text-right tabular-nums text-muted-foreground">{format(value)}</span>
+      <span
+        className={cn(
+          "text-right tabular-nums text-muted-foreground",
+          compact && "col-start-2 row-start-1",
+        )}
+      >
+        {format(value)}
+      </span>
     </label>
   );
 }
@@ -536,7 +555,7 @@ export function PhotoEditorPanel({
         docked ? "border-l" : "rounded-xl border shadow-2xl",
       )}
     >
-      <div className="flex items-start gap-3 border-b px-4 py-3">
+      <div className={cn("flex items-start border-b py-3", docked ? "gap-2 px-3" : "gap-3 px-4")}>
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">修图</h2>
           <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
@@ -555,8 +574,8 @@ export function PhotoEditorPanel({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="flex flex-col gap-5">
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", docked ? "p-3" : "p-4")}>
+        <div className={cn("flex flex-col", docked ? "gap-4" : "gap-5")}>
           {context?.state.pendingRevisionId !== null &&
           context?.state.pendingRevisionId !== undefined ? (
             <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
@@ -613,7 +632,7 @@ export function PhotoEditorPanel({
             </section>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn("grid gap-2", docked ? "grid-cols-1" : "grid-cols-2")}>
             <Button
               disabled={busy || source === null}
               onClick={() => void smartOptimize()}
@@ -635,6 +654,7 @@ export function PhotoEditorPanel({
 
           <div className="flex flex-col gap-3">
             <RangeControl
+              compact={docked}
               disabled={busy}
               format={(value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)} EV`}
               label="曝光"
@@ -645,6 +665,7 @@ export function PhotoEditorPanel({
               value={recipe.exposureEv}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="色温"
               maximum={1}
@@ -654,6 +675,7 @@ export function PhotoEditorPanel({
               value={recipe.temperature}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="色调"
               maximum={1}
@@ -663,6 +685,7 @@ export function PhotoEditorPanel({
               value={recipe.tint}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="高光"
               maximum={100}
@@ -672,6 +695,7 @@ export function PhotoEditorPanel({
               value={recipe.highlights}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="阴影"
               maximum={100}
@@ -681,6 +705,7 @@ export function PhotoEditorPanel({
               value={recipe.shadows}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="对比度"
               maximum={100}
@@ -690,6 +715,7 @@ export function PhotoEditorPanel({
               value={recipe.contrast}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="自然饱和度"
               maximum={100}
@@ -699,6 +725,7 @@ export function PhotoEditorPanel({
               value={recipe.vibrance}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="饱和度"
               maximum={100}
@@ -708,6 +735,7 @@ export function PhotoEditorPanel({
               value={recipe.saturation}
             />
             <RangeControl
+              compact={docked}
               disabled={busy}
               label="锐化"
               maximum={100}
@@ -733,7 +761,12 @@ export function PhotoEditorPanel({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-end gap-2 border-t py-3",
+          docked ? "px-3" : "px-4",
+        )}
+      >
         {context?.state.activeRevisionId !== null &&
         context?.state.activeRevisionId !== undefined ? (
           <Button
