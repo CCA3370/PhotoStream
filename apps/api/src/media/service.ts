@@ -119,7 +119,14 @@ function categoryView(row: typeof schema.categories.$inferSelect) {
     name: row.name,
     sortOrder: row.sortOrder,
     enabled: row.enabled,
+    shortcut: row.shortcut,
   };
+}
+
+function defaultCategoryShortcut(ordinal: number): string | null {
+  if (ordinal >= 1 && ordinal <= 9) return `Ctrl+${ordinal}`;
+  if (ordinal === 10) return "Ctrl+0";
+  return null;
 }
 
 function extensionFor(format: string): string {
@@ -1188,6 +1195,7 @@ export class PhotoService {
       );
       const album = await this.#albumById(transaction, options.albumId);
       if (album === null) throw this.#albumNotFound();
+      await this.#advisoryLock(transaction, `category-shortcut:${options.albumId}`);
       const [existing] = await transaction
         .select()
         .from(schema.categories)
@@ -1200,12 +1208,34 @@ export class PhotoService {
         )
         .limit(1);
       if (existing !== undefined) return categoryView(existing);
+
+      const [categoryCount] = await transaction
+        .select({ total: sql<number>`count(*)::int` })
+        .from(schema.categories)
+        .where(eq(schema.categories.albumId, options.albumId));
+      const shortcutCandidate = defaultCategoryShortcut((categoryCount?.total ?? 0) + 1);
+      const [shortcutConflict] =
+        shortcutCandidate === null
+          ? []
+          : await transaction
+              .select({ id: schema.categories.id })
+              .from(schema.categories)
+              .where(
+                and(
+                  eq(schema.categories.albumId, options.albumId),
+                  eq(schema.categories.shortcut, shortcutCandidate),
+                ),
+              )
+              .limit(1);
+      const shortcut = shortcutConflict === undefined ? shortcutCandidate : null;
+
       const [created] = await transaction
         .insert(schema.categories)
         .values({
           albumId: options.albumId,
           name: options.name,
           sortOrder: options.sortOrder,
+          shortcut,
           createdBy: options.actor.id,
           idempotencyKey,
         })
@@ -1235,23 +1265,48 @@ export class PhotoService {
       readonly name?: string | undefined;
       readonly sortOrder?: number | undefined;
       readonly enabled?: boolean | undefined;
+      readonly shortcut?: string | null | undefined;
     };
   }) {
     requirePermission(options.actor.role, "album:configure");
-    const [updated] = await this.#database
-      .update(schema.categories)
-      .set({ ...options.input, updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.categories.id, options.categoryId),
-          eq(schema.categories.albumId, options.albumId),
-        ),
-      )
-      .returning();
-    if (updated === undefined) {
-      throw new AppError({ code: "NOT_FOUND", message: "分类不存在", statusCode: 404 });
-    }
-    return categoryView(updated);
+    return this.#database.transaction(async (transaction) => {
+      await this.#advisoryLock(transaction, `category-shortcut:${options.albumId}`);
+      if (options.input.shortcut !== undefined && options.input.shortcut !== null) {
+        const [conflict] = await transaction
+          .select({ id: schema.categories.id })
+          .from(schema.categories)
+          .where(
+            and(
+              eq(schema.categories.albumId, options.albumId),
+              eq(schema.categories.shortcut, options.input.shortcut),
+              not(eq(schema.categories.id, options.categoryId)),
+            ),
+          )
+          .limit(1);
+        if (conflict !== undefined) {
+          throw new AppError({
+            code: "BAD_REQUEST",
+            message: "这个快捷键已被其他分类使用",
+            statusCode: 400,
+          });
+        }
+      }
+
+      const [updated] = await transaction
+        .update(schema.categories)
+        .set({ ...options.input, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.categories.id, options.categoryId),
+            eq(schema.categories.albumId, options.albumId),
+          ),
+        )
+        .returning();
+      if (updated === undefined) {
+        throw new AppError({ code: "NOT_FOUND", message: "分类不存在", statusCode: 404 });
+      }
+      return categoryView(updated);
+    });
   }
 
   async deleteCategory(options: {
