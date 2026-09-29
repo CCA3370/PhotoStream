@@ -299,7 +299,7 @@ function stableRemoteMedia(
   const previousByKind = new Map(
     previous.variants.map((variant) => [variant.kind, variant] as const),
   );
-  return {
+  const stabilized = {
     ...incoming,
     variants: incoming.variants.map((variant) => {
       const existing = previousByKind.get(variant.kind);
@@ -315,6 +315,7 @@ function stableRemoteMedia(
       return { ...variant, url: existing.url };
     }),
   };
+  return JSON.stringify(previous) === JSON.stringify(stabilized) ? previous : stabilized;
 }
 
 function reconcileRemotePage(
@@ -332,6 +333,12 @@ function reconcileRemotePage(
     if (!open && !preserveLoadedTail) continue;
     next.push(existing);
     present.add(existing.id);
+  }
+  if (
+    next.length === current.length &&
+    next.every((item, index) => item === current[index])
+  ) {
+    return current;
   }
   return next;
 }
@@ -2400,7 +2407,7 @@ export function ReviewWorkspace({
             return (
               <div
                 className={cn(
-                  "group overflow-hidden rounded-lg border bg-card outline-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring",
+                  "group overflow-hidden rounded-lg border bg-card outline-none transition-shadow hover:shadow-sm focus-within:ring-2 focus-within:ring-ring [content-visibility:auto] [contain-intrinsic-size:280px]",
                   selected && "ring-2 ring-primary",
                 )}
                 data-bib-ocr-pending={ocrPending ? "true" : "false"}
