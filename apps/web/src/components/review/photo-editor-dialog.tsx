@@ -555,12 +555,7 @@ export function PhotoEditorPanel({
         docked ? "border-l" : "rounded-xl border shadow-2xl",
       )}
     >
-      <div
-        className={cn(
-          "flex items-start border-b py-3",
-          docked ? "gap-2 px-3" : "gap-3 px-4",
-        )}
-      >
+      <div className={cn("flex items-start border-b py-3", docked ? "gap-2 px-3" : "gap-3 px-4")}>
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">修图</h2>
           <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
