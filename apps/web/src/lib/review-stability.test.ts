@@ -125,9 +125,9 @@ describe("management review stability guards", () => {
     expect(source).toContain('{item.featured ? "取消精选" : "精选"}');
     expect(source).toContain('className="grid grid-cols-2 gap-2"');
     expect(source).toContain(">图片信息</h3>");
-    expect(source).toContain('>尺寸</dt>');
-    expect(source).toContain('>大小</dt>');
-    expect(source).toContain('>拍摄时间</dt>');
+    expect(source).toContain(">尺寸</dt>");
+    expect(source).toContain(">大小</dt>");
+    expect(source).toContain(">拍摄时间</dt>");
     expect(source).toContain("dateTime(item.capturedAt)");
     expect(source).not.toContain(">只读信息</h3>");
     expect(source).not.toContain(">上传者</dt>");
