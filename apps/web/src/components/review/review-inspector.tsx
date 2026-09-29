@@ -137,12 +137,7 @@ export function ReviewInspector({
           : "sticky top-20 max-h-[calc(100dvh-6rem)] rounded-xl border shadow-sm",
       )}
     >
-      <div
-        className={cn(
-          "flex items-start border-b",
-          docked ? "gap-2 px-3 py-3" : "gap-3 p-4",
-        )}
-      >
+      <div className={cn("flex items-start border-b", docked ? "gap-2 px-3 py-3" : "gap-3 p-4")}>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.title}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
