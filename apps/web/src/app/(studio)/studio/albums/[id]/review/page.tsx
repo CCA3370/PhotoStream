@@ -18,6 +18,7 @@ interface CategoryDetails {
   readonly id: string;
   readonly name: string;
   readonly enabled: boolean;
+  readonly shortcut: string | null;
 }
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
