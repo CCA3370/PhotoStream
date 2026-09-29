@@ -299,7 +299,7 @@ export function ReviewLightbox({
   }, []);
 
   useEffect(() => {
-    if (readOnly || selectedKey === null) return;
+    if (readOnly) return;
 
     const handleMouseMove = (event: MouseEvent): void => {
       const stage = stageRef.current;
@@ -328,7 +328,7 @@ export function ReviewLightbox({
       window.removeEventListener("mousemove", handleMouseMove);
       setHoverNavigationSide(null);
     };
-  }, [readOnly, selectedKey]);
+  }, [readOnly]);
 
   useEffect(() => {
     if (editMode || selectedKey === null) return;
