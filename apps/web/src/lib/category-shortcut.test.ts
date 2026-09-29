@@ -24,6 +24,7 @@ function keyboard(
 describe("category shortcuts", () => {
   it("captures canonical modifier shortcuts from physical key codes", () => {
     expect(categoryShortcutFromKeyboardEvent(keyboard("Digit3", { ctrlKey: true }))).toBe("Ctrl+3");
+    expect(categoryShortcutFromKeyboardEvent(keyboard("Numpad3", { ctrlKey: true }))).toBe("Ctrl+3");
     expect(
       categoryShortcutFromKeyboardEvent(keyboard("KeyK", { ctrlKey: true, shiftKey: true })),
     ).toBe("Ctrl+Shift+K");
