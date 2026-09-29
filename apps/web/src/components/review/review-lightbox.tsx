@@ -17,7 +17,6 @@ import {
   XIcon,
 } from "lucide-react";
 import {
-  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -300,6 +299,38 @@ export function ReviewLightbox({
   }, []);
 
   useEffect(() => {
+    if (readOnly || selectedKey === null) return;
+
+    const handleMouseMove = (event: MouseEvent): void => {
+      const stage = stageRef.current;
+      if (stage === null) return;
+      const rect = stage.getBoundingClientRect();
+      if (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      ) {
+        setHoverNavigationSide(null);
+        return;
+      }
+
+      const offsetX = event.clientX - rect.left;
+      const edgeThreshold = Math.min(180, rect.width * 0.18);
+      let nextSide: "left" | "right" | null = null;
+      if (offsetX <= edgeThreshold) nextSide = "left";
+      else if (offsetX >= rect.width - edgeThreshold) nextSide = "right";
+      setHoverNavigationSide((current) => (current === nextSide ? current : nextSide));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      setHoverNavigationSide(null);
+    };
+  }, [readOnly, selectedKey]);
+
+  useEffect(() => {
     if (editMode || selectedKey === null) return;
     const stage = stageRef.current;
     if (stage === null) return;
@@ -434,20 +465,6 @@ export function ReviewLightbox({
     toggleFullscreen,
     zoom,
   ]);
-
-  function onViewerMouseMove(event: ReactMouseEvent<HTMLDivElement>): void {
-    if (readOnly) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const offsetX = event.clientX - rect.left;
-    const edgeThreshold = Math.min(180, rect.width * 0.18);
-    const nextSide =
-      offsetX <= edgeThreshold
-        ? "left"
-        : offsetX >= rect.width - edgeThreshold
-          ? "right"
-          : null;
-    setHoverNavigationSide((current) => (current === nextSide ? current : nextSide));
-  }
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (zoom <= 1 && !allowsPhotoSwipePointer(event.pointerType)) return;
@@ -650,13 +667,7 @@ export function ReviewLightbox({
           </DialogDescription>
 
           <div className="flex h-full w-full overflow-hidden bg-black" ref={viewerRef}>
-            <div
-              className="relative min-w-0 flex-1 overflow-hidden bg-black"
-              onMouseLeave={() => {
-                if (!readOnly) setHoverNavigationSide(null);
-              }}
-              onMouseMove={onViewerMouseMove}
-            >
+            <div className="relative min-w-0 flex-1 overflow-hidden bg-black">
               <div
                 aria-label="审核图片画布"
                 className={cn(
