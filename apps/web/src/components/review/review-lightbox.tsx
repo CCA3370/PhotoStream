@@ -44,6 +44,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { categoryShortcutMatches } from "@/lib/category-shortcut";
+import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
 import {
   type MediaEditSourceOrigin,
@@ -433,6 +434,7 @@ export function ReviewLightbox({
   ]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (zoom <= 1 && !allowsPhotoSwipePointer(event.pointerType)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, point);
@@ -627,7 +629,7 @@ export function ReviewLightbox({
         >
           <DialogTitle className="sr-only">审核图片查看器</DialogTitle>
           <DialogDescription className="sr-only">
-            左右键切换，滚轮、双击或加减键缩放，拖动查看；分类快捷键快速设置分类，空格切换显示状态，回车切换精选，连续两次
+            左右键切换，触摸左右滑动翻页；滚轮、双击或加减键缩放，放大后拖动查看；分类快捷键快速设置分类，空格切换显示状态，回车切换精选，连续两次
             Delete 删除。
           </DialogDescription>
 
