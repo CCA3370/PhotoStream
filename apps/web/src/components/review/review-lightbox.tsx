@@ -45,12 +45,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Spinner } from "@/components/ui/spinner";
 import { categoryShortcutMatches } from "@/lib/category-shortcut";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
-import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
 import {
   type MediaEditSourceOrigin,
   resolveMediaEditSource,
   resolveRemoteMediaEditSource,
 } from "@/lib/photo-edit/source-resolver";
+import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
