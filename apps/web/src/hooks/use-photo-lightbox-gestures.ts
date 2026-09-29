@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 
-import { swipeIntentDirection } from "@/lib/photo-swipe-intent";
+import { allowsPhotoSwipePointer, swipeIntentDirection } from "@/lib/photo-swipe-intent";
 
 const minZoom = 1;
 const maxZoom = 5;
@@ -183,6 +183,7 @@ export function usePhotoLightboxGestures({
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): void => {
       if (swipeSettling) return;
+      if (zoom <= 1 && !allowsPhotoSwipePointer(event.pointerType)) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       const point = { x: event.clientX, y: event.clientY };
       pointersRef.current.set(event.pointerId, point);

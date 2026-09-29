@@ -30,6 +30,14 @@ describe("management review stability guards", () => {
     expect(source).toContain('selected.visualRevision ?? "base"');
   });
 
+  it("keeps mouse drags from paging while preserving touch swipe handling", () => {
+    const source = readFileSync(lightboxPath, "utf8");
+
+    expect(source).toContain("allowsPhotoSwipePointer(event.pointerType)");
+    expect(source).toContain("zoom <= 1");
+    expect(source).toContain('gestureRef.current = { mode: "swipe", start: point }');
+  });
+
   it("keeps management lightbox keyboard focus on the image canvas", () => {
     const source = readFileSync(lightboxPath, "utf8");
 
