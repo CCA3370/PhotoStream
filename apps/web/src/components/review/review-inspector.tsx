@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 export interface ReviewInspectorCategory {
   readonly id: string;
   readonly name: string;
+  readonly shortcut?: string | null;
 }
 
 export interface ReviewInspectorItem {
