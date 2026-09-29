@@ -44,8 +44,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { categoryShortcutMatches } from "@/lib/category-shortcut";
-import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
 import { internalImageSourceIdentity } from "@/lib/internal-media-url";
+import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
 import {
   type MediaEditSourceOrigin,
   resolveMediaEditSource,
