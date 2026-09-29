@@ -17,6 +17,7 @@ import {
   XIcon,
 } from "lucide-react";
 import {
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -159,6 +160,7 @@ export function ReviewLightbox({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  const [hoverNavigationSide, setHoverNavigationSide] = useState<"left" | "right" | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
@@ -433,6 +435,20 @@ export function ReviewLightbox({
     zoom,
   ]);
 
+  function onViewerMouseMove(event: ReactMouseEvent<HTMLDivElement>): void {
+    if (readOnly) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const edgeThreshold = Math.min(180, rect.width * 0.18);
+    const nextSide =
+      offsetX <= edgeThreshold
+        ? "left"
+        : offsetX >= rect.width - edgeThreshold
+          ? "right"
+          : null;
+    setHoverNavigationSide((current) => (current === nextSide ? current : nextSide));
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (zoom <= 1 && !allowsPhotoSwipePointer(event.pointerType)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -634,7 +650,13 @@ export function ReviewLightbox({
           </DialogDescription>
 
           <div className="flex h-full w-full overflow-hidden bg-black" ref={viewerRef}>
-            <div className="relative min-w-0 flex-1 overflow-hidden bg-black">
+            <div
+              className="relative min-w-0 flex-1 overflow-hidden bg-black"
+              onMouseLeave={() => {
+                if (!readOnly) setHoverNavigationSide(null);
+              }}
+              onMouseMove={onViewerMouseMove}
+            >
               <div
                 aria-label="审核图片画布"
                 className={cn(
@@ -802,7 +824,12 @@ export function ReviewLightbox({
                 <>
                   <Button
                     aria-label="上一张照片"
-                    className="absolute left-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:left-4 sm:size-11"
+                    className={cn(
+                      "absolute left-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md transition-opacity duration-150 hover:bg-white/15 hover:text-white sm:left-4 sm:size-11",
+                      !readOnly &&
+                        hoverNavigationSide !== "left" &&
+                        "pointer-events-none opacity-0",
+                    )}
                     onClick={() => selectOffset(-1)}
                     size="icon-lg"
                     title="上一张 (←)"
@@ -813,7 +840,12 @@ export function ReviewLightbox({
                   </Button>
                   <Button
                     aria-label="下一张照片"
-                    className="absolute right-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-white/15 hover:text-white sm:right-4 sm:size-11"
+                    className={cn(
+                      "absolute right-2 top-1/2 z-20 size-10 -translate-y-1/2 rounded-full border-white/15 bg-black/35 text-white backdrop-blur-md transition-opacity duration-150 hover:bg-white/15 hover:text-white sm:right-4 sm:size-11",
+                      !readOnly &&
+                        hoverNavigationSide !== "right" &&
+                        "pointer-events-none opacity-0",
+                    )}
                     onClick={() => selectOffset(1)}
                     size="icon-lg"
                     title="下一张 (→)"
