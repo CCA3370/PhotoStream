@@ -345,7 +345,13 @@ export function LiveUpdates({
         clearConnectionWatchdog();
         clearConnectionNoticeTimer();
         setConnectionInterrupted(false);
-        stopFallbackPolling();
+        if (isAppleWebKit()) {
+          if (fallbackPolling === null) {
+            fallbackPolling = setInterval(requestCatchUp, effectiveFallbackPollIntervalMs);
+          }
+        } else {
+          stopFallbackPolling();
+        }
         requestCatchUp();
       });
       source.addEventListener("error", () => {
