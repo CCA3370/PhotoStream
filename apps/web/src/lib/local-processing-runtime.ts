@@ -50,6 +50,7 @@ export interface LocalProcessingSnapshot {
   readonly tasks: readonly LocalProcessingTaskView[];
   readonly paused: boolean;
   readonly compatibilityRecovery: "safari-interrupted" | null;
+  readonly persistenceDegraded: boolean;
 }
 
 type PersistedProcessingStatus = Exclude<LocalProcessingTaskStatus, "staged" | "cancelled">;
@@ -352,6 +353,7 @@ class LocalProcessingRuntime {
   #adaptiveTimer: number | null = null;
   #purged = false;
   #compatibilityRecovery: "safari-interrupted" | null = null;
+  #persistenceDegraded = false;
 
   constructor(albumId: string) {
     this.#albumId = albumId;
@@ -365,6 +367,7 @@ class LocalProcessingRuntime {
     return {
       paused: this.#paused,
       compatibilityRecovery: this.#compatibilityRecovery,
+      persistenceDegraded: this.#persistenceDegraded,
       tasks: [...this.#tasks.values()].map((task) => ({
         id: task.id,
         fileName: task.sourceFileName,
@@ -415,7 +418,7 @@ class LocalProcessingRuntime {
       totalUploadBytes: input.file.size,
       uploadStartedAt: null,
     }));
-    await putPersistedTasks(created.map(persistedTask));
+    await this.#persistTasks(created.map(persistedTask));
     for (const task of created) this.#tasks.set(task.id, task);
     this.#emit();
     this.#pump();
@@ -459,7 +462,7 @@ class LocalProcessingRuntime {
         await clientMutation(`/api/v1/uploads/${encodeURIComponent(intentId)}/cancel`);
       }
       await Promise.all([
-        deletePersistedTask(task.id),
+        this.#deletePersistedTask(task.id),
         deleteLocalReviewPhoto(task.localPhotoId),
         deleteLocalPhotoEditDraft(task.localPhotoId),
       ]);
@@ -471,7 +474,7 @@ class LocalProcessingRuntime {
         uploadState: "failed",
         error: message,
       }).catch(() => undefined);
-      await putPersistedTasks([persistedTask(task)]).catch(() => undefined);
+      await this.#persistTasks([persistedTask(task)]).catch(() => undefined);
       this.#emit();
       throw error;
     }
@@ -514,7 +517,7 @@ class LocalProcessingRuntime {
       task.error = null;
       retrying.push(task);
     }
-    await putPersistedTasks(retrying.map(persistedTask));
+    await this.#persistTasks(retrying.map(persistedTask));
     if (retrying.length === 0) return;
     this.#paused = false;
     this.#emit();
@@ -538,7 +541,13 @@ class LocalProcessingRuntime {
     for (const controller of this.#abortControllers.values()) controller.abort();
 
     const [persisted, localPhotos] = await Promise.all([
-      listPersistedTasks(this.#albumId),
+      this.#persistenceDegraded
+        ? Promise.resolve([] as PersistedProcessingTask[])
+        : listPersistedTasks(this.#albumId).catch((error: unknown) => {
+            if (!isAppleWebKit()) throw error;
+            this.#persistenceDegraded = true;
+            return [] as PersistedProcessingTask[];
+          }),
       listLocalReviewPhotos(this.#albumId),
     ]);
     const localPhotoIds = new Set([
@@ -548,7 +557,7 @@ class LocalProcessingRuntime {
     ]);
 
     await Promise.all([
-      ...persisted.map((task) => deletePersistedTask(task.id)),
+      ...persisted.map((task) => this.#deletePersistedTask(task.id)),
       ...[...localPhotoIds].flatMap((localPhotoId) => [
         deleteLocalReviewPhoto(localPhotoId),
         deleteLocalPhotoEditDraft(localPhotoId),
@@ -572,7 +581,13 @@ class LocalProcessingRuntime {
       this.#compatibilityRecovery = "safari-interrupted";
     }
 
-    const stored = await listPersistedTasks(this.#albumId);
+    let stored: PersistedProcessingTask[] = [];
+    try {
+      stored = await listPersistedTasks(this.#albumId);
+    } catch (error) {
+      if (!isAppleWebKit()) throw error;
+      this.#persistenceDegraded = true;
+    }
     const recovered: ProcessingTask[] = await Promise.all(
       stored.map(async (task) => {
         const file = restoredPersistedFile(task);
@@ -603,10 +618,32 @@ class LocalProcessingRuntime {
     );
     for (const task of recovered) this.#tasks.set(task.id, task);
     const reset = recovered.filter((task) => task.status === "queued");
-    if (reset.length > 0) await putPersistedTasks(reset.map(persistedTask));
+    if (reset.length > 0) await this.#persistTasks(reset.map(persistedTask));
     this.#ensureAdaptiveTimer();
     this.#emit();
     this.#pump();
+  }
+
+  async #persistTasks(tasks: readonly PersistedProcessingTask[]): Promise<void> {
+    if (tasks.length === 0 || this.#persistenceDegraded) return;
+    try {
+      await putPersistedTasks(tasks);
+    } catch (error) {
+      if (!isAppleWebKit()) throw error;
+      this.#persistenceDegraded = true;
+      this.#emit();
+    }
+  }
+
+  async #deletePersistedTask(id: string): Promise<void> {
+    if (this.#persistenceDegraded) return;
+    try {
+      await deletePersistedTask(id);
+    } catch (error) {
+      if (!isAppleWebKit()) throw error;
+      this.#persistenceDegraded = true;
+      this.#emit();
+    }
   }
 
   #emit(): void {
@@ -703,7 +740,7 @@ class LocalProcessingRuntime {
     let metadata: ProcessedPhotoMetadata | null = null;
 
     try {
-      await putPersistedTasks([persistedTask(task)]);
+      await this.#persistTasks([persistedTask(task)]);
       await processPhotoInWorkerStreaming(
         task.file,
         {
@@ -849,7 +886,7 @@ class LocalProcessingRuntime {
       } else {
         startLocalBibOcr(task.localPhotoId, bibConfig);
       }
-      await deletePersistedTask(task.id);
+      await this.#deletePersistedTask(task.id);
       task.status = "staged";
       task.error = null;
       task.uploadedBytes = task.totalUploadBytes;
@@ -874,7 +911,7 @@ class LocalProcessingRuntime {
     } finally {
       if (this.#purged) {
         await Promise.all([
-          deletePersistedTask(task.id).catch(() => undefined),
+          this.#deletePersistedTask(task.id).catch(() => undefined),
           deleteLocalReviewPhoto(task.localPhotoId).catch(() => undefined),
           deleteLocalPhotoEditDraft(task.localPhotoId).catch(() => undefined),
         ]);
