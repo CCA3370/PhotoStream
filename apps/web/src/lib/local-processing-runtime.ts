@@ -12,7 +12,7 @@ import {
 } from "@/lib/apple-webkit";
 import { clientMutation } from "@/lib/client-api";
 import { managementErrorMessage } from "@/lib/management-error";
-import { startLocalBibOcr } from "@/lib/local-bib-ocr";
+import { runLocalBibOcrAndWait, startLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   createLocalReviewPhoto,
   deleteLocalReviewPhoto,
@@ -769,18 +769,25 @@ class LocalProcessingRuntime {
               const currentMetadata = metadata;
               if (currentMetadata !== null) {
                 uploads.push(
-                  uploaded.then(async (latest) => {
-                    const microPreviewBlob = await uploadProgressiveMicroPreview(
-                      latest.mediaId,
-                      variant,
-                      currentMetadata.width,
-                      currentMetadata.height,
-                      controller.signal,
-                    );
-                    if (microPreviewBlob !== null) {
-                      await patchLocalReviewPhoto(task.localPhotoId, { microPreviewBlob });
-                    }
-                  }),
+                  uploaded
+                    .then(async (latest) => {
+                      const microPreviewBlob = await uploadProgressiveMicroPreview(
+                        latest.mediaId,
+                        variant,
+                        currentMetadata.width,
+                        currentMetadata.height,
+                        controller.signal,
+                      );
+                      if (microPreviewBlob !== null) {
+                        await patchLocalReviewPhoto(task.localPhotoId, { microPreviewBlob });
+                      }
+                    })
+                    .catch((error: unknown) => {
+                      if (controller.signal.aborted) throw error;
+                      // The micro preview is an optional bandwidth optimization. Safari must not
+                      // turn a successful original/preview upload into a failed photo because this
+                      // tiny derived enhancement could not be generated.
+                    }),
                 );
               }
             }
@@ -794,7 +801,12 @@ class LocalProcessingRuntime {
         uploadState: "published",
         error: null,
       });
-      startLocalBibOcr(task.localPhotoId, bibConfig);
+      if (isAppleWebKit() && bibConfig.recognitionEnabled) {
+        // Keep WebKit's WASM OCR from overlapping the next full-resolution decode.
+        await runLocalBibOcrAndWait(task.localPhotoId, bibConfig);
+      } else {
+        startLocalBibOcr(task.localPhotoId, bibConfig);
+      }
       await deletePersistedTask(task.id);
       task.status = "staged";
       task.error = null;
