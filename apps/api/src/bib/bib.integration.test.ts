@@ -420,6 +420,72 @@ maybeDescribe("bib configuration, privacy and search", () => {
     ).rejects.toMatchObject({ code: "BIB_CONFIG_INVALID" });
   });
 
+  it("keeps number and grade/class search available across public access changes", async () => {
+    await service.updateConfig({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      input: validConfig(),
+      requestId: "bib-public-config",
+    });
+    await service.processPendingRecalculations(10);
+
+    await photoService.updateAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      input: { access: "public" },
+      requestId: "bib-public-access",
+    });
+
+    const publicConfig = await service.getConfig({ id: adminId, role: "admin" }, albumId);
+    expect(publicConfig.searchEnabled).toBe(true);
+
+    const publicAlbum = await photoService.getPublicAlbum("bib-integration-one");
+    expect(publicAlbum.view).toMatchObject({
+      accessRequired: false,
+      bibSearchEnabled: true,
+      bibAttributeFilterEnabled: true,
+    });
+
+    await expect(
+      service.searchPublic({
+        slug: "bib-integration-one",
+        visitorToken: undefined,
+        number: "101999",
+        cursor: undefined,
+      }),
+    ).resolves.toMatchObject({ items: [] });
+
+    await expect(
+      service.filterPublicAttributes({
+        slug: "bib-integration-one",
+        visitorToken: undefined,
+        gradeOptionId: gradeOne,
+        classOptionId: classOne,
+        categoryId: undefined,
+        cursor: undefined,
+      }),
+    ).resolves.toMatchObject({ items: [] });
+
+    await expect(
+      service.updateConfig({
+        actor: { id: adminId, role: "admin" },
+        albumId,
+        input: updateFromView(publicConfig),
+        requestId: "bib-public-resave",
+      }),
+    ).resolves.toMatchObject({ searchEnabled: true });
+
+    await photoService.updateAlbum({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      input: { access: "password" },
+      requestId: "bib-password-access",
+    });
+    expect(
+      (await service.getConfig({ id: adminId, role: "admin" }, albumId)).searchEnabled,
+    ).toBe(true);
+  });
+
   it("keeps suggestions private, confirms exact search, and protects manual no-number", async () => {
     await service.updateConfig({
       actor: { id: adminId, role: "admin" },

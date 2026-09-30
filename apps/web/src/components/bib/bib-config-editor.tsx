@@ -916,7 +916,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       <Card>
         <CardHeader>
           <CardTitle>功能开关</CardTitle>
-          <CardDescription>搜索只能用于口令相册。</CardDescription>
+          <CardDescription>公开和口令活动都可启用精确号码与年级班级搜索。</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>

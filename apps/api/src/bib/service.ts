@@ -248,14 +248,7 @@ export class BibService {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`bib-config:${options.albumId}`}, 0))`,
       );
-      const album = await this.#album(transaction, options.albumId);
-      if (normalized.searchEnabled && album.access !== "password") {
-        throw new AppError({
-          code: "BIB_CONFIG_INVALID",
-          message: "只有口令相册可以开启号码搜索",
-          statusCode: 409,
-        });
-      }
+      await this.#album(transaction, options.albumId);
       const current = await this.#loadDocument(transaction, options.albumId);
       await assertConfigIdsAvailable(
         normalized.patterns.map((pattern) => pattern.id),
@@ -1572,9 +1565,7 @@ export class BibService {
     const number = normalizeBibNumber(options.number);
     if (number === null) throw this.#publicSearchUnavailable();
     const photoService = this.#photoServiceOrThrow();
-    const album = await photoService.getAuthorizedPublicAlbum(options.slug, options.visitorToken, {
-      requirePassword: true,
-    });
+    const album = await photoService.getAuthorizedPublicAlbum(options.slug, options.visitorToken);
     if (!album.bibSearchEnabled || !album.bibRuleUsable) throw this.#publicSearchUnavailable();
     const document = await this.#loadDocument(this.#database, album.id);
     if (!evaluateBibNumber(number, document.patterns).valid) throw this.#publicSearchUnavailable();
@@ -1611,9 +1602,7 @@ export class BibService {
     readonly cursor: string | undefined;
   }) {
     const photoService = this.#photoServiceOrThrow();
-    const album = await photoService.getAuthorizedPublicAlbum(options.slug, options.visitorToken, {
-      requirePassword: true,
-    });
+    const album = await photoService.getAuthorizedPublicAlbum(options.slug, options.visitorToken);
     if (!album.bibSearchEnabled || !album.bibRuleUsable || !album.bibMappingUsable) {
       throw this.#publicSearchUnavailable();
     }

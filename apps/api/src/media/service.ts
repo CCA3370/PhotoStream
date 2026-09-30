@@ -1109,7 +1109,6 @@ export class PhotoService {
           ...(scheduledStartAt === undefined ? {} : { scheduledStartAt }),
           previewDownloadEnabled: true,
           originalDownloadEnabled: true,
-          ...(options.input.access === "public" ? { bibSearchEnabled: false } : {}),
           ...(accessChanged ? { accessVersion: album.accessVersion + 1 } : {}),
           updatedAt: now,
         })
@@ -2942,8 +2941,7 @@ export class PhotoService {
       .from(schema.categories)
       .where(and(eq(schema.categories.albumId, album.id), eq(schema.categories.enabled, true)))
       .orderBy(asc(schema.categories.sortOrder), asc(schema.categories.id));
-    const bibSearchEnabled =
-      unlocked && album.access === "password" && album.bibSearchEnabled && album.bibRuleUsable;
+    const bibSearchEnabled = unlocked && album.bibSearchEnabled && album.bibRuleUsable;
     const bibNumberLengths = bibSearchEnabled
       ? (
           await this.#database
