@@ -469,12 +469,18 @@ export function PhotoEditorPanel({
             contentType: photo.originalContentType,
           }),
         });
-        setProgress(photo.mediaId === null ? 100 : 5);
+        const remoteReady = photo.mediaId !== null && photo.uploadState === "published";
+        setProgress(remoteReady ? 5 : 100);
 
-        if (photo.mediaId === null) {
+        if (!remoteReady) {
           toast.add({
             title: "修图已应用到本机",
-            description: "远端媒体建立后会自动同步此修图版本，基础原图上传不受影响。",
+            description:
+              photo.mediaId === null
+                ? "远端媒体建立后会自动同步此修图版本，基础原图上传不受影响。"
+                : photo.uploadState === "failed"
+                  ? "照片上传尚未完成；修图参数已保留，重新上传完成后会自动同步。"
+                  : "照片仍在上传；修图参数已保留，基础上传完成后会自动同步。",
             type: "success",
           });
           await onApplied();
