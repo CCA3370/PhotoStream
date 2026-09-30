@@ -27,12 +27,7 @@ describe("management review stability guards", () => {
     expect(source).not.toContain("onWheel={");
     expect(source).not.toContain("key={displaySrc}");
     expect(source).not.toContain(
-      "key={`" +
-        "$" +
-        "{selected.key}:" +
-        "$" +
-        '{selected.visualRevision ?? "base"}' +
-        "`}",
+      "key={`" + "$" + "{selected.key}:" + "$" + '{selected.visualRevision ?? "base"}' + "`}",
     );
     expect(source).toContain('selected.visualRevision ?? "base"');
   });
