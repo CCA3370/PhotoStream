@@ -40,7 +40,7 @@ async function decode(file: File): Promise<{
   draw(context: CanvasRenderingContext2D): void;
   close(): void;
 }> {
-  if (typeof createImageBitmap === "function") {
+  if (!isAppleWebKit() && typeof createImageBitmap === "function") {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
       return {
@@ -57,12 +57,24 @@ async function decode(file: File): Promise<{
   const url = URL.createObjectURL(file);
   const image = new Image();
   image.decoding = "async";
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.addEventListener("load", () => resolve(), { once: true });
+    image.addEventListener(
+      "error",
+      () => reject(new Error("此设备无法解码 HEIC/HEIF，请先在系统相册中导出为 JPEG 后再上传。")),
+      { once: true },
+    );
+  });
   image.src = url;
   try {
-    await image.decode();
-  } catch {
+    if (typeof image.decode === "function") {
+      await image.decode().catch(() => loaded);
+    } else {
+      await loaded;
+    }
+  } catch (error) {
     URL.revokeObjectURL(url);
-    throw new Error("此设备无法解码 HEIC/HEIF，请先在系统相册中导出为 JPEG 后再上传。");
+    throw error;
   }
   return {
     width: image.naturalWidth,
