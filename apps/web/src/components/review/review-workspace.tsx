@@ -333,6 +333,8 @@ export function ReviewWorkspace({
   const lastSelectedIndexRef = useRef<number | null>(null);
   const dragSelectionRef = useRef<DragSelectionState | null>(null);
   const filterRequestIdRef = useRef(0);
+  const lightboxTotalRequestRef = useRef(0);
+  const lightboxTotalAbortRef = useRef<AbortController | null>(null);
   const reviewedMediaIdsRef = useRef<Set<string>>(new Set());
   const collaborationRequestIdRef = useRef(0);
   const completedReviewsRef = useRef(new Map<string, string>());
@@ -376,6 +378,7 @@ export function ReviewWorkspace({
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [lightboxQueueKeys, setLightboxQueueKeys] = useState<readonly string[]>([]);
+  const [lightboxTotal, setLightboxTotal] = useState<number | null>(null);
   const [inspectorKey, setInspectorKey] = useState<string | null>(null);
   const [inspectorDeleteOpen, setInspectorDeleteOpen] = useState(false);
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
@@ -611,6 +614,22 @@ export function ReviewWorkspace({
     [albumId, buildRemoteQuery, filter],
   );
 
+  const fetchRemoteTotal = useCallback(
+    async (signal?: AbortSignal): Promise<number> => {
+      const publicationStatus =
+        filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
+      const query = buildRemoteQuery(publicationStatus);
+      query.set("limit", "1");
+      if (filter === "featured") query.set("featured", "true");
+      const page = await clientGet<RemoteSelectionPage>(
+        `/api/v1/albums/${albumId}/media-selection?${query.toString()}`,
+        signal,
+      );
+      return page.total;
+    },
+    [albumId, buildRemoteQuery, filter],
+  );
+
   const remoteQueryKey = `${albumId}:${filter}:${buildRemoteQuery().toString()}`;
   remoteQueryKeyRef.current = remoteQueryKey;
   if (remoteMatchingScopeRef.current === null && !filtersHydrated) {
@@ -744,7 +763,13 @@ export function ReviewWorkspace({
     };
   }, [albumId, refreshFeatured, refreshRemote, refreshReviewCollaboration]);
 
-  useEffect(() => () => remoteRequestsRef.current.cancel(), []);
+  useEffect(
+    () => () => {
+      remoteRequestsRef.current.cancel();
+      lightboxTotalAbortRef.current?.abort();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -948,6 +973,43 @@ export function ReviewWorkspace({
     () => items.filter((item) => matchesCurrentFilters(item)),
     [items, matchesCurrentFilters],
   );
+
+  function openLightbox(key: string): void {
+    setLightboxQueueKeys(visibleItems.map((candidate) => candidate.key));
+    setActiveKey(key);
+
+    const localCount = visibleItems.filter((item) => item.source === "local").length;
+    const requestId = lightboxTotalRequestRef.current + 1;
+    lightboxTotalRequestRef.current = requestId;
+    lightboxTotalAbortRef.current?.abort();
+    lightboxTotalAbortRef.current = null;
+
+    if (filter === "local") {
+      setLightboxTotal(localCount);
+      return;
+    }
+
+    setLightboxTotal(null);
+    const controller = new AbortController();
+    lightboxTotalAbortRef.current = controller;
+    void fetchRemoteTotal(controller.signal)
+      .then((remoteTotal) => {
+        if (
+          controller.signal.aborted ||
+          lightboxTotalRequestRef.current !== requestId ||
+          activeKey !== null
+        ) {
+          return;
+        }
+        setLightboxTotal(localCount + remoteTotal);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (lightboxTotalAbortRef.current === controller) {
+          lightboxTotalAbortRef.current = null;
+        }
+      });
+  }
 
   function resetSelection(): void {
     setSelectedKeys(new Set());
@@ -2596,8 +2658,7 @@ export function ReviewWorkspace({
                         toggleSelection(item.key, index, event.shiftKey);
                         return;
                       }
-                      setLightboxQueueKeys(visibleItems.map((candidate) => candidate.key));
-                      setActiveKey(item.key);
+                      openLightbox(item.key);
                     }}
                     type="button"
                   >
@@ -2815,7 +2876,9 @@ export function ReviewWorkspace({
 
       <ReviewLightbox
         categories={categories}
+        hasMore={filter !== "local" && cursor !== null}
         items={lightboxItems}
+        loadingMore={loadingMore}
         onBibError={setError}
         onCategoryChange={(key, categoryId) => {
           const item = itemByKey(key);
@@ -2823,8 +2886,12 @@ export function ReviewWorkspace({
         }}
         onBibStateChange={updateBibState}
         onClose={() => {
+          lightboxTotalRequestRef.current += 1;
+          lightboxTotalAbortRef.current?.abort();
+          lightboxTotalAbortRef.current = null;
           setActiveKey(null);
           setLightboxQueueKeys([]);
+          setLightboxTotal(null);
         }}
         onDelete={(key) => {
           const item = itemByKey(key);
@@ -2832,6 +2899,7 @@ export function ReviewWorkspace({
         }}
         onLocalBibConfirmNoNumber={confirmLocalNoNumberByKey}
         onLocalBibConfirmNumbers={confirmLocalNumbersByKey}
+        onLoadMore={loadMore}
         onEditApplied={async () => {
           await Promise.all([refreshRemote(), refreshLocal()]);
         }}
@@ -2850,6 +2918,7 @@ export function ReviewWorkspace({
           if (item !== null) void toggleVisibility(item);
         }}
         selectedKey={activeKey}
+        totalCount={lightboxTotal}
       />
 
       <BibReviewDialog
