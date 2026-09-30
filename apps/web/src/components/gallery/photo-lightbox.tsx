@@ -293,13 +293,16 @@ export function PhotoLightbox({
     }, 110);
   }, [cancelTargetRequest, clearControlsHideTimer, selectedId]);
 
+  useLayoutEffect(() => {
+    if (selectedId !== null) resetInteraction();
+  }, [resetInteraction, selectedId]);
+
   useEffect(() => {
     preparedRequestRef.current += 1;
     setDownloadMenuOpen(false);
     setWeChatDownload(null);
     setPreparedImage(null);
-    if (selectedId !== null) resetInteraction();
-  }, [resetInteraction, selectedId]);
+  }, [selectedId]);
 
   useEffect(
     () => () => {
