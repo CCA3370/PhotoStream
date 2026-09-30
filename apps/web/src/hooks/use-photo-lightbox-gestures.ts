@@ -139,8 +139,9 @@ export function usePhotoLightboxGestures({
       if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
       swipeTimerRef.current = setTimeout(() => {
         swipeTimerRef.current = null;
-        setSwipeSettling(false);
-        setSwipeOffset(0);
+        // Keep the completed slide position until the selected media actually changes.
+        // Resetting the offset first briefly moves the old photo back to the center,
+        // which is visible as a wrong-photo flash when navigation is driven by keys.
         commitOffset(offset);
       }, swipeSettleMs);
     },
