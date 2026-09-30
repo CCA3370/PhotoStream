@@ -78,7 +78,10 @@ async function yieldToBrowser(): Promise<void> {
   });
 }
 
-async function decodeSource(source: PhotoEditRenderableSource, signal?: AbortSignal): Promise<DecodedSource> {
+async function decodeSource(
+  source: PhotoEditRenderableSource,
+  signal?: AbortSignal,
+): Promise<DecodedSource> {
   aborted(signal);
   if (isImageBitmapSource(source)) {
     return {
