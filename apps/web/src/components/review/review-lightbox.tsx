@@ -141,6 +141,10 @@ export function ReviewLightbox({
   onLocalBibConfirmNoNumber,
   onBibError,
   onCategoryChange,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
+  totalCount,
   readOnly = false,
 }: Readonly<{
   items: readonly ReviewLightboxItem[];
@@ -159,6 +163,10 @@ export function ReviewLightbox({
   onLocalBibConfirmNoNumber: (key: string) => Promise<BibMediaState>;
   onBibError: (message: string) => void;
   onCategoryChange: (key: string, categoryId: string | null) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void | Promise<void>;
+  totalCount?: number | null;
   readOnly?: boolean;
 }>) {
   const selectedIndex =
@@ -170,6 +178,8 @@ export function ReviewLightbox({
   const pointersRef = useRef(new Map<number, Point>());
   const gestureRef = useRef<Gesture>({ mode: "idle" });
   const deleteTapRef = useRef<{ readonly key: string; readonly at: number } | null>(null);
+  const pendingForwardNavigationRef = useRef(false);
+  const requestedMoreAtLengthRef = useRef<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -250,14 +260,53 @@ export function ReviewLightbox({
 
   const selectOffset = useCallback(
     (offset: number) => {
-      if (items.length < 2 || selectedIndex < 0) return;
+      if (selectedIndex < 0) return;
       const index = selectedIndex + offset;
-      if (index < 0 || index >= items.length) return;
+      if (index < 0) return;
+      if (index >= items.length) {
+        if (offset > 0 && hasMore && onLoadMore !== undefined) {
+          pendingForwardNavigationRef.current = true;
+          if (!loadingMore) void onLoadMore();
+        }
+        return;
+      }
       const item = items[index];
       if (item !== undefined) onSelect(item.key);
     },
-    [items, onSelect, selectedIndex],
+    [hasMore, items, loadingMore, onLoadMore, onSelect, selectedIndex],
   );
+
+  useEffect(() => {
+    if (selectedKey !== null) return;
+    pendingForwardNavigationRef.current = false;
+    requestedMoreAtLengthRef.current = null;
+  }, [selectedKey]);
+
+  useEffect(() => {
+    if (!pendingForwardNavigationRef.current || selectedIndex < 0) return;
+    const next = items[selectedIndex + 1];
+    if (next !== undefined) {
+      pendingForwardNavigationRef.current = false;
+      onSelect(next.key);
+      return;
+    }
+    if (!hasMore && !loadingMore) pendingForwardNavigationRef.current = false;
+  }, [hasMore, items, loadingMore, onSelect, selectedIndex]);
+
+  useEffect(() => {
+    if (
+      selectedIndex < 0 ||
+      !hasMore ||
+      loadingMore ||
+      onLoadMore === undefined ||
+      selectedIndex < Math.max(0, items.length - 6) ||
+      requestedMoreAtLengthRef.current === items.length
+    ) {
+      return;
+    }
+    requestedMoreAtLengthRef.current = items.length;
+    void onLoadMore();
+  }, [hasMore, items.length, loadingMore, onLoadMore, selectedIndex]);
 
   const toggleFullscreen = useCallback(async () => {
     const viewer = viewerRef.current;
@@ -664,9 +713,12 @@ export function ReviewLightbox({
   const hidden = selected.publicationStatus === "hidden";
   const canToggleVisibility = published || (hidden && !selected.inspector.editPending);
   const busy = selected.pendingAction !== null || !canReviewCurrentImage;
-  const canNavigate = items.length > 1;
   const canSelectPrevious = selectedIndex > 0;
-  const canSelectNext = selectedIndex >= 0 && selectedIndex < items.length - 1;
+  const canSelectNext =
+    selectedIndex >= 0 && (selectedIndex < items.length - 1 || hasMore);
+  const canNavigate = canSelectPrevious || canSelectNext;
+  const displayTotal =
+    totalCount == null ? (hasMore ? null : items.length) : Math.max(totalCount, items.length);
   const bibConfirmed = isBibReviewConfirmed(selected.bib);
   const localActions =
     selected.mediaId === null
@@ -798,7 +850,7 @@ export function ReviewLightbox({
 
               <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3 pb-14 sm:p-4 sm:pb-16">
                 <div className="text-xs text-white/65">
-                  {selectedIndex + 1} / {items.length}
+                  {selectedIndex + 1} / {displayTotal ?? "…"}
                 </div>
                 <div className="pointer-events-auto flex items-center gap-1.5">
                   {(selected.localPreferred && selected.originalSrc !== null) ||
@@ -899,7 +951,11 @@ export function ReviewLightbox({
                     type="button"
                     variant="outline"
                   >
-                    <ChevronRightIcon className="size-5 sm:size-6" />
+                    {loadingMore && selectedIndex === items.length - 1 ? (
+                      <Spinner className="size-5 animate-spin sm:size-6" />
+                    ) : (
+                      <ChevronRightIcon className="size-5 sm:size-6" />
+                    )}
                   </Button>
                 </>
               ) : null}
