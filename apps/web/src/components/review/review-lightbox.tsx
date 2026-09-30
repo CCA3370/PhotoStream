@@ -770,7 +770,7 @@ export function ReviewLightbox({
                 )}
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between bg-gradient-to-b from-black/70 via-black/20 to-transparent p-3 pb-14 sm:p-4 sm:pb-16">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3 pb-14 sm:p-4 sm:pb-16">
                 <div className="text-xs text-white/65">
                   {selectedIndex + 1} / {items.length}
                 </div>
@@ -876,7 +876,7 @@ export function ReviewLightbox({
                 </>
               ) : null}
 
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-20">
                 <div className="pointer-events-auto mx-auto flex max-w-6xl flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
                   <div className="flex items-center gap-2 text-[11px] text-white/60 sm:text-xs">
                     <span>
