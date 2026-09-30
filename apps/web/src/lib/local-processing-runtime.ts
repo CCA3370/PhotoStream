@@ -11,7 +11,7 @@ import {
   markSafariProcessingActive,
 } from "@/lib/apple-webkit";
 import { clientMutation } from "@/lib/client-api";
-import { runLocalBibOcrAndWait, startLocalBibOcr } from "@/lib/local-bib-ocr";
+import { startLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   createLocalReviewPhoto,
   deleteLocalReviewPhoto,
@@ -70,6 +70,8 @@ interface ProcessingTask {
   uploadedBytes: number;
   totalUploadBytes: number;
   uploadStartedAt: number | null;
+  intentId: string | null;
+  mediaId: string | null;
 }
 
 interface PersistedProcessingTask extends Omit<ProcessingTask, "file" | "status"> {
@@ -417,6 +419,8 @@ class LocalProcessingRuntime {
       uploadedBytes: 0,
       totalUploadBytes: input.file.size,
       uploadStartedAt: null,
+      intentId: null,
+      mediaId: null,
     }));
     await this.#persistTasks(created.map(persistedTask));
     for (const task of created) this.#tasks.set(task.id, task);
@@ -444,10 +448,10 @@ class LocalProcessingRuntime {
     this.#abortControllers.get(taskId)?.abort();
     this.#emit();
 
-    let intentId: string | null = null;
+    let intentId: string | null = task.intentId;
     try {
-      const localPhoto = await getLocalReviewPhoto(task.localPhotoId);
-      intentId = localPhoto?.intentId ?? null;
+      const localPhoto = intentId === null ? await getLocalReviewPhoto(task.localPhotoId) : null;
+      intentId = intentId ?? localPhoto?.intentId ?? null;
       if (intentId === null) {
         const pendingIntent = this.#intentPromises.get(taskId);
         if (pendingIntent !== undefined) {
@@ -470,10 +474,12 @@ class LocalProcessingRuntime {
       const message = error instanceof Error ? error.message : "取消上传失败";
       task.status = "failed";
       task.error = message;
-      await patchLocalReviewPhoto(task.localPhotoId, {
-        uploadState: "failed",
-        error: message,
-      }).catch(() => undefined);
+      if (!isAppleWebKit()) {
+        await patchLocalReviewPhoto(task.localPhotoId, {
+          uploadState: "failed",
+          error: message,
+        }).catch(() => undefined);
+      }
       await this.#persistTasks([persistedTask(task)]).catch(() => undefined);
       this.#emit();
       throw error;
@@ -613,6 +619,8 @@ class LocalProcessingRuntime {
           uploadedBytes: 0,
           totalUploadBytes: file.size,
           uploadStartedAt: null,
+          intentId: task.intentId ?? null,
+          mediaId: task.mediaId ?? null,
         };
       }),
     );
@@ -746,29 +754,37 @@ class LocalProcessingRuntime {
         {
           onMetadata: async (nextMetadata) => {
             metadata = nextMetadata;
-            const created = createLocalReviewPhoto({
-              albumId: this.#albumId,
-              categoryId: task.categoryId,
-              file: task.file,
-              sourceFileName: task.sourceFileName,
-              sourceHash: task.sourceHash,
-              processed: { ...nextMetadata, variants: [] },
-            });
-            const localPhoto = {
-              ...created,
-              id: task.localPhotoId,
-              createdAt: task.createdAt,
-              uploadState: "uploading" as const,
-              bib: {
-                ...created.bib,
-                ocrStatus: bibConfig.recognitionEnabled
-                  ? ("not_started" as const)
-                  : ("disabled" as const),
-                modelVersion: bibConfig.modelVersion,
-                ruleVersion: bibConfig.ruleVersion,
-              },
-            };
-            await putLocalReviewPhoto(localPhoto);
+            const persistLocalReview = !isAppleWebKit();
+
+            // WebKit must not block the remote upload on a large Blob IndexedDB write.
+            // Uploading photos are intentionally hidden from review, so Safari can safely
+            // use the remote media as the source of truth once the upload completes.
+            if (persistLocalReview) {
+              const created = createLocalReviewPhoto({
+                albumId: this.#albumId,
+                categoryId: task.categoryId,
+                file: task.file,
+                sourceFileName: task.sourceFileName,
+                sourceHash: task.sourceHash,
+                processed: { ...nextMetadata, variants: [] },
+              });
+              const localPhoto = {
+                ...created,
+                id: task.localPhotoId,
+                createdAt: task.createdAt,
+                uploadState: "uploading" as const,
+                bib: {
+                  ...created.bib,
+                  ocrStatus: bibConfig.recognitionEnabled
+                    ? ("not_started" as const)
+                    : ("disabled" as const),
+                  modelVersion: bibConfig.modelVersion,
+                  ruleVersion: bibConfig.ruleVersion,
+                },
+              };
+              await putLocalReviewPhoto(localPhoto);
+            }
+
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
             intentPromise = createProgressiveUpload({
               localPhotoId: task.localPhotoId,
@@ -781,38 +797,43 @@ class LocalProcessingRuntime {
             });
             this.#intentPromises.set(task.id, intentPromise);
             const intent = await intentPromise;
+            task.intentId = intent.id;
+            task.mediaId = intent.mediaId;
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-            await patchLocalReviewPhoto(task.localPhotoId, {
-              intentId: intent.id,
-              mediaId: intent.mediaId,
-              uploadState: "uploading",
-              error: null,
-            });
 
-            const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
-            if (
-              editDraft !== null &&
-              ["applied_local", "syncing", "failed"].includes(editDraft.editState) &&
-              editDraft.sourceFingerprint.length > 0
-            ) {
-              let reserved = false;
-              let releaseReservation: () => void = () => {};
-              const reservationReady = new Promise<void>((resolve) => {
-                releaseReservation = resolve;
+            if (persistLocalReview) {
+              await patchLocalReviewPhoto(task.localPhotoId, {
+                intentId: intent.id,
+                mediaId: intent.mediaId,
+                uploadState: "uploading",
+                error: null,
               });
-              const syncPromise = syncLocalPhotoEditDraft(task.localPhotoId, undefined, () => {
-                reserved = true;
-                releaseReservation();
-              });
-              void syncPromise.catch(() => undefined);
-              await Promise.race([
-                reservationReady,
-                syncPromise.then(() => {
-                  if (!reserved) {
-                    throw new Error("修图版本未能在基础预览上传前建立发布门禁");
-                  }
-                }),
-              ]);
+
+              const editDraft = await getLocalPhotoEditDraft(task.localPhotoId);
+              if (
+                editDraft !== null &&
+                ["applied_local", "syncing", "failed"].includes(editDraft.editState) &&
+                editDraft.sourceFingerprint.length > 0
+              ) {
+                let reserved = false;
+                let releaseReservation: () => void = () => {};
+                const reservationReady = new Promise<void>((resolve) => {
+                  releaseReservation = resolve;
+                });
+                const syncPromise = syncLocalPhotoEditDraft(task.localPhotoId, undefined, () => {
+                  reserved = true;
+                  releaseReservation();
+                });
+                void syncPromise.catch(() => undefined);
+                await Promise.race([
+                  reservationReady,
+                  syncPromise.then(() => {
+                    if (!reserved) {
+                      throw new Error("修图版本未能在基础预览上传前建立发布门禁");
+                    }
+                  }),
+                ]);
+              }
             }
 
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
@@ -826,13 +847,15 @@ class LocalProcessingRuntime {
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
             task.totalUploadBytes += variant.blob.size;
             this.#emit();
-            await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
-              ...current,
-              variants: [
-                ...current.variants.filter((existing) => existing.kind !== variant.kind),
-                { ...variant },
-              ],
-            }));
+            if (!isAppleWebKit()) {
+              await updateLocalReviewPhoto(task.localPhotoId, (current) => ({
+                ...current,
+                variants: [
+                  ...current.variants.filter((existing) => existing.kind !== variant.kind),
+                  { ...variant },
+                ],
+              }));
+            }
             const intent = await intentPromise;
             if (intent === null) throw new Error("原图上传任务尚未创建");
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
@@ -857,7 +880,7 @@ class LocalProcessingRuntime {
                         currentMetadata.height,
                         controller.signal,
                       );
-                      if (microPreviewBlob !== null) {
+                      if (microPreviewBlob !== null && !isAppleWebKit()) {
                         await patchLocalReviewPhoto(task.localPhotoId, { microPreviewBlob });
                       }
                     })
@@ -876,14 +899,11 @@ class LocalProcessingRuntime {
       );
       await Promise.all(uploads);
       if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-      await patchLocalReviewPhoto(task.localPhotoId, {
-        uploadState: "published",
-        error: null,
-      });
-      if (isAppleWebKit() && bibConfig.recognitionEnabled) {
-        // Keep WebKit's WASM OCR from overlapping the next full-resolution decode.
-        await runLocalBibOcrAndWait(task.localPhotoId, bibConfig);
-      } else {
+      if (!isAppleWebKit()) {
+        await patchLocalReviewPhoto(task.localPhotoId, {
+          uploadState: "published",
+          error: null,
+        });
         startLocalBibOcr(task.localPhotoId, bibConfig);
       }
       await this.#deletePersistedTask(task.id);
