@@ -334,14 +334,15 @@ async function runLocalBibOcr(
   await syncLocalBibToServer(photoId, config);
 }
 
-function queueOcr(photoId: string, config: BibConfigView): void {
+function queueOcr(photoId: string, config: BibConfigView): Promise<void> {
   const previousDesired = desiredOcrConfigs.get(photoId);
   const revisionChanged =
     previousDesired !== undefined && configRevision(previousDesired) !== configRevision(config);
   desiredOcrConfigs.set(photoId, config);
-  if (ocrJobs.has(photoId)) {
+  const existingJob = ocrJobs.get(photoId);
+  if (existingJob !== undefined) {
     if (revisionChanged) ocrControllers.get(photoId)?.abort();
-    return;
+    return existingJob;
   }
   const startedRevision = configRevision(config);
   const controller = new AbortController();
@@ -356,15 +357,20 @@ function queueOcr(photoId: string, config: BibConfigView): void {
     if (ocrControllers.get(photoId) === controller) ocrControllers.delete(photoId);
     const desired = desiredOcrConfigs.get(photoId);
     if (desired !== undefined && configRevision(desired) !== startedRevision) {
-      queueOcr(photoId, desired);
+      void queueOcr(photoId, desired);
       return;
     }
     desiredOcrConfigs.delete(photoId);
   });
+  return job;
 }
 
 export function startLocalBibOcr(photoId: string, config: BibConfigView): void {
-  queueOcr(photoId, config);
+  void queueOcr(photoId, config);
+}
+
+export async function runLocalBibOcrAndWait(photoId: string, config: BibConfigView): Promise<void> {
+  await queueOcr(photoId, config);
 }
 
 export async function resumeLocalBibOcr(albumId: string, config: BibConfigView): Promise<void> {
