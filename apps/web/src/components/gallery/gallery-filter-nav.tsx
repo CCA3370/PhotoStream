@@ -103,7 +103,7 @@ export function GalleryFilterNav({
     resizeObserver.observe(container);
 
     return () => resizeObserver.disconnect();
-  }, [items, selectedKey]);
+  }, [selectedKey]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -144,7 +144,7 @@ export function GalleryFilterNav({
       resizeObserver.disconnect();
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
     };
-  }, [items]);
+  }, []);
 
   return (
     <nav
@@ -188,15 +188,13 @@ export function GalleryFilterNav({
           aria-pressed={featuredOnly}
           className={cn(
             "flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-border/80 bg-muted/25 px-2.5 text-sm font-medium text-foreground shadow-xs transition-[background-color,border-color,color] duration-150 hover:border-border hover:bg-muted/55 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 lg:h-9 lg:px-3 lg:text-[15px]",
-            featuredOnly && "border-primary/35 bg-primary/10 text-primary hover:border-primary/45 hover:bg-primary/15",
+            featuredOnly &&
+              "border-primary/35 bg-primary/10 text-primary hover:border-primary/45 hover:bg-primary/15",
           )}
           onClick={() => onFeaturedChange(!featuredOnly)}
           type="button"
         >
-          <StarIcon
-            aria-hidden="true"
-            className={cn("size-4", featuredOnly && "fill-current")}
-          />
+          <StarIcon aria-hidden="true" className={cn("size-4", featuredOnly && "fill-current")} />
           精选
         </button>
       </div>
