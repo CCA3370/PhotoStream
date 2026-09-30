@@ -93,8 +93,17 @@ describe("management review stability guards", () => {
     expect(workspace).toContain(
       "return appended.length === 0 ? current : [...current, ...appended]",
     );
+    expect(workspace).toContain("fetchRemoteTotal");
+    expect(workspace).toContain("/media-selection?");
+    expect(workspace).toContain('hasMore={filter !== "local" && cursor !== null}');
+    expect(workspace).toContain("onLoadMore={loadMore}");
+    expect(workspace).toContain("totalCount={lightboxTotal}");
     expect(lightbox).toContain("const index = selectedIndex + offset");
-    expect(lightbox).toContain("if (index < 0 || index >= items.length) return");
+    expect(lightbox).toContain("if (index < 0) return");
+    expect(lightbox).toContain("if (index >= items.length)");
+    expect(lightbox).toContain("pendingForwardNavigationRef.current = true");
+    expect(lightbox).toContain("requestedMoreAtLengthRef.current");
+    expect(lightbox).toContain('displayTotal ?? "…"');
     expect(lightbox).not.toContain("% items.length");
     expect(lightbox).toContain("disabled={!canSelectPrevious}");
     expect(lightbox).toContain("disabled={!canSelectNext}");
