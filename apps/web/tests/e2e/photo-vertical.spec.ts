@@ -228,7 +228,7 @@ test("photo travels browser to object store and becomes visible after password u
     }
     await expect(task.getByText("已发布", { exact: true })).toBeVisible();
 
-    const newMedia = viewerPage.getByRole("button", { name: "有 1 条新影像" });
+    const newMedia = viewerPage.getByRole("button", { name: "有1张新照片，点击查看" });
     await expect(newMedia).toBeVisible({ timeout: 25_000 });
     expect(liveUpdateTransportObserved).toBe(true);
     await newMedia.click();
