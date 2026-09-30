@@ -7,6 +7,7 @@ import {
   type BrowserContext,
   chromium,
   expect,
+  webkit,
   type Locator,
   type Page,
   test,
@@ -112,7 +113,7 @@ async function selectPaddedSyntheticFile(
 test.beforeAll(async () => {
   const cdpUrl = process.env.BROWSER_CDP_URL;
   if (cdpUrl === undefined) {
-    browser = await chromium.launch();
+    browser = process.env.E2E_BROWSER === "webkit" ? await webkit.launch() : await chromium.launch();
   } else {
     browser = await chromium.connectOverCDP(cdpUrl);
   }
