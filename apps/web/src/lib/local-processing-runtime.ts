@@ -864,11 +864,18 @@ class LocalProcessingRuntime {
             }
 
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
-            uploads.push(
-              uploadProgressiveOriginal(intent, task.file, controller.signal, (uploaded, total) =>
+            const originalUpload = uploadProgressiveOriginal(
+              intent,
+              task.file,
+              controller.signal,
+              (uploaded, total) =>
                 this.#reportUploadProgress(task, "photo_original", uploaded, total),
-              ),
             );
+            if (isAppleWebKit()) {
+              await originalUpload;
+            } else {
+              uploads.push(originalUpload);
+            }
           },
           onVariant: async (variant) => {
             if (controller.signal.aborted) throw new DOMException("上传已取消", "AbortError");
@@ -893,31 +900,35 @@ class LocalProcessingRuntime {
               (uploadedBytes, totalBytes) =>
                 this.#reportUploadProgress(task, variant.kind, uploadedBytes, totalBytes),
             );
-            uploads.push(uploaded);
-            if (variant.kind === "photo_480") {
-              const currentMetadata = metadata;
-              if (currentMetadata !== null) {
-                uploads.push(
-                  uploaded
-                    .then(async (latest) => {
-                      const microPreviewBlob = await uploadProgressiveMicroPreview(
-                        latest.mediaId,
-                        variant,
-                        currentMetadata.width,
-                        currentMetadata.height,
-                        controller.signal,
-                      );
-                      if (microPreviewBlob !== null && !isAppleWebKit()) {
-                        await patchLocalReviewPhoto(task.localPhotoId, { microPreviewBlob });
-                      }
-                    })
-                    .catch((error: unknown) => {
-                      if (controller.signal.aborted) throw error;
-                      // The micro preview is an optional bandwidth optimization. Safari must not
-                      // turn a successful original/preview upload into a failed photo because this
-                      // tiny derived enhancement could not be generated.
-                    }),
-                );
+            if (isAppleWebKit()) {
+              // WebKit gets a fully serialized transfer pipeline. Do not overlap the original,
+              // derived variants, or optional micro preview requests.
+              await uploaded;
+            } else {
+              uploads.push(uploaded);
+              if (variant.kind === "photo_480") {
+                const currentMetadata = metadata;
+                if (currentMetadata !== null) {
+                  uploads.push(
+                    uploaded
+                      .then(async (latest) => {
+                        const microPreviewBlob = await uploadProgressiveMicroPreview(
+                          latest.mediaId,
+                          variant,
+                          currentMetadata.width,
+                          currentMetadata.height,
+                          controller.signal,
+                        );
+                        if (microPreviewBlob !== null) {
+                          await patchLocalReviewPhoto(task.localPhotoId, { microPreviewBlob });
+                        }
+                      })
+                      .catch((error: unknown) => {
+                        if (controller.signal.aborted) throw error;
+                        // The micro preview is an optional bandwidth optimization.
+                      }),
+                  );
+                }
               }
             }
           },
@@ -942,10 +953,18 @@ class LocalProcessingRuntime {
       const message = managementErrorMessage(error, "本地处理或上传失败");
       task.status = "failed";
       task.error = message;
-      await patchLocalReviewPhoto(task.localPhotoId, {
-        uploadState: "failed",
-        error: message,
-      }).catch(() => undefined);
+
+      if (task.intentId !== null) {
+        await clientMutation(
+          `/api/v1/uploads/${encodeURIComponent(task.intentId)}/cancel`,
+        ).catch(() => undefined);
+      }
+      if (!isAppleWebKit()) {
+        await patchLocalReviewPhoto(task.localPhotoId, {
+          uploadState: "failed",
+          error: message,
+        }).catch(() => undefined);
+      }
       if (isResourcePressureError(error) && this.#processingLimit > 1) {
         this.#healthySamples = 0;
         this.#processingLimit -= 1;
