@@ -118,14 +118,19 @@ function dispatchChanged(albumId: string): void {
 function ensureBroadcastChannel(): BroadcastChannel | null {
   if (typeof window === "undefined" || !("BroadcastChannel" in window)) return null;
   if (broadcastChannel !== null) return broadcastChannel;
-  broadcastChannel = new BroadcastChannel(broadcastChannelName);
-  broadcastChannel.addEventListener(
-    "message",
-    (event: MessageEvent<{ readonly albumId?: string }>) => {
-      if (typeof event.data?.albumId === "string") dispatchChanged(event.data.albumId);
-    },
-  );
-  return broadcastChannel;
+  try {
+    broadcastChannel = new BroadcastChannel(broadcastChannelName);
+    broadcastChannel.addEventListener(
+      "message",
+      (event: MessageEvent<{ readonly albumId?: string }>) => {
+        if (typeof event.data?.albumId === "string") dispatchChanged(event.data.albumId);
+      },
+    );
+    return broadcastChannel;
+  } catch {
+    // Some private/managed Safari contexts expose BroadcastChannel but reject construction.
+    return null;
+  }
 }
 
 function notify(albumId: string): void {
@@ -150,7 +155,14 @@ function openDatabase(): Promise<IDBDatabase> {
         store.createIndex("mediaId", "mediaId", { unique: false });
       }
     });
-    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("success", () => {
+      const database = request.result;
+      database.addEventListener("versionchange", () => database.close());
+      resolve(database);
+    });
+    request.addEventListener("blocked", () =>
+      reject(new Error("Safari 暂时无法升级本地审核队列，请关闭其他 PhotoStream 标签页后重试")),
+    );
     request.addEventListener("error", () =>
       reject(request.error ?? new Error("无法打开本地审核队列")),
     );
@@ -486,7 +498,7 @@ export async function deleteLocalReviewPhoto(id: string): Promise<void> {
     const database = await openDatabase();
     try {
       const transaction = database.transaction(storeName, "readwrite");
-      transaction.objectStore(storeName).delete(id);
+      await requestResult(transaction.objectStore(storeName).delete(id));
       await complete(transaction);
     } finally {
       database.close();
