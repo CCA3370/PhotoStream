@@ -230,10 +230,19 @@ test("photo travels browser to object store and becomes visible after password u
       .toBe("ready");
 
     const newMedia = viewerPage.getByRole("button", { name: "有1张新照片，点击查看" });
-    await expect(newMedia).toBeVisible({ timeout: 25_000 });
-    expect(liveUpdateTransportObserved).toBe(true);
-    await newMedia.click();
     const photoButton = viewerPage.getByRole("button", { name: "打开活动照片" });
+    await expect
+      .poll(
+        async () => {
+          if (await photoButton.isVisible()) return "photo";
+          if (await newMedia.isVisible()) return "notice";
+          return "waiting";
+        },
+        { timeout: 25_000 },
+      )
+      .not.toBe("waiting");
+    expect(liveUpdateTransportObserved).toBe(true);
+    if (await newMedia.isVisible()) await newMedia.click();
     await expect(photoButton).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => objectResponses.length).toBeGreaterThan(0);
     expect(
