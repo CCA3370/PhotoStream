@@ -136,7 +136,7 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     const unlock = viewerPage.getByRole("button", { name: "进入相册" });
     await expectReactHydrated(unlock);
     await unlock.click();
-    await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
+    await expect(viewerPage.getByText("暂无照片")).toBeVisible();
     await sseConnected;
 
     const fixture = await syntheticJpeg(page);
@@ -155,7 +155,7 @@ test("review, downloads, live visibility, deletion, and password rotation form o
       uploadCard.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
     ).toBeVisible({ timeout: 30_000 });
     await expect(uploadCard.getByText("等待审核", { exact: true })).toBeVisible();
-    await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
+    await expect(viewerPage.getByText("暂无照片")).toBeVisible();
 
     const listed = await context.request.get(
       appUrl(`/api/v1/albums/${album.album.id}/media?limit=60`),
@@ -271,7 +271,7 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await expect(viewerPage.getByRole("button", { name: "打开活动照片" })).toHaveCount(0, {
       timeout: 15_000,
     });
-    await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
+    await expect(viewerPage.getByText("暂无照片")).toBeVisible();
 
     await selectPublished.click();
     await page.getByRole("button", { name: "恢复", exact: true }).click();
@@ -346,7 +346,7 @@ test("review, downloads, live visibility, deletion, and password rotation form o
     await expect(viewerPage.getByText("相册不可用或口令错误")).toBeVisible();
     await viewerPage.getByLabel("相册口令").fill(newPassword);
     await viewerPage.getByRole("button", { name: "进入相册" }).click();
-    await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
+    await expect(viewerPage.getByText("暂无照片")).toBeVisible();
     await expectNoAxeViolations(viewerPage);
 
     await page.goto(appUrl("/studio/audit"));
