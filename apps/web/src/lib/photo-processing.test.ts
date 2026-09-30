@@ -44,8 +44,14 @@ afterEach(() => {
 });
 
 describe("photo worker protocol", () => {
-  it("rejects a legacy worker response instead of accepting the old protocol", async () => {
+  function enableWorkerPipeline(): void {
     vi.stubGlobal("Worker", FakeWorker);
+    vi.stubGlobal("createImageBitmap", vi.fn());
+    vi.stubGlobal("OffscreenCanvas", class FakeOffscreenCanvas {});
+  }
+
+  it("rejects a legacy worker response instead of accepting the old protocol", async () => {
+    enableWorkerPipeline();
     FakeWorker.responder = (request, worker) => {
       const id = (request as { id: string }).id;
       queueMicrotask(() => {
@@ -73,7 +79,7 @@ describe("photo worker protocol", () => {
   });
 
   it("requires protocol version 2 and completes only the current streaming protocol", async () => {
-    vi.stubGlobal("Worker", FakeWorker);
+    enableWorkerPipeline();
     FakeWorker.responder = (request, worker) => {
       const message = request as { id: string; protocolVersion: number };
       expect(message.protocolVersion).toBe(PHOTO_WORKER_PROTOCOL_VERSION);
