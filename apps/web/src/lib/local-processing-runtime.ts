@@ -71,8 +71,14 @@ interface ProcessingTask {
   uploadStartedAt: number | null;
 }
 
-interface PersistedProcessingTask extends Omit<ProcessingTask, "status"> {
+interface PersistedProcessingTask extends Omit<ProcessingTask, "file" | "status"> {
   readonly status: PersistedProcessingStatus;
+  readonly fileBlob?: Blob;
+  readonly fileName?: string;
+  readonly fileType?: string;
+  readonly fileLastModified?: number;
+  /** Legacy records written before Safari-safe Blob persistence. */
+  readonly file?: File;
 }
 
 interface AdaptiveProcessingProfile {
@@ -287,7 +293,10 @@ function persistedTask(task: ProcessingTask): PersistedProcessingTask {
     id: task.id,
     albumId: task.albumId,
     localPhotoId: task.localPhotoId,
-    file: task.file,
+    fileBlob: task.file.slice(0, task.file.size, task.file.type),
+    fileName: task.file.name,
+    fileType: task.file.type,
+    fileLastModified: task.file.lastModified,
     sourceFileName: task.sourceFileName,
     sourceHash: task.sourceHash,
     allowDuplicate: task.allowDuplicate,
@@ -299,6 +308,17 @@ function persistedTask(task: ProcessingTask): PersistedProcessingTask {
     totalUploadBytes: task.totalUploadBytes,
     uploadStartedAt: task.uploadStartedAt,
   };
+}
+
+function restoredPersistedFile(task: PersistedProcessingTask): File {
+  if (task.file instanceof File) return task.file;
+  if (!(task.fileBlob instanceof Blob)) {
+    throw new Error("本地处理队列缺少原始照片数据");
+  }
+  return new File([task.fileBlob], task.fileName ?? task.sourceFileName ?? "photo", {
+    type: task.fileType ?? task.fileBlob.type,
+    lastModified: task.fileLastModified ?? Date.now(),
+  });
 }
 
 type Listener = (snapshot: LocalProcessingSnapshot) => void;
@@ -544,20 +564,32 @@ class LocalProcessingRuntime {
 
     const stored = await listPersistedTasks(this.#albumId);
     const recovered: ProcessingTask[] = await Promise.all(
-      stored.map(async (task) => ({
-        ...task,
-        sourceFileName: task.sourceFileName ?? task.file.name,
-        sourceHash:
-          typeof task.sourceHash === "string" && /^[a-f0-9]{64}$/u.test(task.sourceHash)
-            ? task.sourceHash
-            : await sha256Blob(task.file),
-        allowDuplicate: task.allowDuplicate ?? false,
-        status: task.status === "processing" ? "queued" : task.status,
-        error: task.status === "processing" ? null : task.error,
-        uploadedBytes: 0,
-        totalUploadBytes: task.file.size,
-        uploadStartedAt: null,
-      })),
+      stored.map(async (task) => {
+        const file = restoredPersistedFile(task);
+        const {
+          file: _legacyFile,
+          fileBlob: _fileBlob,
+          fileLastModified: _fileLastModified,
+          fileName: _fileName,
+          fileType: _fileType,
+          ...rest
+        } = task;
+        return {
+          ...rest,
+          file,
+          sourceFileName: task.sourceFileName ?? file.name,
+          sourceHash:
+            typeof task.sourceHash === "string" && /^[a-f0-9]{64}$/u.test(task.sourceHash)
+              ? task.sourceHash
+              : await sha256Blob(file),
+          allowDuplicate: task.allowDuplicate ?? false,
+          status: task.status === "processing" ? "queued" : task.status,
+          error: task.status === "processing" ? null : task.error,
+          uploadedBytes: 0,
+          totalUploadBytes: file.size,
+          uploadStartedAt: null,
+        };
+      }),
     );
     for (const task of recovered) this.#tasks.set(task.id, task);
     const reset = recovered.filter((task) => task.status === "queued");
