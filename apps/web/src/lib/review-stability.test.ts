@@ -89,7 +89,9 @@ describe("management review stability guards", () => {
     expect(workspace).toContain("stableReviewOrderRef");
     expect(workspace).toContain("stableReviewOrderKey");
     expect(workspace).toContain("stableOrder.nextPosition += 1");
-    expect(workspace).toContain("return appended.length === 0 ? current : [...current, ...appended]");
+    expect(workspace).toContain(
+      "return appended.length === 0 ? current : [...current, ...appended]",
+    );
     expect(lightbox).toContain("const index = selectedIndex + offset");
     expect(lightbox).toContain("if (index < 0 || index >= items.length) return");
     expect(lightbox).not.toContain("% items.length");
