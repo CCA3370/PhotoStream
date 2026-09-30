@@ -1016,6 +1016,9 @@ maybeDescribe("stage 3 operations", () => {
       albumId,
       mediaId: media.id,
       status: "indexed",
+      providerTaskId: "previous-index-task",
+      attempts: 7,
+      lastErrorCode: "previous_index_error",
     });
     storage.objects.set(objectKey, { bytes: 100, contentType: "image/jpeg", etag: "fixture" });
     const now = new Date();
@@ -1028,7 +1031,13 @@ maybeDescribe("stage 3 operations", () => {
     });
     expect(pending).toMatchObject({ status: "pending", lastErrorCode: null });
     expect(storage.objects.has(objectKey)).toBe(true);
-    expect((await database.select().from(schema.mediaFaceIndexTasks))[0]?.status).toBe("deleting");
+    expect((await database.select().from(schema.mediaFaceIndexTasks))[0]).toMatchObject({
+      status: "deleting",
+      providerTaskId: null,
+      attempts: 0,
+      lastErrorCode: null,
+      deletionConfirmedAt: null,
+    });
 
     await database
       .delete(schema.mediaFaceIndexTasks)
