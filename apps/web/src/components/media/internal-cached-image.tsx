@@ -12,11 +12,7 @@ import {
 } from "@/lib/local-review-queue";
 import { loadMediaBlob } from "@/lib/media-blob-cache";
 
-export type InternalPreviewVariantKind =
-  | "photo_240"
-  | "photo_480"
-  | "photo_960"
-  | "photo_1920";
+export type InternalPreviewVariantKind = "photo_240" | "photo_480" | "photo_960" | "photo_1920";
 
 interface RemoteVariantSource {
   readonly kind: string;
@@ -70,10 +66,7 @@ function previewKind(value: string | undefined): InternalPreviewVariantKind | nu
     : null;
 }
 
-function localVariantBlob(
-  photo: LocalReviewPhoto,
-  kind: InternalPreviewVariantKind,
-): Blob | null {
+function localVariantBlob(photo: LocalReviewPhoto, kind: InternalPreviewVariantKind): Blob | null {
   if (kind === "photo_240") return photo.microPreviewBlob ?? null;
   return photo.variants.find((variant) => variant.kind === kind)?.blob ?? null;
 }
@@ -114,6 +107,8 @@ function InternalCachedImageComponent({
 }) {
   const host = useRef<HTMLSpanElement>(null);
   const failedCandidatesRef = useRef(new Set<string>());
+  const strategyRef = useRef<string | null>(null);
+  const retryRevisionRef = useRef(0);
   const [visible, setVisible] = useState(false);
   const [retryRevision, setRetryRevision] = useState(0);
   type ResolvedImage = {
@@ -184,11 +179,6 @@ function InternalCachedImageComponent({
     ],
   );
 
-  useEffect(() => {
-    failedCandidatesRef.current.clear();
-    setRetryRevision(0);
-  }, [strategy]);
-
   useEffect(
     () => () => {
       const current = resolvedRef.current;
@@ -208,7 +198,16 @@ function InternalCachedImageComponent({
   }, [eager, visible]);
 
   useEffect(() => {
+    if (strategyRef.current !== strategy) {
+      strategyRef.current = strategy;
+      failedCandidatesRef.current.clear();
+      retryRevisionRef.current = 0;
+      setRetryRevision(0);
+    } else {
+      retryRevisionRef.current = retryRevision;
+    }
     if (!eager && !visible) return;
+    const startedRetryRevision = retryRevision;
     let disposed = false;
 
     const commitResolved = (next: ResolvedImage): void => {
@@ -250,7 +249,7 @@ function InternalCachedImageComponent({
           local = null;
         }
       }
-      if (disposed) return;
+      if (disposed || retryRevisionRef.current !== startedRetryRevision) return;
 
       if (local !== null) {
         for (const kind of requestLocalOrder) {
@@ -347,7 +346,7 @@ function InternalCachedImageComponent({
         }
       }
 
-      if (!disposed) errorRef.current?.();
+      if (!disposed && retryRevisionRef.current === startedRetryRevision) errorRef.current?.();
     };
 
     void resolveImage();
