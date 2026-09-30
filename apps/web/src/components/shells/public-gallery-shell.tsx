@@ -48,9 +48,7 @@ export function PublicGalleryShell({
         active: detail?.active === true,
         count: typeof detail?.count === "number" ? detail.count : 0,
         label:
-          typeof detail?.label === "string" && detail.label.length > 0
-            ? detail.label
-            : "找照片",
+          typeof detail?.label === "string" && detail.label.length > 0 ? detail.label : "找照片",
       });
     };
     window.addEventListener("photostream:search-status", updateSearchState);
