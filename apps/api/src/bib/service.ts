@@ -248,7 +248,7 @@ export class BibService {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`bib-config:${options.albumId}`}, 0))`,
       );
-      await this.#album(transaction, options.albumId);
+      const album = await this.#album(transaction, options.albumId);
       const current = await this.#loadDocument(transaction, options.albumId);
       await assertConfigIdsAvailable(
         normalized.patterns.map((pattern) => pattern.id),
