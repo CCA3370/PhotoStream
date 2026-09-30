@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 
 import { allowsPhotoSwipePointer, swipeIntentDirection } from "@/lib/photo-swipe-intent";
 
@@ -139,10 +140,14 @@ export function usePhotoLightboxGestures({
       if (swipeTimerRef.current !== null) clearTimeout(swipeTimerRef.current);
       swipeTimerRef.current = setTimeout(() => {
         swipeTimerRef.current = null;
-        // Keep the completed slide position until the selected media actually changes.
-        // Resetting the offset first briefly moves the old photo back to the center,
-        // which is visible as a wrong-photo flash when navigation is driven by keys.
-        commitOffset(offset);
+        // Commit the target media and reset the slide transform in one synchronous React commit.
+        // This prevents any paint where the new selected media is paired with the old swipe offset
+        // (or the old media is briefly recentered), both of which can expose a wrong neighbor.
+        flushSync(() => {
+          commitOffset(offset);
+          setSwipeSettling(false);
+          setSwipeOffset(0);
+        });
       }, swipeSettleMs);
     },
     [canNavigate, commitOffset, requestTarget, stageHeight, stageWidth, swipeSettling],
