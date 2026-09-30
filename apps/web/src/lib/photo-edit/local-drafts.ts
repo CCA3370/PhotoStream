@@ -51,6 +51,28 @@ function sanitizeDraft(value: LocalPhotoEditDraft): LocalPhotoEditDraft {
   };
 }
 
+function ensureChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined" || !("BroadcastChannel" in window)) return null;
+  if (channel !== null) return channel;
+  try {
+    channel = new BroadcastChannel(channelName);
+    channel.addEventListener(
+      "message",
+      (event: MessageEvent<{ readonly localPhotoId?: string }>) => {
+        if (typeof event.data.localPhotoId !== "string") return;
+        window.dispatchEvent(
+          new CustomEvent("photostream:local-photo-edit-draft-changed", {
+            detail: { localPhotoId: event.data.localPhotoId },
+          }),
+        );
+      },
+    );
+    return channel;
+  } catch {
+    return null;
+  }
+}
+
 function notify(localPhotoId: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -58,22 +80,11 @@ function notify(localPhotoId: string): void {
       detail: { localPhotoId },
     }),
   );
-  if (!("BroadcastChannel" in window)) return;
-  channel ??= new BroadcastChannel(channelName);
-  channel.postMessage({ localPhotoId });
-}
-
-function ensureChannel(): void {
-  if (typeof window === "undefined" || !("BroadcastChannel" in window) || channel !== null) return;
-  channel = new BroadcastChannel(channelName);
-  channel.addEventListener("message", (event: MessageEvent<{ readonly localPhotoId?: string }>) => {
-    if (typeof event.data.localPhotoId !== "string") return;
-    window.dispatchEvent(
-      new CustomEvent("photostream:local-photo-edit-draft-changed", {
-        detail: { localPhotoId: event.data.localPhotoId },
-      }),
-    );
-  });
+  try {
+    ensureChannel()?.postMessage({ localPhotoId });
+  } catch {
+    // Cross-tab draft notifications are best-effort in private/managed Safari.
+  }
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -97,7 +108,14 @@ function openDatabase(): Promise<IDBDatabase> {
         });
       }
     });
-    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("success", () => {
+      const database = request.result;
+      database.addEventListener("versionchange", () => database.close());
+      resolve(database);
+    });
+    request.addEventListener("blocked", () =>
+      reject(new Error("Safari 暂时无法升级本地修图草稿，请关闭其他 PhotoStream 标签页后重试")),
+    );
     request.addEventListener("error", () =>
       reject(request.error ?? new Error("无法打开本地修图草稿存储")),
     );
@@ -198,7 +216,7 @@ export async function putLocalPhotoEditDraft(options: {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    transaction.objectStore(storeName).put(draft);
+    await result(transaction.objectStore(storeName).put(draft));
     await complete(transaction);
   } finally {
     database.close();
@@ -235,7 +253,7 @@ export async function patchLocalPhotoEditDraft(
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    transaction.objectStore(storeName).put(next);
+    await result(transaction.objectStore(storeName).put(next));
     await complete(transaction);
   } finally {
     database.close();
@@ -249,7 +267,7 @@ export async function deleteLocalPhotoEditDraft(localPhotoId: string): Promise<v
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    transaction.objectStore(storeName).delete(localPhotoId);
+    await result(transaction.objectStore(storeName).delete(localPhotoId));
     await complete(transaction);
   } finally {
     database.close();
