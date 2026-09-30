@@ -1545,6 +1545,34 @@ maybeDescribe("photo vertical slice transactions", () => {
     );
     expect(afterReview.currentUserRemainingCount).toBe(reviewerAssigned.length - 2);
 
+    const pendingMine = await service.listInternalMedia(
+      { id: reviewerId, role: "reviewer" },
+      {
+        albumId: album.album.id,
+        reviewAssignment: "mine",
+        reviewStatus: "pending",
+        limit: 60,
+      },
+    );
+    expect(pendingMine.items).toHaveLength(reviewerAssigned.length - 2);
+    expect(pendingMine.items.every((item) => item.reviewedAt === null)).toBe(true);
+    expect(
+      pendingMine.items.every((item) =>
+        reviewerAssigned.some((assignedItem) => assignedItem.id === item.id),
+      ),
+    ).toBe(true);
+
+    const pendingSelection = await service.listInternalMediaSelection(
+      { id: reviewerId, role: "reviewer" },
+      {
+        albumId: album.album.id,
+        reviewAssignment: "mine",
+        reviewStatus: "pending",
+        limit: 1_000,
+      },
+    );
+    expect(pendingSelection.total).toBe(reviewerAssigned.length - 2);
+
     const [newMedia] = await database
       .insert(schema.media)
       .values({
