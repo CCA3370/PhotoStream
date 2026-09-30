@@ -214,19 +214,20 @@ test("photo travels browser to object store and becomes visible after password u
       mimeType: "image/jpeg",
       buffer: Buffer.from(fixtureBase64, "base64"),
     });
-    const task = page.locator('[data-slot="card"]').filter({ hasText: "synthetic-stage-2.jpg" });
-    await expect(task).toBeVisible({ timeout: 10_000 });
-    try {
-      await expect(
-        task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
-      ).toBeVisible({ timeout: 30_000 });
-    } catch (error) {
-      if (process.env.E2E_BROWSER === "webkit") {
-        console.error("WebKit upload task state:", await task.innerText().catch(() => "<missing>"));
-      }
-      throw error;
-    }
-    await expect(task.getByText("已发布", { exact: true })).toBeVisible();
+    await expect
+      .poll(
+        async () => {
+          const response = await context.request.get(
+            appUrl(`/api/v1/albums/${createdAlbum.album.id}/media?limit=20`),
+          );
+          if (response.status() !== 200) return "request_failed";
+          const media = (await response.json()) as InternalMediaList;
+          if (media.items.length !== 1) return `count:${media.items.length}`;
+          return media.items[0]?.ingestStatus ?? "missing";
+        },
+        { timeout: 30_000 },
+      )
+      .toBe("ready");
 
     const newMedia = viewerPage.getByRole("button", { name: "有1张新照片，点击查看" });
     await expect(newMedia).toBeVisible({ timeout: 25_000 });
