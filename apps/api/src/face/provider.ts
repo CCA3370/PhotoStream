@@ -160,6 +160,69 @@ function isNotFound(error: unknown): boolean {
   return status === 404 || code === "NoSuchDataset" || code === "EntityNotExist";
 }
 
+const IMM_READ_MAX_ATTEMPTS = 3;
+const IMM_READ_RETRY_DELAYS_MS = [200, 600] as const;
+
+function errorRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function transientStatus(record: Record<string, unknown>): number | null {
+  for (const key of ["statusCode", "status", "httpStatus"]) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return Math.trunc(parsed);
+    }
+  }
+  const response = errorRecord(record.response);
+  return response === null ? null : transientStatus(response);
+}
+
+export function isRetryableImmReadError(error: unknown): boolean {
+  const records: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    const record = errorRecord(current);
+    if (record === null) break;
+    records.push(record);
+    current = record.cause;
+  }
+
+  for (const record of records) {
+    const status = transientStatus(record);
+    if (status !== null && (status === 408 || status === 429 || status >= 500)) return true;
+  }
+
+  const details = records
+    .flatMap((record) => [record.code, record.name, record.message])
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+
+  return /(?:ConnectTimeout|ReadTimeout|TimeoutError|ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|EPIPE|socket hang up|fetch failed)/iu.test(
+    details,
+  );
+}
+
+async function retryImmRead<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= IMM_READ_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= IMM_READ_MAX_ATTEMPTS || !isRetryableImmReadError(error)) throw error;
+      const delay = IMM_READ_RETRY_DELAYS_MS[attempt - 1] ?? 0;
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
+
 export class AliyunFaceProvider implements FaceProvider {
   readonly #client: InstanceType<typeof ImmClient.default>;
   readonly #projectName: string;
@@ -195,8 +258,10 @@ export class AliyunFaceProvider implements FaceProvider {
 
   async datasetExists(datasetName: string): Promise<boolean> {
     try {
-      await this.#client.getDataset(
-        new GetDatasetRequest({ projectName: this.#projectName, datasetName }),
+      await retryImmRead(() =>
+        this.#client.getDataset(
+          new GetDatasetRequest({ projectName: this.#projectName, datasetName }),
+        ),
       );
       return true;
     } catch (error) {
@@ -221,15 +286,17 @@ export class AliyunFaceProvider implements FaceProvider {
   }
 
   async mediaIndexed(datasetName: string, mediaId: string): Promise<boolean> {
-    const response = await this.#client.simpleQuery(
-      new SimpleQueryRequest({
-        projectName: this.#projectName,
-        datasetName,
-        maxResults: 1,
-        query: new SimpleQuery({ field: "CustomId", operation: "eq", value: mediaId }),
-        withFields: ["CustomId"],
-        withoutTotalHits: true,
-      }),
+    const response = await retryImmRead(() =>
+      this.#client.simpleQuery(
+        new SimpleQueryRequest({
+          projectName: this.#projectName,
+          datasetName,
+          maxResults: 1,
+          query: new SimpleQuery({ field: "CustomId", operation: "eq", value: mediaId }),
+          withFields: ["CustomId"],
+          withoutTotalHits: true,
+        }),
+      ),
     );
     return response.body?.files?.some((file) => file.customId === mediaId) ?? false;
   }
@@ -257,8 +324,10 @@ export class AliyunFaceProvider implements FaceProvider {
   }
 
   async taskStatus(taskId: string, taskType: "FaceClustering"): Promise<ProviderTaskStatus> {
-    const response = await this.#client.getTask(
-      new GetTaskRequest({ projectName: this.#projectName, taskId, taskType }),
+    const response = await retryImmRead(() =>
+      this.#client.getTask(
+        new GetTaskRequest({ projectName: this.#projectName, taskId, taskType }),
+      ),
     );
     if (response.body?.status === "Succeeded") return "succeeded";
     if (response.body?.status === "Failed") return "failed";
@@ -266,8 +335,10 @@ export class AliyunFaceProvider implements FaceProvider {
   }
 
   async validateReference(uri: string): Promise<ReferenceValidation> {
-    const response = await this.#client.detectImageFaces(
-      new DetectImageFacesRequest({ projectName: this.#projectName, sourceURI: uri }),
+    const response = await retryImmRead(() =>
+      this.#client.detectImageFaces(
+        new DetectImageFacesRequest({ projectName: this.#projectName, sourceURI: uri }),
+      ),
     );
     return classifyDetectedFaces(response.body?.faces ?? [], {
       quality: this.#minQuality,
@@ -277,12 +348,14 @@ export class AliyunFaceProvider implements FaceProvider {
   }
 
   async findSynchronousCandidates(datasetName: string, referenceUri: string): Promise<string[]> {
-    const clusterResponse = await this.#client.searchImageFigureCluster(
-      new SearchImageFigureClusterRequest({
-        projectName: this.#projectName,
-        datasetName,
-        sourceURI: referenceUri,
-      }),
+    const clusterResponse = await retryImmRead(() =>
+      this.#client.searchImageFigureCluster(
+        new SearchImageFigureClusterRequest({
+          projectName: this.#projectName,
+          datasetName,
+          sourceURI: referenceUri,
+        }),
+      ),
     );
     const clusters = clusterResponse.body?.clusters ?? [];
     const clusterId = selectQualifiedCluster(clusters, this.#clusterThreshold);
@@ -293,20 +366,22 @@ export class AliyunFaceProvider implements FaceProvider {
     let nextToken: string | undefined;
     const seenTokens = new Set<string>();
     do {
-      const response = await this.#client.simpleQuery(
-        new SimpleQueryRequest({
-          projectName: this.#projectName,
-          datasetName,
-          maxResults: 100,
-          ...(nextToken === undefined ? {} : { nextToken }),
-          query: new SimpleQuery({
-            field: "Figures.FigureClusterId",
-            operation: "eq",
-            value: clusterId,
+      const response = await retryImmRead(() =>
+        this.#client.simpleQuery(
+          new SimpleQueryRequest({
+            projectName: this.#projectName,
+            datasetName,
+            maxResults: 100,
+            ...(nextToken === undefined ? {} : { nextToken }),
+            query: new SimpleQuery({
+              field: "Figures.FigureClusterId",
+              operation: "eq",
+              value: clusterId,
+            }),
+            withFields: ["CustomId"],
+            withoutTotalHits: true,
           }),
-          withFields: ["CustomId"],
-          withoutTotalHits: true,
-        }),
+        ),
       );
       for (const file of response.body?.files ?? []) {
         if (typeof file.customId === "string") mediaIds.push(file.customId);
@@ -337,14 +412,16 @@ export class AliyunFaceProvider implements FaceProvider {
     let previousBatch = "";
     let repeatedBatchCount = 0;
     for (;;) {
-      const response = await this.#client.simpleQuery(
-        new SimpleQueryRequest({
-          projectName: this.#projectName,
-          datasetName,
-          maxResults: 100,
-          withFields: ["URI"],
-          withoutTotalHits: true,
-        }),
+      const response = await retryImmRead(() =>
+        this.#client.simpleQuery(
+          new SimpleQueryRequest({
+            projectName: this.#projectName,
+            datasetName,
+            maxResults: 100,
+            withFields: ["URI"],
+            withoutTotalHits: true,
+          }),
+        ),
       );
       const uris = (response.body?.files ?? []).flatMap((file) =>
         typeof file.URI === "string" ? [file.URI] : [],
