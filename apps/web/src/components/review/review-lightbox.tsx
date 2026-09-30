@@ -104,7 +104,9 @@ function stateLabel(status: string): string {
 }
 
 function isCategorySelectMenuTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && target.closest('[data-review-category-menu="true"]') !== null;
+  return (
+    target instanceof HTMLElement && target.closest('[data-review-category-menu="true"]') !== null
+  );
 }
 
 function isTextEntryKeyboardTarget(target: EventTarget | null): boolean {
@@ -627,11 +629,7 @@ export function ReviewLightbox({
 
   function onImageError(): void {
     if (selected === null) return;
-    if (
-      viewingOriginal &&
-      originalSource === "local-original" &&
-      selected.mediaId !== null
-    ) {
+    if (viewingOriginal && originalSource === "local-original" && selected.mediaId !== null) {
       setLoadFailed(false);
       void showRemoteOriginalFallback(selected.key);
       return;
