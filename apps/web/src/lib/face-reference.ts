@@ -68,7 +68,8 @@ async function decodeWithImageElement(file: File): Promise<{
 }
 
 async function decode(file: File) {
-  if (isAppleWebKit() || typeof createImageBitmap !== "function") return decodeWithImageElement(file);
+  if (isAppleWebKit() || typeof createImageBitmap !== "function")
+    return decodeWithImageElement(file);
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     return {
