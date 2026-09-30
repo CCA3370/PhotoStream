@@ -176,12 +176,14 @@ export async function getLocalPhotoEditDraft(
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readonly");
-    const row = await result(
-      transaction.objectStore(storeName).get(localPhotoId) as IDBRequest<
-        LocalPhotoEditDraft | undefined
-      >,
-    );
-    await complete(transaction);
+    const [row] = await Promise.all([
+      result(
+        transaction.objectStore(storeName).get(localPhotoId) as IDBRequest<
+          LocalPhotoEditDraft | undefined
+        >,
+      ),
+      complete(transaction),
+    ]);
     return row === undefined ? null : sanitizeDraft(row);
   } finally {
     database.close();
@@ -216,8 +218,10 @@ export async function putLocalPhotoEditDraft(options: {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    await result(transaction.objectStore(storeName).put(draft));
-    await complete(transaction);
+    await Promise.all([
+      result(transaction.objectStore(storeName).put(draft)),
+      complete(transaction),
+    ]);
   } finally {
     database.close();
   }
@@ -253,8 +257,10 @@ export async function patchLocalPhotoEditDraft(
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    await result(transaction.objectStore(storeName).put(next));
-    await complete(transaction);
+    await Promise.all([
+      result(transaction.objectStore(storeName).put(next)),
+      complete(transaction),
+    ]);
   } finally {
     database.close();
   }
@@ -267,8 +273,10 @@ export async function deleteLocalPhotoEditDraft(localPhotoId: string): Promise<v
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    await result(transaction.objectStore(storeName).delete(localPhotoId));
-    await complete(transaction);
+    await Promise.all([
+      result(transaction.objectStore(storeName).delete(localPhotoId)),
+      complete(transaction),
+    ]);
   } finally {
     database.close();
   }
