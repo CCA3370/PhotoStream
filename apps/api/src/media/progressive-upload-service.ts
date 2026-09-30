@@ -233,7 +233,7 @@ export class ProgressiveUploadService {
       if ((uploaderQuota?.activeIntents ?? 0) >= maxActiveUploadIntentsPerUploader) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
-          message: "同时进行的上传任务过多，请等待现有上传完成后重试",
+          message: `同时进行的上传任务过多（当前 ${uploaderQuota?.activeIntents ?? 0}/${maxActiveUploadIntentsPerUploader}），请取消残留任务或等待现有上传完成后重试`,
           statusCode: 409,
         });
       }
@@ -243,7 +243,7 @@ export class ProgressiveUploadService {
       ) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
-          message: "未完成上传占用已达到上限，请等待现有上传完成后重试",
+          message: `未完成上传占用已达到 4 GiB 上限（当前 ${Math.round(Number(uploaderQuota?.outstandingBytes ?? 0) / 1024 / 1024)} MiB），请等待现有上传完成后重试`,
           statusCode: 409,
         });
       }
