@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { loadConfig } from "../config.js";
-import { AliyunFaceProvider, classifyDetectedFaces, selectQualifiedCluster } from "./provider.js";
+import {
+  AliyunFaceProvider,
+  classifyDetectedFaces,
+  isRetryableImmReadError,
+  selectQualifiedCluster,
+} from "./provider.js";
 
 describe("Aliyun face provider allowlist mapping", () => {
   it("classifies only count, quality, sharpness, and boundary size", () => {
@@ -52,6 +57,18 @@ describe("Aliyun face provider allowlist mapping", () => {
       ),
     ).toBe("strongest");
     expect(selectQualifiedCluster([{ clusterId: "below", similarity: 0.5 }], 0.92)).toBeNull();
+  });
+
+  it("retries message-only transport timeouts from the generated IMM SDK", () => {
+    expect(
+      isRetryableImmReadError(
+        new Error(
+          "ConnectTimeout: Connect HTTPS://imm.cn-beijing.aliyuncs.com/?ProjectName=test failed.",
+        ),
+      ),
+    ).toBe(true);
+    expect(isRetryableImmReadError({ response: { statusCode: 503 } })).toBe(true);
+    expect(isRetryableImmReadError({ code: "InvalidParameter", statusCode: 400 })).toBe(false);
   });
 
   it("constructs both generated SDK layers without making a cloud request", () => {
