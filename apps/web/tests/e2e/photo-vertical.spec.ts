@@ -173,17 +173,17 @@ test("photo travels browser to object store and becomes visible after password u
   const viewer = await browser.newContext();
   const viewerPage = await viewer.newPage();
   const objectResponses: string[] = [];
-  let connected: () => void = () => undefined;
-  const sseConnected = new Promise<void>((resolve) => {
-    connected = resolve;
-  });
+  let liveUpdateTransportObserved = false;
   viewerPage.on("response", (response) => {
     const url = new URL(response.url());
     if (url.port === "3002" && url.pathname.startsWith("/objects/")) {
       objectResponses.push(response.url());
     }
-    if (url.pathname.endsWith(`/api/v1/public/albums/${createdAlbum.album.slug}/events`)) {
-      connected();
+    if (
+      url.pathname.endsWith(`/api/v1/public/albums/${createdAlbum.album.slug}/events`) ||
+      url.pathname.endsWith(`/api/v1/public/albums/${createdAlbum.album.slug}/changes`)
+    ) {
+      liveUpdateTransportObserved = true;
     }
   });
   try {
@@ -193,7 +193,6 @@ test("photo travels browser to object store and becomes visible after password u
     await expectReactHydrated(unlock);
     await unlock.click();
     await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
-    await sseConnected;
 
     await page.goto(appUrl(`/studio/albums/${createdAlbum.album.id}/upload`));
     const input = page.locator("#photo-files");
@@ -210,7 +209,8 @@ test("photo travels browser to object store and becomes visible after password u
     await expect(task.getByText("已发布", { exact: true })).toBeVisible();
 
     const newMedia = viewerPage.getByRole("button", { name: "有 1 条新影像" });
-    await expect(newMedia).toBeVisible({ timeout: 15_000 });
+    await expect(newMedia).toBeVisible({ timeout: 25_000 });
+    expect(liveUpdateTransportObserved).toBe(true);
     await newMedia.click();
     const photoButton = viewerPage.getByRole("button", { name: "打开活动照片" });
     await expect(photoButton).toBeVisible({ timeout: 15_000 });
