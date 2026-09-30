@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { isAppleWebKit } from "@/lib/apple-webkit";
 import { clientGet } from "@/lib/client-api";
 
 export const REVIEW_REMOTE_CHANGED_EVENT = "photostream:review-remote-changed";
@@ -27,7 +28,9 @@ export function ReviewRemoteSync({
     let source: EventSource | null = null;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let connectionWatchdog: ReturnType<typeof setTimeout> | null = null;
     let checking = false;
+    const effectiveFallbackPollIntervalMs = isAppleWebKit() ? 5_000 : fallbackPollIntervalMs;
 
     const publishRevision = (revision: string) => {
       if (revision === revisionRef.current) return;
@@ -62,14 +65,27 @@ export function ReviewRemoteSync({
 
     const startFallback = () => {
       if (fallbackTimer !== null || disposed) return;
-      fallbackTimer = setInterval(() => void checkRevision(), fallbackPollIntervalMs);
+      fallbackTimer = setInterval(() => void checkRevision(), effectiveFallbackPollIntervalMs);
+    };
+
+    const clearConnectionWatchdog = () => {
+      if (connectionWatchdog === null) return;
+      clearTimeout(connectionWatchdog);
+      connectionWatchdog = null;
     };
 
     const connect = () => {
       if (disposed) return;
+      clearConnectionWatchdog();
       source?.close();
       const next = new EventSource(`/api/v1/albums/${encodeURIComponent(albumId)}/review-events`);
       source = next;
+      connectionWatchdog = setTimeout(() => {
+        connectionWatchdog = null;
+        if (disposed || source !== next || next.readyState === EventSource.OPEN) return;
+        startFallback();
+        void checkRevision();
+      }, 4_000);
       next.addEventListener("review.changed", (event) => {
         try {
           const parsed = JSON.parse((event as MessageEvent<string>).data) as {
@@ -81,10 +97,12 @@ export function ReviewRemoteSync({
         }
       });
       next.addEventListener("open", () => {
+        clearConnectionWatchdog();
         stopFallback();
         void checkRevision();
       });
       next.addEventListener("error", () => {
+        clearConnectionWatchdog();
         startFallback();
         if (next.readyState !== EventSource.CLOSED || disposed || reconnectTimer !== null) return;
         reconnectTimer = setTimeout(() => {
@@ -110,6 +128,7 @@ export function ReviewRemoteSync({
 
     return () => {
       disposed = true;
+      clearConnectionWatchdog();
       source?.close();
       stopFallback();
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
