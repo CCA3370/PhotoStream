@@ -254,7 +254,7 @@ EventBridge 入口不接受 Cookie，必须验证 RSA 签名、官方证书 URL�
 | `GET /api/v1/public/albums/{slug}/media` | 按分类、游标和上限返回已发布媒体及短期 CDN URL |
 | `GET /api/v1/public/albums/{slug}/events` | SSE 增量事件；支持 `Last-Event-ID` |
 | `GET /api/v1/public/albums/{slug}/changes` | SSE 不可用时的游标增量查询 |
-| `POST /api/v1/public/albums/{slug}/bib-search` | 口令相册精确查询已确认号码对应的已发布照片 |
+| `POST /api/v1/public/albums/{slug}/bib-search` | 公开或口令相册精确查询已确认号码对应的已发布照片 |
 | `POST /api/v1/public/albums/{slug}/bib-attributes-filter` | 按年级或年级+班级筛选同一确认号码标签对应的已发布照片 |
 | `POST/GET/DELETE /api/v1/public/albums/{slug}/face-searches...` | 未来同意门禁的人脸候选搜索；私有任务与结果，不进入相册 SSE |
 | `POST /api/v1/public/albums/{slug}/downloads/{mediaId}/{kind}` | 校验相册开关、记录签发并返回 5 分钟 CDN 地址 |
