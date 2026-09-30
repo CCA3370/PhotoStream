@@ -54,17 +54,21 @@ export function clearSafariProcessingActive(albumId: string): void {
   }
 }
 
-export function consumeSafariInterruptedProcessing(albumId: string): boolean {
+export function hasSafariInterruptedProcessing(albumId: string): boolean {
   if (!isAppleWebKit() || typeof window === "undefined") return false;
   try {
     const key = markerKey(albumId);
     const raw = window.sessionStorage.getItem(key);
     if (raw === null) return false;
-    window.sessionStorage.removeItem(key);
     const timestamp = Number(raw);
-    if (!Number.isFinite(timestamp)) return false;
+    if (!Number.isFinite(timestamp)) {
+      window.sessionStorage.removeItem(key);
+      return false;
+    }
     const age = Date.now() - timestamp;
-    return age >= 0 && age < markerMaxAgeMs;
+    if (age >= 0 && age < markerMaxAgeMs) return true;
+    window.sessionStorage.removeItem(key);
+    return false;
   } catch {
     return false;
   }
