@@ -98,7 +98,11 @@ export function ReviewRemoteSync({
       });
       next.addEventListener("open", () => {
         clearConnectionWatchdog();
-        stopFallback();
+        if (isAppleWebKit()) {
+          startFallback();
+        } else {
+          stopFallback();
+        }
         void checkRevision();
       });
       next.addEventListener("error", () => {
