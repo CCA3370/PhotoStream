@@ -336,10 +336,7 @@ function reconcileRemotePage(
     next.push(existing);
     present.add(existing.id);
   }
-  if (
-    next.length === current.length &&
-    next.every((item, index) => item === current[index])
-  ) {
+  if (next.length === current.length && next.every((item, index) => item === current[index])) {
     return current;
   }
   return next;
@@ -956,9 +953,7 @@ export function ReviewWorkspace({
     if (activeKey === null) return;
     setLightboxQueueKeys((current) => {
       const known = new Set(current);
-      const appended = visibleItems
-        .map((item) => item.key)
-        .filter((key) => !known.has(key));
+      const appended = visibleItems.map((item) => item.key).filter((key) => !known.has(key));
       return appended.length === 0 ? current : [...current, ...appended];
     });
   }, [activeKey, visibleItems]);
@@ -2515,9 +2510,7 @@ export function ReviewWorkspace({
                           ? reviewCompactLocalThumbnailOrder
                           : reviewStandardLocalThumbnailOrder
                       }
-                      mediaId={
-                        item.source === "remote" ? item.remote.id : item.local.photo.mediaId
-                      }
+                      mediaId={item.source === "remote" ? item.remote.id : item.local.photo.mediaId}
                       remoteVariantOrder={
                         gridDensity === "compact"
                           ? reviewCompactRemoteThumbnailOrder
