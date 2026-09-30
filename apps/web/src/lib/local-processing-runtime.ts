@@ -421,6 +421,31 @@ class LocalProcessingRuntime {
     this.#pump();
   }
 
+  async cancelAllTasks(): Promise<{ readonly cancelled: number; readonly failed: number }> {
+    await this.initialize();
+    const taskIds = [...this.#tasks.values()]
+      .filter((task) => task.status !== "staged" && task.status !== "cancelled")
+      .map((task) => task.id);
+    if (taskIds.length === 0) return { cancelled: 0, failed: 0 };
+
+    // Freeze scheduling while the individual cancellations run. cancelTask() normally pumps
+    // the queue after each cleanup; without this guard, another queued task could start while
+    // the user is cancelling the whole batch.
+    const wasPaused = this.#paused;
+    this.#paused = true;
+    this.#emit();
+
+    try {
+      const results = await Promise.allSettled(taskIds.map((taskId) => this.cancelTask(taskId)));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      return { cancelled: taskIds.length - failed, failed };
+    } finally {
+      this.#paused = wasPaused;
+      this.#emit();
+      if (!this.#paused) this.#pump();
+    }
+  }
+
   async retryFailed(): Promise<void> {
     await this.initialize();
     const retrying: ProcessingTask[] = [];
