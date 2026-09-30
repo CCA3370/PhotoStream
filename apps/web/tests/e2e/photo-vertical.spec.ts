@@ -7,10 +7,10 @@ import {
   type BrowserContext,
   chromium,
   expect,
-  webkit,
   type Locator,
   type Page,
   test,
+  webkit,
 } from "@playwright/test";
 
 const baseUrl = process.env.E2E_APP_ORIGIN ?? "http://localhost:3000";
@@ -113,7 +113,8 @@ async function selectPaddedSyntheticFile(
 test.beforeAll(async () => {
   const cdpUrl = process.env.BROWSER_CDP_URL;
   if (cdpUrl === undefined) {
-    browser = process.env.E2E_BROWSER === "webkit" ? await webkit.launch() : await chromium.launch();
+    browser =
+      process.env.E2E_BROWSER === "webkit" ? await webkit.launch() : await chromium.launch();
   } else {
     browser = await chromium.connectOverCDP(cdpUrl);
   }
