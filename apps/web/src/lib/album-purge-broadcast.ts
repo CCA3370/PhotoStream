@@ -37,11 +37,16 @@ function initialize(): void {
   initialized = true;
 
   if ("BroadcastChannel" in window) {
-    channel = new BroadcastChannel(channelName);
-    channel.addEventListener("message", (event) => {
-      const notice = parsedNotice(event.data);
-      if (notice !== null) emit(notice);
-    });
+    try {
+      channel = new BroadcastChannel(channelName);
+      channel.addEventListener("message", (event) => {
+        const notice = parsedNotice(event.data);
+        if (notice !== null) emit(notice);
+      });
+    } catch {
+      channel = null;
+      // Safari private/managed contexts may expose BroadcastChannel but reject construction.
+    }
   }
 
   if (typeof window.addEventListener === "function") {
