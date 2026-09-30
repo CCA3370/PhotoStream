@@ -733,7 +733,9 @@ export function ReviewWorkspace({
     const remoteMediaIds = new Set(remoteMedia.map((item) => item.id));
     const localItems: ReviewItem[] = localMedia
       .filter(
-        (item) => item.photo.mediaId === null || !remoteMediaIds.has(item.photo.mediaId),
+        (item) =>
+          item.photo.uploadState !== "uploading" &&
+          (item.photo.mediaId === null || !remoteMediaIds.has(item.photo.mediaId)),
       )
       .map((item) => ({
         key: `local:${item.photo.id}`,
@@ -752,7 +754,18 @@ export function ReviewWorkspace({
         createdAt: item.photo.createdAt,
       }));
     const remoteItems: ReviewItem[] = remoteMedia
-      .filter((item) => item.publicationStatus !== "deleted")
+      .filter((item) => {
+        if (item.publicationStatus === "deleted") return false;
+        const linkedLocal = localByMediaId.get(item.id) ?? null;
+        if (linkedLocal?.photo.uploadState === "uploading") return false;
+        return ![
+          "created",
+          "local_processing",
+          "uploading_preview",
+          "preview_ready",
+          "uploading_source",
+        ].includes(item.ingestStatus);
+      })
       .map((item) => {
         const linkedLocal = localByMediaId.get(item.id) ?? null;
         const ordinaryUrl = ordinary(item);
