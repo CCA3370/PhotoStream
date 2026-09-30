@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const usesExternalBrowser = process.env.BROWSER_CDP_URL !== undefined;
 const appOrigin = process.env.E2E_APP_ORIGIN ?? "http://localhost:3000";
-const browserName =
+const browserName: "chromium" | "firefox" | "webkit" =
   process.env.E2E_BROWSER === "webkit"
     ? "webkit"
     : process.env.E2E_BROWSER === "firefox"
