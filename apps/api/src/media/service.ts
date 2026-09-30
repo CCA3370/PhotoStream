@@ -2372,6 +2372,7 @@ export class PhotoService {
       readonly categoryId?: string | undefined;
       readonly uploaderId?: string | undefined;
       readonly reviewAssignment?: "mine" | undefined;
+      readonly reviewStatus?: "pending" | undefined;
       readonly bibReviewDecision?:
         | (typeof schema.bibReviewDecisionEnum.enumValues)[number]
         | undefined;
@@ -2423,6 +2424,10 @@ export class PhotoService {
     if (options.reviewAssignment === "mine") {
       requirePermission(actor.role, "media:review");
       conditions.push(eq(schema.media.reviewAssigneeId, actor.id));
+    }
+    if (options.reviewStatus === "pending") {
+      requirePermission(actor.role, "media:review");
+      conditions.push(isNull(schema.media.reviewedAt));
     }
     if (options.bibReviewDecision !== undefined) {
       const matchingReview = this.#database
@@ -2617,6 +2622,7 @@ export class PhotoService {
         capturedAt: media.capturedAt === null ? null : iso(media.capturedAt),
         publishSequence: media.publishSequence,
         publishedAt: media.publishedAt === null ? null : iso(media.publishedAt),
+        reviewedAt: media.reviewedAt === null ? null : iso(media.reviewedAt),
         variants: resolvedVariants
           .filter(
             (variant) =>
@@ -2686,6 +2692,7 @@ export class PhotoService {
       readonly categoryId?: string | undefined;
       readonly uploaderId?: string | undefined;
       readonly reviewAssignment?: "mine" | undefined;
+      readonly reviewStatus?: "pending" | undefined;
       readonly bibReviewDecision?:
         | (typeof schema.bibReviewDecisionEnum.enumValues)[number]
         | undefined;
@@ -2737,6 +2744,10 @@ export class PhotoService {
     if (options.reviewAssignment === "mine") {
       requirePermission(actor.role, "media:review");
       baseConditions.push(eq(schema.media.reviewAssigneeId, actor.id));
+    }
+    if (options.reviewStatus === "pending") {
+      requirePermission(actor.role, "media:review");
+      baseConditions.push(isNull(schema.media.reviewedAt));
     }
     if (options.bibReviewDecision !== undefined) {
       const matchingReview = this.#database
