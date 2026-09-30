@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { broadcastAlbumPurge } from "@/lib/album-purge-broadcast";
+import { isAppleWebKit } from "@/lib/apple-webkit";
 import { ClientApiError, clientGet } from "@/lib/client-api";
 import { purgeWarmDerivedImages } from "@/lib/derived-image-cache";
 import { purgeAlbumMediaBlobCache } from "@/lib/media-blob-cache";
@@ -95,12 +96,14 @@ export function LiveUpdates({
     let safetyReconcile: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let connectionNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+    let connectionWatchdog: ReturnType<typeof setTimeout> | null = null;
     let eventSource: EventSource | null = null;
     let disposed = false;
     let catchUpRunning = false;
     let catchUpQueued = false;
     let reconciliationRequired = true;
     const pendingSse = new Map<number, PublicChange>();
+    const effectiveFallbackPollIntervalMs = isAppleWebKit() ? 5_000 : fallbackPollIntervalMs;
 
     const clearConnectionNoticeTimer = () => {
       if (connectionNoticeTimer === null) return;
@@ -258,7 +261,7 @@ export function LiveUpdates({
           }
           markConnectionInterruptedSoon();
           if (disposed || fallbackPolling !== null) return;
-          fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
+          fallbackPolling = setInterval(requestCatchUp, effectiveFallbackPollIntervalMs);
         } finally {
           catchUpRunning = false;
           if (catchUpQueued && !disposed) requestCatchUp();
@@ -282,7 +285,14 @@ export function LiveUpdates({
       }
     };
 
+    const clearConnectionWatchdog = () => {
+      if (connectionWatchdog === null) return;
+      clearTimeout(connectionWatchdog);
+      connectionWatchdog = null;
+    };
+
     const closeEventSource = () => {
+      clearConnectionWatchdog();
       eventSource?.close();
       eventSource = null;
     };
@@ -302,6 +312,15 @@ export function LiveUpdates({
         `/api/v1/public/albums/${encodeURIComponent(slug)}/events?after=${lastEventId.current}`,
       );
       eventSource = source;
+      connectionWatchdog = setTimeout(() => {
+        connectionWatchdog = null;
+        if (disposed || eventSource !== source || source.readyState === EventSource.OPEN) return;
+        markConnectionInterruptedSoon();
+        requestCatchUp();
+        if (fallbackPolling === null) {
+          fallbackPolling = setInterval(requestCatchUp, effectiveFallbackPollIntervalMs);
+        }
+      }, 4_000);
 
       const published = (event: Event) => receiveSse("media.published", event);
       const updated = (event: Event) => receiveSse("media.updated", event);
@@ -323,16 +342,18 @@ export function LiveUpdates({
       source.addEventListener("media.bib.updated", bibUpdated);
       source.addEventListener("album.notification.updated", notificationUpdated);
       source.addEventListener("open", () => {
+        clearConnectionWatchdog();
         clearConnectionNoticeTimer();
         setConnectionInterrupted(false);
         stopFallbackPolling();
         requestCatchUp();
       });
       source.addEventListener("error", () => {
+        clearConnectionWatchdog();
         markConnectionInterruptedSoon();
         requestCatchUp();
         if (fallbackPolling === null) {
-          fallbackPolling = setInterval(requestCatchUp, fallbackPollIntervalMs);
+          fallbackPolling = setInterval(requestCatchUp, effectiveFallbackPollIntervalMs);
         }
         if (source.readyState === EventSource.CLOSED) scheduleReconnect();
       });
@@ -360,6 +381,7 @@ export function LiveUpdates({
       disposed = true;
       stopFallbackPolling();
       clearConnectionNoticeTimer();
+      clearConnectionWatchdog();
       if (safetyReconcile !== null) clearInterval(safetyReconcile);
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       document.removeEventListener("visibilitychange", visibilityChanged);
