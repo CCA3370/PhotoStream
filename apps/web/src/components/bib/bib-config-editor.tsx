@@ -514,6 +514,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
   );
   const [saved, setSaved] = useState(initial);
   const [pending, setPending] = useState(false);
+  const [featurePending, setFeaturePending] = useState<"recognition" | "search" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testNumber, setTestNumber] = useState("");
   const [testResult, setTestResult] = useState<BibTestResponse | null>(null);
@@ -849,6 +850,64 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
     }));
   }
 
+  async function updateFeature(
+    feature: "recognition" | "search",
+    checked: boolean,
+  ): Promise<void> {
+    if (pending || featurePending !== null) return;
+    const nextRequest = requestFrom(saved);
+    if (feature === "recognition") nextRequest.recognitionEnabled = checked;
+    else nextRequest.searchEnabled = checked;
+
+    const rule = validateBibRuleSet(nextRequest.patterns);
+    if ((nextRequest.recognitionEnabled || nextRequest.searchEnabled) && !rule.usable) {
+      setError("当前号码规则不可用，不能开启号码识别或搜索。");
+      return;
+    }
+    if (feature === "recognition" && checked) {
+      const mapping = validateBibAttributeRules(
+        nextRequest.patterns,
+        nextRequest.attributeOptions,
+        nextRequest.attributeRules,
+      );
+      if (!mapping.usable) {
+        setError("当前年级或班级解析规则不可用，不能开启自动号码识别。");
+        return;
+      }
+    }
+
+    setFeaturePending(feature);
+    setError(null);
+    setConfig((current) => ({
+      ...current,
+      ...(feature === "recognition"
+        ? { recognitionEnabled: checked }
+        : { searchEnabled: checked }),
+    }));
+    try {
+      const updated = await clientMutation<BibConfigView>(
+        `/api/v1/albums/${saved.albumId}/bib-config`,
+        { method: "PUT", body: nextRequest },
+      );
+      setSaved(updated);
+      setConfig((current) => ({
+        ...current,
+        recognitionEnabled: updated.recognitionEnabled,
+        searchEnabled: updated.searchEnabled,
+      }));
+    } catch (caught) {
+      setConfig((current) => ({
+        ...current,
+        ...(feature === "recognition"
+          ? { recognitionEnabled: saved.recognitionEnabled }
+          : { searchEnabled: saved.searchEnabled }),
+      }));
+      setError(caught instanceof Error ? caught.message : "号码功能开关保存失败");
+    } finally {
+      setFeaturePending(null);
+    }
+  }
+
   async function save(): Promise<void> {
     if (pending) return;
     const attributeOptionIssue = validation.issues.find(
@@ -861,11 +920,12 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
       setError(attributeOptionIssue.message);
       return;
     }
-    if (
-      (config.recognitionEnabled || config.searchEnabled) &&
-      (!validation.rule.usable || !validation.mapping.usable)
-    ) {
-      setError("当前号码规则或属性解析规则不可用，关闭开关后可保存草稿，不能直接启用。");
+    if ((config.recognitionEnabled || config.searchEnabled) && !validation.rule.usable) {
+      setError("当前号码规则不可用，关闭号码识别和搜索后可保存草稿，不能直接启用。");
+      return;
+    }
+    if (config.recognitionEnabled && !validation.mapping.usable) {
+      setError("当前年级或班级解析规则不可用，关闭自动号码识别后可保存；精确号码搜索仍可单独使用。");
       return;
     }
     setPending(true);
@@ -930,24 +990,25 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
               </FieldContent>
               <Switch
                 checked={config.recognitionEnabled}
-                disabled={saved.automationStatus === "disabled"}
-                id="bib-recognition-enabled"
-                onCheckedChange={(checked) =>
-                  setConfig((current) => ({ ...current, recognitionEnabled: checked }))
+                disabled={
+                  saved.automationStatus === "disabled" || pending || featurePending !== null
                 }
+                id="bib-recognition-enabled"
+                onCheckedChange={(checked) => void updateFeature("recognition", checked)}
               />
             </Field>
             <Field orientation="horizontal">
               <FieldContent>
                 <FieldLabel htmlFor="bib-search-enabled">观众精确号码搜索</FieldLabel>
-                <FieldDescription>未确认、失效和未发布照片始终不可搜索。</FieldDescription>
+                <FieldDescription>
+                  点击后立即保存。年级/班级映射异常时仍可使用精确号码搜索。
+                </FieldDescription>
               </FieldContent>
               <Switch
                 checked={config.searchEnabled}
+                disabled={pending || featurePending !== null}
                 id="bib-search-enabled"
-                onCheckedChange={(checked) =>
-                  setConfig((current) => ({ ...current, searchEnabled: checked }))
-                }
+                onCheckedChange={(checked) => void updateFeature("search", checked)}
               />
             </Field>
           </FieldGroup>
@@ -1681,7 +1742,7 @@ export function BibConfigEditor({ initial }: Readonly<{ initial: BibConfigView }
         </CardContent>
       </Card>
 
-      <Button disabled={pending} onClick={() => void save()} type="button">
+      <Button disabled={pending || featurePending !== null} onClick={() => void save()} type="button">
         <SaveIcon data-icon="inline-start" />
         {pending ? "正在保存…" : "保存号码规则与属性解析"}
       </Button>

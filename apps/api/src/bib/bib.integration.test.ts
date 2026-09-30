@@ -420,6 +420,45 @@ maybeDescribe("bib configuration, privacy and search", () => {
     ).rejects.toMatchObject({ code: "BIB_CONFIG_INVALID" });
   });
 
+  it("allows exact search while attribute mapping is invalid", async () => {
+    const saved = await service.updateConfig({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      input: validConfig({ recognitionEnabled: false, searchEnabled: false }),
+      requestId: "bib-exact-search-base",
+    });
+
+    const withInvalidMapping = await service.updateConfig({
+      actor: { id: adminId, role: "admin" },
+      albumId,
+      input: {
+        ...updateFromView(saved),
+        recognitionEnabled: false,
+        searchEnabled: true,
+        attributeRules: [
+          { dimension: "grade", startPosition: 12, width: 1, firstValue: 1 },
+        ],
+      },
+      requestId: "bib-exact-search-invalid-mapping",
+    });
+
+    expect(withInvalidMapping).toMatchObject({
+      recognitionEnabled: false,
+      searchEnabled: true,
+      ruleUsable: true,
+      mappingUsable: false,
+    });
+
+    await expect(
+      service.updateConfig({
+        actor: { id: adminId, role: "admin" },
+        albumId,
+        input: { ...updateFromView(withInvalidMapping), recognitionEnabled: true },
+        requestId: "bib-recognition-invalid-mapping",
+      }),
+    ).rejects.toMatchObject({ code: "BIB_CONFIG_INVALID" });
+  });
+
   it("keeps number and grade/class search available across public access changes", async () => {
     await service.updateConfig({
       actor: { id: adminId, role: "admin" },

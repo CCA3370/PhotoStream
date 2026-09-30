@@ -229,10 +229,10 @@ export class BibService {
         statusCode: 409,
       });
     }
-    if ((normalized.recognitionEnabled || normalized.searchEnabled) && !mapping.usable) {
+    if (normalized.recognitionEnabled && !mapping.usable) {
       throw new AppError({
         code: "BIB_CONFIG_INVALID",
-        message: "年级或班级解析规则不可用，不能开启号码功能",
+        message: "年级或班级解析规则不可用，不能开启自动号码识别",
         statusCode: 409,
       });
     }
