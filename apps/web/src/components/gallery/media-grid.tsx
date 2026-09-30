@@ -528,10 +528,7 @@ export function MediaGrid({
       if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
       if (typeof tile.animate !== "function") continue;
       tile.animate(
-        [
-          { transform: `translate(${deltaX}px, ${deltaY}px)` },
-          { transform: "translate(0, 0)" },
-        ],
+        [{ transform: `translate(${deltaX}px, ${deltaY}px)` }, { transform: "translate(0, 0)" }],
         {
           duration: 360,
           easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
