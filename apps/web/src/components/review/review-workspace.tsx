@@ -196,6 +196,12 @@ interface BatchFailure {
   readonly message: string;
 }
 
+interface StableReviewOrder {
+  sortOrder: SortOrder;
+  nextPosition: number;
+  readonly positions: Map<string, number>;
+}
+
 const filterModes = new Set<FilterMode>(["all", "featured", "hidden", "local", "published"]);
 const assignmentFilters = new Set<ReviewAssignmentFilter>(["all", "mine"]);
 const reviewStatusFilters = new Set<ReviewStatusFilter>(["all", "pending"]);
@@ -286,6 +292,10 @@ function mergeRemote(
   const byId = new Map(current.map((item) => [item.id, item]));
   for (const item of incoming) byId.set(item.id, item);
   return [...byId.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function stableReviewOrderKey(item: ReviewItem): string {
+  return item.source === "remote" && item.local !== null ? `local:${item.local.photo.id}` : item.key;
 }
 
 function stableRemoteMedia(
@@ -393,6 +403,11 @@ export function ReviewWorkspace({
   const [gradeOption, setGradeOption] = useState("all");
   const [classOption, setClassOption] = useState("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const stableReviewOrderRef = useRef<StableReviewOrder>({
+    sortOrder,
+    nextPosition: 0,
+    positions: new Map(),
+  });
   const [gridDensity, setGridDensity] = useState<GridDensity>("standard");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -802,13 +817,34 @@ export function ReviewWorkspace({
           createdAt: linkedLocal?.photo.createdAt ?? item.createdAt,
         };
       });
-    return [...localItems, ...remoteItems]
+    const sorted = [...localItems, ...remoteItems]
       .filter((item) => !deletingKeys.has(item.key))
       .sort((left, right) =>
         sortOrder === "oldest"
           ? left.createdAt.localeCompare(right.createdAt)
           : right.createdAt.localeCompare(left.createdAt),
       );
+
+    const stableOrder = stableReviewOrderRef.current;
+    if (stableOrder.sortOrder !== sortOrder) {
+      stableOrder.sortOrder = sortOrder;
+      stableOrder.nextPosition = 0;
+      stableOrder.positions.clear();
+    }
+    for (const item of sorted) {
+      const key = stableReviewOrderKey(item);
+      if (stableOrder.positions.has(key)) continue;
+      stableOrder.positions.set(key, stableOrder.nextPosition);
+      stableOrder.nextPosition += 1;
+    }
+
+    return sorted.sort((left, right) => {
+      const leftPosition =
+        stableOrder.positions.get(stableReviewOrderKey(left)) ?? Number.MAX_SAFE_INTEGER;
+      const rightPosition =
+        stableOrder.positions.get(stableReviewOrderKey(right)) ?? Number.MAX_SAFE_INTEGER;
+      return leftPosition - rightPosition;
+    });
   }, [deletingKeys, featuredIds, localMedia, remoteMedia, sortOrder]);
 
   const matchesCurrentFilters = useCallback(

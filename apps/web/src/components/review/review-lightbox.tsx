@@ -235,7 +235,8 @@ export function ReviewLightbox({
   const selectOffset = useCallback(
     (offset: number) => {
       if (items.length < 2 || selectedIndex < 0) return;
-      const index = (selectedIndex + offset + items.length) % items.length;
+      const index = selectedIndex + offset;
+      if (index < 0 || index >= items.length) return;
       const item = items[index];
       if (item !== undefined) onSelect(item.key);
     },
@@ -645,6 +646,8 @@ export function ReviewLightbox({
   const canToggleVisibility = published || (hidden && !selected.inspector.editPending);
   const busy = selected.pendingAction !== null;
   const canNavigate = items.length > 1;
+  const canSelectPrevious = selectedIndex > 0;
+  const canSelectNext = selectedIndex >= 0 && selectedIndex < items.length - 1;
   const bibConfirmed = isBibReviewConfirmed(selected.bib);
   const localActions =
     selected.mediaId === null
@@ -847,6 +850,7 @@ export function ReviewLightbox({
                         hoverNavigationSide !== "left" &&
                         "pointer-events-none opacity-0",
                     )}
+                    disabled={!canSelectPrevious}
                     onClick={() => selectOffset(-1)}
                     size="icon-lg"
                     title="上一张 (←)"
@@ -863,6 +867,7 @@ export function ReviewLightbox({
                         hoverNavigationSide !== "right" &&
                         "pointer-events-none opacity-0",
                     )}
+                    disabled={!canSelectNext}
                     onClick={() => selectOffset(1)}
                     size="icon-lg"
                     title="下一张 (→)"

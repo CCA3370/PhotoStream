@@ -82,6 +82,21 @@ describe("management review stability guards", () => {
     expect(source).not.toContain("当前打开的照片可能已在其他会话或操作中发生变化");
   });
 
+  it("appends realtime review arrivals and prevents lightbox wraparound", () => {
+    const workspace = readFileSync(workspacePath, "utf8");
+    const lightbox = readFileSync(lightboxPath, "utf8");
+
+    expect(workspace).toContain("stableReviewOrderRef");
+    expect(workspace).toContain("stableReviewOrderKey");
+    expect(workspace).toContain("stableOrder.nextPosition += 1");
+    expect(workspace).toContain("return appended.length === 0 ? current : [...current, ...appended]");
+    expect(lightbox).toContain("const index = selectedIndex + offset");
+    expect(lightbox).toContain("if (index < 0 || index >= items.length) return");
+    expect(lightbox).not.toContain("% items.length");
+    expect(lightbox).toContain("disabled={!canSelectPrevious}");
+    expect(lightbox).toContain("disabled={!canSelectNext}");
+  });
+
   it("optimistically removes deleting media before the backend task completes", () => {
     const source = readFileSync(workspacePath, "utf8");
 
