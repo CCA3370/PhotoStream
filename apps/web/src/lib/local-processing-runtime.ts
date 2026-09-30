@@ -4,6 +4,7 @@ import type { BibConfigView, UploadIntentView } from "@photostream/contracts";
 
 import { subscribeAlbumPurge } from "@/lib/album-purge-broadcast";
 import { clientMutation } from "@/lib/client-api";
+import { managementErrorMessage } from "@/lib/management-error";
 import { startLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   createLocalReviewPhoto,
@@ -739,7 +740,7 @@ class LocalProcessingRuntime {
       task.uploadedBytes = task.totalUploadBytes;
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : "本地处理或上传失败";
+      const message = managementErrorMessage(error, "本地处理或上传失败");
       task.status = "failed";
       task.error = message;
       await patchLocalReviewPhoto(task.localPhotoId, {
