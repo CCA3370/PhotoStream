@@ -187,8 +187,7 @@ export function UploadShell({ children, queue }: UploadShellProps) {
         <Button
           className="min-h-10 flex-1"
           disabled={
-            queue.cancellingAll ||
-            (queue.queued === 0 && queue.processing === 0 && !queue.paused)
+            queue.cancellingAll || (queue.queued === 0 && queue.processing === 0 && !queue.paused)
           }
           onClick={queue.onTogglePause}
           type="button"
