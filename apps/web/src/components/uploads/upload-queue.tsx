@@ -27,6 +27,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { clientMutation } from "@/lib/client-api";
+import { managementErrorMessage } from "@/lib/management-error";
 import { resumeLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   getLocalProcessingRuntime,
@@ -145,7 +146,7 @@ export function UploadQueue({
     void runtime.initialize().catch((error) => {
       toast.add({
         title: "上传队列恢复失败",
-        description: error instanceof Error ? error.message : "无法恢复未完成的上传任务",
+        description: managementErrorMessage(error, "无法恢复未完成的上传任务"),
         type: "error",
       });
     });
@@ -175,7 +176,7 @@ export function UploadQueue({
         prepared.push(await prepareUploadInput(file));
       } catch (error) {
         preparationFailures.push(
-          `${file.name}：${error instanceof Error ? error.message : "无法处理此文件"}`,
+          `${file.name}：${managementErrorMessage(error, "无法处理此文件")}`,
         );
       }
     }
@@ -194,7 +195,7 @@ export function UploadQueue({
     } catch (error) {
       toast.add({
         title: "重复照片检测失败",
-        description: error instanceof Error ? error.message : "未开始上传，请稍后重试。",
+        description: managementErrorMessage(error, "未开始上传，请稍后重试。"),
         type: "error",
       });
       return;
@@ -248,7 +249,7 @@ export function UploadQueue({
       toast.add({
         title: "无法加入上传队列",
         description:
-          error instanceof Error ? error.message : "浏览器本地存储空间可能不足，请释放空间后重试。",
+          managementErrorMessage(error, "浏览器本地存储空间可能不足，请释放空间后重试。"),
         type: "error",
       });
     } finally {
@@ -313,7 +314,7 @@ export function UploadQueue({
     void runtime.retryFailed().catch((error) => {
       toast.add({
         title: "重试队列失败",
-        description: error instanceof Error ? error.message : "无法更新上传队列",
+        description: managementErrorMessage(error, "无法更新上传队列"),
         type: "error",
       });
     });
@@ -323,7 +324,7 @@ export function UploadQueue({
     void runtime.cancelTask(taskId).catch((error) => {
       toast.add({
         title: "取消上传失败",
-        description: error instanceof Error ? error.message : "无法取消该上传任务",
+        description: managementErrorMessage(error, "无法取消该上传任务"),
         type: "error",
       });
     });
@@ -346,7 +347,7 @@ export function UploadQueue({
       .catch((error) => {
         toast.add({
           title: "无法同步修图版本",
-          description: error instanceof Error ? error.message : "请稍后重试。",
+          description: managementErrorMessage(error, "请稍后重试。"),
           type: "error",
         });
       });
@@ -529,7 +530,7 @@ export function UploadQueue({
                     .catch((error) =>
                       toast.add({
                         title: "重复照片加入队列失败",
-                        description: error instanceof Error ? error.message : "请稍后重试",
+                        description: managementErrorMessage(error, "请稍后重试"),
                         type: "error",
                       }),
                     );
