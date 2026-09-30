@@ -831,7 +831,7 @@ export class FaceService {
       const [code, message] = mapping[validation];
       throw new AppError({ code, message, statusCode: 400 });
     }
-    let mediaIds: string[];
+    let mediaIds: string[] = [];
     try {
       mediaIds = await this.#provider.findSynchronousCandidates(
         context.index.datasetName as string,
@@ -855,10 +855,11 @@ export class FaceService {
         source: "aliyun_imm",
         operation: "SearchImageFigureCluster / SimpleQuery",
         datasetName: context.index.datasetName,
-        context: { searchId: intent.id },
+        context: { searchId: intent.id, degradedToAsyncSearch: true },
       });
-      await this.#failAndDelete(intent, "provider_unavailable");
-      throw providerFailure();
+      // The synchronous cluster path is an optimization, not the only source of results.
+      // Keep the validated reference alive and fall back to FacesSearching instead of
+      // turning a transient IMM read failure into a failed visitor search.
     }
     try {
       const providerTaskId = await this.#provider.startAsyncSearch(
