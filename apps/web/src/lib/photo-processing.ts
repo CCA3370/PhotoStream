@@ -89,7 +89,10 @@ function canvasBlob(
   });
 }
 
-async function decodeWithImageElement(file: File, signal?: AbortSignal): Promise<{
+async function decodeWithImageElement(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
   readonly width: number;
   readonly height: number;
   draw(context: CanvasRenderingContext2D, width: number, height: number): void;
