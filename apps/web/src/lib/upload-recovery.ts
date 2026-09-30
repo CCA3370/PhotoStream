@@ -74,9 +74,7 @@ async function transaction<T>(
       request.addEventListener("error", () =>
         reject(request.error ?? new Error("上传恢复记录操作失败")),
       );
-      tx.addEventListener("abort", () =>
-        reject(tx.error ?? new Error("上传恢复记录事务已取消")),
-      );
+      tx.addEventListener("abort", () => reject(tx.error ?? new Error("上传恢复记录事务已取消")));
       tx.addEventListener("complete", () => resolve(result));
     });
   } finally {
