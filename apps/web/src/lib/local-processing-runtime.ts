@@ -588,11 +588,13 @@ class LocalProcessingRuntime {
     }
 
     let stored: PersistedProcessingTask[] = [];
-    try {
-      stored = await listPersistedTasks(this.#albumId);
-    } catch (error) {
-      if (!isAppleWebKit()) throw error;
+    if (isAppleWebKit()) {
+      // Avoid persisting full-resolution Blob/File objects in WebKit IndexedDB. Large camera
+      // originals can cause severe memory spikes or WebContent termination during structured
+      // cloning. Safari therefore uses an in-memory processing queue by design.
       this.#persistenceDegraded = true;
+    } else {
+      stored = await listPersistedTasks(this.#albumId);
     }
     const recovered: ProcessingTask[] = await Promise.all(
       stored.map(async (task) => {
