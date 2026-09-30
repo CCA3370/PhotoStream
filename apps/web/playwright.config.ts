@@ -2,6 +2,12 @@ import { defineConfig } from "@playwright/test";
 
 const usesExternalBrowser = process.env.BROWSER_CDP_URL !== undefined;
 const appOrigin = process.env.E2E_APP_ORIGIN ?? "http://localhost:3000";
+const browserName =
+  process.env.E2E_BROWSER === "webkit"
+    ? "webkit"
+    : process.env.E2E_BROWSER === "firefox"
+      ? "firefox"
+      : "chromium";
 
 const config = {
   testDir: "./tests/e2e",
@@ -12,6 +18,7 @@ const config = {
   reporter: "list" as const,
   use: {
     baseURL: appOrigin,
+    browserName,
     trace: "retain-on-failure" as const,
     screenshot: "only-on-failure" as const,
   },
