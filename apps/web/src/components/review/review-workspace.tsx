@@ -994,13 +994,7 @@ export function ReviewWorkspace({
     lightboxTotalAbortRef.current = controller;
     void fetchRemoteTotal(controller.signal)
       .then((remoteTotal) => {
-        if (
-          controller.signal.aborted ||
-          lightboxTotalRequestRef.current !== requestId ||
-          activeKey !== null
-        ) {
-          return;
-        }
+        if (controller.signal.aborted || lightboxTotalRequestRef.current !== requestId) return;
         setLightboxTotal(localCount + remoteTotal);
       })
       .catch(() => undefined)
