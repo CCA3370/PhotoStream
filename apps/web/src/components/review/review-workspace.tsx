@@ -104,6 +104,7 @@ interface CategoryOption {
 
 type FilterMode = "all" | "featured" | "hidden" | "local" | "published";
 type IngestFilter = "all" | "failed" | "incomplete";
+type ReviewStatusFilter = "all" | "pending";
 type BibDecisionFilter =
   | "all"
   | "needs_review"
@@ -197,6 +198,7 @@ interface BatchFailure {
 
 const filterModes = new Set<FilterMode>(["all", "featured", "hidden", "local", "published"]);
 const assignmentFilters = new Set<ReviewAssignmentFilter>(["all", "mine"]);
+const reviewStatusFilters = new Set<ReviewStatusFilter>(["all", "pending"]);
 const ingestFilters = new Set<IngestFilter>(["all", "failed", "incomplete"]);
 const bibDecisionFilters = new Set<BibDecisionFilter>([
   "all",
@@ -386,6 +388,7 @@ export function ReviewWorkspace({
   const [category, setCategory] = useState("all");
   const [uploader, setUploader] = useState("all");
   const [assignmentFilter, setAssignmentFilter] = useState<ReviewAssignmentFilter>("all");
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatusFilter>("all");
   const [reviewCollaboration, setReviewCollaboration] = useState(initialReviewCollaboration);
   const [ingestFilter, setIngestFilter] = useState<IngestFilter>("all");
   const [bibDecision, setBibDecision] = useState<BibDecisionFilter>("all");
@@ -396,13 +399,15 @@ export function ReviewWorkspace({
   const [gridDensity, setGridDensity] = useState<GridDensity>("standard");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [lightboxQueueKeys, setLightboxQueueKeys] = useState<readonly string[]>([]);
   const [inspectorKey, setInspectorKey] = useState<string | null>(null);
   const [inspectorDeleteOpen, setInspectorDeleteOpen] = useState(false);
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
   const openItemKeysRef = useRef<ReadonlySet<string>>(new Set());
-  openItemKeysRef.current = new Set(
-    [activeKey, inspectorKey, bibDialogKey].filter((key): key is string => key !== null),
-  );
+  openItemKeysRef.current = new Set([
+    ...lightboxQueueKeys,
+    ...[activeKey, inspectorKey, bibDialogKey].filter((key): key is string => key !== null),
+  ]);
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
     new Map(),
   );
@@ -453,6 +458,7 @@ export function ReviewWorkspace({
     setCategory(simpleQueryValue(params, "category"));
     setUploader(simpleQueryValue(params, "uploader"));
     setAssignmentFilter(enumQueryValue(params, "assignment", assignmentFilters, "all"));
+    setReviewStatus(enumQueryValue(params, "reviewStatus", reviewStatusFilters, "all"));
     setIngestFilter(enumQueryValue(params, "ingest", ingestFilters, "all"));
     setBibDecision(enumQueryValue(params, "bibDecision", bibDecisionFilters, "all"));
     setBibOcrStatus(enumQueryValue(params, "bibOcr", bibOcrFilters, "all"));
@@ -491,6 +497,7 @@ export function ReviewWorkspace({
     setOrDelete("category", category);
     setOrDelete("uploader", uploader);
     setOrDelete("assignment", assignmentFilter);
+    setOrDelete("reviewStatus", reviewStatus);
     setOrDelete("ingest", ingestFilter);
     setOrDelete("bibDecision", bibDecision);
     setOrDelete("bibOcr", bibOcrStatus);
@@ -503,6 +510,7 @@ export function ReviewWorkspace({
     if (next !== current) window.history.replaceState(window.history.state, "", next);
   }, [
     assignmentFilter,
+    reviewStatus,
     bibDecision,
     bibOcrStatus,
     category,
@@ -582,6 +590,7 @@ export function ReviewWorkspace({
       if (category !== "all") query.set("categoryId", category);
       if (uploader !== "all") query.set("uploaderId", uploader);
       if (assignmentFilter === "mine") query.set("reviewAssignment", "mine");
+      if (reviewStatus === "pending") query.set("reviewStatus", "pending");
       if (ingestFilter !== "all") query.set("ingestGroup", ingestFilter);
       if (bibDecision !== "all") query.set("bibReviewDecision", bibDecision);
       if (bibOcrStatus !== "all") query.set("bibOcrStatus", bibOcrStatus);
@@ -593,6 +602,7 @@ export function ReviewWorkspace({
     },
     [
       assignmentFilter,
+      reviewStatus,
       bibDecision,
       bibOcrStatus,
       category,
@@ -804,36 +814,41 @@ export function ReviewWorkspace({
       );
   }, [deletingKeys, featuredIds, localMedia, remoteMedia, sortOrder]);
 
-  const visibleItems = useMemo(
-    () =>
-      items.filter((item) => {
-        if (assignmentFilter === "mine" && item.source === "local") return false;
-        if (category !== "all" && item.categoryId !== category) return false;
-        if (uploader !== "all" && item.uploaderId !== uploader) return false;
-        if (filter === "local" && item.source !== "local") return false;
-        if (filter === "featured" && !item.featured) return false;
-        if (filter === "published" && item.publicationStatus !== "published") return false;
-        if (filter === "hidden" && item.publicationStatus !== "hidden") return false;
-        if (item.source === "local") {
-          if (ingestFilter === "failed" && item.local.photo.uploadState !== "failed") return false;
-          if (ingestFilter === "incomplete" && item.local.photo.uploadState === "published")
-            return false;
-        }
-        const decision = item.bib?.review.decision ?? "pending";
-        const ocrStatus = item.bib?.review.ocrStatus ?? "not_started";
-        if (bibDecision !== "all" && decision !== bibDecision) return false;
-        if (bibOcrStatus !== "all" && ocrStatus !== bibOcrStatus) return false;
-        if (gradeOption !== "all") {
-          const matchedAttribute = item.bib?.tags.some(
-            (tag) =>
-              tag.status === "confirmed" &&
-              tag.gradeOptionId === gradeOption &&
-              (classOption === "all" || tag.classOptionId === classOption),
-          );
-          if (matchedAttribute !== true) return false;
-        }
-        return true;
-      }),
+  const matchesCurrentFilters = useCallback(
+    (item: ReviewItem, ignoreReviewStatus = false): boolean => {
+      if (assignmentFilter === "mine" && item.source === "local") return false;
+      if (
+        !ignoreReviewStatus &&
+        reviewStatus === "pending" &&
+        (item.source === "local" || item.remote.reviewedAt != null)
+      )
+        return false;
+      if (category !== "all" && item.categoryId !== category) return false;
+      if (uploader !== "all" && item.uploaderId !== uploader) return false;
+      if (filter === "local" && item.source !== "local") return false;
+      if (filter === "featured" && !item.featured) return false;
+      if (filter === "published" && item.publicationStatus !== "published") return false;
+      if (filter === "hidden" && item.publicationStatus !== "hidden") return false;
+      if (item.source === "local") {
+        if (ingestFilter === "failed" && item.local.photo.uploadState !== "failed") return false;
+        if (ingestFilter === "incomplete" && item.local.photo.uploadState === "published")
+          return false;
+      }
+      const decision = item.bib?.review.decision ?? "pending";
+      const ocrStatus = item.bib?.review.ocrStatus ?? "not_started";
+      if (bibDecision !== "all" && decision !== bibDecision) return false;
+      if (bibOcrStatus !== "all" && ocrStatus !== bibOcrStatus) return false;
+      if (gradeOption !== "all") {
+        const matchedAttribute = item.bib?.tags.some(
+          (tag) =>
+            tag.status === "confirmed" &&
+            tag.gradeOptionId === gradeOption &&
+            (classOption === "all" || tag.classOptionId === classOption),
+        );
+        if (matchedAttribute !== true) return false;
+      }
+      return true;
+    },
     [
       assignmentFilter,
       bibDecision,
@@ -843,9 +858,14 @@ export function ReviewWorkspace({
       filter,
       gradeOption,
       ingestFilter,
-      items,
+      reviewStatus,
       uploader,
     ],
+  );
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => matchesCurrentFilters(item)),
+    [items, matchesCurrentFilters],
   );
 
   function resetSelection(): void {
@@ -857,6 +877,7 @@ export function ReviewWorkspace({
 
   function clearAdvancedFilters(): void {
     setAssignmentFilter("all");
+    setReviewStatus("all");
     setIngestFilter("all");
     setBibDecision("all");
     setBibOcrStatus("all");
@@ -931,12 +952,25 @@ export function ReviewWorkspace({
       : selectedKeys.has(item.key);
   }
 
+  useEffect(() => {
+    if (activeKey === null) return;
+    setLightboxQueueKeys((current) => {
+      const known = new Set(current);
+      const appended = visibleItems
+        .map((item) => item.key)
+        .filter((key) => !known.has(key));
+      return appended.length === 0 ? current : [...current, ...appended];
+    });
+  }, [activeKey, visibleItems]);
+
   const lightboxSourceItems = useMemo(() => {
-    if (activeKey === null || visibleItems.some((item) => item.key === activeKey))
-      return visibleItems;
-    const activeItem = items.find((item) => item.key === activeKey);
-    return activeItem === undefined ? visibleItems : [...visibleItems, activeItem];
-  }, [activeKey, items, visibleItems]);
+    if (activeKey === null) return [];
+    const byKey = new Map(items.map((item) => [item.key, item] as const));
+    return lightboxQueueKeys
+      .map((key) => byKey.get(key))
+      .filter((item): item is ReviewItem => item !== undefined)
+      .filter((item) => matchesCurrentFilters(item, true));
+  }, [activeKey, items, lightboxQueueKeys, matchesCurrentFilters]);
 
   const lightboxItems = useMemo<readonly ReviewLightboxItem[]>(
     () =>
@@ -1275,6 +1309,12 @@ export function ReviewWorkspace({
     reviewedMediaIdsRef.current.add(mediaId);
     try {
       await clientMutation<{ readonly ok: true }>(`/api/v1/media/${mediaId}/reviewed`);
+      const reviewedAt = new Date().toISOString();
+      setRemoteMedia((current) =>
+        current.map((candidate) =>
+          candidate.id === mediaId ? { ...candidate, reviewedAt } : candidate,
+        ),
+      );
       await refreshReviewCollaboration();
     } catch (cause) {
       reviewedMediaIdsRef.current.delete(mediaId);
@@ -1819,6 +1859,7 @@ export function ReviewWorkspace({
 
   const advancedFiltersActive =
     assignmentFilter !== "all" ||
+    reviewStatus !== "all" ||
     ingestFilter !== "all" ||
     bibDecision !== "all" ||
     bibOcrStatus !== "all" ||
@@ -1995,6 +2036,29 @@ export function ReviewWorkspace({
           userRole={userRole}
           value={reviewCollaboration}
         />
+
+        <Select
+          items={[
+            { label: "全部审核状态", value: "all" },
+            { label: "待审核图片", value: "pending" },
+          ]}
+          onValueChange={(value) => {
+            setReviewStatus((value ?? "all") as ReviewStatusFilter);
+            if ((value ?? "all") === "pending" && filter === "local") setFilter("all");
+            resetSelection();
+          }}
+          value={reviewStatus}
+        >
+          <SelectTrigger aria-label="审核状态筛选" className="h-8 w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部审核状态</SelectItem>
+              <SelectItem value="pending">待审核图片</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
 
         <Select
           items={[
@@ -2436,6 +2500,7 @@ export function ReviewWorkspace({
                         toggleSelection(item.key, index, event.shiftKey);
                         return;
                       }
+                      setLightboxQueueKeys(visibleItems.map((candidate) => candidate.key));
                       setActiveKey(item.key);
                     }}
                     type="button"
@@ -2663,7 +2728,10 @@ export function ReviewWorkspace({
           if (item !== null) void changeCategory(item, categoryId);
         }}
         onBibStateChange={updateBibState}
-        onClose={() => setActiveKey(null)}
+        onClose={() => {
+          setActiveKey(null);
+          setLightboxQueueKeys([]);
+        }}
         onDelete={(key) => {
           const item = itemByKey(key);
           if (item !== null) void deleteItem(item);
