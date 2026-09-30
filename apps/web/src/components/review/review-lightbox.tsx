@@ -20,6 +20,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -53,6 +54,7 @@ import {
 import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
 import {
   canActOnReviewImage,
+  notifyCurrentReviewImageLoad,
   type ReviewImageRequest,
   requestReviewImage,
 } from "@/lib/review-image-state";
@@ -175,6 +177,10 @@ export function ReviewLightbox({
   const [requestedImage, setRequestedImage] = useState(() => requestReviewImage(null, selected));
   const imageRequest = requestReviewImage(requestedImage, selected);
   if (imageRequest !== requestedImage) setRequestedImage(imageRequest);
+  const liveImageRequestRef = useRef(imageRequest);
+  useLayoutEffect(() => {
+    liveImageRequestRef.current = imageRequest;
+  }, [imageRequest]);
   const [loadedImageRequest, setLoadedImageRequest] = useState<ReviewImageRequest | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const loaded = imageRequest.identity !== null && imageRequest === loadedImageRequest;
@@ -364,6 +370,7 @@ export function ReviewLightbox({
     if (selected === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (bibDialogOpen) return;
+      const canActOnImage = canReviewCurrentImage && imageRequest === liveImageRequestRef.current;
       if (!readOnly && event.key === "Tab") {
         event.preventDefault();
         event.stopPropagation();
@@ -381,7 +388,7 @@ export function ReviewLightbox({
       }
 
       const shortcutCategory =
-        !readOnly && canReviewCurrentImage && !event.repeat && selected.pendingAction === null
+        !readOnly && canActOnImage && !event.repeat && selected.pendingAction === null
           ? categories.find(
               (category) =>
                 category.shortcut != null && categoryShortcutMatches(event, category.shortcut),
@@ -428,7 +435,7 @@ export function ReviewLightbox({
       } else if (!readOnly && event.code === "Space") {
         event.preventDefault();
         event.stopPropagation();
-        if (!canReviewCurrentImage || event.repeat || selected.pendingAction !== null) return;
+        if (!canActOnImage || event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
           onToggleVisibility(selected.key);
         }
@@ -436,13 +443,12 @@ export function ReviewLightbox({
       } else if (!readOnly && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        if (canReviewCurrentImage && selected.pendingAction === null)
-          onToggleFeatured(selected.key);
+        if (canActOnImage && selected.pendingAction === null) onToggleFeatured(selected.key);
         focusViewer();
       } else if (!readOnly && event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
         event.stopPropagation();
-        if (!canReviewCurrentImage || selected.pendingAction !== null) return;
+        if (!canActOnImage || selected.pendingAction !== null) return;
         const now = Date.now();
         if (deleteTapRef.current?.key === selected.key && now - deleteTapRef.current.at <= 900) {
           deleteTapRef.current = null;
@@ -475,6 +481,7 @@ export function ReviewLightbox({
     editMode,
     focusViewer,
     fullscreenSupported,
+    imageRequest,
     onCategoryChange,
     onClose,
     onDelete,
@@ -757,9 +764,15 @@ export function ReviewLightbox({
                         fill
                         onError={onImageError}
                         onLoad={() => {
-                          setLoadedImageRequest(imageRequest);
-                          setLoadFailed(false);
-                          if (!readOnly) onViewed(selected.key);
+                          notifyCurrentReviewImageLoad(
+                            liveImageRequestRef.current,
+                            imageRequest,
+                            () => {
+                              setLoadedImageRequest(imageRequest);
+                              setLoadFailed(false);
+                              if (!readOnly) onViewed(selected.key);
+                            },
+                          );
                         }}
                         loading="eager"
                         localPhotoId={selected.localPhotoId}

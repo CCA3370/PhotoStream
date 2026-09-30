@@ -9,6 +9,7 @@ describe("internal image load notifications", () => {
       {
         resolvedStrategy: "previous-photo",
         currentStrategy: "selected-photo",
+        resolvedSource: "/fixture/previous-photo",
         displayedSource: "/fixture/previous-photo",
         requestedSource: "/fixture/previous-photo",
       },
@@ -22,6 +23,7 @@ describe("internal image load notifications", () => {
     const image = {
       resolvedStrategy: "selected-photo",
       currentStrategy: "selected-photo",
+      resolvedSource: "/fixture/selected-photo",
       displayedSource: "/fixture/previous-photo",
       requestedSource: "/fixture/selected-photo",
     };
@@ -31,5 +33,31 @@ describe("internal image load notifications", () => {
       reviewed.push("selected-photo"),
     );
     expect(reviewed).toEqual(["selected-photo"]);
+  });
+
+  it("rejects a cached completion delivered to an old callback after the DOM source changed", () => {
+    const completed: string[] = [];
+    notifyCurrentInternalImageLoad(
+      {
+        resolvedStrategy: "same-photo",
+        currentStrategy: "same-photo",
+        resolvedSource: "/fixture/previous-resolution",
+        displayedSource: "/fixture/current-resolution",
+        requestedSource: "/fixture/current-resolution",
+      },
+      () => completed.push("previous-resolution"),
+    );
+    expect(completed).toEqual([]);
+    notifyCurrentInternalImageLoad(
+      {
+        resolvedStrategy: "same-photo",
+        currentStrategy: "same-photo",
+        resolvedSource: "/fixture/current-resolution",
+        displayedSource: "/fixture/current-resolution",
+        requestedSource: "/fixture/current-resolution",
+      },
+      () => completed.push("current-resolution"),
+    );
+    expect(completed).toEqual(["current-resolution"]);
   });
 });

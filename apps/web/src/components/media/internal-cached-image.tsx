@@ -1,7 +1,7 @@
 "use client";
 
 import Image, { type ImageProps } from "next/image";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { clientGet } from "@/lib/client-api";
 import { notifyCurrentInternalImageLoad } from "@/lib/internal-image-load";
@@ -113,6 +113,7 @@ function InternalCachedImageComponent({
   const [visible, setVisible] = useState(false);
   const [retryRevision, setRetryRevision] = useState(0);
   type ResolvedImage = {
+    readonly session: number;
     readonly strategy: string;
     readonly candidateId: string;
     readonly url: string;
@@ -120,6 +121,7 @@ function InternalCachedImageComponent({
   };
   const [resolved, setResolved] = useState<ResolvedImage | null>(null);
   const resolvedRef = useRef<ResolvedImage | null>(null);
+  const resolvedSessionRef = useRef(0);
   const retiredObjectUrlsRef = useRef(new Set<string>());
   const requestRef = useRef({
     src,
@@ -179,6 +181,10 @@ function InternalCachedImageComponent({
       src,
     ],
   );
+  const liveStrategyRef = useRef(strategy);
+  useLayoutEffect(() => {
+    liveStrategyRef.current = strategy;
+  }, [strategy]);
 
   useEffect(
     () => () => {
@@ -211,14 +217,15 @@ function InternalCachedImageComponent({
     const startedRetryRevision = retryRevision;
     let disposed = false;
 
-    const commitResolved = (next: ResolvedImage): void => {
+    const commitResolved = (next: Omit<ResolvedImage, "session">): void => {
       if (disposed) {
         if (next.ownedObjectUrl) URL.revokeObjectURL(next.url);
         return;
       }
       const previous = resolvedRef.current;
-      resolvedRef.current = next;
-      setResolved(next);
+      const committed = { ...next, session: ++resolvedSessionRef.current };
+      resolvedRef.current = committed;
+      setResolved(committed);
       if (previous?.ownedObjectUrl && previous.url !== next.url) {
         retiredObjectUrlsRef.current.add(previous.url);
       }
@@ -363,13 +370,18 @@ function InternalCachedImageComponent({
       {display === null ? null : (
         <Image
           {...props}
+          key={resolved?.session}
           src={display}
           unoptimized
           onLoad={(event) => {
             notifyCurrentInternalImageLoad(
               {
                 resolvedStrategy: resolved?.strategy,
-                currentStrategy: strategy,
+                currentStrategy: liveStrategyRef.current,
+                resolvedSource:
+                  resolved === null
+                    ? undefined
+                    : new URL(resolved.url, event.currentTarget.ownerDocument.baseURI).href,
                 displayedSource: event.currentTarget.currentSrc,
                 requestedSource: event.currentTarget.src,
               },

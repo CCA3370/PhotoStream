@@ -87,6 +87,7 @@ import {
   patchLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
+import { reviewLightboxQueue } from "@/lib/review-lightbox-queue";
 import {
   fetchReviewRemoteWindow,
   isStandaloneLocalReviewPhoto,
@@ -1041,14 +1042,13 @@ export function ReviewWorkspace({
     });
   }, [activeKey, visibleItems]);
 
-  const lightboxSourceItems = useMemo(() => {
-    if (activeKey === null) return [];
-    const byKey = new Map(items.map((item) => [item.key, item] as const));
-    return lightboxQueueKeys
-      .map((key) => byKey.get(key))
-      .filter((item): item is ReviewItem => item !== undefined)
-      .filter((item) => matchesCurrentFilters(item, true));
-  }, [activeKey, items, lightboxQueueKeys, matchesCurrentFilters]);
+  const lightboxSourceItems = useMemo(
+    () =>
+      reviewLightboxQueue(items, lightboxQueueKeys, activeKey, (item) =>
+        matchesCurrentFilters(item, true),
+      ),
+    [activeKey, items, lightboxQueueKeys, matchesCurrentFilters],
+  );
 
   const lightboxItems = useMemo<readonly ReviewLightboxItem[]>(
     () =>

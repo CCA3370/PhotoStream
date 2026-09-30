@@ -31,3 +31,11 @@ export function requestReviewImage(
   const identity = reviewImageIdentity(image);
   return previous?.identity === identity ? previous : { identity };
 }
+
+export function notifyCurrentReviewImageLoad(
+  current: ReviewImageRequest,
+  completed: ReviewImageRequest,
+  onLoaded: () => void,
+): void {
+  if (current.identity !== null && current === completed) onLoaded();
+}

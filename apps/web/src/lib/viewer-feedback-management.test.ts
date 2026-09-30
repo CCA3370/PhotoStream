@@ -33,7 +33,7 @@ describe("viewer feedback management", () => {
     expect(inbox).toContain("<ReviewLightbox");
     expect(inbox).toContain("readOnly");
     expect(lightbox).toContain("readOnly = false");
-    expect(lightbox).toContain("!readOnly && !bibConfirmed");
+    expect(lightbox).toContain("!readOnly && canReviewCurrentImage && !bibConfirmed");
     expect(lightbox).toContain("mediaId={selected.mediaId}");
   });
 });

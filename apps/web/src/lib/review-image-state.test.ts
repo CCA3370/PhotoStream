@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { canActOnReviewImage, requestReviewImage } from "./review-image-state";
+import {
+  canActOnReviewImage,
+  notifyCurrentReviewImageLoad,
+  requestReviewImage,
+} from "./review-image-state";
 
 describe("review image loading state", () => {
   const photo = { key: "remote:one", visualRevision: null, src: "/fixture/one-preview" };
@@ -50,5 +54,19 @@ describe("review image loading state", () => {
     };
     const remoteOriginal = requestReviewImage(loaded, selectedWithRemoteOriginal);
     expect(canActOnReviewImage(remoteOriginal, loaded, false)).toBe(true);
+  });
+
+  it("ignores a delayed previous-photo callback and accepts the current cached image", () => {
+    const first = requestReviewImage(null, photo);
+    const second = requestReviewImage(first, {
+      ...photo,
+      key: "remote:two",
+      src: "/fixture/two-preview",
+    });
+    const reviewed: string[] = [];
+    notifyCurrentReviewImageLoad(second, first, () => reviewed.push("one"));
+    expect(reviewed).toEqual([]);
+    notifyCurrentReviewImageLoad(second, second, () => reviewed.push("two"));
+    expect(reviewed).toEqual(["two"]);
   });
 });
