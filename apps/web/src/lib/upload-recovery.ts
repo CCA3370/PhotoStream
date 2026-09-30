@@ -44,8 +44,17 @@ async function database(): Promise<IDBDatabase> {
         request.result.createObjectStore(storeName, { keyPath: "intentId" });
       }
     });
-    request.addEventListener("success", () => resolve(request.result));
-    request.addEventListener("error", () => reject(request.error));
+    request.addEventListener("success", () => {
+      const db = request.result;
+      db.addEventListener("versionchange", () => db.close());
+      resolve(db);
+    });
+    request.addEventListener("blocked", () =>
+      reject(new Error("Safari 暂时无法打开上传恢复数据库，请关闭其他 PhotoStream 标签页后重试")),
+    );
+    request.addEventListener("error", () =>
+      reject(request.error ?? new Error("无法打开上传恢复数据库")),
+    );
   });
 }
 
@@ -62,8 +71,12 @@ async function transaction<T>(
       request.addEventListener("success", () => {
         result = request.result;
       });
-      request.addEventListener("error", () => reject(request.error));
-      tx.addEventListener("abort", () => reject(tx.error));
+      request.addEventListener("error", () =>
+        reject(request.error ?? new Error("上传恢复记录操作失败")),
+      );
+      tx.addEventListener("abort", () =>
+        reject(tx.error ?? new Error("上传恢复记录事务已取消")),
+      );
       tx.addEventListener("complete", () => resolve(result));
     });
   } finally {
