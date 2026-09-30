@@ -253,10 +253,10 @@ export async function listLocalReviewPhotos(albumId: string): Promise<LocalRevie
   try {
     const transaction = database.transaction(storeName, "readonly");
     const store = transaction.objectStore(storeName).index("albumId");
-    const rows = await requestResult(
-      store.getAll(IDBKeyRange.only(albumId)) as IDBRequest<LocalReviewPhoto[]>,
-    );
-    await complete(transaction);
+    const [rows] = await Promise.all([
+      requestResult(store.getAll(IDBKeyRange.only(albumId)) as IDBRequest<LocalReviewPhoto[]>),
+      complete(transaction),
+    ]);
     return rows
       .map(normalizeStoredPhoto)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -272,12 +272,14 @@ export async function findLocalReviewPhotoByMediaId(
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readonly");
-    const row = await requestResult(
-      transaction.objectStore(storeName).index("mediaId").get(mediaId) as IDBRequest<
-        LocalReviewPhoto | undefined
-      >,
-    );
-    await complete(transaction);
+    const [row] = await Promise.all([
+      requestResult(
+        transaction.objectStore(storeName).index("mediaId").get(mediaId) as IDBRequest<
+          LocalReviewPhoto | undefined
+        >,
+      ),
+      complete(transaction),
+    ]);
     return row === undefined ? null : normalizeStoredPhoto(row);
   } finally {
     database.close();
@@ -289,10 +291,12 @@ export async function getLocalReviewPhoto(id: string): Promise<LocalReviewPhoto 
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readonly");
-    const row = await requestResult(
-      transaction.objectStore(storeName).get(id) as IDBRequest<LocalReviewPhoto | undefined>,
-    );
-    await complete(transaction);
+    const [row] = await Promise.all([
+      requestResult(
+        transaction.objectStore(storeName).get(id) as IDBRequest<LocalReviewPhoto | undefined>,
+      ),
+      complete(transaction),
+    ]);
     return row === undefined ? null : normalizeStoredPhoto(row);
   } finally {
     database.close();
@@ -304,8 +308,10 @@ export async function putLocalReviewPhoto(photo: LocalReviewPhoto): Promise<void
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    await requestResult(transaction.objectStore(storeName).put(photo));
-    await complete(transaction);
+    await Promise.all([
+      requestResult(transaction.objectStore(storeName).put(photo)),
+      complete(transaction),
+    ]);
   } finally {
     database.close();
   }
@@ -498,8 +504,10 @@ export async function deleteLocalReviewPhoto(id: string): Promise<void> {
     const database = await openDatabase();
     try {
       const transaction = database.transaction(storeName, "readwrite");
-      await requestResult(transaction.objectStore(storeName).delete(id));
-      await complete(transaction);
+      await Promise.all([
+        requestResult(transaction.objectStore(storeName).delete(id)),
+        complete(transaction),
+      ]);
     } finally {
       database.close();
     }
