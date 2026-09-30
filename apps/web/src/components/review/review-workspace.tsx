@@ -295,7 +295,9 @@ function mergeRemote(
 }
 
 function stableReviewOrderKey(item: ReviewItem): string {
-  return item.source === "remote" && item.local !== null ? `local:${item.local.photo.id}` : item.key;
+  return item.source === "remote" && item.local !== null
+    ? `local:${item.local.photo.id}`
+    : item.key;
 }
 
 function stableRemoteMedia(
