@@ -295,14 +295,11 @@ export function PhotoLightbox({
 
   useLayoutEffect(() => {
     if (selectedId !== null) resetInteraction();
-  }, [resetInteraction, selectedId]);
-
-  useEffect(() => {
     preparedRequestRef.current += 1;
     setDownloadMenuOpen(false);
     setWeChatDownload(null);
     setPreparedImage(null);
-  }, [selectedId]);
+  }, [resetInteraction, selectedId]);
 
   useEffect(
     () => () => {
