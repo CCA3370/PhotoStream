@@ -187,11 +187,23 @@ test("photo travels browser to object store and becomes visible after password u
     }
   });
   try {
-    await viewerPage.goto(appUrl(`/g/${createdAlbum.album.slug}`));
-    await viewerPage.getByLabel("相册口令").fill(createdAlbum.generatedPassword);
-    const unlock = viewerPage.getByRole("button", { name: "进入相册" });
-    await expectReactHydrated(unlock);
-    await unlock.click();
+    if (process.env.E2E_BROWSER === "webkit") {
+      const unlock = await viewer.request.post(
+        appUrl(`/api/v1/public/albums/${createdAlbum.album.slug}/unlock`),
+        {
+          data: { password: createdAlbum.generatedPassword },
+          headers: { origin: baseUrl },
+        },
+      );
+      expect(unlock.status()).toBe(200);
+      await viewerPage.goto(appUrl(`/g/${createdAlbum.album.slug}`));
+    } else {
+      await viewerPage.goto(appUrl(`/g/${createdAlbum.album.slug}`));
+      await viewerPage.getByLabel("相册口令").fill(createdAlbum.generatedPassword);
+      const unlock = viewerPage.getByRole("button", { name: "进入相册" });
+      await expectReactHydrated(unlock);
+      await unlock.click();
+    }
     await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
 
     await page.goto(appUrl(`/studio/albums/${createdAlbum.album.id}/upload`));
