@@ -639,8 +639,11 @@ export class OperationsService {
         .update(schema.mediaFaceIndexTasks)
         .set({
           status: "deleting",
+          providerTaskId: null,
+          attempts: 0,
           deletionConfirmedAt: null,
           nextAttemptAt: now,
+          lastErrorCode: null,
           updatedAt: now,
         })
         .where(
