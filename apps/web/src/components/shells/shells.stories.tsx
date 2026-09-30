@@ -36,11 +36,14 @@ export const UploadQueue: Story = {
         failed: 0,
         cancelled: 0,
         retryableFailed: 0,
+        cancellable: 0,
+        cancellingAll: false,
         pendingReview: 0,
         completed: 0,
         total: 0,
         onTogglePause: () => undefined,
         onRetryFailed: () => undefined,
+        onCancelAll: () => undefined,
         onClearCompleted: () => undefined,
       }}
     >
