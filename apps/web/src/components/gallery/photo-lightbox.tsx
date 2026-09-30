@@ -678,7 +678,7 @@ export function PhotoLightbox({
           <div
             aria-hidden={!controlsVisible}
             className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 transition-[opacity,transform] duration-200 ease-out sm:p-4 sm:pb-16 motion-reduce:transition-none",
+              "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 transition-[opacity,transform] duration-200 ease-out sm:p-4 sm:pb-16 motion-reduce:transition-none",
               controlsVisible
                 ? "translate-y-0 opacity-100"
                 : "pointer-events-none -translate-y-2 opacity-0",
@@ -779,7 +779,7 @@ export function PhotoLightbox({
           <div
             aria-hidden={!controlsVisible}
             className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] transition-[opacity,transform] duration-200 ease-out sm:px-4 sm:pt-20 motion-reduce:transition-none",
+              "pointer-events-none absolute inset-x-0 bottom-0 z-20 px-2.5 pt-16 pb-[max(0.65rem,env(safe-area-inset-bottom))] transition-[opacity,transform] duration-200 ease-out sm:px-4 sm:pt-20 motion-reduce:transition-none",
               controlsVisible
                 ? "translate-y-0 opacity-100"
                 : "pointer-events-none translate-y-3 opacity-0",
