@@ -162,9 +162,9 @@ export function UploadQueue({
       if (snapshot.persistenceDegraded && !safariPersistenceShownRef.current) {
         safariPersistenceShownRef.current = true;
         toast.add({
-          title: "Safari 已切换为内存上传队列",
+          title: "Safari 兼容上传模式",
           description:
-            "Safari 当前无法可靠写入本地任务数据库，上传会继续正常进行；但刷新或关闭页面后，尚未完成的任务无法自动恢复。",
+            "为避免大图写入本地数据库导致 Safari 内存过高，上传任务仅保留在当前页面；刷新或关闭页面后，尚未完成的任务不会自动恢复。",
           type: "warning",
           timeout: 12_000,
         });
