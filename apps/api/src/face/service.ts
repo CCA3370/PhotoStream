@@ -2106,7 +2106,13 @@ export class FaceService {
       .where(
         and(
           eq(schema.mediaFaceIndexTasks.albumId, albumId),
-          inArray(schema.mediaFaceIndexTasks.status, ["pending", "indexing", "deleting"]),
+          or(
+            inArray(schema.mediaFaceIndexTasks.status, ["pending", "indexing", "deleting"]),
+            and(
+              eq(schema.mediaFaceIndexTasks.status, "excluded"),
+              isNull(schema.mediaFaceIndexTasks.deletionConfirmedAt),
+            ),
+          ),
         ),
       );
     const [activeJobs] = await this.#database
@@ -2131,6 +2137,10 @@ export class FaceService {
           eq(schema.albumFaceIndexes.albumId, albumId),
           eq(schema.albumFaceIndexes.enabled, true),
           eq(schema.albumFaceIndexes.indexState, "degraded"),
+          inArray(schema.albumFaceIndexes.lastErrorCode, [
+            "provider_unavailable",
+            "deletion_confirmation_timeout",
+          ]),
         ),
       );
   }
