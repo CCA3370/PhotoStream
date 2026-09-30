@@ -26,7 +26,14 @@ describe("management review stability guards", () => {
     expect(source).toContain('addEventListener("wheel", handleWheel, { passive: false })');
     expect(source).not.toContain("onWheel={");
     expect(source).not.toContain("key={displaySrc}");
-    expect(source).not.toContain('key={`${selected.key}:${selected.visualRevision ?? "base"}`}');
+    expect(source).not.toContain(
+      "key={`" +
+        "$" +
+        "{selected.key}:" +
+        "$" +
+        '{selected.visualRevision ?? "base"}' +
+        "`}",
+    );
     expect(source).toContain('selected.visualRevision ?? "base"');
   });
 
@@ -118,7 +125,7 @@ describe("management review stability guards", () => {
   it("keeps the docked inspector compact and free of redundant media labels", () => {
     const source = readFileSync(inspectorPath, "utf8");
 
-    expect(source).toContain('>图片属性</p>');
+    expect(source).toContain(">图片属性</p>");
     expect(source).not.toContain("{item.title}</p>");
     expect(source).not.toContain("statusLabel(item.publicationStatus)");
     expect(source).not.toContain("{item.sourceLabel}");
