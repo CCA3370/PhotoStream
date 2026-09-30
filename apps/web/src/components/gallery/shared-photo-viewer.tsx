@@ -329,7 +329,7 @@ export function SharedPhotoViewer({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/65 via-black/15 to-transparent px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 sm:p-4 sm:pb-16">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-14 sm:p-4 sm:pb-16">
         <div className="pointer-events-auto">
           <PhotoReportButton
             className="h-11 rounded-full border-white/10 bg-black/30 px-3 text-white backdrop-blur-md transition-[transform,background-color] duration-150 hover:bg-white/15 hover:text-white active:scale-[0.96] sm:h-10 motion-reduce:transform-none motion-reduce:transition-none"
@@ -340,7 +340,7 @@ export function SharedPhotoViewer({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2.5 pt-20 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-24">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-2.5 pt-20 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:pt-24">
         <div className="pointer-events-auto mx-auto flex w-full max-w-5xl items-end justify-between gap-3">
           <div className="hidden shrink-0 text-[11px] text-white/55 sm:block">
             {media.width} × {media.height} · {Math.round(zoom * 100)}%
