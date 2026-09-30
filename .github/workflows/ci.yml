@@ -296,7 +296,7 @@ jobs:
         run: >-
           pnpm --filter @photostream/web exec playwright test
           tests/e2e/foundation.spec.ts
-          --grep "Tailwind compatibility|document responses|Base UI dialog|unauthenticated visitors|authenticated studio|5000 item gallery"
+          --grep "Tailwind compatibility|document responses|Base UI dialog|unauthenticated visitors|authenticated studio|10000 item gallery"
       - name: Run Safari/WebKit compatibility smoke tests
         env:
           E2E_BROWSER: webkit

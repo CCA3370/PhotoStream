@@ -46,6 +46,7 @@ import {
 } from "../idempotency.js";
 import { type CdnInvalidator, LocalCdnInvalidator } from "./cdn-invalidator.js";
 import { liveEventChannel } from "./live-event-broker.js";
+import { maxAlbumMediaCount } from "./limits.js";
 import type { ObjectStorage } from "./object-storage.js";
 import { previewExpiresAt } from "./preview-expiry.js";
 
@@ -1421,10 +1422,10 @@ export class PhotoService {
             sql`${schema.media.publicationStatus} <> 'deleted'`,
           ),
         );
-      if ((countRows[0]?.count ?? 0) >= 5_000) {
+      if ((countRows[0]?.count ?? 0) >= maxAlbumMediaCount) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
-          message: "相册照片数量已达到 5000 张上限",
+          message: `相册照片数量已达到 ${maxAlbumMediaCount} 张上限`,
           statusCode: 409,
         });
       }

@@ -4,6 +4,7 @@ import { schema } from "@photostream/db";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { AppError } from "../errors.js";
+import { maxAlbumMediaCount } from "./limits.js";
 import type { InternalActor } from "./service.js";
 
 const multipartThreshold = 16 * 1024 * 1024;
@@ -201,10 +202,10 @@ export class ProgressiveUploadService {
             sql`${schema.media.publicationStatus} <> 'deleted'`,
           ),
         );
-      if ((mediaCount?.count ?? 0) >= 5_000) {
+      if ((mediaCount?.count ?? 0) >= maxAlbumMediaCount) {
         throw new AppError({
           code: "MEDIA_LIMIT_EXCEEDED",
-          message: "相册照片数量已达到 5000 张上限",
+          message: `相册照片数量已达到 ${maxAlbumMediaCount} 张上限`,
           statusCode: 409,
         });
       }

@@ -193,7 +193,7 @@ maybeDescribe("phase 2 local capacity", () => {
 
   afterAll(async () => pool.end());
 
-  it("pages 5000 media and fans one persistent event out to 500 clients", async () => {
+  it("pages 10000 media and fans one persistent event out to 500 clients", async () => {
     const [user] = await database
       .insert(schema.users)
       .values({
@@ -209,14 +209,14 @@ maybeDescribe("phase 2 local capacity", () => {
     const [album] = await database
       .insert(schema.albums)
       .values({
-        slug: "capacity-album-5000",
+        slug: "capacity-album-10000",
         title: "容量验证相册",
         description: "纯元数据夹具",
         state: "live",
         access: "public",
         publishMode: "auto",
         passwordHash: null,
-        publishSequence: 5_000,
+        publishSequence: 10_000,
         idempotencyKey: "capacity-album-idempotency",
         createdBy: user.id,
       })
@@ -224,11 +224,11 @@ maybeDescribe("phase 2 local capacity", () => {
     if (album === undefined) throw new Error("Capacity album insert failed");
 
     const now = new Date();
-    for (let start = 1; start <= 5_000; start += 500) {
+    for (let start = 1; start <= 10_000; start += 500) {
       const rows = await database
         .insert(schema.media)
         .values(
-          Array.from({ length: Math.min(500, 5_001 - start) }, (_, index) => {
+          Array.from({ length: Math.min(500, 10_001 - start) }, (_, index) => {
             const publishSequence = start + index;
             return {
               albumId: album.id,
@@ -282,9 +282,9 @@ maybeDescribe("phase 2 local capacity", () => {
       cursor = page.nextCursor ?? undefined;
     } while (cursor !== undefined);
 
-    expect(sequences).toHaveLength(5_000);
-    expect(new Set(sequences).size).toBe(5_000);
-    expect(sequences[0]).toBe(5_000);
+    expect(sequences).toHaveLength(10_000);
+    expect(new Set(sequences).size).toBe(10_000);
+    expect(sequences[0]).toBe(10_000);
     expect(sequences.at(-1)).toBe(1);
     const paginationP95 = percentile(pageDurations, 0.95);
     expect(paginationP95).toBeLessThan(300);

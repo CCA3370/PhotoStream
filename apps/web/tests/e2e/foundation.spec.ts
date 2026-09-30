@@ -215,10 +215,10 @@ test("authenticated studio and upload shells expose their primary landmarks", as
   await expectNoAxeViolations(page, ['input[type="file"].sr-only']);
 });
 
-test("5000 item gallery keeps the mounted DOM bounded while scrolling", async () => {
+test("10000 item gallery keeps the mounted DOM bounded while scrolling", async () => {
   await page.setViewportSize({ width: 1_280, height: 800 });
   await page.goto(appUrl("/verification/gallery-capacity"));
-  await expect(page.getByRole("heading", { level: 1, name: "5,000 项窗口化网格" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "10,000 项窗口化网格" })).toBeVisible();
   await expect(page.locator('[data-virtualized="true"]')).toBeAttached();
   const mounted = page.locator("[data-media-id]");
   await expect.poll(() => mounted.count()).toBeGreaterThan(0);

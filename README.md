@@ -28,7 +28,7 @@
 - `pnpm --filter @photostream/web storybook`：查看组件与三类界面壳状态；
 - `TEST_DATABASE_URL=postgresql://photostream:local-development-only@127.0.0.1:5432/photostream_test pnpm test:db`：运行隔离数据库集成测试；
 - `pnpm --filter @photostream/web test:e2e`：运行浏览器/axe 验证。
-- `TEST_DATABASE_URL=postgresql://photostream:local-development-only@127.0.0.1:5432/photostream_test pnpm --filter @photostream/api test:capacity`：运行 5,000 项与 500 SSE 独立容量门禁。
+- `TEST_DATABASE_URL=postgresql://photostream:local-development-only@127.0.0.1:5432/photostream_test pnpm --filter @photostream/api test:capacity`：运行 10,000 项与 500 SSE 独立容量门禁。
 - `node scripts/check-bib-ocr-assets.mjs`：校验自托管 OCR 模型、Worker/WASM 哈希、远程回退和每设备 gzip 预算。
 - `pnpm photos:audit-local`：只读审计 Git 忽略的 `test_photos/`，仅输出尺寸、体积、EXIF/GPS 与结构错误聚合。
 
@@ -47,7 +47,7 @@
 - 可按相册启用本地数字号码牌 OCR；自动结果只作候选，人工确认后自动派生年级/班级并供口令相册筛选；无候选照片必须人工确认“无号码”。
 - 本地已实现按口令相册启用、同意门禁的人脸候选找图；只返回“可能包含”，不建立姓名身份库或跨相册人物搜索，生产启用仍受独立门禁约束。
 - 新相册默认需要口令且禁止下载；管理员可对单场活动逐项放开。
-- 第一版重点服务小型活动，设计目标为每场 5,000 张照片、5 名并发上传者和 500 名并发观众。
+- 第一版重点服务小型活动，设计目标为每场 10,000 张照片、5 名并发上传者和 500 名并发观众。
 
 ## 文档索引
 
