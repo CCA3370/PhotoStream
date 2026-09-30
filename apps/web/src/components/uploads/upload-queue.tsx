@@ -27,7 +27,6 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { clientMutation } from "@/lib/client-api";
-import { managementErrorMessage } from "@/lib/management-error";
 import { resumeLocalBibOcr } from "@/lib/local-bib-ocr";
 import {
   getLocalProcessingRuntime,
@@ -40,6 +39,7 @@ import {
   listLocalReviewPhotos,
   localQueueSupported,
 } from "@/lib/local-review-queue";
+import { managementErrorMessage } from "@/lib/management-error";
 import { syncLocalPhotoEditDraft } from "@/lib/photo-edit/local-draft-sync";
 import {
   deleteLocalPhotoEditDraft,
@@ -264,8 +264,10 @@ export function UploadQueue({
     } catch (error) {
       toast.add({
         title: "无法加入上传队列",
-        description:
-          managementErrorMessage(error, "浏览器本地存储空间可能不足，请释放空间后重试。"),
+        description: managementErrorMessage(
+          error,
+          "浏览器本地存储空间可能不足，请释放空间后重试。",
+        ),
         type: "error",
       });
     } finally {
@@ -428,9 +430,8 @@ export function UploadQueue({
         failed: queueCounts.failed,
         cancelled: queueCounts.cancelled,
         retryableFailed: queueCounts.failed,
-        cancellable: tasks.filter(
-          (task) => task.status !== "staged" && task.status !== "cancelled",
-        ).length,
+        cancellable: tasks.filter((task) => task.status !== "staged" && task.status !== "cancelled")
+          .length,
         cancellingAll,
         pendingReview: items.filter((item) => item.photo.uploadState !== "published").length,
         completed: queueCounts.completed,
