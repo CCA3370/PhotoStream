@@ -1,6 +1,13 @@
 "use client";
 
-import { ListChecksIcon, PauseIcon, PlayIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
+import {
+  CircleXIcon,
+  ListChecksIcon,
+  PauseIcon,
+  PlayIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,11 +30,14 @@ export interface UploadShellProps {
     readonly failed: number;
     readonly cancelled: number;
     readonly retryableFailed: number;
+    readonly cancellable: number;
+    readonly cancellingAll: boolean;
     readonly pendingReview: number;
     readonly completed: number;
     readonly total: number;
     readonly onTogglePause: () => void;
     readonly onRetryFailed: () => void;
+    readonly onCancelAll: () => void;
     readonly onClearCompleted: () => void;
   };
 }
@@ -84,6 +94,16 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
       >
         <RotateCcwIcon data-icon="inline-start" />
         重试失败（{queue.retryableFailed}）
+      </Button>
+      <Button
+        className="min-h-10 justify-start"
+        disabled={queue.cancellable === 0 || queue.cancellingAll}
+        onClick={queue.onCancelAll}
+        type="button"
+        variant="destructive"
+      >
+        <CircleXIcon data-icon="inline-start" />
+        {queue.cancellingAll ? "正在取消全部…" : `取消全部任务（${queue.cancellable}）`}
       </Button>
       <Button
         className="min-h-10 justify-start"
@@ -181,6 +201,15 @@ export function UploadShell({ children, queue }: UploadShellProps) {
           variant="outline"
         >
           重试失败
+        </Button>
+        <Button
+          className="min-h-10 flex-1"
+          disabled={queue.cancellable === 0 || queue.cancellingAll}
+          onClick={queue.onCancelAll}
+          type="button"
+          variant="destructive"
+        >
+          {queue.cancellingAll ? "正在取消…" : "取消全部"}
         </Button>
       </div>
     </section>
