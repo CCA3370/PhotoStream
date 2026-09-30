@@ -2001,6 +2001,7 @@ export class FaceService {
             await this.#database
               .delete(schema.mediaFaceIndexTasks)
               .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
+          await this.#refreshAlbumIndexHealthAfterMediaDeletion(row.task.albumId);
         }
         if (indexedNow) {
           await this.#database
@@ -2047,6 +2048,91 @@ export class FaceService {
           .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
       }
     }
+  }
+
+  async #refreshAlbumIndexHealthAfterMediaDeletion(albumId: string) {
+    const [index] = await this.#database
+      .select({
+        enabled: schema.albumFaceIndexes.enabled,
+        indexState: schema.albumFaceIndexes.indexState,
+        lastErrorCode: schema.albumFaceIndexes.lastErrorCode,
+      })
+      .from(schema.albumFaceIndexes)
+      .where(eq(schema.albumFaceIndexes.albumId, albumId))
+      .limit(1);
+    if (
+      index === undefined ||
+      index.enabled !== true ||
+      index.indexState !== "degraded" ||
+      !["provider_unavailable", "deletion_confirmation_timeout"].includes(
+        index.lastErrorCode ?? "",
+      )
+    ) {
+      return;
+    }
+
+    const [mediaIssues] = await this.#database
+      .select({ value: count() })
+      .from(schema.mediaFaceIndexTasks)
+      .where(
+        and(
+          eq(schema.mediaFaceIndexTasks.albumId, albumId),
+          or(
+            eq(schema.mediaFaceIndexTasks.status, "failed"),
+            sql`${schema.mediaFaceIndexTasks.lastErrorCode} is not null`,
+          ),
+        ),
+      );
+    const [jobIssues] = await this.#database
+      .select({ value: count() })
+      .from(schema.faceAlbumJobs)
+      .where(
+        and(
+          eq(schema.faceAlbumJobs.albumId, albumId),
+          or(
+            eq(schema.faceAlbumJobs.status, "failed"),
+            and(
+              inArray(schema.faceAlbumJobs.status, ["pending", "processing"]),
+              sql`${schema.faceAlbumJobs.lastErrorCode} is not null`,
+            ),
+          ),
+        ),
+      );
+    if ((mediaIssues?.value ?? 0) > 0 || (jobIssues?.value ?? 0) > 0) return;
+
+    const [activeMedia] = await this.#database
+      .select({ value: count() })
+      .from(schema.mediaFaceIndexTasks)
+      .where(
+        and(
+          eq(schema.mediaFaceIndexTasks.albumId, albumId),
+          inArray(schema.mediaFaceIndexTasks.status, ["pending", "indexing", "deleting"]),
+        ),
+      );
+    const [activeJobs] = await this.#database
+      .select({ value: count() })
+      .from(schema.faceAlbumJobs)
+      .where(
+        and(
+          eq(schema.faceAlbumJobs.albumId, albumId),
+          inArray(schema.faceAlbumJobs.status, ["pending", "processing"]),
+        ),
+      );
+    await this.#database
+      .update(schema.albumFaceIndexes)
+      .set({
+        indexState:
+          (activeMedia?.value ?? 0) > 0 || (activeJobs?.value ?? 0) > 0 ? "indexing" : "ready",
+        lastErrorCode: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.albumFaceIndexes.albumId, albumId),
+          eq(schema.albumFaceIndexes.enabled, true),
+          eq(schema.albumFaceIndexes.indexState, "degraded"),
+        ),
+      );
   }
 
   async #clusterQuietAlbums() {
