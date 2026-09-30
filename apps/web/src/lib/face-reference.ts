@@ -1,3 +1,5 @@
+import { isAppleWebKit } from "./apple-webkit";
+
 const maximumInputBytes = 25 * 1024 * 1024;
 export const maximumFaceReferenceBytes = 3 * 1024 * 1024;
 export const maximumFaceReferenceEdge = 1_920;
@@ -33,14 +35,29 @@ async function decodeWithImageElement(file: File): Promise<{
   const url = URL.createObjectURL(file);
   const image = new Image();
   image.decoding = "async";
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.addEventListener("load", () => resolve(), { once: true });
+    image.addEventListener(
+      "error",
+      () =>
+        reject(
+          new FaceReferenceProcessingError(
+            "此设备无法解码该照片；HEIC/HEIF 请先在相册中导出为 JPEG、PNG 或 WebP。",
+          ),
+        ),
+      { once: true },
+    );
+  });
   image.src = url;
   try {
-    await image.decode();
-  } catch {
+    if (typeof image.decode === "function") {
+      await image.decode().catch(() => loaded);
+    } else {
+      await loaded;
+    }
+  } catch (error) {
     URL.revokeObjectURL(url);
-    throw new FaceReferenceProcessingError(
-      "此设备无法解码该照片；HEIC/HEIF 请先在相册中导出为 JPEG、PNG 或 WebP。",
-    );
+    throw error;
   }
   return {
     width: image.naturalWidth,
@@ -51,7 +68,7 @@ async function decodeWithImageElement(file: File): Promise<{
 }
 
 async function decode(file: File) {
-  if (typeof createImageBitmap !== "function") return decodeWithImageElement(file);
+  if (isAppleWebKit() || typeof createImageBitmap !== "function") return decodeWithImageElement(file);
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     return {
@@ -109,7 +126,7 @@ export async function preprocessFaceReference(file: File): Promise<Blob> {
     throw new FaceReferenceProcessingError("处理后的照片仍超过 3 MiB，请改选更小的照片。");
   } finally {
     source.close();
-    canvas.width = 0;
-    canvas.height = 0;
+    canvas.width = 1;
+    canvas.height = 1;
   }
 }
