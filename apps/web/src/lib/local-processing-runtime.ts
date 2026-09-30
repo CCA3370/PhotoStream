@@ -112,6 +112,7 @@ const eventLoopPressureMs = 180;
 const eventLoopHealthyMs = 60;
 const heapPressureThreshold = 0.82;
 const heapHealthyThreshold = 0.68;
+const safariPersistenceTimeoutMs = 1_500;
 const defaultProcessingProfile: AdaptiveProcessingProfile = {
   initial: 3,
   max: 4,
@@ -185,6 +186,26 @@ function isResourcePressureError(error: unknown): boolean {
 
 function processingQueueSupported(): boolean {
   return typeof window !== "undefined" && "indexedDB" in window;
+}
+
+function withSafariPersistenceTimeout<T>(operation: Promise<T>): Promise<T> {
+  if (!isAppleWebKit() || typeof window === "undefined") return operation;
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error("Safari 本地任务数据库响应超时")),
+      safariPersistenceTimeoutMs,
+    );
+    operation.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -422,10 +443,12 @@ class LocalProcessingRuntime {
       intentId: null,
       mediaId: null,
     }));
-    await this.#persistTasks(created.map(persistedTask));
     for (const task of created) this.#tasks.set(task.id, task);
     this.#emit();
     this.#pump();
+    // Persistence is recovery support, not a prerequisite for the current upload. In Safari,
+    // IndexedDB can remain pending indefinitely; never let that block the in-memory queue.
+    void this.#persistTasks(created.map(persistedTask)).catch(() => undefined);
   }
 
   togglePause(): void {
@@ -594,7 +617,7 @@ class LocalProcessingRuntime {
       // cloning. Safari therefore uses an in-memory processing queue by design.
       this.#persistenceDegraded = true;
     } else {
-      stored = await listPersistedTasks(this.#albumId);
+      stored = await withSafariPersistenceTimeout(listPersistedTasks(this.#albumId));
     }
     const recovered: ProcessingTask[] = await Promise.all(
       stored.map(async (task) => {
@@ -637,7 +660,7 @@ class LocalProcessingRuntime {
   async #persistTasks(tasks: readonly PersistedProcessingTask[]): Promise<void> {
     if (tasks.length === 0 || this.#persistenceDegraded) return;
     try {
-      await putPersistedTasks(tasks);
+      await withSafariPersistenceTimeout(putPersistedTasks(tasks));
     } catch (error) {
       if (!isAppleWebKit()) throw error;
       this.#persistenceDegraded = true;
@@ -648,7 +671,7 @@ class LocalProcessingRuntime {
   async #deletePersistedTask(id: string): Promise<void> {
     if (this.#persistenceDegraded) return;
     try {
-      await deletePersistedTask(id);
+      await withSafariPersistenceTimeout(deletePersistedTask(id));
     } catch (error) {
       if (!isAppleWebKit()) throw error;
       this.#persistenceDegraded = true;
