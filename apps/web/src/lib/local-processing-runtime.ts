@@ -903,11 +903,7 @@ class LocalProcessingRuntime {
         this.#healthySamples = 0;
         this.#processingLimit -= 1;
       }
-      try {
-        await putPersistedTasks([persistedTask(task)]);
-      } catch {
-        // Keep the in-memory failure visible even if the persistence layer is unavailable.
-      }
+      await this.#persistTasks([persistedTask(task)]).catch(() => undefined);
     } finally {
       if (this.#purged) {
         await Promise.all([
