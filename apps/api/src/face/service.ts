@@ -23,6 +23,9 @@ type DiagnosticSource = "aliyun_imm" | "aliyun_oss" | "internal";
 type DiagnosticContext = Record<string, string | number | boolean | null>;
 const terminalStatuses = ["completed", "failed", "cancelled", "expired"] as const;
 const presignedReferenceDeletionGraceMs = 20 * 60 * 1_000;
+const mediaDeletionConfirmationMaxAttempts = 20;
+const mediaDeletionConfirmationPollMs = 15_000;
+const mediaDeletionConfirmationSlowPollMs = 5 * 60_000;
 
 const eventSchema = z
   .object({
@@ -372,8 +375,11 @@ export class FaceService {
             target: schema.mediaFaceIndexTasks.mediaId,
             set: {
               status: "excluded",
+              providerTaskId: null,
+              attempts: 0,
               deletionConfirmedAt: null,
               nextAttemptAt: new Date(),
+              lastErrorCode: null,
               updatedAt: new Date(),
             },
           });
@@ -1802,8 +1808,11 @@ export class FaceService {
       .update(schema.mediaFaceIndexTasks)
       .set({
         status: "deleting",
+        providerTaskId: null,
+        attempts: 0,
         deletionConfirmedAt: null,
         nextAttemptAt: new Date(),
+        lastErrorCode: null,
         updatedAt: new Date(),
       })
       .where(
@@ -1936,14 +1945,57 @@ export class FaceService {
           await this.#provider.deleteMedia(row.datasetName, [uri]);
           operation = "SimpleQuery:DeleteConfirmation";
           if (await this.#provider.mediaIndexed(row.datasetName, row.task.mediaId)) {
-            source = "internal";
-            operation = "MediaDeletionConfirmation";
-            throw new Error("media_delete_not_confirmed");
+            const attempts = row.task.attempts + 1;
+            const confirmationTimedOut = attempts >= mediaDeletionConfirmationMaxAttempts;
+            await this.#database
+              .update(schema.mediaFaceIndexTasks)
+              .set({
+                attempts,
+                nextAttemptAt: new Date(
+                  Date.now() +
+                    (confirmationTimedOut
+                      ? mediaDeletionConfirmationSlowPollMs
+                      : mediaDeletionConfirmationPollMs),
+                ),
+                lastErrorCode: confirmationTimedOut ? "deletion_confirmation_timeout" : null,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
+
+            if (attempts === mediaDeletionConfirmationMaxAttempts) {
+              await this.#recordDiagnostic(
+                row.task.albumId,
+                new Error("deletion_confirmation_timeout"),
+                {
+                  source: "internal",
+                  operation: "MediaDeletionConfirmation",
+                  datasetName: row.datasetName,
+                  context: {
+                    mediaId: row.task.mediaId,
+                    taskStatus: row.task.status,
+                    attempts,
+                  },
+                },
+              );
+              await this.#database
+                .update(schema.albumFaceIndexes)
+                .set({
+                  indexState: "degraded",
+                  lastErrorCode: "deletion_confirmation_timeout",
+                  updatedAt: new Date(),
+                })
+                .where(eq(schema.albumFaceIndexes.albumId, row.task.albumId));
+            }
+            continue;
           }
           if (row.task.status === "excluded")
             await this.#database
               .update(schema.mediaFaceIndexTasks)
-              .set({ deletionConfirmedAt: new Date(), lastErrorCode: null, updatedAt: new Date() })
+              .set({
+                deletionConfirmedAt: new Date(),
+                lastErrorCode: null,
+                updatedAt: new Date(),
+              })
               .where(eq(schema.mediaFaceIndexTasks.id, row.task.id));
           else
             await this.#database
