@@ -168,16 +168,18 @@ function errorRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function transientStatus(record: Record<string, unknown>): number | null {
-  for (const key of ["statusCode", "status", "httpStatus"]) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-    if (typeof value === "string" && value.trim() !== "") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return Math.trunc(parsed);
+  for (const candidate of [record, errorRecord(record.response), errorRecord(record.data)]) {
+    if (candidate === null) continue;
+    for (const key of ["statusCode", "status", "httpStatus"]) {
+      const value = candidate[key];
+      if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+      if (typeof value === "string" && value.trim() !== "") {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return Math.trunc(parsed);
+      }
     }
   }
-  const response = errorRecord(record.response);
-  return response === null ? null : transientStatus(response);
+  return null;
 }
 
 export function isRetryableImmReadError(error: unknown): boolean {
