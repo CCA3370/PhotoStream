@@ -103,6 +103,7 @@ export function UploadQueue({
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const previewUrls = useRef<string[]>([]);
   const safariRecoveryShownRef = useRef(false);
+  const safariPersistenceShownRef = useRef(false);
   const runtime = useMemo(() => getLocalProcessingRuntime(albumId), [albumId]);
   const [categoryId, setCategoryId] = useState("uncategorized");
   const [items, setItems] = useState<readonly PreviewPhoto[]>([]);
@@ -154,6 +155,16 @@ export function UploadQueue({
           title: "Safari 安全模式已暂停上传队列",
           description:
             "检测到上一次照片处理在页面异常中断前仍在运行。为避免 Safari 反复崩溃，队列不会自动恢复；确认页面稳定后点击“继续队列”即可按单张模式恢复。",
+          type: "warning",
+          timeout: 12_000,
+        });
+      }
+      if (snapshot.persistenceDegraded && !safariPersistenceShownRef.current) {
+        safariPersistenceShownRef.current = true;
+        toast.add({
+          title: "Safari 已切换为内存上传队列",
+          description:
+            "Safari 当前无法可靠写入本地任务数据库，上传会继续正常进行；但刷新或关闭页面后，尚未完成的任务无法自动恢复。",
           type: "warning",
           timeout: 12_000,
         });
