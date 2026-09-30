@@ -1,5 +1,7 @@
 "use client";
 
+import { isAppleMobileWebKit, isAppleWebKit } from "@/lib/apple-webkit";
+
 export interface PreparedUploadInput {
   readonly file: File;
   readonly sourceFileName: string;
@@ -90,13 +92,22 @@ async function convertHeicToJpeg(file: File): Promise<File> {
   const source = await decode(file);
   const canvas = document.createElement("canvas");
   try {
-    canvas.width = source.width;
-    canvas.height = source.height;
+    // A full-resolution 24/48 MP HEIC canvas can exceed WebKit's per-tab memory budget.
+    // Keep useful photo resolution while bounding the backing-store allocation on Apple devices.
+    const maxEdge = isAppleMobileWebKit() ? 4_096 : isAppleWebKit() ? 6_144 : 8_192;
+    const scale = Math.min(1, maxEdge / Math.max(source.width, source.height));
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext("2d", { alpha: false });
     if (context === null) throw new Error("当前浏览器无法转换 HEIC/HEIF");
     context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, source.width, source.height);
+    context.fillRect(0, 0, width, height);
+    context.save();
+    context.scale(width / source.width, height / source.height);
     source.draw(context);
+    context.restore();
     const jpeg = await canvasJpeg(canvas);
     const baseName = file.name.replace(/\.(?:heic|heif)$/iu, "") || "photo";
     return new File([jpeg], `${baseName}.jpg`, {
@@ -105,12 +116,15 @@ async function convertHeicToJpeg(file: File): Promise<File> {
     });
   } finally {
     source.close();
-    canvas.width = 0;
-    canvas.height = 0;
+    canvas.width = 1;
+    canvas.height = 1;
   }
 }
 
 export async function prepareUploadInput(file: File): Promise<PreparedUploadInput> {
+  if (file.size <= 0 || file.size > 50 * 1024 * 1024) {
+    throw new Error("单张照片必须大于 0 且不超过 50MB");
+  }
   const sourceHash = await sha256Blob(file);
   const prepared = isHeicUploadInput(file) ? await convertHeicToJpeg(file) : file;
   return {
