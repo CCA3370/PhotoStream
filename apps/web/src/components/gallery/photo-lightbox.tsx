@@ -578,6 +578,7 @@ export function PhotoLightbox({
             ) : null}
 
             <LightboxNeighborSlide
+              key={`previous:${previous?.id ?? "none"}`}
               media={stageWidth > 0 ? previous : null}
               offset={previousOffset}
               scale={previousScale}
@@ -588,6 +589,7 @@ export function PhotoLightbox({
             />
 
             <div
+              key={`current-slide:${selected.id}`}
               className={cn(
                 "absolute inset-0 will-change-transform",
                 swipeSettling &&
@@ -610,6 +612,7 @@ export function PhotoLightbox({
                 >
                   {activePreparedImage === null && shareId === undefined ? (
                     <LightboxNeighborSlide
+                      key={`current-fallback:${selected.id}`}
                       media={selected}
                       offset={0}
                       scale={1}
@@ -621,6 +624,7 @@ export function PhotoLightbox({
                   ) : null}
                   {activePreparedImage === null ? (
                     <CachedPhotoImage
+                      key={largeIdentity ?? selected.id}
                       alt="活动照片"
                       bytes={large.bytes}
                       contentRevision={selected.contentRevision}
@@ -668,6 +672,7 @@ export function PhotoLightbox({
             </div>
 
             <LightboxNeighborSlide
+              key={`next:${next?.id ?? "none"}`}
               media={stageWidth > 0 ? next : null}
               offset={nextOffset}
               scale={nextScale}
