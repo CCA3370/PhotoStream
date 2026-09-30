@@ -102,11 +102,13 @@ export function UploadQueue({
   const inputRef = useRef<HTMLInputElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const previewUrls = useRef<string[]>([]);
+  const safariRecoveryShownRef = useRef(false);
   const runtime = useMemo(() => getLocalProcessingRuntime(albumId), [albumId]);
   const [categoryId, setCategoryId] = useState("uncategorized");
   const [items, setItems] = useState<readonly PreviewPhoto[]>([]);
   const [tasks, setTasks] = useState<readonly LocalProcessingTaskView[]>([]);
   const [paused, setPaused] = useState(false);
+  const [directorySupported, setDirectorySupported] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showUploaded, setShowUploaded] = useState(false);
   const [cancellingAll, setCancellingAll] = useState(false);
@@ -143,6 +145,19 @@ export function UploadQueue({
     const unsubscribe = runtime.subscribe((snapshot) => {
       setTasks(snapshot.tasks);
       setPaused(snapshot.paused);
+      if (
+        snapshot.compatibilityRecovery === "safari-interrupted" &&
+        !safariRecoveryShownRef.current
+      ) {
+        safariRecoveryShownRef.current = true;
+        toast.add({
+          title: "Safari 安全模式已暂停上传队列",
+          description:
+            "检测到上一次照片处理在页面异常中断前仍在运行。为避免 Safari 反复崩溃，队列不会自动恢复；确认页面稳定后点击“继续队列”即可按单张模式恢复。",
+          type: "warning",
+          timeout: 12_000,
+        });
+      }
     });
     void runtime.initialize().catch((error) => {
       toast.add({
@@ -260,10 +275,13 @@ export function UploadQueue({
   }
 
   useEffect(() => {
-    if (directoryInputRef.current !== null) {
-      directoryInputRef.current.setAttribute("webkitdirectory", "");
-      directoryInputRef.current.setAttribute("directory", "");
-    }
+    const input = directoryInputRef.current;
+    if (input === null) return;
+    const supported = "webkitdirectory" in input;
+    setDirectorySupported(supported);
+    if (!supported) return;
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
   }, []);
 
   useEffect(() => {
@@ -451,15 +469,17 @@ export function UploadQueue({
             <ImagePlusIcon data-icon="inline-start" />
             选择图片
           </Button>
-          <Button
-            onClick={() => directoryInputRef.current?.click()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <FolderOpenIcon data-icon="inline-start" />
-            选择文件夹
-          </Button>
+          {directorySupported ? (
+            <Button
+              onClick={() => directoryInputRef.current?.click()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <FolderOpenIcon data-icon="inline-start" />
+              选择文件夹
+            </Button>
+          ) : null}
           <Button
             onClick={() => setShowUploaded((current) => !current)}
             size="sm"
