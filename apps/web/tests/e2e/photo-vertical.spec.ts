@@ -215,9 +215,17 @@ test("photo travels browser to object store and becomes visible after password u
       buffer: Buffer.from(fixtureBase64, "base64"),
     });
     const task = page.locator('[data-slot="card"]').filter({ hasText: "synthetic-stage-2.jpg" });
-    await expect(
-      task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(task).toBeVisible({ timeout: 10_000 });
+    try {
+      await expect(
+        task.locator('[data-slot="card-description"]').getByText("完成", { exact: true }),
+      ).toBeVisible({ timeout: 30_000 });
+    } catch (error) {
+      if (process.env.E2E_BROWSER === "webkit") {
+        console.error("WebKit upload task state:", await task.innerText().catch(() => "<missing>"));
+      }
+      throw error;
+    }
     await expect(task.getByText("已发布", { exact: true })).toBeVisible();
 
     const newMedia = viewerPage.getByRole("button", { name: "有 1 条新影像" });
