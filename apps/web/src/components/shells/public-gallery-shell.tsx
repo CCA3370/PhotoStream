@@ -97,7 +97,10 @@ export function PublicGalleryShell({
                     onClick={openSearch}
                     type="button"
                   >
-                    <SearchIcon aria-hidden="true" className="size-3.5 shrink-0 text-primary sm:size-4" />
+                    <SearchIcon
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0 text-primary sm:size-4"
+                    />
                     <span className="truncate">
                       {searchState.active
                         ? `${searchState.label} · ${searchState.count}张`
