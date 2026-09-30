@@ -109,6 +109,7 @@ export function UploadQueue({
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showUploaded, setShowUploaded] = useState(false);
+  const [cancellingAll, setCancellingAll] = useState(false);
   const [duplicateInputs, setDuplicateInputs] = useState<readonly PreparedUploadInput[]>([]);
   const knownSourceHashes = useRef(new Set<string>());
 
@@ -330,6 +331,38 @@ export function UploadQueue({
     });
   }
 
+  function cancelAllTasks(): void {
+    if (cancellingAll) return;
+    setCancellingAll(true);
+    void runtime
+      .cancelAllTasks()
+      .then(({ cancelled, failed }) => {
+        if (cancelled > 0) {
+          toast.add({
+            title: `已取消 ${cancelled} 个上传任务`,
+            ...(failed === 0
+              ? {}
+              : { description: `另有 ${failed} 个任务取消失败，已保留为失败任务。` }),
+            type: failed === 0 ? "success" : "warning",
+          });
+        } else if (failed > 0) {
+          toast.add({
+            title: "取消全部任务失败",
+            description: `${failed} 个任务未能取消，请查看各任务的具体错误。`,
+            type: "error",
+          });
+        }
+      })
+      .catch((error) => {
+        toast.add({
+          title: "取消全部任务失败",
+          description: managementErrorMessage(error, "无法取消上传队列"),
+          type: "error",
+        });
+      })
+      .finally(() => setCancellingAll(false));
+  }
+
   function retryEditSync(localPhotoId: string): void {
     void syncLocalPhotoEditDraft(localPhotoId)
       .then(async () => {
@@ -377,11 +410,16 @@ export function UploadQueue({
         failed: queueCounts.failed,
         cancelled: queueCounts.cancelled,
         retryableFailed: queueCounts.failed,
+        cancellable: tasks.filter(
+          (task) => task.status !== "staged" && task.status !== "cancelled",
+        ).length,
+        cancellingAll,
         pendingReview: items.filter((item) => item.photo.uploadState !== "published").length,
         completed: queueCounts.completed,
         total: tasks.length,
         onTogglePause: () => runtime.togglePause(),
         onRetryFailed: retryFailed,
+        onCancelAll: cancelAllTasks,
         onClearCompleted: () => runtime.clearCompleted(),
       }}
     >
@@ -635,6 +673,7 @@ export function UploadQueue({
                     {task.status === "cancelled" ? null : (
                       <Button
                         aria-label={`取消 ${task.fileName}`}
+                        disabled={cancellingAll}
                         onClick={() => cancelTask(task.id)}
                         size="sm"
                         type="button"
