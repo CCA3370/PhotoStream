@@ -187,7 +187,14 @@ function openDatabase(): Promise<IDBDatabase> {
       const store = database.createObjectStore(storeName, { keyPath: "id" });
       store.createIndex("albumId", "albumId", { unique: false });
     });
-    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("success", () => {
+      const database = request.result;
+      database.addEventListener("versionchange", () => database.close());
+      resolve(database);
+    });
+    request.addEventListener("blocked", () =>
+      reject(new Error("Safari 暂时无法升级本地处理队列，请关闭其他 PhotoStream 标签页后重试")),
+    );
     request.addEventListener("error", () =>
       reject(request.error ?? new Error("无法打开本地处理队列")),
     );
@@ -253,7 +260,7 @@ async function putPersistedTasks(tasks: readonly PersistedProcessingTask[]): Pro
   try {
     const transaction = database.transaction(storeName, "readwrite");
     const store = transaction.objectStore(storeName);
-    for (const task of tasks) store.put(task);
+    await Promise.all(tasks.map((task) => requestResult(store.put(task))));
     await complete(transaction);
   } finally {
     database.close();
@@ -265,7 +272,7 @@ async function deletePersistedTask(id: string): Promise<void> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    transaction.objectStore(storeName).delete(id);
+    await requestResult(transaction.objectStore(storeName).delete(id));
     await complete(transaction);
   } finally {
     database.close();
