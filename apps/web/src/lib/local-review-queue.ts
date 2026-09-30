@@ -292,7 +292,7 @@ export async function putLocalReviewPhoto(photo: LocalReviewPhoto): Promise<void
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    transaction.objectStore(storeName).put(photo);
+    await requestResult(transaction.objectStore(storeName).put(photo));
     await complete(transaction);
   } finally {
     database.close();
