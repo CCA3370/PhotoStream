@@ -3,6 +3,13 @@
 import type { BibConfigView, UploadIntentView } from "@photostream/contracts";
 
 import { subscribeAlbumPurge } from "@/lib/album-purge-broadcast";
+import {
+  clearSafariProcessingActive,
+  hasSafariInterruptedProcessing,
+  isAppleMobileWebKit,
+  isAppleWebKit,
+  markSafariProcessingActive,
+} from "@/lib/apple-webkit";
 import { clientMutation } from "@/lib/client-api";
 import { managementErrorMessage } from "@/lib/management-error";
 import { startLocalBibOcr } from "@/lib/local-bib-ocr";
@@ -42,6 +49,7 @@ export interface LocalProcessingTaskView {
 export interface LocalProcessingSnapshot {
   readonly tasks: readonly LocalProcessingTaskView[];
   readonly paused: boolean;
+  readonly compatibilityRecovery: "safari-interrupted" | null;
 }
 
 type PersistedProcessingStatus = Exclude<LocalProcessingTaskStatus, "staged" | "cancelled">;
@@ -107,6 +115,14 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 function adaptiveProcessingProfile(): AdaptiveProcessingProfile {
   if (typeof navigator === "undefined") return defaultProcessingProfile;
+
+  if (isAppleWebKit()) {
+    return {
+      initial: 1,
+      max: 1,
+      inputByteBudget: (isAppleMobileWebKit() ? 40 : 64) * mebibyte,
+    };
+  }
 
   const cores = Math.max(1, navigator.hardwareConcurrency || 4);
   const memoryGb = (navigator as NavigatorWithDeviceMemory).deviceMemory;
@@ -298,6 +314,7 @@ class LocalProcessingRuntime {
   #healthySamples = 0;
   #adaptiveTimer: number | null = null;
   #purged = false;
+  #compatibilityRecovery: "safari-interrupted" | null = null;
 
   constructor(albumId: string) {
     this.#albumId = albumId;
@@ -310,6 +327,7 @@ class LocalProcessingRuntime {
   snapshot(): LocalProcessingSnapshot {
     return {
       paused: this.#paused,
+      compatibilityRecovery: this.#compatibilityRecovery,
       tasks: [...this.#tasks.values()].map((task) => ({
         id: task.id,
         fileName: task.sourceFileName,
@@ -368,6 +386,10 @@ class LocalProcessingRuntime {
 
   togglePause(): void {
     this.#paused = !this.#paused;
+    if (!this.#paused && this.#compatibilityRecovery !== null) {
+      this.#compatibilityRecovery = null;
+      clearSafariProcessingActive(this.#albumId);
+    }
     this.#emit();
     if (!this.#paused) this.#pump();
   }
@@ -508,6 +530,10 @@ class LocalProcessingRuntime {
     this.#profile = adaptiveProcessingProfile();
     this.#processingLimit = this.#profile.initial;
     this.#healthySamples = 0;
+    if (hasSafariInterruptedProcessing(this.#albumId)) {
+      this.#paused = true;
+      this.#compatibilityRecovery = "safari-interrupted";
+    }
 
     const stored = await listPersistedTasks(this.#albumId);
     const recovered: ProcessingTask[] = await Promise.all(
@@ -572,7 +598,9 @@ class LocalProcessingRuntime {
   async #runTask(task: ProcessingTask): Promise<void> {
     if (task.status !== "queued" || this.#claimingTasks.has(task.id)) return;
     const lockManager =
-      typeof navigator !== "undefined" && "locks" in navigator ? navigator.locks : undefined;
+      !isAppleWebKit() && typeof navigator !== "undefined" && "locks" in navigator
+        ? navigator.locks
+        : undefined;
     if (lockManager === undefined) {
       await this.#runTaskExclusive(task);
       return;
@@ -618,6 +646,7 @@ class LocalProcessingRuntime {
     this.#abortControllers.set(task.id, controller);
     this.#runningTasks += 1;
     this.#runningInputBytes += task.file.size;
+    markSafariProcessingActive(this.#albumId);
     this.#emit();
 
     const uploads: Promise<unknown>[] = [];
@@ -795,6 +824,7 @@ class LocalProcessingRuntime {
       this.#uploadProgress.delete(task.id);
       this.#runningTasks = Math.max(0, this.#runningTasks - 1);
       this.#runningInputBytes = Math.max(0, this.#runningInputBytes - task.file.size);
+      if (this.#runningTasks === 0) clearSafariProcessingActive(this.#albumId);
       this.#emit();
       this.#pump();
     }
