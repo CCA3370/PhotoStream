@@ -234,10 +234,12 @@ async function listPersistedTasks(albumId: string): Promise<PersistedProcessingT
   try {
     const transaction = database.transaction(storeName, "readonly");
     const store = transaction.objectStore(storeName).index("albumId");
-    const rows = await requestResult(
-      store.getAll(IDBKeyRange.only(albumId)) as IDBRequest<PersistedProcessingTask[]>,
-    );
-    await complete(transaction);
+    const [rows] = await Promise.all([
+      requestResult(
+        store.getAll(IDBKeyRange.only(albumId)) as IDBRequest<PersistedProcessingTask[]>,
+      ),
+      complete(transaction),
+    ]);
     return rows.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   } finally {
     database.close();
@@ -249,10 +251,14 @@ async function getPersistedTask(id: string): Promise<PersistedProcessingTask | u
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readonly");
-    const row = await requestResult(
-      transaction.objectStore(storeName).get(id) as IDBRequest<PersistedProcessingTask | undefined>,
-    );
-    await complete(transaction);
+    const [row] = await Promise.all([
+      requestResult(
+        transaction.objectStore(storeName).get(id) as IDBRequest<
+          PersistedProcessingTask | undefined
+        >,
+      ),
+      complete(transaction),
+    ]);
     return row;
   } finally {
     database.close();
@@ -266,8 +272,10 @@ async function putPersistedTasks(tasks: readonly PersistedProcessingTask[]): Pro
   try {
     const transaction = database.transaction(storeName, "readwrite");
     const store = transaction.objectStore(storeName);
-    await Promise.all(tasks.map((task) => requestResult(store.put(task))));
-    await complete(transaction);
+    await Promise.all([
+      ...tasks.map((task) => requestResult(store.put(task))),
+      complete(transaction),
+    ]);
   } finally {
     database.close();
   }
@@ -278,8 +286,10 @@ async function deletePersistedTask(id: string): Promise<void> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(storeName, "readwrite");
-    await requestResult(transaction.objectStore(storeName).delete(id));
-    await complete(transaction);
+    await Promise.all([
+      requestResult(transaction.objectStore(storeName).delete(id)),
+      complete(transaction),
+    ]);
   } finally {
     database.close();
   }
