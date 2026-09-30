@@ -17,8 +17,7 @@ export function isAppleWebKit(): boolean {
   if (value === null) return false;
   const ua = value.userAgent;
   const appleMobile =
-    /iPad|iPhone|iPod/i.test(ua) ||
-    (value.platform === "MacIntel" && value.maxTouchPoints > 1);
+    /iPad|iPhone|iPod/i.test(ua) || (value.platform === "MacIntel" && value.maxTouchPoints > 1);
   if (appleMobile) return true;
   return /AppleWebKit/i.test(ua) && !/Chrome|Chromium|Edg|OPR|Android/i.test(ua);
 }
