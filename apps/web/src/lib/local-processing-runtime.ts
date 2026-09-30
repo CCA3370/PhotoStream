@@ -341,6 +341,8 @@ function persistedTask(task: ProcessingTask): PersistedProcessingTask {
     uploadedBytes: task.uploadedBytes,
     totalUploadBytes: task.totalUploadBytes,
     uploadStartedAt: task.uploadStartedAt,
+    intentId: task.intentId,
+    mediaId: task.mediaId,
   };
 }
 
