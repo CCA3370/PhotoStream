@@ -1,5 +1,7 @@
 import type { BibCandidateInput } from "@photostream/contracts";
 
+import { isAppleWebKit } from "./apple-webkit";
+
 export const BIB_OCR_ASSET_VERSION = "ppocrv6-tiny-0.4.2-ff6ab415-1e13b227";
 const assetBase = `/assets/models/bib-ocr/${BIB_OCR_ASSET_VERSION}`;
 
@@ -73,20 +75,22 @@ export function bibOcrSupported(): boolean {
 
 async function createRunner(): Promise<OcrRunner> {
   const runtime = await loadRuntime();
+  const appleWebKit = isAppleWebKit();
   return runtime.create({
-    worker: true,
+    worker: !appleWebKit,
     textDetectionModelName: "PP-OCRv6_tiny_det",
     textDetectionModelAsset: { url: `${assetBase}/det.tar` },
     textRecognitionModelName: "PP-OCRv6_tiny_rec",
     textRecognitionModelAsset: { url: `${assetBase}/rec.tar` },
     textDetectionBatchSize: 1,
-    textRecognitionBatchSize: 4,
+    textRecognitionBatchSize: appleWebKit ? 1 : 4,
     ortOptions: {
       backend: "wasm",
       wasmPaths: `${assetBase}/ort/`,
-      numThreads: globalThis.crossOriginIsolated
-        ? Math.max(1, Math.min(2, navigator.hardwareConcurrency || 1))
-        : 1,
+      numThreads:
+        appleWebKit || !globalThis.crossOriginIsolated
+          ? 1
+          : Math.max(1, Math.min(2, navigator.hardwareConcurrency || 1)),
       simd: true,
       proxy: false,
     },
