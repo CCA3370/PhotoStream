@@ -204,7 +204,7 @@ test("photo travels browser to object store and becomes visible after password u
       await expectReactHydrated(unlock);
       await unlock.click();
     }
-    await expect(viewerPage.getByText("还没有已发布影像")).toBeVisible();
+    await expect(viewerPage.getByText("暂无照片")).toBeVisible();
 
     await page.goto(appUrl(`/studio/albums/${createdAlbum.album.id}/upload`));
     const input = page.locator("#photo-files");
