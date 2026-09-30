@@ -661,6 +661,7 @@ export const internalMediaViewSchema = z
     capturedAt: z.string().datetime().nullable(),
     publishSequence: z.number().int().positive().nullable(),
     publishedAt: z.string().datetime().nullable(),
+    reviewedAt: z.string().datetime().nullable().optional(),
     variants: z.array(mediaVariantViewSchema),
     edit: mediaEditStateViewSchema.optional(),
     deletionTask: z
