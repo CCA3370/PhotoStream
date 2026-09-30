@@ -68,7 +68,9 @@ async function decode(file: File): Promise<{
   image.src = url;
   try {
     if (typeof image.decode === "function") {
-      await image.decode().catch(() => loaded);
+      await Promise.race([image.decode(), loaded]).catch(async () => {
+        await loaded;
+      });
     } else {
       await loaded;
     }
