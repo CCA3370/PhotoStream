@@ -73,7 +73,7 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
     <div className="flex flex-col gap-2">
       <Button
         className="min-h-10 justify-start"
-        disabled={!canPause}
+        disabled={!canPause || queue.cancellingAll}
         onClick={queue.onTogglePause}
         type="button"
         variant="outline"
@@ -87,7 +87,7 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
       </Button>
       <Button
         className="min-h-10 justify-start"
-        disabled={queue.retryableFailed === 0}
+        disabled={queue.retryableFailed === 0 || queue.cancellingAll}
         onClick={queue.onRetryFailed}
         type="button"
         variant="outline"
@@ -107,7 +107,7 @@ function QueueControls({ queue }: Readonly<{ queue: UploadShellProps["queue"] }>
       </Button>
       <Button
         className="min-h-10 justify-start"
-        disabled={queue.completed + queue.cancelled === 0}
+        disabled={queue.completed + queue.cancelled === 0 || queue.cancellingAll}
         onClick={queue.onClearCompleted}
         type="button"
         variant="ghost"
@@ -186,7 +186,10 @@ export function UploadShell({ children, queue }: UploadShellProps) {
       <div className="flex gap-2 border-t p-3 lg:hidden">
         <Button
           className="min-h-10 flex-1"
-          disabled={queue.queued === 0 && queue.processing === 0 && !queue.paused}
+          disabled={
+            queue.cancellingAll ||
+            (queue.queued === 0 && queue.processing === 0 && !queue.paused)
+          }
           onClick={queue.onTogglePause}
           type="button"
           variant="outline"
@@ -195,7 +198,7 @@ export function UploadShell({ children, queue }: UploadShellProps) {
         </Button>
         <Button
           className="min-h-10 flex-1"
-          disabled={queue.retryableFailed === 0}
+          disabled={queue.retryableFailed === 0 || queue.cancellingAll}
           onClick={queue.onRetryFailed}
           type="button"
           variant="outline"
