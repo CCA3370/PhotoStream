@@ -28,14 +28,11 @@ describe("resolveMediaEditSource", () => {
     }));
     const fetchRemote = vi.fn(async () => new Response(remoteBlob, { status: 200 }));
 
-    const resolved = await resolveRemoteMediaEditSource(
-      "11111111-1111-4111-8111-111111111111",
-      {
-        findLocal: async () => ({ originalBlob: new Blob(["broken-local"]) }),
-        requestRemote,
-        fetchRemote,
-      },
-    );
+    const resolved = await resolveRemoteMediaEditSource("11111111-1111-4111-8111-111111111111", {
+      findLocal: async () => ({ originalBlob: new Blob(["broken-local"]) }),
+      requestRemote,
+      fetchRemote,
+    });
 
     expect(resolved.sourceOrigin).toBe("remote-original");
     expect(await resolved.blob.text()).toBe("remote-original");
