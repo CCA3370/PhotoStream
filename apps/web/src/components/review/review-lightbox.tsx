@@ -51,6 +51,11 @@ import {
   resolveRemoteMediaEditSource,
 } from "@/lib/photo-edit/source-resolver";
 import { allowsPhotoSwipePointer } from "@/lib/photo-swipe-intent";
+import {
+  canActOnReviewImage,
+  type ReviewImageRequest,
+  requestReviewImage,
+} from "@/lib/review-image-state";
 import { cn } from "@/lib/utils";
 
 const minZoom = 1;
@@ -167,8 +172,13 @@ export function ReviewLightbox({
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [hoverNavigationSide, setHoverNavigationSide] = useState<"left" | "right" | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [requestedImage, setRequestedImage] = useState(() => requestReviewImage(null, selected));
+  const imageRequest = requestReviewImage(requestedImage, selected);
+  if (imageRequest !== requestedImage) setRequestedImage(imageRequest);
+  const [loadedImageRequest, setLoadedImageRequest] = useState<ReviewImageRequest | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const loaded = imageRequest.identity !== null && imageRequest === loadedImageRequest;
+  const canReviewCurrentImage = canActOnReviewImage(imageRequest, loadedImageRequest, loadFailed);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
   const displayIdentityRef = useRef<string | null>(null);
   const selectedKeyRef = useRef<string | null>(selectedKey);
@@ -371,7 +381,7 @@ export function ReviewLightbox({
       }
 
       const shortcutCategory =
-        !readOnly && !event.repeat && selected.pendingAction === null
+        !readOnly && canReviewCurrentImage && !event.repeat && selected.pendingAction === null
           ? categories.find(
               (category) =>
                 category.shortcut != null && categoryShortcutMatches(event, category.shortcut),
@@ -418,7 +428,7 @@ export function ReviewLightbox({
       } else if (!readOnly && event.code === "Space") {
         event.preventDefault();
         event.stopPropagation();
-        if (event.repeat || selected.pendingAction !== null) return;
+        if (!canReviewCurrentImage || event.repeat || selected.pendingAction !== null) return;
         if (selected.publicationStatus === "published" || selected.publicationStatus === "hidden") {
           onToggleVisibility(selected.key);
         }
@@ -426,12 +436,13 @@ export function ReviewLightbox({
       } else if (!readOnly && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        if (selected.pendingAction === null) onToggleFeatured(selected.key);
+        if (canReviewCurrentImage && selected.pendingAction === null)
+          onToggleFeatured(selected.key);
         focusViewer();
       } else if (!readOnly && event.key === "Delete" && selected.canDelete) {
         event.preventDefault();
         event.stopPropagation();
-        if (selected.pendingAction !== null) return;
+        if (!canReviewCurrentImage || selected.pendingAction !== null) return;
         const now = Date.now();
         if (deleteTapRef.current?.key === selected.key && now - deleteTapRef.current.at <= 900) {
           deleteTapRef.current = null;
@@ -458,6 +469,7 @@ export function ReviewLightbox({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
     bibDialogOpen,
+    canReviewCurrentImage,
     categories,
     changeZoom,
     editMode,
@@ -644,7 +656,7 @@ export function ReviewLightbox({
   const published = selected.publicationStatus === "published";
   const hidden = selected.publicationStatus === "hidden";
   const canToggleVisibility = published || (hidden && !selected.inspector.editPending);
-  const busy = selected.pendingAction !== null;
+  const busy = selected.pendingAction !== null || !canReviewCurrentImage;
   const canNavigate = items.length > 1;
   const canSelectPrevious = selectedIndex > 0;
   const canSelectNext = selectedIndex >= 0 && selectedIndex < items.length - 1;
@@ -745,7 +757,7 @@ export function ReviewLightbox({
                         fill
                         onError={onImageError}
                         onLoad={() => {
-                          setLoaded(true);
+                          setLoadedImageRequest(imageRequest);
                           setLoadFailed(false);
                           if (!readOnly) onViewed(selected.key);
                         }}
@@ -822,7 +834,7 @@ export function ReviewLightbox({
                 </div>
               </div>
 
-              {!readOnly && !bibConfirmed && !editMode ? (
+              {!readOnly && canReviewCurrentImage && !bibConfirmed && !editMode ? (
                 <div className="pointer-events-none absolute inset-x-3 top-16 z-30 sm:left-auto sm:right-4 sm:w-[22rem]">
                   <div className="pointer-events-auto rounded-2xl border border-white/10 bg-black/60 p-3 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-4">
                     <BibReviewEditor
@@ -900,6 +912,7 @@ export function ReviewLightbox({
                       <Button
                         aria-label="修改号码确认"
                         className="size-8 rounded-lg border-emerald-400/30 bg-emerald-500/80 text-white shadow-none hover:border-emerald-300/40 hover:bg-emerald-500 hover:text-white"
+                        disabled={busy}
                         onClick={(event) => {
                           event.currentTarget.blur();
                           setBibDialogOpen(true);
@@ -1043,7 +1056,9 @@ export function ReviewLightbox({
                     docked
                     item={selected.inspector}
                     selectPortalContainer={dialogContentRef}
-                    onCategoryChange={(categoryId) => onCategoryChange(selected.key, categoryId)}
+                    onCategoryChange={(categoryId) => {
+                      if (canReviewCurrentImage) onCategoryChange(selected.key, categoryId);
+                    }}
                     onClose={() => setInspectorOpen(false)}
                     onDelete={() => {
                       onDelete(selected.key);
@@ -1051,6 +1066,7 @@ export function ReviewLightbox({
                     }}
                     onOpenBib={() => setBibDialogOpen(true)}
                     onEdit={() => {
+                      if (!canReviewCurrentImage) return;
                       resetView();
                       setEditMode(true);
                       setEditPreview({ beforeUrl: null, afterUrl: null, loading: true });
@@ -1081,7 +1097,7 @@ export function ReviewLightbox({
           }}
           onError={onBibError}
           onOpenChange={setBibDialogOpen}
-          open={bibDialogOpen && bibConfirmed}
+          open={canReviewCurrentImage && bibDialogOpen && bibConfirmed}
           state={selected.bib}
         />
       ) : null}

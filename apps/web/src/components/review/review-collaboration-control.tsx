@@ -154,7 +154,7 @@ export function ReviewCollaborationControl({
                 <DialogTitle>审核分工</DialogTitle>
                 <DialogDescription>
                   选择至少 2
-                  个账号后，系统会优先将当前未审核照片平均分配；之后的新照片会自动分给剩余待审核任务最少的协作者。首次显示照片或打开大图即视为审核完成。清空选择可关闭分工。
+                  个账号后，系统会优先将当前未审核照片平均分配；之后的新照片会自动分给剩余待审核任务最少的协作者。打开大图并成功加载，或发布照片后，即视为审核完成。浏览缩略图不会完成审核。清空选择可关闭分工。
                 </DialogDescription>
               </DialogHeader>
 

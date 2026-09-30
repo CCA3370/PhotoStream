@@ -152,6 +152,7 @@ export function ReviewInspector({
             <div className="flex flex-col gap-1.5 text-xs font-medium">
               <span>分类</span>
               <Select
+                disabled={busy}
                 items={[
                   { label: "未分类", value: "uncategorized" },
                   ...categories.map((category) => ({ label: category.name, value: category.id })),

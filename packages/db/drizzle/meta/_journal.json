@@ -330,6 +330,13 @@
       "when": 1790675100000,
       "tag": "0046_alt_category_shortcuts",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790726400000,
+      "tag": "0047_repair_hidden_review_backfill",
+      "breakpoints": true
     }
   ]
 }

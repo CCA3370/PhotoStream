@@ -87,6 +87,15 @@ import {
   patchLocalReviewPhoto,
 } from "@/lib/local-review-queue";
 import { deleteLocalPhotoEditDraft } from "@/lib/photo-edit/local-drafts";
+import {
+  fetchReviewRemoteWindow,
+  isStandaloneLocalReviewPhoto,
+  mergeRemote,
+  type ReviewRemoteFrontier,
+  ReviewRemoteRequests,
+  reconcileRemotePage,
+  reviewRemoteFrontier,
+} from "@/lib/review-remote-state";
 import { cn } from "@/lib/utils";
 
 async function deleteLocalReviewState(localPhotoId: string): Promise<void> {
@@ -285,73 +294,10 @@ function remoteOriginal(media: InternalMediaView): string | null {
   return media.variants.find((variant) => variant.kind === "photo_original")?.url ?? null;
 }
 
-function mergeRemote(
-  current: readonly InternalMediaView[],
-  incoming: readonly InternalMediaView[],
-): readonly InternalMediaView[] {
-  const byId = new Map(current.map((item) => [item.id, item]));
-  for (const item of incoming) byId.set(item.id, item);
-  return [...byId.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-}
-
 function stableReviewOrderKey(item: ReviewItem): string {
   return item.source === "remote" && item.local !== null
     ? `local:${item.local.photo.id}`
     : item.key;
-}
-
-function stableRemoteMedia(
-  previous: InternalMediaView | undefined,
-  incoming: InternalMediaView,
-): InternalMediaView {
-  if (
-    previous === undefined ||
-    (previous.edit?.activeRevisionId ?? null) !== (incoming.edit?.activeRevisionId ?? null)
-  ) {
-    return incoming;
-  }
-  const previousByKind = new Map(
-    previous.variants.map((variant) => [variant.kind, variant] as const),
-  );
-  const stabilized = {
-    ...incoming,
-    variants: incoming.variants.map((variant) => {
-      const existing = previousByKind.get(variant.kind);
-      if (
-        existing === undefined ||
-        existing.bytes !== variant.bytes ||
-        existing.width !== variant.width ||
-        existing.height !== variant.height ||
-        existing.contentType !== variant.contentType
-      ) {
-        return variant;
-      }
-      return { ...variant, url: existing.url };
-    }),
-  };
-  return JSON.stringify(previous) === JSON.stringify(stabilized) ? previous : stabilized;
-}
-
-function reconcileRemotePage(
-  current: readonly InternalMediaView[],
-  incoming: readonly InternalMediaView[],
-  openKeys: ReadonlySet<string>,
-  preserveLoadedTail: boolean,
-): readonly InternalMediaView[] {
-  const currentById = new Map(current.map((item) => [item.id, item] as const));
-  const next = incoming.map((item) => stableRemoteMedia(currentById.get(item.id), item));
-  const present = new Set(next.map((item) => item.id));
-  for (const existing of current) {
-    if (present.has(existing.id)) continue;
-    const open = openKeys.has(`remote:${existing.id}`);
-    if (!open && !preserveLoadedTail) continue;
-    next.push(existing);
-    present.add(existing.id);
-  }
-  if (next.length === current.length && next.every((item, index) => item === current[index])) {
-    return current;
-  }
-  return next;
 }
 
 function chunks<T>(items: readonly T[], size: number): readonly T[][] {
@@ -387,6 +333,21 @@ export function ReviewWorkspace({
   const dragSelectionRef = useRef<DragSelectionState | null>(null);
   const filterRequestIdRef = useRef(0);
   const reviewedMediaIdsRef = useRef<Set<string>>(new Set());
+  const collaborationRequestIdRef = useRef(0);
+  const completedReviewsRef = useRef(new Map<string, string>());
+  const remoteRequestsRef = useRef(new ReviewRemoteRequests());
+  const remoteFrontierRef = useRef<ReviewRemoteFrontier | null>(
+    reviewRemoteFrontier(initialPage.items),
+  );
+  const remoteMatchingIdsRef = useRef(new Set(initialPage.items.map((item) => item.id)));
+  const remoteMatchingScopeRef = useRef<string | null>(null);
+  const remoteQueryKeyRef = useRef<string | null>(null);
+  const [remoteMatchingIds, setRemoteMatchingIds] = useState<ReadonlySet<string>>(
+    remoteMatchingIdsRef.current,
+  );
+  const remoteCursorRef = useRef<RemoteCursor | null>(
+    initialPage.nextCursor === null ? null : { kind: "single", value: initialPage.nextCursor },
+  );
   const [remoteMedia, setRemoteMedia] = useState<readonly InternalMediaView[]>(initialPage.items);
   const [cursor, setCursor] = useState<RemoteCursor | null>(
     initialPage.nextCursor === null ? null : { kind: "single", value: initialPage.nextCursor },
@@ -419,7 +380,6 @@ export function ReviewWorkspace({
   const [bibDialogKey, setBibDialogKey] = useState<string | null>(null);
   const openItemKeysRef = useRef<ReadonlySet<string>>(new Set());
   openItemKeysRef.current = new Set([
-    ...lightboxQueueKeys,
     ...[activeKey, inspectorKey, bibDialogKey].filter((key): key is string => key !== null),
   ]);
   const [pendingActions, setPendingActions] = useState<ReadonlyMap<string, ReviewPendingAction>>(
@@ -586,11 +546,14 @@ export function ReviewWorkspace({
   }, [albumId]);
 
   const refreshReviewCollaboration = useCallback(async () => {
+    const requestId = ++collaborationRequestIdRef.current;
     const next = await clientGet<ReviewCollaborationView>(
       `/api/v1/albums/${albumId}/review-collaboration`,
     );
-    setReviewCollaboration(next);
-    if (!next.enabled || !next.currentUserParticipating) setAssignmentFilter("all");
+    if (requestId === collaborationRequestIdRef.current) {
+      setReviewCollaboration(next);
+      if (!next.enabled || !next.currentUserParticipating) setAssignmentFilter("all");
+    }
     return next;
   }, [albumId]);
 
@@ -629,13 +592,14 @@ export function ReviewWorkspace({
   );
 
   const fetchRemote = useCallback(
-    async (pageCursor?: RemoteCursor): Promise<RemotePage> => {
+    async (pageCursor?: RemoteCursor, signal?: AbortSignal): Promise<RemotePage> => {
       const publicationStatus =
         filter === "published" ? "published" : filter === "hidden" ? "hidden" : undefined;
       const query = buildRemoteQuery(publicationStatus, pageCursor?.value);
       if (filter === "featured") query.set("featured", "true");
       const page = await clientGet<InternalMediaList>(
         `/api/v1/albums/${albumId}/media?${query.toString()}`,
+        signal,
       );
       return {
         items: page.items,
@@ -646,19 +610,43 @@ export function ReviewWorkspace({
     [albumId, buildRemoteQuery, filter],
   );
 
-  const refreshRemote = useCallback(async (): Promise<RemotePage> => {
-    const page = await fetchRemote();
-    setRemoteMedia((current) =>
-      reconcileRemotePage(
-        current,
-        page.items,
-        openItemKeysRef.current,
-        current.length > page.items.length,
-      ),
-    );
-    setCursor(page.nextCursor);
-    return page;
-  }, [fetchRemote]);
+  const remoteQueryKey = `${albumId}:${filter}:${buildRemoteQuery().toString()}`;
+  remoteQueryKeyRef.current = remoteQueryKey;
+  if (remoteMatchingScopeRef.current === null && !filtersHydrated) {
+    remoteMatchingScopeRef.current = remoteQueryKey;
+  }
+  const refreshRemote = useCallback(async (): Promise<void> => {
+    await remoteRequestsRef.current.run(remoteQueryKey, async ({ signal, isCurrent }) => {
+      const page = await fetchReviewRemoteWindow(
+        async (value) => {
+          const result = await fetchRemote(
+            value === undefined ? undefined : { kind: "single", value },
+            signal,
+          );
+          return { items: result.items, nextCursor: result.nextCursor?.value ?? null };
+        },
+        remoteFrontierRef.current,
+        sortOrder,
+      );
+      if (!isCurrent() || remoteQueryKeyRef.current !== remoteQueryKey) return;
+      remoteMatchingIdsRef.current = new Set(page.items.map((item) => item.id));
+      remoteMatchingScopeRef.current = remoteQueryKey;
+      setRemoteMatchingIds(remoteMatchingIdsRef.current);
+      remoteFrontierRef.current = reviewRemoteFrontier(page.items);
+      const nextCursor =
+        page.nextCursor === null ? null : { kind: "single" as const, value: page.nextCursor };
+      remoteCursorRef.current = nextCursor;
+      setRemoteMedia((current) =>
+        reconcileRemotePage(
+          current,
+          page.items,
+          openItemKeysRef.current,
+          completedReviewsRef.current,
+        ),
+      );
+      setCursor(nextCursor);
+    });
+  }, [fetchRemote, remoteQueryKey, sortOrder]);
 
   const updateBibState = useCallback((mediaId: string, state: BibMediaState): void => {
     setRemoteMedia((current) =>
@@ -670,6 +658,7 @@ export function ReviewWorkspace({
     void Promise.all([
       refreshLocal(),
       refreshFeatured(),
+      refreshReviewCollaboration(),
       resumeLocalBibOcr(albumId, bibConfig),
     ]).catch((cause) => setError(cause instanceof Error ? cause.message : "审核数据加载失败"));
     const localChanged = (event: Event) => {
@@ -707,24 +696,62 @@ export function ReviewWorkspace({
       }
       localUrlCache.current.clear();
     };
-  }, [albumId, bibConfig, refreshFeatured, refreshLocal, updateBibState]);
+  }, [
+    albumId,
+    bibConfig,
+    refreshFeatured,
+    refreshLocal,
+    refreshReviewCollaboration,
+    updateBibState,
+  ]);
 
   useEffect(() => {
+    let disposed = false;
+    let syncing = false;
+    let pending = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (disposed || syncing || timer !== null) return;
+      timer = setTimeout(() => void synchronize(), 250);
+    };
+    const synchronize = async () => {
+      timer = null;
+      syncing = true;
+      pending = false;
+      try {
+        await Promise.all([refreshRemote(), refreshFeatured(), refreshReviewCollaboration()]);
+      } catch (cause) {
+        if (!disposed) setError(cause instanceof Error ? cause.message : "审核数据同步失败");
+      } finally {
+        syncing = false;
+        if (pending) schedule();
+      }
+    };
     const remoteChanged = (event: Event) => {
       const detail = (
         event as CustomEvent<{ readonly albumId?: string; readonly revision?: string }>
       ).detail;
       if (detail?.albumId !== albumId) return;
-      void Promise.all([refreshRemote(), refreshFeatured(), refreshReviewCollaboration()]).catch(
-        (cause) => setError(cause instanceof Error ? cause.message : "审核数据同步失败"),
-      );
+      pending = true;
+      schedule();
     };
     window.addEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
-    return () => window.removeEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
+    return () => {
+      disposed = true;
+      if (timer !== null) clearTimeout(timer);
+      window.removeEventListener(REVIEW_REMOTE_CHANGED_EVENT, remoteChanged);
+    };
   }, [albumId, refreshFeatured, refreshRemote, refreshReviewCollaboration]);
+
+  useEffect(() => () => remoteRequestsRef.current.cancel(), []);
 
   useEffect(() => {
     if (!filtersHydrated) return;
+    if (remoteRequestsRef.current.setScope(remoteQueryKey)) {
+      remoteFrontierRef.current = null;
+      remoteCursorRef.current = null;
+      remoteMatchingIdsRef.current = new Set();
+    }
     const requestId = filterRequestIdRef.current + 1;
     filterRequestIdRef.current = requestId;
     loadingMoreRef.current = false;
@@ -732,11 +759,22 @@ export function ReviewWorkspace({
     setSelectedKeys(new Set());
     setRemoteSelection(null);
     lastSelectedIndexRef.current = null;
-    void fetchRemote()
-      .then((page) => {
-        if (filterRequestIdRef.current !== requestId) return;
+    void remoteRequestsRef.current
+      .run(remoteQueryKey, async ({ signal, isCurrent }) => {
+        const page = await fetchRemote(undefined, signal);
+        if (!isCurrent() || remoteQueryKeyRef.current !== remoteQueryKey) return;
+        remoteMatchingIdsRef.current = new Set(page.items.map((item) => item.id));
+        remoteMatchingScopeRef.current = remoteQueryKey;
+        setRemoteMatchingIds(remoteMatchingIdsRef.current);
+        remoteFrontierRef.current = reviewRemoteFrontier(page.items);
+        remoteCursorRef.current = page.nextCursor;
         setRemoteMedia((current) =>
-          reconcileRemotePage(current, page.items, openItemKeysRef.current, false),
+          reconcileRemotePage(
+            current,
+            page.items,
+            openItemKeysRef.current,
+            completedReviewsRef.current,
+          ),
         );
         setCursor(page.nextCursor);
       })
@@ -747,7 +785,7 @@ export function ReviewWorkspace({
       .finally(() => {
         if (filterRequestIdRef.current === requestId) setLoadingMore(false);
       });
-  }, [fetchRemote, filtersHydrated]);
+  }, [fetchRemote, filtersHydrated, remoteQueryKey]);
 
   const items = useMemo<readonly ReviewItem[]>(() => {
     const localByMediaId = new Map<string, LocalView>();
@@ -756,11 +794,7 @@ export function ReviewWorkspace({
     }
     const remoteMediaIds = new Set(remoteMedia.map((item) => item.id));
     const localItems: ReviewItem[] = localMedia
-      .filter(
-        (item) =>
-          item.photo.uploadState !== "uploading" &&
-          (item.photo.mediaId === null || !remoteMediaIds.has(item.photo.mediaId)),
-      )
+      .filter((item) => isStandaloneLocalReviewPhoto(item.photo, remoteMediaIds))
       .map((item) => ({
         key: `local:${item.photo.id}`,
         source: "local",
@@ -851,6 +885,14 @@ export function ReviewWorkspace({
 
   const matchesCurrentFilters = useCallback(
     (item: ReviewItem, ignoreReviewStatus = false): boolean => {
+      if (
+        item.source === "remote" &&
+        (remoteMatchingScopeRef.current !== remoteQueryKey ||
+          !remoteMatchingIds.has(item.remote.id)) &&
+        !(ignoreReviewStatus && item.key === activeKey)
+      ) {
+        return false;
+      }
       if (assignmentFilter === "mine" && item.source === "local") return false;
       if (
         !ignoreReviewStatus &&
@@ -885,6 +927,7 @@ export function ReviewWorkspace({
       return true;
     },
     [
+      activeKey,
       assignmentFilter,
       bibDecision,
       bibOcrStatus,
@@ -894,6 +937,8 @@ export function ReviewWorkspace({
       gradeOption,
       ingestFilter,
       reviewStatus,
+      remoteQueryKey,
+      remoteMatchingIds,
       uploader,
     ],
   );
@@ -1343,6 +1388,7 @@ export function ReviewWorkspace({
     try {
       await clientMutation<{ readonly ok: true }>(`/api/v1/media/${mediaId}/reviewed`);
       const reviewedAt = new Date().toISOString();
+      completedReviewsRef.current.set(mediaId, reviewedAt);
       setRemoteMedia((current) =>
         current.map((candidate) =>
           candidate.id === mediaId ? { ...candidate, reviewedAt } : candidate,
@@ -1813,16 +1859,32 @@ export function ReviewWorkspace({
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const page = await fetchRemote(cursor);
-      setRemoteMedia((current) => mergeRemote(current, page.items));
-      setCursor(page.nextCursor);
+      await remoteRequestsRef.current.run(remoteQueryKey, async ({ signal, isCurrent }) => {
+        const currentCursor = remoteCursorRef.current;
+        if (currentCursor === null) return;
+        const page = await fetchRemote(currentCursor, signal);
+        if (!isCurrent() || remoteQueryKeyRef.current !== remoteQueryKey) return;
+        remoteMatchingIdsRef.current = new Set([
+          ...remoteMatchingIdsRef.current,
+          ...page.items.map((item) => item.id),
+        ]);
+        setRemoteMatchingIds(remoteMatchingIdsRef.current);
+        if (page.items.length > 0) remoteFrontierRef.current = reviewRemoteFrontier(page.items);
+        remoteCursorRef.current = page.nextCursor;
+        setRemoteMedia((current) => mergeRemote(current, page.items, completedReviewsRef.current));
+        setCursor(page.nextCursor);
+      });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "加载更多图片失败");
+      if (remoteRequestsRef.current.isScope(remoteQueryKey)) {
+        setError(cause instanceof Error ? cause.message : "加载更多图片失败");
+      }
     } finally {
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
+      if (remoteRequestsRef.current.isScope(remoteQueryKey)) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
     }
-  }, [cursor, fetchRemote]);
+  }, [cursor, fetchRemote, remoteQueryKey]);
 
   async function fetchSelectionPage(
     publicationStatus?: "draft" | "hidden" | "pending_review" | "published",
@@ -2060,6 +2122,7 @@ export function ReviewWorkspace({
             resetSelection();
           }}
           onValueChange={(next) => {
+            collaborationRequestIdRef.current += 1;
             setReviewCollaboration(next);
             resetSelection();
             void refreshRemote().catch((cause) =>

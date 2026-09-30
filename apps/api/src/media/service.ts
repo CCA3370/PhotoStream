@@ -23,6 +23,7 @@ import {
   desc,
   eq,
   exists,
+  getTableColumns,
   gt,
   inArray,
   isNotNull,
@@ -74,6 +75,27 @@ const incompleteIngestStatuses = [
   "preview_ready",
   "uploading_source",
 ] as const;
+
+const internalMediaCursorTime = sql<string>`to_char(${schema.media.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+function internalMediaCursorCondition(
+  cursor: { readonly createdAt: string; readonly mediaId: string },
+  albumId: string,
+  sort: "newest" | "oldest",
+) {
+  // Older signed cursors truncated PostgreSQL microseconds to JS milliseconds.
+  const createdAt =
+    cursor.createdAt.length === 24
+      ? sql`coalesce((
+          select cursor_media.created_at from media as cursor_media
+          where cursor_media.id = ${cursor.mediaId}::uuid
+            and cursor_media.album_id = ${albumId}::uuid
+        ), ${cursor.createdAt}::timestamptz)`
+      : sql`${cursor.createdAt}::timestamptz`;
+  return sort === "oldest"
+    ? sql`(${schema.media.createdAt}, ${schema.media.id}) > (${createdAt}, ${cursor.mediaId}::uuid)`
+    : sql`(${schema.media.createdAt}, ${schema.media.id}) < (${createdAt}, ${cursor.mediaId}::uuid)`;
+}
 
 function iso(value: Date): string {
   return value.toISOString();
@@ -208,7 +230,7 @@ export class PhotoService {
         .select({
           albumId: schema.media.albumId,
           mediaCount: sql<number>`count(*)::int`,
-          pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.publicationStatus} = 'pending_review')::int`,
+          pendingReviewCount: sql<number>`count(*) filter (where ${schema.media.reviewedAt} is null)::int`,
           incompleteCount: sql<number>`count(*) filter (where ${schema.media.ingestStatus} not in ('ready', 'failed', 'cancelled'))::int`,
         })
         .from(schema.media)
@@ -2428,6 +2450,7 @@ export class PhotoService {
     if (options.reviewStatus === "pending") {
       requirePermission(actor.role, "media:review");
       conditions.push(isNull(schema.media.reviewedAt));
+      conditions.push(sql`${schema.media.publicationStatus} <> 'deleted'`);
     }
     if (options.bibReviewDecision !== undefined) {
       const matchingReview = this.#database
@@ -2489,26 +2512,12 @@ export class PhotoService {
       conditions.push(eq(schema.media.uploaderId, actor.id));
     }
     if (cursor !== null) {
-      const cursorCondition =
-        (options.sort ?? "newest") === "oldest"
-          ? or(
-              gt(schema.media.createdAt, cursor.createdAt),
-              and(
-                eq(schema.media.createdAt, cursor.createdAt),
-                gt(schema.media.id, cursor.mediaId),
-              ),
-            )
-          : or(
-              lt(schema.media.createdAt, cursor.createdAt),
-              and(
-                eq(schema.media.createdAt, cursor.createdAt),
-                lt(schema.media.id, cursor.mediaId),
-              ),
-            );
-      if (cursorCondition !== undefined) conditions.push(cursorCondition);
+      conditions.push(
+        internalMediaCursorCondition(cursor, options.albumId, options.sort ?? "newest"),
+      );
     }
     const rows = await this.#database
-      .select()
+      .select({ ...getTableColumns(schema.media), cursorCreatedAt: internalMediaCursorTime })
       .from(schema.media)
       .where(and(...conditions))
       .orderBy(
@@ -2670,7 +2679,7 @@ export class PhotoService {
         hasMore && last !== undefined
           ? this.#encodeInternalCursor(
               options.albumId,
-              last.createdAt,
+              last.cursorCreatedAt,
               last.id,
               options.sort ?? "newest",
             )
@@ -2748,6 +2757,7 @@ export class PhotoService {
     if (options.reviewStatus === "pending") {
       requirePermission(actor.role, "media:review");
       baseConditions.push(isNull(schema.media.reviewedAt));
+      baseConditions.push(sql`${schema.media.publicationStatus} <> 'deleted'`);
     }
     if (options.bibReviewDecision !== undefined) {
       const matchingReview = this.#database
@@ -2814,23 +2824,9 @@ export class PhotoService {
       .where(and(...baseConditions));
     const conditions = [...baseConditions];
     if (cursor !== null) {
-      const cursorCondition =
-        (options.sort ?? "newest") === "oldest"
-          ? or(
-              gt(schema.media.createdAt, cursor.createdAt),
-              and(
-                eq(schema.media.createdAt, cursor.createdAt),
-                gt(schema.media.id, cursor.mediaId),
-              ),
-            )
-          : or(
-              lt(schema.media.createdAt, cursor.createdAt),
-              and(
-                eq(schema.media.createdAt, cursor.createdAt),
-                lt(schema.media.id, cursor.mediaId),
-              ),
-            );
-      if (cursorCondition !== undefined) conditions.push(cursorCondition);
+      conditions.push(
+        internalMediaCursorCondition(cursor, options.albumId, options.sort ?? "newest"),
+      );
     }
     const rows = await this.#database
       .select({
@@ -2838,6 +2834,7 @@ export class PhotoService {
         publicationStatus: schema.media.publicationStatus,
         categoryId: schema.media.categoryId,
         createdAt: schema.media.createdAt,
+        cursorCreatedAt: internalMediaCursorTime,
       })
       .from(schema.media)
       .where(and(...conditions))
@@ -2870,7 +2867,7 @@ export class PhotoService {
         hasMore && last !== undefined
           ? this.#encodeInternalCursor(
               options.albumId,
-              last.createdAt,
+              last.cursorCreatedAt,
               last.id,
               options.sort ?? "newest",
             )
@@ -3756,12 +3753,12 @@ export class PhotoService {
 
   #encodeInternalCursor(
     albumId: string,
-    createdAt: Date,
+    createdAt: string,
     mediaId: string,
     sort: "newest" | "oldest",
   ): string {
     const encoded = Buffer.from(
-      JSON.stringify({ albumId, createdAt: createdAt.toISOString(), mediaId, sort }),
+      JSON.stringify({ albumId, createdAt, mediaId, sort }),
       "utf8",
     ).toString("base64url");
     return `${encoded}.${cursorSignature(this.#config.CURSOR_SIGNING_SECRET, encoded)}`;
@@ -3787,12 +3784,14 @@ export class PhotoService {
       if (
         parsed.albumId !== albumId ||
         parsed.sort !== sort ||
+        typeof parsed.createdAt !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3,6}Z$/u.test(parsed.createdAt) ||
         Number.isNaN(createdAt.getTime()) ||
         typeof parsed.mediaId !== "string"
       ) {
         throw new Error("invalid cursor");
       }
-      return { createdAt, mediaId: parsed.mediaId };
+      return { createdAt: parsed.createdAt, mediaId: parsed.mediaId };
     } catch {
       throw new AppError({ code: "BAD_REQUEST", message: "媒体游标无效", statusCode: 400 });
     }

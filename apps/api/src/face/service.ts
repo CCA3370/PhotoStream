@@ -2064,9 +2064,7 @@ export class FaceService {
       index === undefined ||
       index.enabled !== true ||
       index.indexState !== "degraded" ||
-      !["provider_unavailable", "deletion_confirmation_timeout"].includes(
-        index.lastErrorCode ?? "",
-      )
+      !["provider_unavailable", "deletion_confirmation_timeout"].includes(index.lastErrorCode ?? "")
     ) {
       return;
     }

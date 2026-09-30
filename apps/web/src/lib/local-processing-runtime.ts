@@ -955,9 +955,9 @@ class LocalProcessingRuntime {
       task.error = message;
 
       if (task.intentId !== null) {
-        await clientMutation(
-          `/api/v1/uploads/${encodeURIComponent(task.intentId)}/cancel`,
-        ).catch(() => undefined);
+        await clientMutation(`/api/v1/uploads/${encodeURIComponent(task.intentId)}/cancel`).catch(
+          () => undefined,
+        );
       }
       if (!isAppleWebKit()) {
         await patchLocalReviewPhoto(task.localPhotoId, {

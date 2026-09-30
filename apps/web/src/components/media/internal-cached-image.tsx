@@ -4,6 +4,7 @@ import Image, { type ImageProps } from "next/image";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { clientGet } from "@/lib/client-api";
+import { notifyCurrentInternalImageLoad } from "@/lib/internal-image-load";
 import { internalImageKey, internalImageSourceIdentity } from "@/lib/internal-media-url";
 import {
   findLocalReviewPhotoByMediaId,
@@ -365,9 +366,19 @@ function InternalCachedImageComponent({
           src={display}
           unoptimized
           onLoad={(event) => {
-            for (const url of retiredObjectUrlsRef.current) URL.revokeObjectURL(url);
-            retiredObjectUrlsRef.current.clear();
-            props.onLoad?.(event);
+            notifyCurrentInternalImageLoad(
+              {
+                resolvedStrategy: resolved?.strategy,
+                currentStrategy: strategy,
+                displayedSource: event.currentTarget.currentSrc,
+                requestedSource: event.currentTarget.src,
+              },
+              () => {
+                for (const url of retiredObjectUrlsRef.current) URL.revokeObjectURL(url);
+                retiredObjectUrlsRef.current.clear();
+                props.onLoad?.(event);
+              },
+            );
           }}
           onError={() => {
             const candidateId = resolved?.strategy === strategy ? resolved.candidateId : undefined;

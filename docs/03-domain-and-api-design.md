@@ -35,6 +35,8 @@
 
 前端展示状态同样不得引入覆盖真实领域状态的单一“总状态”。上传/审核卡片并列映射 `IngestStatus`、`PublicationStatus`、多条 `BibTagStatus` 和照片级 `BibReviewDecision`；显示文案与组合规则见[前端与交互设计](06-frontend-ux.md)。该映射是 UI 表示，不新增 REST/SSE 枚举，也不改变数据库状态机。
 
+审核进度使用 `Media.reviewedAt` 独立记录，不能从隐藏状态推断。活动摘要 `pendingReviewCount`、审核顶栏、`reviewStatus=pending` 列表/全选和分工剩余数量均以 `reviewedAt IS NULL` 且未删除为口径；“只看分配给我”再限制审核负责人，其他筛选进一步缩小结果。上传未完成的照片仍计入任务，网格只在上传完成后展示。大图成功加载或发布后完成审核，缩略图浏览不完成审核；已审核的隐藏照片不再计入待审核。
+
 ## 3. 核心实体
 
 ### 3.1 User 与 Session

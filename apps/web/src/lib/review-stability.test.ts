@@ -12,6 +12,7 @@ const remoteSyncPath = fileURLToPath(
 const workspacePath = fileURLToPath(
   new URL("../components/review/review-workspace.tsx", import.meta.url),
 );
+const remoteStatePath = fileURLToPath(new URL("./review-remote-state.ts", import.meta.url));
 const inspectorPath = fileURLToPath(
   new URL("../components/review/review-inspector.tsx", import.meta.url),
 );
@@ -76,7 +77,7 @@ describe("management review stability guards", () => {
     const source = readFileSync(workspacePath, "utf8");
 
     expect(source).toContain("reconcileRemotePage(");
-    expect(source).toContain("stableRemoteMedia(");
+    expect(readFileSync(remoteStatePath, "utf8")).toContain("stableRemoteMedia(");
     expect(source).toContain("openItemKeysRef.current");
     expect(source).not.toContain("审核数据已实时同步");
     expect(source).not.toContain("当前打开的照片可能已在其他会话或操作中发生变化");
